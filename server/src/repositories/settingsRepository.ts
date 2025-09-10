@@ -1,0 +1,54 @@
+import { prisma } from '../config/db.js';
+
+export const settingsRepository = {
+  // Markets
+  listMarkets: () => prisma.market.findMany({ orderBy: { name: 'asc' } }),
+  createMarket: (name: string) => prisma.market.create({ data: { name } }),
+  updateMarket: (id: string, name: string) => prisma.market.update({ where: { id }, data: { name } }),
+  deleteMarket: (id: string) => prisma.market.delete({ where: { id } }),
+
+  // Counties
+  listCounties: (marketId?: string) => prisma.county.findMany({ where: marketId ? { marketId } : undefined, orderBy: { name: 'asc' } }),
+  createCounty: (marketId: string, name: string) => prisma.county.create({ data: { marketId, name } }),
+  updateCounty: (id: string, name: string, marketId?: string) => prisma.county.update({ where: { id }, data: { name, ...(marketId ? { marketId } : {}) } }),
+  deleteCounty: (id: string) => prisma.county.delete({ where: { id } }),
+
+  // Lead Sources
+  listLeadSources: () => prisma.leadSource.findMany({ orderBy: { name: 'asc' } }),
+  createLeadSource: (name: string, active = true) => prisma.leadSource.create({ data: { name, active } }),
+  updateLeadSource: (id: string, name?: string, active?: boolean) => prisma.leadSource.update({ where: { id }, data: { ...(name ? { name } : {}), ...(active === undefined ? {} : { active }) } }),
+  deleteLeadSource: (id: string) => prisma.leadSource.delete({ where: { id } }),
+
+  // Asset Classes
+  listAssetClasses: () => prisma.assetClass.findMany({ orderBy: { name: 'asc' } }),
+  createAssetClass: (name: string, active = true) => prisma.assetClass.create({ data: { name, active } }),
+  updateAssetClass: (id: string, name?: string, active?: boolean) => prisma.assetClass.update({ where: { id }, data: { ...(name ? { name } : {}), ...(active === undefined ? {} : { active }) } }),
+  deleteAssetClass: (id: string) => prisma.assetClass.delete({ where: { id } }),
+
+  // Price Ranges
+  listPriceRanges: () => prisma.priceRange.findMany({ orderBy: { min: 'asc' } }),
+  createPriceRange: (label: string, min?: number, max?: number) => prisma.priceRange.create({ data: { label, min, max } }),
+  updatePriceRange: (id: string, label?: string, min?: number, max?: number) => prisma.priceRange.update({ where: { id }, data: { ...(label ? { label } : {}), min, max } }),
+  deletePriceRange: (id: string) => prisma.priceRange.delete({ where: { id } }),
+
+  // Doc Categories
+  listDocCategories: () => prisma.docCategory.findMany({ orderBy: { name: 'asc' } }),
+  createDocCategory: (name: string) => prisma.docCategory.create({ data: { name } }),
+  updateDocCategory: (id: string, name: string) => prisma.docCategory.update({ where: { id }, data: { name } }),
+  deleteDocCategory: (id: string) => prisma.docCategory.delete({ where: { id } }),
+
+  // App Settings
+  getAppSettings: () => prisma.appSetting.findUnique({ where: { id: 'global' } }),
+  setAppSettings: (data: any) => prisma.appSetting.upsert({ where: { id: 'global' }, update: { data }, create: { id: 'global', data } }),
+
+  // Pipelines
+  listPipelines: () => prisma.pipelineDefinition.findMany({ where: { active: true }, include: { stages: { orderBy: { orderIndex: 'asc' } } }, orderBy: { key: 'asc' } }),
+  findPipelineByKey: (key: string) => prisma.pipelineDefinition.findUnique({ where: { key: key as any }, include: { stages: { orderBy: { orderIndex: 'asc' } } } }),
+  createStage: (pipelineId: string, name: string, orderIndex: number, color?: string) => prisma.pipelineStage.create({ data: { pipelineId, name, orderIndex, color } }),
+  updateStage: (id: string, data: { name?: string; orderIndex?: number; color?: string }) => prisma.pipelineStage.update({ where: { id }, data }),
+  deleteStage: (id: string) => prisma.pipelineStage.delete({ where: { id } }),
+  reorderStages: async (pipelineId: string, items: { id: string; orderIndex: number }[]) => {
+    return prisma.$transaction(items.map(i => prisma.pipelineStage.update({ where: { id: i.id }, data: { orderIndex: i.orderIndex } })));
+  }
+};
+

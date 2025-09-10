@@ -1,0 +1,458 @@
+// Prisma schema for Sprint 1: Users, Roles, Tokens, Audit + Sprint 2: Settings & Pipelines
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String       @id @default(uuid())
+  firstName     String
+  lastName      String
+  email         String       @unique
+  phone         String?
+  passwordHash  String
+  status        String       @default("active")
+  roles         UserRole[]
+  refreshTokens RefreshToken[]
+  auditLogs     AuditLog[]   @relation("UserAuditLogs")
+  assignedLeads Lead[]       @relation("AssignedUserLeads")
+  createdLeads  Lead[]       @relation("CreatedByUserLeads")
+  assignedTasks Task[]       @relation("AssignedToUserTasks")
+  createdTasks  Task[]       @relation("CreatedByUserTasks")
+  uploadedFiles File[]       @relation("UploadedByUser")
+  createdScenarios UnderwritingScenario[] @relation("CreatedByUser")
+  createdCommunications Communication[] @relation("CreatedByUser")
+  createdMarketingLinks MarketingLink[] @relation("CreatedByUser")
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+model Role {
+  id    String    @id @default(uuid())
+  name  RoleName  @unique
+  users UserRole[]
+}
+
+enum RoleName {
+  ADMIN
+  MANAGER
+  ACQ
+  DISP
+  TC
+}
+
+model UserRole {
+  userId String
+  roleId String
+  user   User @relation(fields: [userId], references: [id])
+  role   Role @relation(fields: [roleId], references: [id])
+
+  @@id([userId, roleId])
+  @@index([roleId])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  entityType  String
+  entityId    String
+  action      String
+  changedById String?
+  diff        Json?
+  createdAt   DateTime @default(now())
+
+  changedBy User? @relation("UserAuditLogs", fields: [changedById], references: [id])
+
+  @@index([entityType, entityId])
+}
+
+// Settings & Catalogs
+model Market {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  counties  County[]
+  leads     Lead[]
+}
+
+model County {
+  id        String  @id @default(uuid())
+  name      String
+  marketId  String
+  market    Market  @relation(fields: [marketId], references: [id])
+  leadAddresses LeadAddress[]
+
+  @@unique([name, marketId])
+}
+
+model LeadSource {
+  id      String  @id @default(uuid())
+  name    String  @unique
+  active  Boolean @default(true)
+}
+
+model AssetClass {
+  id      String  @id @default(uuid())
+  name    String  @unique
+  active  Boolean @default(true)
+}
+
+model PriceRange {
+  id      String  @id @default(uuid())
+  label   String  @unique
+  min     Int?
+  max     Int?
+}
+
+model DocCategory {
+  id      String  @id @default(uuid())
+  name    String  @unique
+  fileCategorizations FileCategorization[]
+}
+
+model AppSetting {
+  id    String @id @default("global")
+  data  Json
+}
+
+// Pipelines
+enum PipelineKey {
+  ACQUISITIONS
+  DISPOSITIONS
+  TRANSACTION
+}
+
+model PipelineDefinition {
+  id      String      @id @default(uuid())
+  key     PipelineKey @unique
+  name    String
+  stages  PipelineStage[]
+  active  Boolean     @default(true)
+}
+
+model PipelineStage {
+  id          String             @id @default(uuid())
+  pipelineId  String
+  pipeline    PipelineDefinition @relation(fields: [pipelineId], references: [id])
+  name        String
+  orderIndex  Int
+  color       String?
+  leads       Lead[]
+  fromStageHistory StageHistory[] @relation("FromStage")
+  toStageHistory   StageHistory[] @relation("ToStage")
+
+  @@index([pipelineId, orderIndex])
+}
+
+// Leads foundation
+enum LeadType {
+  SELLER
+  BUYER
+  VENDOR
+}
+
+enum TaskStatus {
+  OPEN
+  DONE
+}
+
+model Lead {
+  id               String         @id @default(uuid())
+  leadType         LeadType
+  status           String?
+  marketId         String?
+  market           Market?        @relation(fields: [marketId], references: [id])
+  assignedUserId   String?
+  assignedUser     User?          @relation("AssignedUserLeads", fields: [assignedUserId], references: [id])
+  pipelineStageId  String?
+  pipelineStage    PipelineStage? @relation(fields: [pipelineStageId], references: [id])
+  createdById      String?
+  createdBy        User?          @relation("CreatedByUserLeads", fields: [createdById], references: [id])
+  customFields     Json?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  address          LeadAddress?
+  seller           SellerDetail?
+  buyer            BuyerDetail?
+  buyerCriteria    BuyerCriteria?
+  vendor           VendorDetail?
+  tasks            Task[]
+  stageHistory     StageHistory[]
+  leadBuyers       LeadBuyer[]
+  underwritingScenarios UnderwritingScenario[]
+  communications   Communication[]
+  marketingLinks   MarketingLink[]
+  leadFiles        LeadFile[]
+
+  @@index([leadType])
+  @@index([marketId])
+  @@index([pipelineStageId])
+}
+
+model LeadAddress {
+  leadId   String   @id
+  lead     Lead     @relation(fields: [leadId], references: [id])
+  address1 String
+  city     String
+  state    String
+  zip      String
+  countyId String?
+  county   County?  @relation(fields: [countyId], references: [id])
+}
+
+model SellerDetail {
+  leadId     String @id
+  lead       Lead   @relation(fields: [leadId], references: [id])
+  firstName  String
+  lastName   String
+  phone      String
+  email      String
+  motivation String?
+  notes      String?
+}
+
+model BuyerDetail {
+  leadId              String  @id
+  lead                Lead    @relation(fields: [leadId], references: [id])
+  firstName           String
+  lastName            String
+  phone               String
+  email               String
+  vip                 Boolean @default(false)
+  blacklisted         Boolean @default(false)
+  blacklistReason     String?
+  propertiesPurchased Int     @default(0)
+}
+
+model BuyerCriteria {
+  leadId         String   @id
+  lead           Lead     @relation(fields: [leadId], references: [id])
+  marketIds      String[]
+  assetClassIds  String[]
+  priceRangeIds  String[]
+}
+
+model VendorDetail {
+  leadId     String  @id
+  lead       Lead    @relation(fields: [leadId], references: [id])
+  firstName  String
+  lastName   String
+  phone      String
+  email      String
+  company    String
+  industry   String
+  marketIds  String[]
+}
+
+model StageHistory {
+  id          String   @id @default(uuid())
+  leadId      String
+  fromStageId String?
+  toStageId   String
+  changedById String?
+  changedAt   DateTime @default(now())
+
+  lead        Lead     @relation(fields: [leadId], references: [id])
+  fromStage   PipelineStage? @relation("FromStage", fields: [fromStageId], references: [id])
+  toStage     PipelineStage  @relation("ToStage", fields: [toStageId], references: [id])
+
+  @@index([leadId, changedAt])
+}
+
+model Task {
+  id           String     @id @default(uuid())
+  leadId       String
+  lead         Lead       @relation(fields: [leadId], references: [id])
+  title        String
+  description  String?
+  dueAt        DateTime
+  status       TaskStatus @default(OPEN)
+  assignedToId String?
+  assignedTo   User?      @relation("AssignedToUserTasks", fields: [assignedToId], references: [id])
+  createdById  String?
+  createdBy    User?      @relation("CreatedByUserTasks", fields: [createdById], references: [id])
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([leadId])
+  @@index([dueAt])
+}
+
+// Documents & Files
+model File {
+  id           String   @id @default(uuid())
+  filename     String
+  mimeType     String
+  size         Int
+  storageKey   String   @unique
+  uploadedById String?
+  uploadedBy   User?    @relation("UploadedByUser", fields: [uploadedById], references: [id])
+  createdAt    DateTime @default(now())
+  versions     FileVersion[]
+  leadFiles    LeadFile[]
+  categories   FileCategorization[]
+  communicationAttachments CommunicationAttachment[]
+}
+
+model FileVersion {
+  id        String   @id @default(uuid())
+  fileId    String
+  file      File     @relation(fields: [fileId], references: [id])
+  versionNo Int
+  storageKey String
+  createdAt DateTime @default(now())
+
+  @@index([fileId, versionNo])
+}
+
+model FileCategorization {
+  fileId        String
+  docCategoryId String
+  file          File        @relation(fields: [fileId], references: [id])
+  category      DocCategory @relation(fields: [docCategoryId], references: [id])
+
+  @@id([fileId, docCategoryId])
+}
+
+model LeadFile {
+  leadId String
+  fileId String
+  lead   Lead @relation(fields: [leadId], references: [id])
+  file   File @relation(fields: [fileId], references: [id])
+
+  @@id([leadId, fileId])
+}
+
+// Underwriting
+model UnderwritingScenario {
+  id          String   @id @default(uuid())
+  leadId      String
+  lead        Lead     @relation(fields: [leadId], references: [id])
+  name        String
+  isPrimary   Boolean  @default(false)
+  inputs      Json
+  outputs     Json
+  createdById String?
+  createdBy   User?    @relation("CreatedByUser", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([leadId, isPrimary])
+}
+
+// Buyers and offers per lead
+model Buyer {
+  id           String  @id @default(uuid())
+  firstName    String
+  lastName     String
+  phone        String
+  email        String
+  segmentation String?
+  criteria     Json?
+  createdAt    DateTime @default(now())
+  leadBuyers   LeadBuyer[]
+}
+
+model LeadBuyer {
+  id        String   @id @default(uuid())
+  leadId    String
+  buyerId   String
+  status    String   // interested|offered|declined
+  offerAmount Int?
+  terms     Json?
+  updatedAt DateTime @default(now())
+
+  lead   Lead  @relation(fields: [leadId], references: [id])
+  buyer  Buyer @relation(fields: [buyerId], references: [id])
+
+  @@index([leadId, buyerId])
+}
+
+// Communications
+enum CommType {
+  EMAIL
+  SMS
+  CALL
+  NOTE
+}
+
+enum Direction {
+  INBOUND
+  OUTBOUND
+}
+
+model Communication {
+  id          String     @id @default(uuid())
+  leadId      String
+  lead        Lead       @relation(fields: [leadId], references: [id])
+  type        CommType
+  direction   Direction
+  subject     String?
+  body        String?
+  externalId  String?
+  occurredAt  DateTime
+  createdById String?
+  createdBy   User?      @relation("CreatedByUser", fields: [createdById], references: [id])
+  createdAt   DateTime   @default(now())
+
+  attachments CommunicationAttachment[]
+
+  @@index([leadId, occurredAt])
+}
+
+model CommunicationAttachment {
+  id              String         @id @default(uuid())
+  communicationId String
+  fileId          String
+  communication   Communication  @relation(fields: [communicationId], references: [id])
+  file            File           @relation(fields: [fileId], references: [id])
+}
+
+// Marketing links
+model MarketingLink {
+  id          String   @id @default(uuid())
+  leadId      String
+  lead        Lead     @relation(fields: [leadId], references: [id])
+  title       String
+  url         String
+  type        String?
+  createdById String?
+  createdBy   User?    @relation("CreatedByUser", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+}
+
+// Comparable sales (internal DB)
+model Comparable {
+  id        String   @id @default(uuid())
+  address   String
+  city      String
+  state     String
+  zip       String
+  beds      Int?
+  baths     Int?
+  sqft      Int?
+  yearBuilt Int?
+  salePrice Int?
+  pricePerSqft Int?
+  dom       Int?
+  dateSold  DateTime?
+  images    String[]
+  createdAt DateTime @default(now())
+}
+
