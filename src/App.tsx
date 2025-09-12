@@ -18,6 +18,7 @@ import ConceptDemo from "./pages/ConceptDemo";
 import AddSellerLead from "./pages/AddSellerLead";
 import AddBuyerLead from "./pages/AddBuyerLead";
 import AddVendorLead from "./pages/AddVendorLead";
+import Agents from "./pages/Agents";
 
 const queryClient = new QueryClient();
 
@@ -95,6 +96,13 @@ const App = () => (
             <Route path="/leads/add-vendor" element={
               <ProtectedRoute requiredRoles={['ADMIN', 'MANAGER']}>
                 <AddVendorLead />
+              </ProtectedRoute>
+            } />
+            <Route path="/agents" element={
+              <ProtectedRoute requiredRoles={['ADMIN']}>
+                <DashboardLayout>
+                  <Agents />
+                </DashboardLayout>
               </ProtectedRoute>
             } />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

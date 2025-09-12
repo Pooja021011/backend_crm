@@ -523,3 +523,5 @@ export const LeadForm: React.FC<LeadFormProps> = ({ type, onSubmit, onCancel, is
     </div>
   );
 };
+
+

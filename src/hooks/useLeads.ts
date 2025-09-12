@@ -1,76 +1,96 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useToast } from '@/hooks/use-toast';
 
-interface Lead {
-  id: string;
-  leadType: 'SELLER' | 'BUYER' | 'VENDOR';
-  status?: string;
-  marketId?: string;
-  market?: { id: string; name: string };
-  assignedUserId?: string;
-  assignedUser?: { id: string; firstName: string; lastName: string };
-  pipelineStageId?: string;
-  pipelineStage?: { id: string; name: string; color?: string };
-  createdById?: string;
-  createdBy?: { id: string; firstName: string; lastName: string };
-  customFields?: any;
-  createdAt: string;
-  updatedAt: string;
-  
-  // Address (for seller leads)
-  address?: {
-    address1: string;
-    city: string;
-    state: string;
-    zip: string;
-    countyId?: string;
-    county?: { id: string; name: string };
-  };
-  
-  // Seller details
-  seller?: {
-    firstName: string;
-    lastName: string;
-    phone: string;
-    email: string;
-    motivation?: string;
-    notes?: string;
-  };
-  
-  // Buyer details
-  buyer?: {
-    firstName: string;
-    lastName: string;
-    phone: string;
-    email: string;
-    vip: boolean;
-    blacklisted: boolean;
-    blacklistReason?: string;
-    propertiesPurchased: number;
-  };
-  
-  // Buyer criteria
-  buyerCriteria?: {
-    marketIds: string[];
-    assetClassIds: string[];
-    priceRangeIds: string[];
-  };
-  
-  // Vendor details
-  vendor?: {
-    firstName: string;
-    lastName: string;
-    phone: string;
-    email: string;
-    company: string;
-    industry: string;
-    marketIds: string[];
-  };
+export type LeadType = 'SELLER' | 'BUYER' | 'VENDOR';
+
+export interface Address {
+  address1: string;
+  city: string;
+  state: string;
+  zip: string;
+  countyId?: string;
 }
 
-interface LeadFilters {
-  type?: 'SELLER' | 'BUYER' | 'VENDOR';
+export interface Seller {
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email: string;
+  motivation?: string;
+  notes?: string;
+}
+
+export interface Buyer {
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email: string;
+  vip?: boolean;
+}
+
+export interface Vendor {
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email: string;
+  company: string;
+  industry: string;
+  marketIds?: string[];
+}
+
+export interface BuyerCriteria {
+  marketIds?: string[];
+  assetClassIds?: string[];
+  priceRangeIds?: string[];
+}
+
+export interface CreateSellerLeadData {
+  type: 'SELLER';
+  marketId?: string;
+  address: Address;
+  seller: Seller;
+  assignedUserId?: string;
+  pipelineStageId?: string;
+}
+
+export interface CreateBuyerLeadData {
+  type: 'BUYER';
+  marketId?: string;
+  buyer: Buyer;
+  criteria?: BuyerCriteria;
+  assignedUserId?: string;
+  pipelineStageId?: string;
+}
+
+export interface CreateVendorLeadData {
+  type: 'VENDOR';
+  marketId?: string;
+  vendor: Vendor;
+  assignedUserId?: string;
+  pipelineStageId?: string;
+}
+
+export type CreateLeadData = CreateSellerLeadData | CreateBuyerLeadData | CreateVendorLeadData;
+
+export interface Lead {
+  id: string;
+  leadType: LeadType; // API uses leadType, not type
+  status?: string;
+  createdAt: string;
+  updatedAt: string;
+  assignedUserId?: string;
+  pipelineStageId?: string;
+  marketId?: string;
+  // Type-specific data (these come from API includes)
+  address?: Address;
+  seller?: Seller;
+  buyer?: Buyer;
+  vendor?: Vendor;
+  buyerCriteria?: BuyerCriteria; // API uses buyerCriteria, not criteria
+}
+
+export interface LeadsListParams {
+  type?: LeadType;
   marketId?: string;
   pipelineStageId?: string;
   status?: string;
@@ -81,19 +101,31 @@ interface LeadFilters {
   take?: number;
 }
 
-interface CreateLeadData {
-  type: 'SELLER' | 'BUYER' | 'VENDOR';
-  [key: string]: any;
+export interface LeadsHookReturn {
+  leads: Lead[];
+  isLoading: boolean;
+  error: string | null;
+  createLead: (data: CreateLeadData) => Promise<Lead>;
+  updateLead: (id: string, data: Partial<CreateLeadData>) => Promise<Lead>;
+  deleteLead: (id: string) => Promise<void>;
+  getLead: (id: string) => Promise<Lead>;
+  listLeads: (params?: LeadsListParams) => Promise<Lead[]>;
+  refreshLeads: () => Promise<void>;
+  fetchLeads: () => Promise<void>;
+  getLeadsByType: (type: LeadType) => Lead[];
+  searchLeads: (query: string) => Lead[];
+  importLeadsFromCSV: (file: File, type: LeadType) => Promise<{ success: number; errors: string[] }>;
+  exportLeadsToCSV: (leadsToExport: Lead[], type: LeadType) => void;
+  sortLeads: (leadsToSort: Lead[], key: string, direction: 'asc' | 'desc') => Lead[];
 }
 
-export const useLeads = () => {
+const API_BASE = 'http://localhost:4000/api/v1';
+
+export const useLeads = (): LeadsHookReturn => {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
-  const { toast } = useToast();
-
-  const API_BASE = 'http://localhost:4000/api/v1';
 
   const makeAuthenticatedRequest = async (url: string, options: RequestInit = {}) => {
     const accessToken = localStorage.getItem('accessToken');
@@ -101,239 +133,300 @@ export const useLeads = () => {
     const response = await fetch(url, {
       ...options,
       headers: {
+        'Content-Type': 'application/json',
         ...options.headers,
         'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
       },
     });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
     }
 
     return response.json();
   };
 
-  const fetchLeads = async (filters: LeadFilters = {}) => {
-    setIsLoading(true);
+  const createLead = async (data: CreateLeadData): Promise<Lead> => {
     setError(null);
-    
-    try {
-      const queryParams = new URLSearchParams();
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value !== undefined && value !== null && value !== '') {
-          queryParams.append(key, value.toString());
-        }
-      });
-
-      const url = `${API_BASE}/leads?${queryParams.toString()}`;
-      const response = await makeAuthenticatedRequest(url);
-      
-      setLeads(response.data || []);
-      return response.data || [];
-    } catch (err: any) {
-      setError(err.message);
-      toast({
-        title: "Error",
-        description: "Failed to fetch leads. Please try again.",
-        variant: "destructive",
-      });
-      return [];
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const createLead = async (leadData: CreateLeadData): Promise<Lead | null> => {
-    setIsLoading(true);
-    setError(null);
-    
     try {
       const response = await makeAuthenticatedRequest(`${API_BASE}/leads`, {
         method: 'POST',
-        body: JSON.stringify(leadData),
+        body: JSON.stringify(data),
       });
-
+      
       const newLead = response.data;
-      setLeads(prev => [newLead, ...prev]);
-      
-      toast({
-        title: "Success!",
-        description: `${leadData.type.toLowerCase()} lead created successfully.`,
-      });
-      
+      setLeads(prevLeads => [...prevLeads, newLead]);
       return newLead;
-    } catch (err: any) {
-      setError(err.message);
-      toast({
-        title: "Error",
-        description: err.message || "Failed to create lead. Please try again.",
-        variant: "destructive",
-      });
-      return null;
-    } finally {
-      setIsLoading(false);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create lead';
+      setError(errorMessage);
+      throw new Error(errorMessage);
     }
   };
 
-  const updateLead = async (leadId: string, updateData: Partial<CreateLeadData>): Promise<Lead | null> => {
-    setIsLoading(true);
+  const updateLead = async (id: string, data: Partial<CreateLeadData>): Promise<Lead> => {
     setError(null);
-    
     try {
-      const response = await makeAuthenticatedRequest(`${API_BASE}/leads/${leadId}`, {
+      const response = await makeAuthenticatedRequest(`${API_BASE}/leads/${id}`, {
         method: 'PATCH',
-        body: JSON.stringify(updateData),
+        body: JSON.stringify(data),
       });
-
+      
       const updatedLead = response.data;
-      setLeads(prev => prev.map(lead => lead.id === leadId ? updatedLead : lead));
-      
-      toast({
-        title: "Success!",
-        description: "Lead updated successfully.",
-      });
-      
+      setLeads(prevLeads => 
+        prevLeads.map(lead => lead.id === id ? updatedLead : lead)
+      );
       return updatedLead;
-    } catch (err: any) {
-      setError(err.message);
-      toast({
-        title: "Error",
-        description: err.message || "Failed to update lead. Please try again.",
-        variant: "destructive",
-      });
-      return null;
-    } finally {
-      setIsLoading(false);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to update lead';
+      setError(errorMessage);
+      throw new Error(errorMessage);
     }
   };
 
-  const deleteLead = async (leadId: string): Promise<boolean> => {
-    setIsLoading(true);
+  const deleteLead = async (id: string): Promise<void> => {
     setError(null);
-    
     try {
-      await makeAuthenticatedRequest(`${API_BASE}/leads/${leadId}`, {
+      await makeAuthenticatedRequest(`${API_BASE}/leads/${id}`, {
         method: 'DELETE',
       });
-
-      setLeads(prev => prev.filter(lead => lead.id !== leadId));
       
-      toast({
-        title: "Success!",
-        description: "Lead deleted successfully.",
-      });
-      
-      return true;
-    } catch (err: any) {
-      setError(err.message);
-      toast({
-        title: "Error",
-        description: err.message || "Failed to delete lead. Please try again.",
-        variant: "destructive",
-      });
-      return false;
-    } finally {
-      setIsLoading(false);
+      setLeads(prevLeads => prevLeads.filter(lead => lead.id !== id));
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to delete lead';
+      setError(errorMessage);
+      throw new Error(errorMessage);
     }
   };
 
-  const changeLeadStage = async (leadId: string, toStageId: string): Promise<Lead | null> => {
-    setIsLoading(true);
+  const getLead = async (id: string): Promise<Lead> => {
     setError(null);
-    
     try {
-      const response = await makeAuthenticatedRequest(`${API_BASE}/leads/${leadId}/stage`, {
-        method: 'POST',
-        body: JSON.stringify({ toStageId }),
-      });
+      const response = await makeAuthenticatedRequest(`${API_BASE}/leads/${id}`);
+      return response.data;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to get lead';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    }
+  };
 
-      const updatedLead = response.data;
-      setLeads(prev => prev.map(lead => lead.id === leadId ? updatedLead : lead));
+  const listLeads = async (params?: LeadsListParams): Promise<Lead[]> => {
+    setError(null);
+    setIsLoading(true);
+    try {
+      const queryParams = new URLSearchParams();
       
-      toast({
-        title: "Success!",
-        description: "Lead stage updated successfully.",
-      });
+      if (params) {
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            queryParams.append(key, value.toString());
+          }
+        });
+      }
       
-      return updatedLead;
-    } catch (err: any) {
-      setError(err.message);
-      toast({
-        title: "Error",
-        description: err.message || "Failed to update lead stage. Please try again.",
-        variant: "destructive",
-      });
-      return null;
+      const url = `${API_BASE}/leads${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+      const response = await makeAuthenticatedRequest(url);
+      
+      setLeads(response.data);
+      return response.data;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to list leads';
+      setError(errorMessage);
+      throw new Error(errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Filter leads by type
-  const getLeadsByType = (type: 'SELLER' | 'BUYER' | 'VENDOR') => {
+  const refreshLeads = async (): Promise<void> => {
+    await listLeads();
+  };
+
+  const fetchLeads = async (): Promise<void> => {
+    await listLeads();
+  };
+
+  const getLeadsByType = (type: LeadType): Lead[] => {
     return leads.filter(lead => lead.leadType === type);
   };
 
-  // Search leads
-  const searchLeads = (query: string) => {
+  const searchLeads = (query: string): Lead[] => {
     if (!query.trim()) return leads;
     
-    const searchTerm = query.toLowerCase();
+    const lowercaseQuery = query.toLowerCase();
     return leads.filter(lead => {
-      // Search in seller details
+      // Search in different fields based on lead type
+      const searchFields = [];
+      
       if (lead.seller) {
-        return (
-          lead.seller.firstName.toLowerCase().includes(searchTerm) ||
-          lead.seller.lastName.toLowerCase().includes(searchTerm) ||
-          lead.seller.phone.includes(searchTerm) ||
-          lead.seller.email.toLowerCase().includes(searchTerm) ||
-          (lead.address?.address1.toLowerCase().includes(searchTerm))
+        searchFields.push(
+          lead.seller.firstName,
+          lead.seller.lastName,
+          lead.seller.email,
+          lead.seller.phone
         );
       }
       
-      // Search in buyer details
       if (lead.buyer) {
-        return (
-          lead.buyer.firstName.toLowerCase().includes(searchTerm) ||
-          lead.buyer.lastName.toLowerCase().includes(searchTerm) ||
-          lead.buyer.phone.includes(searchTerm) ||
-          lead.buyer.email.toLowerCase().includes(searchTerm)
+        searchFields.push(
+          lead.buyer.firstName,
+          lead.buyer.lastName,
+          lead.buyer.email,
+          lead.buyer.phone
         );
       }
       
-      // Search in vendor details
       if (lead.vendor) {
-        return (
-          lead.vendor.firstName.toLowerCase().includes(searchTerm) ||
-          lead.vendor.lastName.toLowerCase().includes(searchTerm) ||
-          lead.vendor.phone.includes(searchTerm) ||
-          lead.vendor.email.toLowerCase().includes(searchTerm) ||
-          lead.vendor.company.toLowerCase().includes(searchTerm)
+        searchFields.push(
+          lead.vendor.firstName,
+          lead.vendor.lastName,
+          lead.vendor.email,
+          lead.vendor.phone,
+          lead.vendor.company,
+          lead.vendor.industry
         );
       }
       
-      return false;
+      if (lead.address) {
+        searchFields.push(
+          lead.address.address1,
+          lead.address.city,
+          lead.address.state,
+          lead.address.zip
+        );
+      }
+      
+      return searchFields.some(field => 
+        field && field.toLowerCase().includes(lowercaseQuery)
+      );
     });
   };
 
-  // Refresh leads (useful for after creating/updating leads)
-  const refreshLeads = () => {
-    return fetchLeads();
+  const importLeadsFromCSV = async (file: File, type: LeadType): Promise<{ success: number; errors: string[] }> => {
+    // This is a placeholder implementation
+    // You would need to implement CSV parsing and validation logic
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve({ success: 0, errors: ['CSV import not yet implemented'] });
+      }, 1000);
+    });
   };
+
+  const exportLeadsToCSV = (leadsToExport: Lead[], type: LeadType): void => {
+    // Basic CSV export implementation
+    const headers = type === 'SELLER' 
+      ? ['First Name', 'Last Name', 'Email', 'Phone', 'Address', 'City', 'State', 'ZIP', 'Motivation']
+      : type === 'BUYER'
+      ? ['First Name', 'Last Name', 'Email', 'Phone', 'VIP']
+      : ['First Name', 'Last Name', 'Email', 'Phone', 'Company', 'Industry'];
+    
+    const csvContent = [
+      headers.join(','),
+      ...leadsToExport.map(lead => {
+        if (type === 'SELLER' && lead.leadType === 'SELLER' && lead.seller && lead.address) {
+          return [
+            lead.seller.firstName,
+            lead.seller.lastName,
+            lead.seller.email,
+            lead.seller.phone,
+            lead.address.address1,
+            lead.address.city,
+            lead.address.state,
+            lead.address.zip,
+            lead.seller.motivation || ''
+          ].map(field => `"${field || ''}"`).join(',');
+        } else if (type === 'BUYER' && lead.leadType === 'BUYER' && lead.buyer) {
+          return [
+            lead.buyer.firstName,
+            lead.buyer.lastName,
+            lead.buyer.email,
+            lead.buyer.phone,
+            lead.buyer.vip ? 'Yes' : 'No'
+          ].map(field => `"${field || ''}"`).join(',');
+        } else if (type === 'VENDOR' && lead.leadType === 'VENDOR' && lead.vendor) {
+          return [
+            lead.vendor.firstName,
+            lead.vendor.lastName,
+            lead.vendor.email,
+            lead.vendor.phone,
+            lead.vendor.company,
+            lead.vendor.industry
+          ].map(field => `"${field || ''}"`).join(',');
+        }
+        return '';
+      }).filter(row => row)
+    ].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${type.toLowerCase()}_leads_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const sortLeads = (leadsToSort: Lead[], key: string, direction: 'asc' | 'desc'): Lead[] => {
+    return [...leadsToSort].sort((a, b) => {
+      let aValue: any;
+      let bValue: any;
+      
+      // Handle different sort keys
+      switch (key) {
+        case 'name':
+          aValue = a.seller?.firstName || a.buyer?.firstName || a.vendor?.firstName || '';
+          bValue = b.seller?.firstName || b.buyer?.firstName || b.vendor?.firstName || '';
+          break;
+        case 'email':
+          aValue = a.seller?.email || a.buyer?.email || a.vendor?.email || '';
+          bValue = b.seller?.email || b.buyer?.email || b.vendor?.email || '';
+          break;
+        case 'phone':
+          aValue = a.seller?.phone || a.buyer?.phone || a.vendor?.phone || '';
+          bValue = b.seller?.phone || b.buyer?.phone || b.vendor?.phone || '';
+          break;
+        case 'createdAt':
+        case 'updatedAt':
+          aValue = new Date(a[key as keyof Lead] as string);
+          bValue = new Date(b[key as keyof Lead] as string);
+          break;
+        default:
+          aValue = a[key as keyof Lead] || '';
+          bValue = b[key as keyof Lead] || '';
+      }
+      
+      if (aValue < bValue) return direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  };
+
+  // Load leads on mount
+  useEffect(() => {
+    if (user) {
+      listLeads().catch(console.error);
+    }
+  }, [user]);
 
   return {
     leads,
     isLoading,
     error,
-    fetchLeads,
     createLead,
     updateLead,
     deleteLead,
-    changeLeadStage,
+    getLead,
+    listLeads,
+    refreshLeads,
+    fetchLeads,
     getLeadsByType,
     searchLeads,
-    refreshLeads,
+    importLeadsFromCSV,
+    exportLeadsToCSV,
+    sortLeads,
   };
 };

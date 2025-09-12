@@ -79,10 +79,190 @@ async function replaceStages(pipelineId: string, names: string[]) {
   }
 }
 
+async function upsertMarketsAndCounties() {
+  // North Carolina Markets and Counties
+  const markets = [
+    {
+      name: "Charlotte Market",
+      counties: [
+        "Mecklenburg County",
+        "Union County",
+        "Cabarrus County",
+        "Gaston County",
+        "Iredell County",
+        "York County", // SC
+        "Lancaster County" // SC
+      ]
+    },
+    {
+      name: "Winston-Salem / Greensboro Market",
+      counties: [
+        "Forsyth County",
+        "Guilford County",
+        "Davidson County",
+        "Randolph County",
+        "Alamance County",
+        "Rockingham County",
+        "Stokes County",
+        "Surry County"
+      ]
+    },
+    {
+      name: "Raleigh / Durham Market",
+      counties: [
+        "Wake County",
+        "Durham County",
+        "Orange County",
+        "Johnston County",
+        "Franklin County",
+        "Granville County",
+        "Person County",
+        "Vance County"
+      ]
+    },
+    {
+      name: "Fayetteville Market",
+      counties: [
+        "Cumberland County",
+        "Hoke County",
+        "Robeson County",
+        "Bladen County",
+        "Sampson County",
+        "Moore County",
+        "Richmond County",
+        "Scotland County"
+      ]
+    }
+  ];
+
+  for (const marketData of markets) {
+    const market = await prisma.market.upsert({
+      where: { name: marketData.name },
+      update: {},
+      create: { name: marketData.name }
+    });
+
+    for (const countyName of marketData.counties) {
+      await prisma.county.upsert({
+        where: { name_marketId: { name: countyName, marketId: market.id } },
+        update: {},
+        create: { 
+          name: countyName, 
+          marketId: market.id 
+        }
+      });
+    }
+  }
+}
+
+async function upsertLeadSources() {
+  const leadSources = [
+    "Website",
+    "Referral",
+    "Social Media",
+    "Cold Call",
+    "Direct Mail",
+    "Networking Event",
+    "Online Advertisement",
+    "Walk-in",
+    "Google Ads",
+    "Facebook Ads",
+    "Yellow Pages",
+    "Radio",
+    "TV",
+    "Newspaper",
+    "Real Estate Agent",
+    "Wholesaler",
+    "Bird Dog"
+  ];
+
+  for (const sourceName of leadSources) {
+    await prisma.leadSource.upsert({
+      where: { name: sourceName },
+      update: {},
+      create: { name: sourceName, active: true }
+    });
+  }
+}
+
+async function upsertAssetClasses() {
+  const assetClasses = [
+    "Single Family",
+    "Townhouse",
+    "Condo",
+    "Multi-Family",
+    "Commercial",
+    "Land",
+    "Mobile Home",
+    "Duplex",
+    "Triplex",
+    "Fourplex"
+  ];
+
+  for (const className of assetClasses) {
+    await prisma.assetClass.upsert({
+      where: { name: className },
+      update: {},
+      create: { name: className, active: true }
+    });
+  }
+}
+
+async function upsertPriceRanges() {
+  const priceRanges = [
+    { label: "Under $50k", min: 0, max: 49999 },
+    { label: "$50k - $100k", min: 50000, max: 99999 },
+    { label: "$100k - $200k", min: 100000, max: 199999 },
+    { label: "$200k - $300k", min: 200000, max: 299999 },
+    { label: "$300k - $500k", min: 300000, max: 499999 },
+    { label: "$500k - $750k", min: 500000, max: 749999 },
+    { label: "$750k - $1M", min: 750000, max: 999999 },
+    { label: "Over $1M", min: 1000000, max: null }
+  ];
+
+  for (const range of priceRanges) {
+    await prisma.priceRange.upsert({
+      where: { label: range.label },
+      update: {},
+      create: range
+    });
+  }
+}
+
+async function upsertDocCategories() {
+  const docCategories = [
+    "Contract",
+    "Inspection Report",
+    "Appraisal",
+    "Title Work",
+    "Insurance",
+    "Financial Documents",
+    "Photos",
+    "Repair Estimates",
+    "Legal Documents",
+    "Marketing Materials",
+    "Correspondence",
+    "Other"
+  ];
+
+  for (const categoryName of docCategories) {
+    await prisma.docCategory.upsert({
+      where: { name: categoryName },
+      update: {},
+      create: { name: categoryName }
+    });
+  }
+}
+
 async function main() {
   await upsertRoles();
   await upsertAdmin();
   await upsertPipelines();
+  await upsertMarketsAndCounties();
+  await upsertLeadSources();
+  await upsertAssetClasses();
+  await upsertPriceRanges();
+  await upsertDocCategories();
   console.log('Seed complete.');
 }
 

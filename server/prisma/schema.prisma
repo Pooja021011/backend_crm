@@ -25,6 +25,7 @@ model User {
   assignedTasks Task[]       @relation("AssignedToUserTasks")
   createdTasks  Task[]       @relation("CreatedByUserTasks")
   uploadedFiles File[]       @relation("UploadedByUser")
+  uploadedFileVersions FileVersion[] @relation("VersionUploadedByUser")
   createdScenarios UnderwritingScenario[] @relation("CreatedByUser")
   createdCommunications Communication[] @relation("CreatedByUser")
   createdMarketingLinks MarketingLink[] @relation("CreatedByUser")
@@ -299,12 +300,18 @@ model Task {
 model File {
   id           String   @id @default(uuid())
   filename     String
+  originalName String
   mimeType     String
   size         Int
   storageKey   String   @unique
+  description  String?
+  tags         String[] // Array of tag strings
+  isPublic     Boolean  @default(false)
+  category     String   @default("other") // Direct category field
   uploadedById String?
   uploadedBy   User?    @relation("UploadedByUser", fields: [uploadedById], references: [id])
   createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
   versions     FileVersion[]
   leadFiles    LeadFile[]
   categories   FileCategorization[]
@@ -312,12 +319,17 @@ model File {
 }
 
 model FileVersion {
-  id        String   @id @default(uuid())
-  fileId    String
-  file      File     @relation(fields: [fileId], references: [id])
-  versionNo Int
-  storageKey String
-  createdAt DateTime @default(now())
+  id           String   @id @default(uuid())
+  fileId       String
+  file         File     @relation(fields: [fileId], references: [id])
+  versionNo    Int
+  filename     String
+  size         Int
+  storageKey   String
+  changeNote   String?
+  uploadedById String?
+  uploadedBy   User?    @relation("VersionUploadedByUser", fields: [uploadedById], references: [id])
+  createdAt    DateTime @default(now())
 
   @@index([fileId, versionNo])
 }

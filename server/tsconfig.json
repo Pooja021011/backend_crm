@@ -13,6 +13,6 @@
     "types": ["node"],
     "baseUrl": "./src"
   },
-  "include": ["src", "prisma/seed.ts"]
+  "include": ["src"]
 }
 

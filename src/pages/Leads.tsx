@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +26,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { 
   Plus, 
@@ -48,12 +49,20 @@ import {
   Archive,
   Download,
   Upload,
-  Loader2
+  Loader2,
+  FileText,
+  SortAsc,
+  SortDesc
 } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { useNavigate } from "react-router-dom";
-import { useLeads } from "@/hooks/useLeads";
+import { useLeads, type LeadType } from "@/hooks/useLeads";
 import { useAuth } from "@/contexts/AuthContext";
+import { SortableTableHeader, useSortable } from "@/components/SortableTableHeader";
+import { ImportCSVDialog } from "@/components/ImportCSVDialog";
+import { LeadActions } from "@/components/LeadActions";
+import { generateCSVTemplate } from "@/utils/csvUtils";
+import { toast } from "@/hooks/use-toast";
 
 const Leads = () => {
   const navigate = useNavigate();
@@ -65,13 +74,20 @@ const Leads = () => {
     fetchLeads, 
     deleteLead, 
     getLeadsByType, 
-    searchLeads 
+    searchLeads,
+    importLeadsFromCSV,
+    exportLeadsToCSV,
+    sortLeads
   } = useLeads();
   
-  const [activeTab, setActiveTab] = useState<"SELLER" | "BUYER" | "VENDOR">("SELLER");
+  const [activeTab, setActiveTab] = useState<LeadType>("SELLER");
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [isAddLeadOpen, setIsAddLeadOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  
+  // Sorting functionality
+  const { sortConfig, handleSort, resetSort } = useSortable({ key: 'updatedAt', direction: 'desc' });
 
   // Load all leads on component mount
   useEffect(() => {
@@ -83,11 +99,22 @@ const Leads = () => {
     setSelectedItems([]);
   }, [activeTab]);
 
-  // Get filtered leads based on search and active tab
-  const getCurrentLeads = () => {
-    const typeLeads = getLeadsByType(activeTab);
-    return searchQuery ? searchLeads(searchQuery).filter(lead => lead.leadType === activeTab) : typeLeads;
-  };
+  // Get filtered and sorted leads based on search and active tab
+  const getCurrentLeads = useMemo(() => {
+    let filteredLeads = getLeadsByType(activeTab);
+    
+    // Apply search filter
+    if (searchQuery) {
+      filteredLeads = searchLeads(searchQuery).filter(lead => lead.leadType === activeTab);
+    }
+    
+    // Apply sorting
+    if (sortConfig.key && sortConfig.direction) {
+      filteredLeads = sortLeads(filteredLeads, sortConfig.key, sortConfig.direction);
+    }
+    
+    return filteredLeads;
+  }, [getLeadsByType, activeTab, searchQuery, searchLeads, sortConfig, sortLeads]);
 
   const getLeadCount = (type: "SELLER" | "BUYER" | "VENDOR") => {
     return getLeadsByType(type).length;
@@ -337,13 +364,84 @@ const Leads = () => {
     return getCurrentLeads();
   };
 
-  const getFilteredLeadsForTab = (type: "SELLER" | "BUYER" | "VENDOR") => {
-    const typeLeads = getLeadsByType(type);
-    return searchQuery ? searchLeads(searchQuery).filter(lead => lead.leadType === type) : typeLeads;
+  const getFilteredLeadsForTab = (type: LeadType) => {
+    if (type === activeTab) {
+      return currentLeads;
+    }
+    let filteredLeads = getLeadsByType(type);
+    
+    // Apply search filter
+    if (searchQuery) {
+      filteredLeads = searchLeads(searchQuery).filter(lead => lead.leadType === type);
+    }
+    
+    // Apply sorting
+    if (sortConfig.key && sortConfig.direction) {
+      filteredLeads = sortLeads(filteredLeads, sortConfig.key, sortConfig.direction);
+    }
+    
+    return filteredLeads;
+  };
+
+  // CSV Import/Export handlers
+  const handleImportCSV = async (file: File, leadType: LeadType) => {
+    try {
+      const result = await importLeadsFromCSV(file, leadType);
+      
+      if (result.success > 0) {
+        toast({
+          title: "Import Successful",
+          description: `Successfully imported ${result.success} leads.`,
+        });
+      }
+      
+      if (result.errors.length > 0) {
+        toast({
+          title: "Import Warnings",
+          description: `${result.errors.length} errors occurred during import.`,
+          variant: "destructive",
+        });
+      }
+      
+      return result;
+    } catch (error) {
+      toast({
+        title: "Import Failed",
+        description: error instanceof Error ? error.message : "An error occurred",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+  
+  const handleExportCSV = () => {
+    const currentLeads = getCurrentLeads;
+    if (currentLeads.length === 0) {
+      toast({
+        title: "No Data to Export",
+        description: "There are no leads to export for the current tab.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    exportLeadsToCSV(currentLeads, activeTab);
+    toast({
+      title: "Export Successful",
+      description: `Exported ${currentLeads.length} ${activeTab.toLowerCase()} leads.`,
+    });
+  };
+  
+  const handleDownloadTemplate = () => {
+    generateCSVTemplate(activeTab);
+    toast({
+      title: "Template Downloaded",
+      description: `CSV template for ${activeTab.toLowerCase()} leads downloaded.`,
+    });
   };
 
   const handleSelectAll = () => {
-    const currentLeads = getFilteredLeads();
+    const currentLeads = getCurrentLeads;
     if (selectedItems.length === currentLeads.length) {
       setSelectedItems([]);
     } else {
@@ -373,7 +471,7 @@ const Leads = () => {
     }
   };
 
-  const currentLeads = getFilteredLeads();
+  const currentLeads = getCurrentLeads;
   const allSelected = selectedItems.length === currentLeads.length && currentLeads.length > 0;
   const someSelected = selectedItems.length > 0 && selectedItems.length < currentLeads.length;
 
@@ -547,7 +645,7 @@ const Leads = () => {
                     </div>
                   ) : (
                     <>
-                      {getFilteredLeads().length} of {getCurrentLeads().length} leads
+                      {currentLeads.length} leads
                       {searchQuery && ` matching "${searchQuery}"`}
                     </>
                   )}
@@ -555,21 +653,123 @@ const Leads = () => {
               </div>
               
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" className="gap-2">
-                  <Upload className="w-4 h-4" />
-                  Import
-                </Button>
-                <Button variant="outline" size="sm" className="gap-2">
-                  <Download className="w-4 h-4" />
-                  Export
-                </Button>
+                {/* Import Dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-2">
+                      <Upload className="w-4 h-4" />
+                      Import
+                      <ChevronDown className="w-3 h-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem onClick={() => setIsImportOpen(true)}>
+                      <Upload className="w-4 h-4 mr-2" />
+                      Import CSV
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleDownloadTemplate}>
+                      <FileText className="w-4 h-4 mr-2" />
+                      Download Template
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                
+                {/* Export Dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-2">
+                      <Download className="w-4 h-4" />
+                      Export
+                      <ChevronDown className="w-3 h-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem onClick={handleExportCSV}>
+                      <Download className="w-4 h-4 mr-2" />
+                      Export All ({getCurrentLeads.length})
+                    </DropdownMenuItem>
+                    {selectedItems.length > 0 && (
+                      <DropdownMenuItem onClick={() => {
+                        const selectedLeads = getCurrentLeads.filter(lead => selectedItems.includes(lead.id));
+                        exportLeadsToCSV(selectedLeads, activeTab);
+                        toast({
+                          title: "Export Successful",
+                          description: `Exported ${selectedLeads.length} selected leads.`,
+                        });
+                      }}>
+                        <Download className="w-4 h-4 mr-2" />
+                        Export Selected ({selectedItems.length})
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                
+                {/* Sort Dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-2">
+                      {sortConfig.key ? (
+                        sortConfig.direction === 'asc' ? <SortAsc className="w-4 h-4" /> : <SortDesc className="w-4 h-4" />
+                      ) : (
+                        <ArrowUpDown className="w-4 h-4" />
+                      )}
+                      Sort
+                      <ChevronDown className="w-3 h-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem onClick={() => handleSort('name')}>
+                      Sort by Name
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleSort('email')}>
+                      Sort by Email
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleSort('createdAt')}>
+                      Sort by Created Date
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleSort('updatedAt')}>
+                      Sort by Last Contact
+                    </DropdownMenuItem>
+                    {activeTab === 'SELLER' && (
+                      <DropdownMenuItem onClick={() => handleSort('motivation')}>
+                        Sort by Motivation
+                      </DropdownMenuItem>
+                    )}
+                    {activeTab === 'BUYER' && (
+                      <>
+                        <DropdownMenuItem onClick={() => handleSort('priceRange')}>
+                          Sort by Price Range
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleSort('motivation')}>
+                          Sort by Motivation
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                    {activeTab === 'VENDOR' && (
+                      <>
+                        <DropdownMenuItem onClick={() => handleSort('company')}>
+                          Sort by Company
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleSort('rating')}>
+                          Sort by Rating
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                    {sortConfig.key && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={resetSort}>
+                          Clear Sort
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                
                 <Button variant="outline" size="sm" className="gap-2">
                   <Filter className="w-4 h-4" />
                   Filter
-                </Button>
-                <Button variant="outline" size="sm" className="gap-2">
-                  <ArrowUpDown className="w-4 h-4" />
-                  Sort
                 </Button>
                 
                 {/* Add Lead Dialog */}
@@ -641,36 +841,51 @@ const Leads = () => {
                     <TableRow className="border-b border-gray-200">
                       <TableHead className="w-12 sticky left-0 bg-white z-10 border-r border-gray-200">
                         <Checkbox 
-                          checked={getFilteredLeadsForTab("SELLER").length > 0 && selectedItems.length === getFilteredLeadsForTab("SELLER").length}
+                          checked={currentLeads.length > 0 && selectedItems.length === currentLeads.length}
                           ref={(el) => {
-                            if (el) (el as any).indeterminate = selectedItems.length > 0 && selectedItems.length < getFilteredLeadsForTab("SELLER").length;
+                            if (el) (el as any).indeterminate = selectedItems.length > 0 && selectedItems.length < currentLeads.length;
                           }}
                           onCheckedChange={() => {
-                            const filteredLeads = getFilteredLeadsForTab("SELLER");
-                            if (selectedItems.length === filteredLeads.length) {
+                            if (selectedItems.length === currentLeads.length) {
                               setSelectedItems([]);
                             } else {
-                              setSelectedItems(filteredLeads.map(lead => lead.id));
+                              setSelectedItems(currentLeads.map(lead => lead.id));
                             }
                           }}
                         />
                       </TableHead>
-                      <TableHead className="text-gray-600 font-medium min-w-[250px]">Property Address</TableHead>
-                      <TableHead className="text-gray-600 font-medium min-w-[180px]">Lead Name</TableHead>
-                      <TableHead className="text-gray-600 font-medium min-w-[200px]">Contact Info</TableHead>
-                      <TableHead className="text-gray-600 font-medium min-w-[120px]">Market</TableHead>
+                      <SortableTableHeader sortKey="address" sortConfig={sortConfig} onSort={handleSort} className="min-w-[250px]">
+                        Property Address
+                      </SortableTableHeader>
+                      <SortableTableHeader sortKey="name" sortConfig={sortConfig} onSort={handleSort} className="min-w-[180px]">
+                        Lead Name
+                      </SortableTableHeader>
+                      <SortableTableHeader sortKey="email" sortConfig={sortConfig} onSort={handleSort} className="min-w-[200px]">
+                        Contact Info
+                      </SortableTableHeader>
+                      <SortableTableHeader sortKey="market" sortConfig={sortConfig} onSort={handleSort} className="min-w-[120px]">
+                        Market
+                      </SortableTableHeader>
                       <TableHead className="text-gray-600 font-medium min-w-[120px]">Property Value</TableHead>
-                      <TableHead className="text-gray-600 font-medium min-w-[100px]">Motivation</TableHead>
+                      <SortableTableHeader sortKey="motivation" sortConfig={sortConfig} onSort={handleSort} className="min-w-[100px]">
+                        Motivation
+                      </SortableTableHeader>
                       <TableHead className="text-gray-600 font-medium min-w-[120px]">Timeline</TableHead>
-                      <TableHead className="text-gray-600 font-medium min-w-[120px]">Lead Status</TableHead>
+                      <SortableTableHeader sortKey="status" sortConfig={sortConfig} onSort={handleSort} className="min-w-[120px]">
+                        Lead Status
+                      </SortableTableHeader>
                       <TableHead className="text-gray-600 font-medium min-w-[140px]">Pipeline Status</TableHead>
-                      <TableHead className="text-gray-600 font-medium min-w-[140px]">Assigned Agent</TableHead>
-                      <TableHead className="text-gray-600 font-medium min-w-[120px]">Last Contact</TableHead>
+                      <SortableTableHeader sortKey="assignedUser" sortConfig={sortConfig} onSort={handleSort} className="min-w-[140px]">
+                        Assigned Agent
+                      </SortableTableHeader>
+                      <SortableTableHeader sortKey="updatedAt" sortConfig={sortConfig} onSort={handleSort} className="min-w-[120px]">
+                        Last Contact
+                      </SortableTableHeader>
                       <TableHead className="w-12 sticky right-0 bg-white z-10 border-l border-gray-200"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {getFilteredLeadsForTab("SELLER").map((lead) => (
+                    {currentLeads.map((lead) => (
                       <TableRow key={lead.id} className="border-b border-gray-100 hover:bg-gray-50">
                         <TableCell className="sticky left-0 bg-white z-10 border-r border-gray-200">
                           <div className="flex items-center justify-center h-full">
@@ -737,39 +952,10 @@ const Leads = () => {
                           {new Date(lead.updatedAt).toLocaleDateString()}
                         </TableCell>
                         <TableCell className="sticky right-0 bg-white z-10 border-l border-gray-200">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                <MoreHorizontal className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem>
-                                <Eye className="w-4 h-4 mr-2" />
-                                View Details
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>
-                                <Edit className="w-4 h-4 mr-2" />
-                                Edit Lead
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>
-                                <Phone className="w-4 h-4 mr-2" />
-                                Call Lead
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>
-                                <Mail className="w-4 h-4 mr-2" />
-                                Send Email
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>
-                                <Calendar className="w-4 h-4 mr-2" />
-                                Schedule Meeting
-                              </DropdownMenuItem>
-                              <DropdownMenuItem className="text-red-600">
-                                <Trash2 className="w-4 h-4 mr-2" />
-                                Delete Lead
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          <LeadActions 
+                            lead={lead} 
+                            onLeadUpdated={() => fetchLeads()} 
+                          />
                         </TableCell>
                       </TableRow>
                     ))}
@@ -788,10 +974,10 @@ const Leads = () => {
                         <Checkbox 
                           checked={getFilteredLeadsForTab("BUYER").length > 0 && selectedItems.length === getFilteredLeadsForTab("BUYER").length}
                           ref={(el) => {
-                            if (el) (el as any).indeterminate = selectedItems.length > 0 && selectedItems.length < getFilteredLeadsForTab(buyerLeads).length;
+                            if (el) (el as any).indeterminate = selectedItems.length > 0 && selectedItems.length < getFilteredLeadsForTab("BUYER").length;
                           }}
                           onCheckedChange={() => {
-                            const filteredLeads = getFilteredLeadsForTab(buyerLeads);
+                            const filteredLeads = getFilteredLeadsForTab("BUYER");
                             if (selectedItems.length === filteredLeads.length) {
                               setSelectedItems([]);
                             } else {
@@ -816,7 +1002,7 @@ const Leads = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {getFilteredLeadsForTab("BUYER").map((lead) => (
+                    {activeTab === "BUYER" ? currentLeads.map((lead) => (
                       <TableRow key={lead.id} className="border-b border-gray-100 hover:bg-gray-50">
                         <TableCell className="sticky left-0 bg-white z-10 border-r border-gray-200">
                           <div className="flex items-center justify-center h-full">
@@ -897,42 +1083,13 @@ const Leads = () => {
                         <TableCell className="text-gray-600">{lead.assignedAgent}</TableCell>
                         <TableCell className="text-gray-600">{lead.lastContact}</TableCell>
                         <TableCell className="sticky right-0 bg-white z-10 border-l border-gray-200">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                <MoreHorizontal className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem>
-                                <Eye className="w-4 h-4 mr-2" />
-                                View Details
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>
-                                <Edit className="w-4 h-4 mr-2" />
-                                Edit Lead
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>
-                                <Phone className="w-4 h-4 mr-2" />
-                                Call Lead
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>
-                                <Mail className="w-4 h-4 mr-2" />
-                                Send Email
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>
-                                <Calendar className="w-4 h-4 mr-2" />
-                                Schedule Meeting
-                              </DropdownMenuItem>
-                              <DropdownMenuItem className="text-red-600">
-                                <Trash2 className="w-4 h-4 mr-2" />
-                                Delete Lead
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          <LeadActions 
+                            lead={lead} 
+                            onLeadUpdated={() => fetchLeads()} 
+                          />
                         </TableCell>
                       </TableRow>
-                    ))}
+                    )) : []}
                   </TableBody>
                 </Table>
               </div>
@@ -946,12 +1103,12 @@ const Leads = () => {
                     <TableRow className="border-b border-gray-200">
                       <TableHead className="w-12 sticky left-0 bg-white z-10 border-r border-gray-200">
                         <Checkbox 
-                          checked={getFilteredLeadsForTab(vendorLeads).length > 0 && selectedItems.length === getFilteredLeadsForTab(vendorLeads).length}
+                          checked={getFilteredLeadsForTab("VENDOR").length > 0 && selectedItems.length === getFilteredLeadsForTab("VENDOR").length}
                           ref={(el) => {
-                            if (el) (el as any).indeterminate = selectedItems.length > 0 && selectedItems.length < getFilteredLeadsForTab(vendorLeads).length;
+                            if (el) (el as any).indeterminate = selectedItems.length > 0 && selectedItems.length < getFilteredLeadsForTab("VENDOR").length;
                           }}
                           onCheckedChange={() => {
-                            const filteredLeads = getFilteredLeadsForTab(vendorLeads);
+                            const filteredLeads = getFilteredLeadsForTab("VENDOR");
                             if (selectedItems.length === filteredLeads.length) {
                               setSelectedItems([]);
                             } else {
@@ -973,7 +1130,7 @@ const Leads = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {getFilteredLeadsForTab("VENDOR").map((lead) => (
+                    {activeTab === "VENDOR" ? currentLeads.map((lead) => (
                       <TableRow key={lead.id} className="border-b border-gray-100 hover:bg-gray-50">
                         <TableCell className="sticky left-0 bg-white z-10 border-r border-gray-200">
                           <div className="flex items-center justify-center h-full">
@@ -1033,42 +1190,13 @@ const Leads = () => {
                         <TableCell className="text-gray-600">{lead.assignedAgent}</TableCell>
                         <TableCell className="text-gray-600">{lead.lastContact}</TableCell>
                         <TableCell className="sticky right-0 bg-white z-10 border-l border-gray-200">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                <MoreHorizontal className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem>
-                                <Eye className="w-4 h-4 mr-2" />
-                                View Details
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>
-                                <Edit className="w-4 h-4 mr-2" />
-                                Edit Lead
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>
-                                <Phone className="w-4 h-4 mr-2" />
-                                Call Vendor
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>
-                                <Mail className="w-4 h-4 mr-2" />
-                                Send Email
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>
-                                <Calendar className="w-4 h-4 mr-2" />
-                                Schedule Meeting
-                              </DropdownMenuItem>
-                              <DropdownMenuItem className="text-red-600">
-                                <Trash2 className="w-4 h-4 mr-2" />
-                                Delete Lead
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          <LeadActions 
+                            lead={lead} 
+                            onLeadUpdated={() => fetchLeads()} 
+                          />
                         </TableCell>
                       </TableRow>
-                    ))}
+                    )) : []}
                   </TableBody>
                 </Table>
               </div>
@@ -1076,6 +1204,14 @@ const Leads = () => {
           </Tabs>
         </div>
       </div>
+      
+      {/* Import CSV Dialog */}
+      <ImportCSVDialog
+        open={isImportOpen}
+        onOpenChange={setIsImportOpen}
+        leadType={activeTab}
+        onImport={handleImportCSV}
+      />
     </DashboardLayout>
   );
 };

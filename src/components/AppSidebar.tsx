@@ -9,10 +9,12 @@ import {
   ChevronLeft,
   ChevronRight,
   User,
-  ChevronDown
+  ChevronDown,
+  UserCog
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   Sidebar,
   SidebarContent,
@@ -31,15 +33,18 @@ const navigationItems = [
   { title: "Leads", url: "/leads", icon: Users },
   { title: "Pipeline", url: "/pipeline", icon: TrendingUp },
   { title: "Metrics", url: "/metrics", icon: BarChart3 },
+  { title: "Agents", url: "/agents", icon: UserCog, adminOnly: true },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
 export function AppSidebar() {
   const { state, toggleSidebar } = useSidebar();
+  const { user } = useAuth();
   const location = useLocation();
   const currentPath = location.pathname;
 
   const isCollapsed = state === "collapsed";
+  const isAdmin = user?.roles?.includes('ADMIN') || false;
 
   const isActive = (path: string) => {
     if (path === "/inbox" && (currentPath === "/inbox" || currentPath === "/")) return true;
@@ -98,7 +103,9 @@ export function AppSidebar() {
           <SidebarGroup>
             <SidebarGroupContent>
               <SidebarMenu className="space-y-1">
-                {navigationItems.map((item) => (
+                {navigationItems
+                  .filter((item) => !item.adminOnly || isAdmin)
+                  .map((item) => (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton asChild>
                       <NavLink 
