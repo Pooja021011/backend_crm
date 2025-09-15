@@ -6,9 +6,19 @@ import { componentTagger } from "lovable-tagger";
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   server: {
-    host: "::",
+    host: "0.0.0.0",
     port: 8080,
     historyApiFallback: true,
+    strictPort: true,
+    https: false, // Force HTTP only
+    cors: true,
+    // Headers to prevent HTTPS upgrade
+    headers: {
+      'Strict-Transport-Security': 'max-age=0',
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Content-Security-Policy': "default-src 'self' http: https: data: blob: 'unsafe-inline' 'unsafe-eval'"
+    }
   },
   plugins: [
     react(),

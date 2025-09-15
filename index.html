@@ -7,6 +7,11 @@
     <meta name="description" content="Professional Real Estate CRM Platform - RealEstate" />
     <meta name="author" content="RealEstate" />
     
+    <!-- Force HTTP, prevent HTTPS upgrades -->
+    <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests; default-src 'self' http: https: data: blob: 'unsafe-inline' 'unsafe-eval';">
+    <meta http-equiv="Strict-Transport-Security" content="max-age=0">
+    <meta name="referrer" content="no-referrer-when-downgrade">
+    
     <!-- Favicons -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2">
     <link rel="manifest" href="/site.webmanifest">

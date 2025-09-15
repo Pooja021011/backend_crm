@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { API_BASE, httpFetch } from '@/config/api';
 
 interface User {
   id: string;
@@ -40,7 +41,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
-  const API_BASE = 'http://localhost:4000/api/v1';
+  // API_BASE is now imported from config
 
   // Check if user is authenticated on app start
   useEffect(() => {
@@ -61,7 +62,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         
         try {
           // Try to refresh token to validate session
-          const response = await fetch(`${API_BASE}/auth/refresh`, {
+          const response = await httpFetch(`${API_BASE}/auth/refresh`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -97,7 +98,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
       setIsLoading(true);
-      const response = await fetch(`${API_BASE}/auth/login`, {
+      const response = await httpFetch(`${API_BASE}/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -140,7 +141,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const refreshToken = async (): Promise<boolean> => {
     try {
-      const response = await fetch(`${API_BASE}/auth/refresh`, {
+        const response = await httpFetch(`${API_BASE}/auth/refresh`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

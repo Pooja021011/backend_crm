@@ -119,7 +119,7 @@ export interface LeadsHookReturn {
   sortLeads: (leadsToSort: Lead[], key: string, direction: 'asc' | 'desc') => Lead[];
 }
 
-const API_BASE = 'http://localhost:4000/api/v1';
+import { API_BASE, httpFetch } from '@/config/api';
 
 export const useLeads = (): LeadsHookReturn => {
   const [leads, setLeads] = useState<Lead[]>([]);
