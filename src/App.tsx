@@ -89,12 +89,12 @@ const App = () => (
               </ProtectedRoute>
             } />
             <Route path="/leads/add-buyer" element={
-              <ProtectedRoute requiredRoles={['ADMIN', 'MANAGER', 'DISP']}>
+              <ProtectedRoute>
                 <AddBuyerLead />
               </ProtectedRoute>
             } />
             <Route path="/leads/add-vendor" element={
-              <ProtectedRoute requiredRoles={['ADMIN', 'MANAGER']}>
+              <ProtectedRoute>
                 <AddVendorLead />
               </ProtectedRoute>
             } />

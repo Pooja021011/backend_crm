@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 export interface Market {
   id: string;
@@ -114,9 +114,9 @@ export const useSettings = (): SettingsHookReturn => {
     }
   };
 
-  const getCountiesByMarket = (marketId: string): County[] => {
+  const getCountiesByMarket = useCallback((marketId: string): County[] => {
     return counties.filter(county => county.marketId === marketId);
-  };
+  }, [counties]);
 
   const refreshSettings = async (): Promise<void> => {
     await fetchAllSettings();
