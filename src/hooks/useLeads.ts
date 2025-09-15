@@ -305,13 +305,104 @@ export const useLeads = (): LeadsHookReturn => {
   };
 
   const importLeadsFromCSV = async (file: File, type: LeadType): Promise<{ success: number; errors: string[] }> => {
-    // This is a placeholder implementation
-    // You would need to implement CSV parsing and validation logic
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({ success: 0, errors: ['CSV import not yet implemented'] });
-      }, 1000);
-    });
+    try {
+      const text = await file.text();
+      const lines = text.split('\n').filter(line => line.trim());
+      
+      if (lines.length <= 1) {
+        return { success: 0, errors: ['CSV file is empty or contains no data rows'] };
+      }
+
+      const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+      const dataRows = lines.slice(1);
+      
+      let successCount = 0;
+      const errors: string[] = [];
+
+      for (let i = 0; i < dataRows.length; i++) {
+        try {
+          const rowData = dataRows[i].split(',').map(cell => cell.trim().replace(/"/g, ''));
+          const rowIndex = i + 2; // +2 because we skip header and arrays are 0-indexed
+          
+          // Create a data object from headers and row data
+          const data: Record<string, string> = {};
+          headers.forEach((header, index) => {
+            data[header] = rowData[index] || '';
+          });
+
+          // Validate required fields
+          if (!data['First Name'] || !data['Last Name'] || !data['Email'] || !data['Phone']) {
+            errors.push(`Row ${rowIndex}: Missing required fields (First Name, Last Name, Email, Phone)`);
+            continue;
+          }
+
+          // Create lead data based on type
+          let leadData: any;
+          
+          if (type === 'SELLER') {
+            leadData = {
+              type: 'SELLER',
+              seller: {
+                firstName: data['First Name'],
+                lastName: data['Last Name'],
+                phone: data['Phone'],
+                email: data['Email'],
+                motivation: data['Motivation'] || 'Medium'
+              },
+              address: data['Address'] ? {
+                address1: data['Address'],
+                city: data['City'] || '',
+                state: data['State'] || '',
+                zip: data['ZIP'] || ''
+              } : undefined
+            };
+          } else if (type === 'BUYER') {
+            leadData = {
+              type: 'BUYER',
+              buyer: {
+                firstName: data['First Name'],
+                lastName: data['Last Name'],
+                phone: data['Phone'],
+                email: data['Email'],
+                vip: data['VIP']?.toLowerCase() === 'true' || data['VIP']?.toLowerCase() === 'yes'
+              }
+            };
+          } else if (type === 'VENDOR') {
+            leadData = {
+              type: 'VENDOR',
+              vendor: {
+                firstName: data['First Name'],
+                lastName: data['Last Name'],
+                phone: data['Phone'],
+                email: data['Email'],
+                company: data['Company'] || '',
+                serviceType: data['Service Type'] || 'Other'
+              }
+            };
+          }
+
+          // Create the lead
+          await createLead(leadData);
+          successCount++;
+          
+        } catch (error) {
+          errors.push(`Row ${i + 2}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      }
+
+      // Refresh leads list after import
+      if (successCount > 0) {
+        await listLeads();
+      }
+
+      return { success: successCount, errors };
+      
+    } catch (error) {
+      return { 
+        success: 0, 
+        errors: [error instanceof Error ? error.message : 'Failed to process CSV file'] 
+      };
+    }
   };
 
   const exportLeadsToCSV = (leadsToExport: Lead[], type: LeadType): void => {
