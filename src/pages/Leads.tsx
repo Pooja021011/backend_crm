@@ -1016,11 +1016,11 @@ const Leads = () => {
                           <div className="flex items-center gap-2">
                             <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
                               <span className="text-xs font-medium text-green-600">
-                                {lead.firstName[0]}{lead.lastName[0]}
+                                {lead.buyer?.firstName?.[0]}{lead.buyer?.lastName?.[0]}
                               </span>
                             </div>
                             <span className="font-medium text-gray-900">
-                              {lead.firstName} {lead.lastName}
+                              {lead.buyer?.firstName} {lead.buyer?.lastName}
                             </span>
                           </div>
                         </TableCell>
@@ -1028,11 +1028,11 @@ const Leads = () => {
                           <div className="space-y-1">
                             <div className="flex items-center gap-1 text-xs text-gray-600">
                               <Phone className="w-3 h-3" />
-                              {lead.phone}
+                              {lead.buyer?.phone}
                             </div>
                             <div className="flex items-center gap-1 text-xs text-gray-600">
                               <Mail className="w-3 h-3" />
-                              {lead.email}
+                              {lead.buyer?.email}
                             </div>
                           </div>
                         </TableCell>
@@ -1144,24 +1144,24 @@ const Leads = () => {
                           <div className="flex items-center gap-2">
                             <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center">
                               <span className="text-xs font-medium text-orange-600">
-                                {lead.firstName[0]}{lead.lastName[0]}
+                                {lead.vendor?.firstName?.[0]}{lead.vendor?.lastName?.[0]}
                               </span>
                             </div>
                             <span className="font-medium text-gray-900">
-                              {lead.firstName} {lead.lastName}
+                              {lead.vendor?.firstName} {lead.vendor?.lastName}
                             </span>
                           </div>
                         </TableCell>
-                        <TableCell className="font-medium text-gray-900">{lead.company}</TableCell>
+                        <TableCell className="font-medium text-gray-900">{lead.vendor?.company}</TableCell>
                         <TableCell>
                           <div className="space-y-1">
                             <div className="flex items-center gap-1 text-xs text-gray-600">
                               <Phone className="w-3 h-3" />
-                              {lead.phone}
+                              {lead.vendor?.phone}
                             </div>
                             <div className="flex items-center gap-1 text-xs text-gray-600">
                               <Mail className="w-3 h-3" />
-                              {lead.email}
+                              {lead.vendor?.email}
                             </div>
                           </div>
                         </TableCell>
