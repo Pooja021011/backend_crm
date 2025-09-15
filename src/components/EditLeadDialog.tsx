@@ -311,15 +311,15 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
                   Assigned Agent
                 </Label>
                 <Select 
-                  value={formData.assignedUserId} 
-                  onValueChange={(value) => handleInputChange('assignedUserId', value)}
+                  value={formData.assignedUserId || 'unassigned'} 
+                  onValueChange={(value) => handleInputChange('assignedUserId', value === 'unassigned' ? null : value)}
                   disabled={agentsLoading}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder={agentsLoading ? "Loading agents..." : "Select agent"} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Unassigned</SelectItem>
+                    <SelectItem value="unassigned">Unassigned</SelectItem>
                     {getActiveAgents().map((agent) => {
                       const initials = `${agent.firstName.charAt(0)}${agent.lastName.charAt(0)}`;
                       const fullName = `${agent.firstName} ${agent.lastName}`;
@@ -342,7 +342,7 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
                       );
                     })}
                     {getActiveAgents().length === 0 && !agentsLoading && (
-                      <SelectItem value="" disabled>
+                      <SelectItem value="no-agents" disabled>
                         No agents available
                       </SelectItem>
                     )}

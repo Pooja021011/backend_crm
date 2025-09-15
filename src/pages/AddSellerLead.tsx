@@ -148,7 +148,7 @@ const AddSellerLead = () => {
           zip: formData.zip.trim() || '00000',
           countyId: formData.countyId || undefined
         },
-        assignedUserId: formData.acquisitionsAgentId || undefined,
+        assignedUserId: formData.acquisitionsAgentId && formData.acquisitionsAgentId !== 'no-agents' ? formData.acquisitionsAgentId : undefined,
         pipelineStageId: undefined // Will use default pipeline stage
       };
 
@@ -471,7 +471,7 @@ const AddSellerLead = () => {
                       );
                     })}
                     {acquisitionsAgents.length === 0 && !agentsLoading && (
-                      <SelectItem value="" disabled>
+                      <SelectItem value="no-agents" disabled>
                         No acquisitions agents available
                       </SelectItem>
                     )}

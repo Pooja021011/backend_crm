@@ -109,7 +109,7 @@ const AddBuyerLead = () => {
           // Convert string arrays to UUIDs if you have mapping
           // For now, we'll skip criteria since we don't have the UUID mapping
         },
-        assignedUserId: formData.dispositionAgentId || undefined
+        assignedUserId: formData.dispositionAgentId && formData.dispositionAgentId !== 'no-agents' ? formData.dispositionAgentId : undefined
       };
 
       const createdLead = await createLead(leadData);
@@ -517,7 +517,7 @@ const AddBuyerLead = () => {
                       );
                     })}
                     {dispositionAgents.length === 0 && !agentsLoading && (
-                      <SelectItem value="" disabled>
+                      <SelectItem value="no-agents" disabled>
                         No disposition agents available
                       </SelectItem>
                     )}
