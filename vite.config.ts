@@ -15,9 +15,7 @@ export default defineConfig(({ mode }) => ({
     // Headers to prevent HTTPS upgrade
     headers: {
       'Strict-Transport-Security': 'max-age=0',
-      'X-Content-Type-Options': 'nosniff',
-      'X-Frame-Options': 'DENY',
-      'Content-Security-Policy': "default-src 'self' http: https: data: blob: 'unsafe-inline' 'unsafe-eval'"
+      'X-Content-Type-Options': 'nosniff'
     }
   },
   plugins: [
