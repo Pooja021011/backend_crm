@@ -25,28 +25,33 @@ interface EmailMessage {
 export const emailService = {
   // Create SMTP transporter for a specific user
   createSmtpTransporter: async (userId: string) => {
-    const userSettings = await settingsRepository.getUserEmailSettings(userId);
-    
-    if (!userSettings || !userSettings.smtpHost || !userSettings.smtpUser || !userSettings.smtpPass) {
-      throw new Error('SMTP configuration not found or incomplete for user');
-    }
-
-    const transporter = nodemailer.createTransport({
-      host: userSettings.smtpHost,
-      port: userSettings.smtpPort || 587,
-      secure: userSettings.smtpPort === 465, // true for 465, false for 587
-      requireTLS: true, // Force TLS for port 587
-      auth: {
-        user: userSettings.smtpUser,
-        pass: userSettings.smtpPass,
-      },
-      tls: {
-        rejectUnauthorized: false, // Allow self-signed certificates
-        ciphers: 'SSLv3' // For compatibility
+    try {
+      const userSettings = await settingsRepository.getUserEmailSettings(userId);
+      
+      if (!userSettings || !userSettings.smtpHost || !userSettings.smtpUser || !userSettings.smtpPass) {
+        throw new Error('SMTP configuration not found or incomplete for user');
       }
-    });
 
-    return transporter;
+      const transporter = nodemailer.createTransport({
+        host: userSettings.smtpHost,
+        port: userSettings.smtpPort || 587,
+        secure: userSettings.smtpPort === 465, // true for 465, false for 587
+        requireTLS: true, // Force TLS for port 587
+        auth: {
+          user: userSettings.smtpUser,
+          pass: userSettings.smtpPass,
+        },
+        tls: {
+          rejectUnauthorized: false, // Allow self-signed certificates
+          ciphers: 'SSLv3' // For compatibility
+        }
+      });
+
+      return transporter;
+    } catch (error: any) {
+      console.error('Error creating SMTP transporter:', error);
+      throw new Error(`Failed to create SMTP transporter: ${error.message}`);
+    }
   },
 
   // Send email using user's SMTP settings

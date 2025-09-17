@@ -42,8 +42,29 @@ export const settingsRepository = {
   setAppSettings: (data: any) => prisma.appSetting.upsert({ where: { id: 'global' }, update: { data }, create: { id: 'global', data } }),
 
   // Per-user Email Settings
-  getUserEmailSettings: (userId: string) =>
-    prisma.userEmailSettings.findUnique({ where: { userId } }),
+  getUserEmailSettings: async (userId: string) => {
+    try {
+      console.log('🔍 Debug - prisma client:', typeof prisma, !!prisma);
+      console.log('🔍 Debug - prisma.userEmailSettings:', typeof prisma?.userEmailSettings, !!prisma?.userEmailSettings);
+      console.log('🔍 Debug - userId:', userId);
+      
+      if (!prisma) {
+        throw new Error('Database client not initialized');
+      }
+      
+      if (!prisma.userEmailSettings) {
+        throw new Error('UserEmailSettings model not available on prisma client');
+      }
+      
+      const result = await prisma.userEmailSettings.findUnique({ where: { userId } });
+      console.log('🔍 Debug - query result:', !!result);
+      return result;
+    } catch (error: any) {
+      console.error('❌ Error fetching user email settings:', error);
+      console.error('❌ Stack trace:', error.stack);
+      throw new Error(`Database error: ${error.message}`);
+    }
+  },
   upsertUserEmailSettings: (userId: string, data: {
     email?: string;
     provider?: string;

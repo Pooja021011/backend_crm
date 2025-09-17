@@ -44,9 +44,14 @@ export const settingsController = {
 
   // Per-user Email Settings
   getUserEmailSettings: async (req: Request, res: Response) => {
-    const userId = (req as any).user.id as string;
-    const data = await settingsService.getUserEmailSettings(userId);
-    return res.json({ success: true, data });
+    try {
+      const userId = (req as any).user.id as string;
+      const data = await settingsService.getUserEmailSettings(userId);
+      return res.json({ success: true, data });
+    } catch (error: any) {
+      console.error('Error in getUserEmailSettings:', error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
   },
   upsertUserEmailSettings: async (req: Request, res: Response) => {
     const userId = (req as any).user.id as string;
