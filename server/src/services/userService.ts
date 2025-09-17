@@ -38,6 +38,24 @@ export const userService = {
       await userRepository.setRoles(id, roles);
     }
     return this.get(id);
+  },
+
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    // Get user with password hash
+    const user = await userRepository.findByIdWithPassword(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Verify current password
+    const isCurrentPasswordValid = await cryptoUtil.verifyPassword(currentPassword, user.passwordHash);
+    if (!isCurrentPasswordValid) {
+      throw new Error('Current password is incorrect');
+    }
+
+    // Hash new password and update
+    const newPasswordHash = await cryptoUtil.hashPassword(newPassword);
+    await userRepository.update(userId, { passwordHash: newPasswordHash });
   }
 };
 

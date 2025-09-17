@@ -15,6 +15,16 @@ router.get('/doc-categories', (req, res, next) => settingsController.listDocCate
 router.get('/app-settings', (req, res, next) => settingsController.getAppSettings(req, res).catch(next));
 router.get('/pipelines', (req, res, next) => settingsController.listPipelines(req, res).catch(next));
 
+// Per-user Email Settings (any authenticated user)
+router.get('/email', (req, res, next) => settingsController.getUserEmailSettings(req, res).catch(next));
+router.post('/email', (req, res, next) => settingsController.upsertUserEmailSettings(req, res).catch(next));
+router.post('/email/test-imap', (req, res, next) => settingsController.testImapConnection(req, res).catch(next));
+router.post('/email/test-smtp', (req, res, next) => settingsController.testSmtpConnection(req, res).catch(next));
+router.get('/email/fetch-gmail', (req, res, next) => settingsController.fetchGmailEmails(req, res).catch(next));
+router.post('/email/send', (req, res, next) => settingsController.sendEmail(req, res).catch(next));
+router.post('/email/fetch-thread', (req, res, next) => settingsController.fetchEmailThread(req, res).catch(next));
+router.post('/email/mark-read', (req, res, next) => settingsController.markEmailAsRead(req, res).catch(next));
+
 // Mutations (ADMIN only)
 router.use(requireRoles('ADMIN'));
 router.post('/markets', (req, res, next) => settingsController.createMarket(req, res).catch(next));

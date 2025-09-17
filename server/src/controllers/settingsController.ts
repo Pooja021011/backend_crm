@@ -42,6 +42,141 @@ export const settingsController = {
   getAppSettings: async (_req: Request, res: Response) => res.json({ data: await settingsService.getAppSettings() }),
   setAppSettings: async (req: Request, res: Response) => res.json({ data: await settingsService.setAppSettings(req.body) }),
 
+  // Per-user Email Settings
+  getUserEmailSettings: async (req: Request, res: Response) => {
+    const userId = (req as any).user.id as string;
+    const data = await settingsService.getUserEmailSettings(userId);
+    return res.json({ success: true, data });
+  },
+  upsertUserEmailSettings: async (req: Request, res: Response) => {
+    const userId = (req as any).user.id as string;
+    const data = await settingsService.upsertUserEmailSettings(userId, req.body);
+    return res.json({ success: true, data });
+  },
+  testImapConnection: async (req: Request, res: Response) => {
+    const { imapHost, imapPort, imapUser, imapPass, imapSecure } = req.body;
+    try {
+      const result = await settingsService.testImapConnection({
+        imapHost,
+        imapPort,
+        imapUser,
+        imapPass,
+        imapSecure
+      });
+      return res.json({ success: true, data: result });
+    } catch (error: any) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+  },
+
+  // Fetch Gmail emails via IMAP
+  fetchGmailEmails: async (req: Request, res: Response) => {
+    const userId = (req as any).user.id as string;
+    const limit = parseInt(req.query.limit as string) || 20;
+    
+    try {
+      const { emailService } = await import('../services/emailService.js');
+      const emails = await emailService.fetchGmailEmails(userId, limit);
+      return res.json({ success: true, data: emails });
+    } catch (error: any) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+  },
+
+  // Send email using user's SMTP settings
+  sendEmail: async (req: Request, res: Response) => {
+    const userId = (req as any).user.id as string;
+    const { to, subject, text, html, replyTo, inReplyTo, references } = req.body;
+    
+    if (!to || !subject || (!text && !html)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Missing required fields: to, subject, and text/html' 
+      });
+    }
+    
+    try {
+      const { emailService } = await import('../services/emailService.js');
+      const result = await emailService.sendEmail(userId, {
+        to,
+        subject,
+        text,
+        html,
+        replyTo,
+        inReplyTo,
+        references
+      });
+      return res.json({ success: true, data: result });
+    } catch (error: any) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+  },
+
+  // Test SMTP connection for current user
+  testSmtpConnection: async (req: Request, res: Response) => {
+    const userId = (req as any).user.id as string;
+    
+    try {
+      const { emailService } = await import('../services/emailService.js');
+      const result = await emailService.testSmtpConnection(userId);
+      return res.json({ success: true, data: result });
+    } catch (error: any) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+  },
+
+  // Fetch email thread for a specific subject
+  fetchEmailThread: async (req: Request, res: Response) => {
+    const userId = (req as any).user.id as string;
+    
+    try {
+      const { subject } = req.body;
+      if (!subject) {
+        return res.status(400).json({ success: false, error: 'Email subject is required' });
+      }
+
+      const { emailService } = await import('../services/emailService.js');
+      const threadEmails = await emailService.fetchEmailThread(userId, subject);
+      
+      res.json({
+        success: true,
+        data: threadEmails
+      });
+    } catch (error: any) {
+      console.error('Thread fetch error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to fetch email thread'
+      });
+    }
+  },
+
+  // Mark email as read on Gmail
+  markEmailAsRead: async (req: Request, res: Response) => {
+    const userId = (req as any).user.id as string;
+    
+    try {
+      const { emailId } = req.body;
+      if (!emailId) {
+        return res.status(400).json({ success: false, error: 'Email ID is required' });
+      }
+
+      const { emailService } = await import('../services/emailService.js');
+      const result = await emailService.markEmailAsRead(userId, emailId);
+      
+      res.json({
+        success: true,
+        data: result
+      });
+    } catch (error: any) {
+      console.error('Mark as read error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to mark email as read'
+      });
+    }
+  },
+
   // Pipelines
   listPipelines: async (_req: Request, res: Response) => res.json({ data: await settingsService.listPipelines() }),
   createStage: async (req: Request, res: Response) => res.status(201).json({ data: await settingsService.createStage(req.params.pipelineId, req.body.name, req.body.orderIndex, req.body.color) }),

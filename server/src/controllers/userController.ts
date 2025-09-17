@@ -31,6 +31,41 @@ export const userController = {
     const user = await userService.update(req.params.id, input);
     res.json({ data: userSerializer(user) });
   },
+
+  // GET /users/profile - Get current user's profile
+  async getProfile(req: Request, res: Response) {
+    const userId = (req as any).user.id as string;
+    const user = await userService.get(userId);
+    res.json({ success: true, data: userSerializer(user) });
+  },
+
+  // PUT /users/profile - Update current user's profile
+  async updateProfile(req: Request, res: Response) {
+    const userId = (req as any).user.id as string;
+    const { firstName, lastName, email, phone } = req.body;
+    
+    const user = await userService.update(userId, {
+      firstName,
+      lastName,
+      email,
+      phone
+    });
+    
+    res.json({ success: true, data: userSerializer(user) });
+  },
+
+  // PUT /users/change-password - Change current user's password
+  async changePassword(req: Request, res: Response) {
+    const userId = (req as any).user.id as string;
+    const { currentPassword, newPassword } = req.body;
+    
+    try {
+      await userService.changePassword(userId, currentPassword, newPassword);
+      res.json({ success: true, message: 'Password changed successfully' });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message });
+    }
+  },
 };
 
 function userSerializer(u: any) {

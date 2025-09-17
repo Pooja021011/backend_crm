@@ -35,6 +35,41 @@ export const settingsService = {
   getAppSettings: () => settingsRepository.getAppSettings(),
   setAppSettings: (data: any) => settingsRepository.setAppSettings(data),
 
+  // Per-user Email Settings
+  getUserEmailSettings: (userId: string) => settingsRepository.getUserEmailSettings(userId),
+  upsertUserEmailSettings: (
+    userId: string,
+    data: {
+      email?: string;
+      provider?: string;
+      smtpHost?: string | null;
+      smtpPort?: number | null;
+      smtpSecure?: boolean | null;
+      smtpUser?: string | null;
+      smtpPass?: string | null;
+      imapHost?: string | null;
+      imapPort?: number | null;
+      imapSecure?: boolean | null;
+      imapUser?: string | null;
+      imapPass?: string | null;
+      gmailConnected?: boolean;
+      gmailTokens?: any;
+      syncEnabled?: boolean;
+    }
+  ) => settingsRepository.upsertUserEmailSettings(userId, data),
+
+  // Test IMAP Connection - delegate to emailService
+  testImapConnection: async (config: {
+    imapHost: string;
+    imapPort: number;
+    imapUser: string;
+    imapPass: string;
+    imapSecure: boolean;
+  }) => {
+    const { emailService } = await import('./emailService.js');
+    return emailService.testImapConnection(config);
+  },
+
   // Pipelines
   listPipelines: () => settingsRepository.listPipelines(),
   createStage: (pipelineId: string, name: string, orderIndex: number, color?: string) => settingsRepository.createStage(pipelineId, name, orderIndex, color),

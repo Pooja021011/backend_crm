@@ -10,7 +10,8 @@ import {
   ChevronRight,
   User,
   ChevronDown,
-  UserCog
+  UserCog,
+  Mail
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -33,8 +34,16 @@ const navigationItems = [
   { title: "Leads", url: "/leads", icon: Users },
   { title: "Pipeline", url: "/pipeline", icon: TrendingUp },
   { title: "Metrics", url: "/metrics", icon: BarChart3 },
-  { title: "Agents", url: "/agents", icon: UserCog, adminOnly: true },
-  { title: "Settings", url: "/settings", icon: Settings },
+  { 
+    title: "Settings", 
+    icon: Settings, 
+    hasSubmenu: true,
+    subItems: [
+      { title: "Profile", url: "/settings?tab=profile", icon: User },
+      { title: "Email Sync", url: "/settings?tab=email", icon: Mail },
+      { title: "Agents", url: "/settings?tab=agents", icon: UserCog, adminOnly: true },
+    ]
+  },
 ];
 
 export function AppSidebar() {
@@ -42,6 +51,7 @@ export function AppSidebar() {
   const { user } = useAuth();
   const location = useLocation();
   const currentPath = location.pathname;
+  const [expandedMenus, setExpandedMenus] = useState<string[]>(['Settings']); // Settings expanded by default
 
   const isCollapsed = state === "collapsed";
   const isAdmin = user?.roles?.includes('ADMIN') || false;
@@ -52,10 +62,35 @@ export function AppSidebar() {
     return false;
   };
 
+  const isSubItemActive = (url: string) => {
+    const urlParams = new URLSearchParams(url.split('?')[1]);
+    const tab = urlParams.get('tab');
+    const currentParams = new URLSearchParams(location.search);
+    const currentTab = currentParams.get('tab');
+    return currentPath === '/settings' && tab === currentTab;
+  };
+
+  const toggleSubmenu = (menuTitle: string) => {
+    if (isCollapsed) return; // Don't toggle when collapsed
+    setExpandedMenus(prev => 
+      prev.includes(menuTitle) 
+        ? prev.filter(item => item !== menuTitle)
+        : [...prev, menuTitle]
+    );
+  };
+
   const getNavClassName = (path: string) =>
     cn(
       "w-full justify-start transition-all duration-200 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground rounded-lg group",
       isActive(path) 
+        ? "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 hover:text-sidebar-primary-foreground shadow-sm" 
+        : ""
+    );
+
+  const getSubNavClassName = (url: string) =>
+    cn(
+      "w-full justify-start transition-all duration-200 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground rounded-lg group text-sm pl-8",
+      isSubItemActive(url) 
         ? "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 hover:text-sidebar-primary-foreground shadow-sm" 
         : ""
     );
@@ -103,21 +138,71 @@ export function AppSidebar() {
           <SidebarGroup>
             <SidebarGroupContent>
               <SidebarMenu className="space-y-1">
-                {navigationItems
-                  .filter((item) => !item.adminOnly || isAdmin)
-                  .map((item) => (
+                {navigationItems.map((item) => (
                   <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild>
-                      <NavLink 
-                        to={item.url} 
-                        className={getNavClassName(item.url)}
-                      >
-                        <item.icon className="w-5 h-5 flex-shrink-0" />
-                        {!isCollapsed && (
-                          <span className="ml-3 animate-fade-in font-medium">{item.title}</span>
+                    {item.hasSubmenu ? (
+                      <>
+                        {/* Main menu item with submenu */}
+                        <SidebarMenuButton asChild>
+                          <button
+                            onClick={() => toggleSubmenu(item.title)}
+                            className={cn(
+                              "w-full justify-between transition-all duration-200 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground rounded-lg group",
+                              currentPath === '/settings' 
+                                ? "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 hover:text-sidebar-primary-foreground shadow-sm" 
+                                : ""
+                            )}
+                          >
+                            <div className="flex items-center">
+                              <item.icon className="w-5 h-5 flex-shrink-0" />
+                              {!isCollapsed && (
+                                <span className="ml-3 animate-fade-in font-medium">{item.title}</span>
+                              )}
+                            </div>
+                            {!isCollapsed && (
+                              <ChevronDown 
+                                className={cn(
+                                  "w-4 h-4 transition-transform duration-200",
+                                  expandedMenus.includes(item.title) ? "rotate-180" : ""
+                                )} 
+                              />
+                            )}
+                          </button>
+                        </SidebarMenuButton>
+                        
+                        {/* Submenu items */}
+                        {!isCollapsed && expandedMenus.includes(item.title) && item.subItems && (
+                          <div className="ml-2 mt-1 space-y-1">
+                            {item.subItems
+                              .filter((subItem) => !subItem.adminOnly || isAdmin)
+                              .map((subItem) => (
+                              <SidebarMenuButton key={subItem.title} asChild>
+                                <NavLink 
+                                  to={subItem.url} 
+                                  className={getSubNavClassName(subItem.url)}
+                                >
+                                  <subItem.icon className="w-4 h-4 flex-shrink-0" />
+                                  <span className="ml-3 animate-fade-in font-medium text-sm">{subItem.title}</span>
+                                </NavLink>
+                              </SidebarMenuButton>
+                            ))}
+                          </div>
                         )}
-                      </NavLink>
-                    </SidebarMenuButton>
+                      </>
+                    ) : (
+                      /* Regular menu item without submenu */
+                      <SidebarMenuButton asChild>
+                        <NavLink 
+                          to={item.url} 
+                          className={getNavClassName(item.url)}
+                        >
+                          <item.icon className="w-5 h-5 flex-shrink-0" />
+                          {!isCollapsed && (
+                            <span className="ml-3 animate-fade-in font-medium">{item.title}</span>
+                          )}
+                        </NavLink>
+                      </SidebarMenuButton>
+                    )}
                   </SidebarMenuItem>
                 ))}
               </SidebarMenu>

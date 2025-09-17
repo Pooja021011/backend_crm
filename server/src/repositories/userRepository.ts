@@ -45,6 +45,19 @@ export const userRepository = {
     return prisma.user.findUnique({ where: { id }, include: { roles: { include: { role: true } } } });
   },
 
+  async findByIdWithPassword(id: string) {
+    return prisma.user.findUnique({ 
+      where: { id }, 
+      select: { 
+        id: true, 
+        passwordHash: true,
+        firstName: true,
+        lastName: true,
+        email: true
+      } 
+    });
+  },
+
   async list(skip = 0, take = 20) {
     return prisma.user.findMany({ skip, take, orderBy: { createdAt: 'desc' }, include: { roles: { include: { role: true } } } });
   },

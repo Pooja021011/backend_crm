@@ -41,6 +41,46 @@ export const settingsRepository = {
   getAppSettings: () => prisma.appSetting.findUnique({ where: { id: 'global' } }),
   setAppSettings: (data: any) => prisma.appSetting.upsert({ where: { id: 'global' }, update: { data }, create: { id: 'global', data } }),
 
+  // Per-user Email Settings
+  getUserEmailSettings: (userId: string) =>
+    prisma.userEmailSettings.findUnique({ where: { userId } }),
+  upsertUserEmailSettings: (userId: string, data: {
+    email?: string;
+    provider?: string;
+    smtpHost?: string | null;
+    smtpPort?: number | null;
+    smtpSecure?: boolean | null;
+    smtpUser?: string | null;
+    smtpPass?: string | null;
+    imapHost?: string | null;
+    imapPort?: number | null;
+    imapSecure?: boolean | null;
+    imapUser?: string | null;
+    imapPass?: string | null;
+    gmailConnected?: boolean;
+    gmailTokens?: any;
+    syncEnabled?: boolean;
+  }) =>
+    prisma.userEmailSettings.upsert({
+      where: { userId },
+      update: { ...data },
+      create: { userId, email: data.email ?? '', provider: data.provider ?? 'SMTP',
+        smtpHost: data.smtpHost ?? null,
+        smtpPort: data.smtpPort ?? null,
+        smtpSecure: data.smtpSecure ?? null,
+        smtpUser: data.smtpUser ?? null,
+        smtpPass: data.smtpPass ?? null,
+        imapHost: data.imapHost ?? null,
+        imapPort: data.imapPort ?? null,
+        imapSecure: data.imapSecure ?? null,
+        imapUser: data.imapUser ?? null,
+        imapPass: data.imapPass ?? null,
+        gmailConnected: data.gmailConnected ?? false,
+        gmailTokens: data.gmailTokens ?? undefined,
+        syncEnabled: data.syncEnabled ?? false,
+      },
+    }),
+
   // Pipelines
   listPipelines: () => prisma.pipelineDefinition.findMany({ where: { active: true }, include: { stages: { orderBy: { orderIndex: 'asc' } } }, orderBy: { key: 'asc' } }),
   findPipelineByKey: (key: string) => prisma.pipelineDefinition.findUnique({ where: { key: key as any }, include: { stages: { orderBy: { orderIndex: 'asc' } } } }),
