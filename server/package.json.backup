@@ -14,12 +14,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "seed": "tsx prisma/seed.ts",
-    "lint": "eslint .",
-    "postinstall": "node scripts/auto-deploy.js",
-    "db:deploy": "npx prisma migrate deploy && npx prisma generate && pm2 restart all --update-env",
-    "db:reset": "prisma migrate reset --force && npm run prisma:generate && pm2 restart all",
-    "db:fresh": "rm -rf node_modules/@prisma node_modules/.prisma && npm install",
-    "server:restart": "pm2 restart all --update-env"
+    "lint": "eslint ."
   },
   "dependencies": {
     "@prisma/client": "^5.17.0",
