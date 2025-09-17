@@ -10,17 +10,23 @@ export default defineConfig(({ mode }) => ({
     port: 8080,
     historyApiFallback: true,
     strictPort: true,
-    https: false, // Force HTTP only
+    https: false,
     cors: true,
-    // Headers to prevent HTTPS upgrade
+    // PM2 compatibility headers
     headers: {
       'Strict-Transport-Security': 'max-age=0',
       'X-Content-Type-Options': 'nosniff'
     }
   },
   plugins: [
-    react(),
-    mode === 'development' &&
+    react({
+      // Explicit JSX configuration for PM2 environment
+      jsxRuntime: 'automatic',
+      jsxImportSource: 'react',
+      // Disable fast refresh in PM2 environment to prevent issues
+      fastRefresh: process.env.PM2_HOME ? false : true
+    }),
+    mode === 'development' && !process.env.PM2_HOME &&
     componentTagger(),
   ].filter(Boolean),
   resolve: {
@@ -28,4 +34,19 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  // PM2 specific optimizations
+  build: {
+    sourcemap: false,
+    minify: mode === 'production'
+  },
+  // Ensure JSX works in PM2 environment
+  esbuild: {
+    jsx: 'automatic',
+    jsxDev: mode === 'development' && !process.env.PM2_HOME,
+    jsxFactory: 'React.createElement',
+    jsxFragment: 'React.Fragment'
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'react/jsx-runtime']
+  }
 }));
