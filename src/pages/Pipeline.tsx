@@ -32,6 +32,7 @@ const Pipeline = () => {
   // API state
   const [pipelineStages, setPipelineStages] = useState<any[]>([]);
   const [leads, setLeads] = useState<any[]>([]);
+  const [needsAttentionCount, setNeedsAttentionCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [movingLead, setMovingLead] = useState(false);
   
@@ -43,17 +44,19 @@ const Pipeline = () => {
     try {
       setLoading(true);
       
-      // Fetch pipeline stages and leads in parallel
-      const [stagesResponse, leadsResponse] = await Promise.all([
+      // Fetch pipeline stages, leads, and needs attention count in parallel
+      const [stagesResponse, leadsResponse, needsAttentionResponse] = await Promise.all([
         makeApiCall(`${API_BASE}/pipeline/${currentPipeline}/stages`),
-        makeApiCall(`${API_BASE}/pipeline/${currentPipeline}/leads${needsAttentionView ? '?needsAttention=true' : ''}`)
+        makeApiCall(`${API_BASE}/pipeline/${currentPipeline}/leads${needsAttentionView ? '?needsAttention=true' : ''}`),
+        makeApiCall(`${API_BASE}/pipeline/${currentPipeline}/leads?needsAttention=true`)
       ]);
 
-      if (stagesResponse.ok && leadsResponse.ok) {
+      if (stagesResponse.ok && leadsResponse.ok && needsAttentionResponse.ok) {
         const stagesData = await stagesResponse.json();
         const leadsData = await leadsResponse.json();
+        const needsAttentionData = await needsAttentionResponse.json();
 
-        if (stagesData.success && leadsData.success) {
+        if (stagesData.success && leadsData.success && needsAttentionData.success) {
           // Map stages to include colors for UI
           const stagesWithColors = stagesData.data.map((stage: any, index: number) => ({
             ...stage,
@@ -62,6 +65,7 @@ const Pipeline = () => {
 
           setPipelineStages(stagesWithColors);
           setLeads(leadsData.data);
+          setNeedsAttentionCount(needsAttentionData.data.length);
         } else {
           throw new Error('Failed to fetch pipeline data');
         }
@@ -107,12 +111,6 @@ const Pipeline = () => {
     return leads.filter(lead => lead.stage === stageId);
   };
 
-  const getNeedsAttentionCount = () => {
-    return leads.filter(lead => {
-      const hoursSinceLastContact = differenceInHours(new Date(), new Date(lead.lastContactDate));
-      return hoursSinceLastContact >= 72 || lead.status === 'urgent';
-    }).length;
-  };
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string);
@@ -189,7 +187,6 @@ const Pipeline = () => {
   };
 
   const activeLead = activeId ? leads.find(lead => lead.id === activeId) : null;
-  const needsAttentionCount = getNeedsAttentionCount();
 
   return (
     <div className="space-y-6">
@@ -234,17 +231,19 @@ const Pipeline = () => {
             />
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="gap-2">
-              <Filter className="w-4 h-4" />
-              Filter
-            </Button>
-            <Button size="sm" className="gap-2 bg-green-600 hover:bg-green-700">
-              <Plus className="w-4 h-4" />
-              Add Lead
-            </Button>
-          </div>
+          {/* Action Buttons - Hidden as requested */}
+          {false && (
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" className="gap-2">
+                <Filter className="w-4 h-4" />
+                Filter
+              </Button>
+              <Button size="sm" className="gap-2 bg-green-600 hover:bg-green-700">
+                <Plus className="w-4 h-4" />
+                Add Lead
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 

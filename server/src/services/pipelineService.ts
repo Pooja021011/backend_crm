@@ -124,8 +124,20 @@ export const pipelineService = {
       });
 
       // Filter for needs attention if requested
-      if (filters.needsAttention) {
-        return this.filterNeedsAttentionLeads(transformedLeads);
+      if (filters && filters.needsAttention === true) {
+        const now = new Date();
+        const filteredLeads = transformedLeads.filter(lead => {
+          // No contact in 72+ hours
+          const hoursSinceLastContact = Math.floor((now.getTime() - new Date(lead.lastContactDate).getTime()) / (1000 * 60 * 60));
+          
+          return (
+            hoursSinceLastContact >= 72 ||
+            lead.status === 'urgent' ||
+            lead.clearToClose === false
+          );
+        });
+        
+        return filteredLeads;
       }
 
       return transformedLeads;
@@ -285,23 +297,18 @@ export const pipelineService = {
 
   /**
    * Filter leads that need attention based on business rules
+   * This function is kept for potential future use but the logic is now inlined
    */
   filterNeedsAttentionLeads(leads: any[]) {
     const now = new Date();
     
     return leads.filter(lead => {
-      // No contact in 72+ hours
       const hoursSinceLastContact = Math.floor((now.getTime() - new Date(lead.lastContactDate).getTime()) / (1000 * 60 * 60));
-      
-      // TODO: Add more business logic for needs attention
-      // - Due diligence ending soon
-      // - Closing today
-      // - Price reduction needed
       
       return (
         hoursSinceLastContact >= 72 ||
         lead.status === 'urgent' ||
-        lead.clearToClose === false // Example condition
+        lead.clearToClose === false
       );
     });
   }
