@@ -10,6 +10,8 @@ import {
   CheckCircle2
 } from "lucide-react";
 import { format, differenceInDays, differenceInHours } from "date-fns";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 interface PipelineCardProps {
   lead: {
@@ -17,21 +19,45 @@ interface PipelineCardProps {
     address: string;
     sellerName: string;
     buyerName?: string;
-    dateCreated: Date;
-    statusChangedDate: Date;
+    dateCreated: Date | string;
+    statusChangedDate: Date | string;
+    lastContactDate?: Date | string;
     priceReduction: boolean;
     clearToClose: boolean;
     originalPrice?: number;
     currentPrice?: number;
     stage: string;
+    stageName?: string;
+    assignedAgent?: string;
+    leadType?: string;
+    status?: string;
   };
   isDragging?: boolean;
 }
 
 export const PipelineCard = ({ lead, isDragging }: PipelineCardProps) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging: isSortableDragging
+  } = useSortable({ 
+    id: lead.id
+  });
+
+  const style = isSortableDragging ? {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  } : {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
   const getTimeInStatus = () => {
-    const hours = differenceInHours(new Date(), lead.statusChangedDate);
-    const days = differenceInDays(new Date(), lead.statusChangedDate);
+    const hours = differenceInHours(new Date(), new Date(lead.statusChangedDate));
+    const days = differenceInDays(new Date(), new Date(lead.statusChangedDate));
     
     if (days > 0) {
       return `${days} day${days > 1 ? 's' : ''}`;
@@ -46,9 +72,17 @@ export const PipelineCard = ({ lead, isDragging }: PipelineCardProps) => {
   };
 
   return (
-    <Card className={`p-3 mb-2 border border-gray-200 bg-white shadow-sm hover:shadow-md transition-all duration-200 cursor-grab active:cursor-grabbing ${
-      isDragging ? 'opacity-50 rotate-1 scale-105' : ''
-    }`}>
+    <Card 
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={`p-3 mb-2 border border-gray-200 bg-white shadow-sm hover:shadow-md transition-all duration-200 cursor-grab active:cursor-grabbing ${
+        isSortableDragging ? 'opacity-30 scale-95' : ''
+      } ${
+        isDragging ? 'rotate-6 scale-110 shadow-2xl' : ''
+      }`}
+    >
       <div className="space-y-2">
         {/* Address */}
         <div className="flex items-start gap-2">
@@ -83,7 +117,7 @@ export const PipelineCard = ({ lead, isDragging }: PipelineCardProps) => {
           <div className="flex items-center gap-1">
             <Calendar className="w-3 h-3" />
             <span>Created</span>
-            <span className="font-medium">{format(lead.dateCreated, 'MMM dd')}</span>
+            <span className="font-medium">{format(new Date(lead.dateCreated), 'MMM dd')}</span>
           </div>
           <div className="flex items-center gap-1">
             <Clock className="w-3 h-3" />

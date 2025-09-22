@@ -52,9 +52,9 @@ import {
   Trash2,
   Users,
   UserCheck,
+  MessageSquare,
   UserX,
-  Shield,
-  MessageSquare
+  Shield
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";

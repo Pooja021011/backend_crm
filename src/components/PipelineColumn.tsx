@@ -9,19 +9,26 @@ interface PipelineColumnProps {
     id: string;
     name: string;
     color: string;
+    leadCount?: number;
+    orderIndex?: number;
   };
   leads: Array<{
     id: string;
     address: string;
     sellerName: string;
     buyerName?: string;
-    dateCreated: Date;
-    statusChangedDate: Date;
+    dateCreated: Date | string;
+    statusChangedDate: Date | string;
+    lastContactDate?: Date | string;
     priceReduction: boolean;
     clearToClose: boolean;
     originalPrice?: number;
     currentPrice?: number;
     stage: string;
+    stageName?: string;
+    assignedAgent?: string;
+    leadType?: string;
+    status?: string;
   }>;
 }
 

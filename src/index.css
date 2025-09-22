@@ -6,6 +6,26 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Drag and Drop Overlay - Cursor Following */
+[data-dnd-kit-overlay] {
+  position: fixed !important;
+  z-index: 999999 !important;
+  pointer-events: none !important;
+  width: auto !important;
+  height: auto !important;
+}
+
+/* Reset all transforms for overlay */
+[data-dnd-kit-overlay] * {
+  position: static !important;
+}
+
+/* Pipeline container reset */
+.pipeline-container {
+  transform: none !important;
+  position: relative !important;
+}
+
 /* Local Homes Buyers - Professional Modern Design System */
 
 @layer base {

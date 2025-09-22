@@ -8,6 +8,7 @@ import fileRoutes from './fileRoutes.js';
 import agentRoutes from './agentRoutes.js';
 import smsRoutes from './smsRoutes.js';
 import callRoutes from './callRoutes.js';
+import pipelineRoutes from './pipelineRoutes.js';
 
 const router = Router();
 
@@ -20,6 +21,7 @@ router.use('/files', fileRoutes);
 router.use('/agents', agentRoutes);
 router.use('/sms', smsRoutes);
 router.use('/calls', callRoutes);
+router.use('/pipeline', pipelineRoutes);
 
 export default router;
 

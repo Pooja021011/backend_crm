@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,169 +14,182 @@ import {
   AlertTriangle,
   Workflow,
   Filter,
-  Plus
+  Plus,
+  Loader2
 } from "lucide-react";
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCenter } from "@dnd-kit/core";
+import { snapCenterToCursor } from "@dnd-kit/modifiers";
 import { differenceInHours, isToday, addDays } from "date-fns";
+import { API_BASE, makeApiCall } from "@/config/api";
+import { useToast } from "@/hooks/use-toast";
 
 const Pipeline = () => {
+  const { toast } = useToast();
   const [needsAttentionView, setNeedsAttentionView] = useState(false);
   const [transactionPipelineView, setTransactionPipelineView] = useState(true);
   const [activeId, setActiveId] = useState<string | null>(null);
+  
+  // API state
+  const [pipelineStages, setPipelineStages] = useState<any[]>([]);
+  const [leads, setLeads] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [movingLead, setMovingLead] = useState(false);
+  
+  // Pipeline configuration - using ACQUISITIONS pipeline by default
+  const currentPipeline = 'ACQUISITIONS';
 
-  // Pipeline stages configuration - exactly as specified
-  const pipelineStages = [
-    { id: 'new-lead', name: 'New Lead', color: 'blue' },
-    { id: 'no-contact', name: 'No Contact Made', color: 'gray' },
-    { id: 'contact-made', name: 'Contact Made', color: 'orange' },
-    { id: 'appointment-set', name: 'Appointment Set', color: 'purple' },
-    { id: 'appointment-complete', name: 'Appointment Complete', color: 'blue' },
-    { id: 'due-diligence', name: 'Due Diligence Complete', color: 'orange' },
-    { id: 'offer-made', name: 'Offer Made', color: 'purple' },
-    { id: 'contract-sent', name: 'Contract Sent', color: 'orange' },
-    { id: 'under-contract', name: 'Under Contract', color: 'green' },
-    { id: 'processing', name: 'Processing', color: 'blue' },
-    { id: 'for-sale', name: 'For Sale', color: 'purple' },
-    { id: 'under-contract-sale', name: 'Under Contract (Sale)', color: 'green' },
-    { id: 'closed', name: 'Closed', color: 'green' }
-  ];
+  // API functions
+  const fetchPipelineData = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch pipeline stages and leads in parallel
+      const [stagesResponse, leadsResponse] = await Promise.all([
+        makeApiCall(`${API_BASE}/pipeline/${currentPipeline}/stages`),
+        makeApiCall(`${API_BASE}/pipeline/${currentPipeline}/leads${needsAttentionView ? '?needsAttention=true' : ''}`)
+      ]);
 
-  // Sample leads data with proper dates and contact tracking
-  const [leads, setLeads] = useState([
-    {
-      id: '1',
-      address: '789 Pine Boulevard, Winston-Salem, NC',
-      sellerName: 'Emily Davis',
-      buyerName: '',
-      dateCreated: new Date('2024-01-12'),
-      statusChangedDate: new Date('2024-01-12'),
-      lastContactDate: new Date('2024-01-12'),
-      priceReduction: false,
-      clearToClose: false,
-      originalPrice: 275000,
-      currentPrice: 275000,
-      stage: 'new-lead',
-      dueDiligenceEndDate: addDays(new Date(), 1),
-      closingDate: null,
-      assignedAgent: 'Mike Wilson'
-    },
-    {
-      id: '2',
-      address: '123 Oak Street, Charlotte, NC',
-      sellerName: 'Sarah Johnson',
-      buyerName: '',
-      dateCreated: new Date('2024-01-15'),
-      statusChangedDate: new Date('2024-01-20'),
-      lastContactDate: new Date('2024-01-18'),
-      priceReduction: true,
-      clearToClose: false,
-      originalPrice: 350000,
-      currentPrice: 325000,
-      stage: 'contact-made',
-      dueDiligenceEndDate: addDays(new Date(), 2),
-      closingDate: null,
-      assignedAgent: 'John Smith'
-    },
-    {
-      id: '3',
-      address: '321 Elm Court, Greensboro, NC',
-      sellerName: 'Michael Johnson',
-      buyerName: '',
-      dateCreated: new Date('2024-01-08'),
-      statusChangedDate: new Date('2024-01-22'),
-      lastContactDate: new Date('2024-01-20'),
-      priceReduction: false,
-      clearToClose: false,
-      originalPrice: 425000,
-      currentPrice: 425000,
-      stage: 'appointment-set',
-      dueDiligenceEndDate: addDays(new Date(), 10),
-      closingDate: null,
-      assignedAgent: 'Sarah Lee'
-    },
-    {
-      id: '4',
-      address: '456 Maple Avenue, Raleigh, NC',
-      sellerName: 'Robert Thompson',
-      buyerName: 'Jennifer Martinez',
-      dateCreated: new Date('2024-01-10'),
-      statusChangedDate: new Date('2024-01-25'),
-      lastContactDate: new Date('2024-01-24'),
-      priceReduction: false,
-      clearToClose: true,
-      originalPrice: 475000,
-      currentPrice: 475000,
-      stage: 'under-contract',
-      dueDiligenceEndDate: new Date('2024-01-28'),
-      closingDate: new Date(),
-      assignedAgent: 'Jane Doe'
-    },
-    {
-      id: '5',
-      address: '567 Cedar Drive, Fayetteville, NC',
-      sellerName: 'Lisa Rodriguez',
-      buyerName: 'David Chen',
-      dateCreated: new Date('2024-01-05'),
-      statusChangedDate: new Date('2024-01-23'),
-      lastContactDate: new Date('2024-01-23'),
-      priceReduction: true,
-      clearToClose: true,
-      originalPrice: 395000,
-      currentPrice: 385000,
-      stage: 'processing',
-      dueDiligenceEndDate: new Date('2024-01-20'),
-      closingDate: addDays(new Date(), 5),
-      assignedAgent: 'Tom Anderson'
+      if (stagesResponse.ok && leadsResponse.ok) {
+        const stagesData = await stagesResponse.json();
+        const leadsData = await leadsResponse.json();
+
+        if (stagesData.success && leadsData.success) {
+          // Map stages to include colors for UI
+          const stagesWithColors = stagesData.data.map((stage: any, index: number) => ({
+            ...stage,
+            color: getStageColor(stage.name, index)
+          }));
+
+          setPipelineStages(stagesWithColors);
+          setLeads(leadsData.data);
+        } else {
+          throw new Error('Failed to fetch pipeline data');
+        }
+      } else {
+        throw new Error('Failed to fetch pipeline data');
+      }
+    } catch (error: any) {
+      console.error('Error fetching pipeline data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load pipeline data. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
     }
-  ]);
-
-  // Filter leads based on "Needs Attention" criteria
-  const getNeedsAttentionLeads = () => {
-    return leads.filter(lead => {
-      const hoursSinceLastContact = differenceInHours(new Date(), lead.lastContactDate);
-      const dueDiligenceDaysLeft = lead.dueDiligenceEndDate ? 
-        Math.ceil((lead.dueDiligenceEndDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : 
-        999;
-      const isClosingToday = lead.closingDate && isToday(lead.closingDate);
-
-      return (
-        hoursSinceLastContact >= 72 || // No contact in 72 hours
-        dueDiligenceDaysLeft <= 1 || // 1 day or less due diligence left
-        isClosingToday // Closing today
-      );
-    });
   };
 
+  // Helper function to assign colors to stages
+  const getStageColor = (stageName: string, index: number) => {
+    const colors = ['blue', 'gray', 'orange', 'purple', 'blue', 'orange', 'purple', 'orange', 'green'];
+    if (stageName.toLowerCase().includes('closed') || stageName.toLowerCase().includes('complete')) {
+      return 'green';
+    }
+    if (stageName.toLowerCase().includes('contract') || stageName.toLowerCase().includes('under')) {
+      return 'green';
+    }
+    if (stageName.toLowerCase().includes('contact') || stageName.toLowerCase().includes('made')) {
+      return 'orange';
+    }
+    if (stageName.toLowerCase().includes('appointment') || stageName.toLowerCase().includes('set')) {
+      return 'purple';
+    }
+    return colors[index % colors.length];
+  };
+
+  // Load data on component mount and when filters change
+  useEffect(() => {
+    fetchPipelineData();
+  }, [needsAttentionView]);
+
   const getLeadsForStage = (stageId: string) => {
-    const currentLeads = needsAttentionView ? getNeedsAttentionLeads() : leads;
-    return currentLeads.filter(lead => lead.stage === stageId);
+    return leads.filter(lead => lead.stage === stageId);
+  };
+
+  const getNeedsAttentionCount = () => {
+    return leads.filter(lead => {
+      const hoursSinceLastContact = differenceInHours(new Date(), new Date(lead.lastContactDate));
+      return hoursSinceLastContact >= 72 || lead.status === 'urgent';
+    }).length;
   };
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string);
   };
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     
-    if (!over) return;
+    if (!over || movingLead) return;
 
     const leadId = active.id as string;
-    const newStage = over.id as string;
+    const newStageId = over.id as string;
 
-    setLeads(currentLeads => 
-      currentLeads.map(lead => 
-        lead.id === leadId 
-          ? { ...lead, stage: newStage, statusChangedDate: new Date() }
-          : lead
-      )
-    );
-    
-    setActiveId(null);
+    // Find the lead and check if it's actually moving to a different stage
+    const lead = leads.find(l => l.id === leadId);
+    if (!lead || lead.stage === newStageId) {
+      setActiveId(null);
+      return;
+    }
+
+    try {
+      setMovingLead(true);
+
+      // Optimistically update the UI
+      setLeads(currentLeads => 
+        currentLeads.map(l => 
+          l.id === leadId 
+            ? { ...l, stage: newStageId, statusChangedDate: new Date() }
+            : l
+        )
+      );
+
+      // Make API call to move the lead
+      const response = await makeApiCall(`${API_BASE}/pipeline/leads/${leadId}/move`, {
+        method: 'PUT',
+        body: JSON.stringify({ stageId: newStageId })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to move lead');
+      }
+
+      const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to move lead');
+      }
+
+      toast({
+        title: "Lead Moved",
+        description: `Lead successfully moved to ${result.data.newStageName}`,
+      });
+
+    } catch (error: any) {
+      console.error('Error moving lead:', error);
+      
+      // Revert the optimistic update
+      setLeads(currentLeads => 
+        currentLeads.map(l => 
+          l.id === leadId 
+            ? { ...l, stage: lead.stage, statusChangedDate: lead.statusChangedDate }
+            : l
+        )
+      );
+
+      toast({
+        title: "Error",
+        description: error.message || "Failed to move lead. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setMovingLead(false);
+      setActiveId(null);
+    }
   };
 
   const activeLead = activeId ? leads.find(lead => lead.id === activeId) : null;
-  const needsAttentionCount = getNeedsAttentionLeads().length;
+  const needsAttentionCount = getNeedsAttentionCount();
 
   return (
     <div className="space-y-6">
@@ -235,14 +248,28 @@ const Pipeline = () => {
         </div>
       </div>
 
+      {/* Loading State */}
+      {loading && (
+        <Card className="p-12 text-center border border-gray-200 bg-gray-50">
+          <Loader2 className="w-8 h-8 text-gray-400 mx-auto mb-4 animate-spin" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">
+            Loading Pipeline Data
+          </h3>
+          <p className="text-gray-600">
+            Fetching leads and pipeline stages...
+          </p>
+        </Card>
+      )}
+
       {/* Pipeline Board - Horizontal Scrolling Grid */}
-      {transactionPipelineView && (
+      {!loading && transactionPipelineView && (
         <DndContext
           collisionDetection={closestCenter}
+          modifiers={[snapCenterToCursor]}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <div className="overflow-x-auto pb-4">
+          <div className="pipeline-container overflow-x-auto pb-4">
             <div className="flex gap-4 min-w-max">
               {pipelineStages.map((stage) => (
                 <PipelineColumn
@@ -276,7 +303,7 @@ const Pipeline = () => {
       )}
 
       {/* Needs Attention Summary */}
-      {needsAttentionView && needsAttentionCount > 0 && (
+      {!loading && needsAttentionView && needsAttentionCount > 0 && (
         <Card className="p-6 bg-orange-50 border border-orange-200">
           <div className="flex items-start gap-4">
             <div className="p-2 bg-orange-100 rounded-lg">
@@ -288,11 +315,24 @@ const Pipeline = () => {
               </h3>
               <div className="text-sm text-orange-800 space-y-1">
                 <p>• Leads with no contact in 72+ hours</p>
-                <p>• Leads with 1 day or less due diligence remaining</p>
-                <p>• Leads closing today</p>
+                <p>• Leads with urgent status</p>
+                <p>• Leads requiring immediate follow-up</p>
               </div>
             </div>
           </div>
+        </Card>
+      )}
+
+      {/* Empty state when no leads need attention */}
+      {!loading && needsAttentionView && needsAttentionCount === 0 && (
+        <Card className="p-12 text-center border border-green-200 bg-green-50">
+          <AlertTriangle className="w-16 h-16 text-green-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-green-900 mb-2">
+            All Caught Up!
+          </h3>
+          <p className="text-green-700">
+            No leads currently need immediate attention.
+          </p>
         </Card>
       )}
     </div>

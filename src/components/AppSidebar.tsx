@@ -53,7 +53,7 @@ export function AppSidebar() {
   const { user } = useAuth();
   const location = useLocation();
   const currentPath = location.pathname;
-  const [expandedMenus, setExpandedMenus] = useState<string[]>(['Settings']); // Settings expanded by default
+  const [expandedMenus, setExpandedMenus] = useState<string[]>([]); // No menus expanded by default
 
   const isCollapsed = state === "collapsed";
   const isAdmin = user?.roles?.includes('ADMIN') || false;
