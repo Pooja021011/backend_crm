@@ -1,6 +1,7 @@
 import Telnyx from 'telnyx';
 import { logger } from '../config/logger.js';
 import { communicationRepository } from '../repositories/communicationRepository.js';
+import { smsSettingsRepository } from '../repositories/smsSettingsRepository.js';
 
 // Initialize Telnyx client
 const telnyx = Telnyx(process.env.TELNYX_API_KEY);
@@ -22,14 +23,35 @@ export interface SMSResponse {
 
 export const smsService = {
   /**
-   * Send SMS using Telnyx
+   * Send SMS using Telnyx with user-specific phone number
    */
   async sendSMS(message: SMSMessage): Promise<SMSResponse> {
     try {
-      logger.info('Sending SMS via Telnyx', { to: message.to, from: message.from });
+      // Get user's SMS settings to determine the from number
+      let fromNumber = message.from;
+      if (message.userId && !fromNumber) {
+        const userSmsSettings = await smsSettingsRepository.getUserSmsSettings(message.userId);
+        if (userSmsSettings?.phoneNumber) {
+          fromNumber = userSmsSettings.phoneNumber;
+        } else {
+          return {
+            success: false,
+            error: 'No phone number configured for this user. Please configure your SMS settings.',
+          };
+        }
+      }
+
+      if (!fromNumber) {
+        return {
+          success: false,
+          error: 'From phone number is required',
+        };
+      }
+
+      logger.info('Sending SMS via Telnyx', { to: message.to, from: fromNumber, userId: message.userId });
 
       const response = await telnyx.messages.create({
-        from: message.from,
+        from: fromNumber,
         to: message.to,
         text: message.text,
       });
@@ -52,6 +74,7 @@ export const smsService = {
         success: true,
         messageId: response.data.id,
         data: response.data,
+        fromNumber,
       };
     } catch (error: any) {
       logger.error('Failed to send SMS via Telnyx', { error: error.message });

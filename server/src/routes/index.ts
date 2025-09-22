@@ -7,6 +7,7 @@ import searchRoutes from './searchRoutes.js';
 import fileRoutes from './fileRoutes.js';
 import agentRoutes from './agentRoutes.js';
 import smsRoutes from './smsRoutes.js';
+import callRoutes from './callRoutes.js';
 
 const router = Router();
 
@@ -18,6 +19,7 @@ router.use('/search', searchRoutes);
 router.use('/files', fileRoutes);
 router.use('/agents', agentRoutes);
 router.use('/sms', smsRoutes);
+router.use('/calls', callRoutes);
 
 export default router;
 

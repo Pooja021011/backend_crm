@@ -1,7 +1,9 @@
 import { Card } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Building, Users, Calendar, TrendingUp, Home, BarChart3, MessageSquare, Phone, Mail, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import SMSWidget from "@/components/SMSWidget";
+import CallWidget from "@/components/CallWidget";
 
 const Index = () => {
   return (
@@ -114,8 +116,29 @@ const Index = () => {
           </div>
         </Card>
 
-        {/* Telnyx SMS Widget */}
-        <SMSWidget />
+        {/* Communication Widgets - SMS & Call */}
+        <Card className="p-3 hover:shadow-lg transition-all duration-300 group border border-indigo-200/50 bg-gradient-to-br from-indigo-50/80 to-white">
+          <Tabs defaultValue="sms" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 mb-3">
+              <TabsTrigger value="sms" className="text-xs">
+                <MessageSquare className="w-3 h-3 mr-1" />
+                SMS
+              </TabsTrigger>
+              <TabsTrigger value="call" className="text-xs">
+                <Phone className="w-3 h-3 mr-1" />
+                Call
+              </TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="sms" className="mt-0">
+              <SMSWidget />
+            </TabsContent>
+            
+            <TabsContent value="call" className="mt-0">
+              <CallWidget />
+            </TabsContent>
+          </Tabs>
+        </Card>
 
         {/* Alerts Widget */}
         <Card className="p-3 hover:shadow-lg transition-all duration-300 group border border-orange-200/50 bg-gradient-to-br from-orange-50/80 to-white">

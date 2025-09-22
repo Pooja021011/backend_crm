@@ -1,0 +1,46 @@
+import { Router } from 'express';
+import { callController } from '../controllers/callController.js';
+import { authenticate } from '../middleware/auth.js';
+
+const router = Router();
+
+// All call routes require authentication except webhooks
+router.use((req, res, next) => {
+  // Skip auth for webhook endpoints
+  if (req.path === '/webhook') {
+    return next();
+  }
+  return authenticate(req, res, next);
+});
+
+// Make outbound call
+router.post('/make', (req, res, next) => 
+  callController.makeCall(req, res).catch(next)
+);
+
+// Get call history
+router.get('/history', (req, res, next) => 
+  callController.getCallHistory(req, res).catch(next)
+);
+
+// Get call status
+router.get('/status/:callControlId', (req, res, next) => 
+  callController.getCallStatus(req, res).catch(next)
+);
+
+// Answer incoming call
+router.post('/answer/:callControlId', (req, res, next) => 
+  callController.answerCall(req, res).catch(next)
+);
+
+// Hang up call
+router.post('/hangup/:callControlId', (req, res, next) => 
+  callController.hangupCall(req, res).catch(next)
+);
+
+// Webhook endpoint for incoming calls (no auth required)
+router.post('/webhook', (req, res, next) => 
+  callController.webhook(req, res).catch(next)
+);
+
+export default router;

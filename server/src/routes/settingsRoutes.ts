@@ -25,6 +25,10 @@ router.post('/email/send', (req, res, next) => settingsController.sendEmail(req,
 router.post('/email/fetch-thread', (req, res, next) => settingsController.fetchEmailThread(req, res).catch(next));
 router.post('/email/mark-read', (req, res, next) => settingsController.markEmailAsRead(req, res).catch(next));
 
+// Per-user SMS Settings (any authenticated user)
+router.get('/sms', (req, res, next) => settingsController.getUserSmsSettings(req, res).catch(next));
+router.post('/sms', (req, res, next) => settingsController.upsertUserSmsSettings(req, res).catch(next));
+
 // Mutations (ADMIN only)
 router.use(requireRoles('ADMIN'));
 router.post('/markets', (req, res, next) => settingsController.createMarket(req, res).catch(next));

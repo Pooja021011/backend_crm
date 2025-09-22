@@ -11,7 +11,8 @@ import {
   User,
   ChevronDown,
   UserCog,
-  Mail
+  Mail,
+  MessageSquare
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -41,6 +42,7 @@ const navigationItems = [
     subItems: [
       { title: "Profile", url: "/settings?tab=profile", icon: User },
       { title: "Email Sync", url: "/settings?tab=email", icon: Mail },
+      { title: "SMS and Call", url: "/settings?tab=sms", icon: MessageSquare },
       { title: "Agents", url: "/settings?tab=agents", icon: UserCog, adminOnly: true },
     ]
   },

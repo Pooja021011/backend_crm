@@ -30,6 +30,7 @@ model User {
   createdCommunications Communication[] @relation("CreatedByUser")
   createdMarketingLinks MarketingLink[] @relation("CreatedByUser")
   emailSettings UserEmailSettings?
+  smsSettings UserSmsSettings?
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 }
@@ -164,6 +165,24 @@ model UserEmailSettings {
   syncEnabled    Boolean  @default(false)
   lastSyncAt     DateTime?
 
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// Per-user SMS settings (Telnyx)
+model UserSmsSettings {
+  userId       String   @id
+  user         User     @relation(fields: [userId], references: [id])
+
+  // Telnyx phone number (from address) - user-specific
+  phoneNumber  String?  // E.164 format: +1234567890
+  
+  // Display settings
+  displayName  String?  // How the number appears to the user
+  
+  // Status
+  active       Boolean  @default(true)
+  
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }

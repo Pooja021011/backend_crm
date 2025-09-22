@@ -29,7 +29,7 @@ export const smsController = {
 
       const result = await smsService.sendSMS({
         to: formattedTo,
-        from: process.env.TELNYX_PHONE_NUMBER || '',
+        from: '', // Will be determined by user's SMS settings
         text,
         leadId,
         userId
@@ -88,7 +88,7 @@ export const smsController = {
 
         return {
           to: formattedTo,
-          from: process.env.TELNYX_PHONE_NUMBER || '',
+          from: '', // Will be determined by user's SMS settings
           text: msg.text,
           leadId: msg.leadId,
           userId

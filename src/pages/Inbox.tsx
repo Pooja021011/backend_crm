@@ -85,6 +85,10 @@ const Inbox = () => {
   const [loadingSMS, setLoadingSMS] = useState(false);
   const [showNewSMS, setShowNewSMS] = useState(false);
   const [newSMSNumber, setNewSMSNumber] = useState('');
+
+  // Call history state
+  const [callHistory, setCallHistory] = useState<any[]>([]);
+  const [loadingCallHistory, setLoadingCallHistory] = useState(false);
   
   const { toast } = useToast();
 
@@ -561,8 +565,34 @@ const Inbox = () => {
   useEffect(() => {
     if (activeTab === 'sms') {
       fetchSMSHistory();
+    } else if (activeTab === 'calls') {
+      fetchCallHistory();
     }
   }, [activeTab]);
+
+  // Fetch call history
+  const fetchCallHistory = async () => {
+    setLoadingCallHistory(true);
+    try {
+      const response = await makeApiCall(`${API_BASE}/calls/history`);
+      const result = await response.json();
+      
+      if (result.success) {
+        setCallHistory(result.data.calls || []);
+      } else {
+        throw new Error(result.error || 'Failed to fetch call history');
+      }
+    } catch (error: any) {
+      console.error('Error fetching call history:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load call history",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingCallHistory(false);
+    }
+  };
 
   // Keep dummy data for non-email tabs, remove only email dummy data
   const allMessages = [
@@ -889,18 +919,6 @@ const Inbox = () => {
             </div>
             
             <div className="flex items-center gap-4">
-              {emailSettings?.gmailConnected && (
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={fetchGmailEmails}
-                  disabled={loadingEmails}
-                  className="text-gray-600 hover:text-gray-900"
-                >
-                  <RefreshCw className={`w-4 h-4 mr-1 ${loadingEmails ? 'animate-spin' : ''}`} />
-                  <span className="text-sm">{loadingEmails ? 'Syncing...' : 'Sync Gmail'}</span>
-                </Button>
-              )}
               <Button variant="ghost" size="sm" className="text-gray-600 hover:text-gray-900">
                 <span className="text-sm">Due date</span>
                 <ChevronDown className="w-4 h-4 ml-1" />
@@ -995,9 +1013,119 @@ const Inbox = () => {
                     </div>
                   )}
                 </div>
+              ) : activeTab === 'calls' ? (
+                /* Call History Tab Content */
+                <div>
+                  {/* Call History Header */}
+                  <div className="flex items-center justify-between p-4 border-b bg-gray-50">
+                    <h3 className="text-lg font-semibold text-gray-900">Call History</h3>
+                    <Button
+                      onClick={fetchCallHistory}
+                      variant="ghost"
+                      size="sm"
+                      disabled={loadingCallHistory}
+                      className="text-gray-600 hover:text-gray-900"
+                    >
+                      {loadingCallHistory ? (
+                        <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                      ) : (
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                      )}
+                      Refresh
+                    </Button>
+                  </div>
+
+                  {/* Call History List */}
+                  {loadingCallHistory ? (
+                    <div className="p-12 text-center">
+                      <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-purple-600" />
+                      <p className="text-gray-600">Loading call history...</p>
+                    </div>
+                  ) : callHistory.length === 0 ? (
+                    <div className="p-12 text-center">
+                      <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Phone className="w-8 h-8 text-purple-600" />
+                      </div>
+                      <p className="text-lg font-medium text-gray-500">No call history yet</p>
+                      <p className="text-sm text-gray-400 mt-2">Your recent calls will appear here</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-200">
+                      {callHistory.map((call) => (
+                        <div key={call.id} className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50">
+                          {/* Call Direction Icon */}
+                          <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                              call.direction === 'OUTBOUND' ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'
+                            }`}>
+                              <Phone className="w-4 h-4" />
+                            </div>
+                          </div>
+                          
+                          {/* Call Details */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-3">
+                              <span className="font-medium text-sm text-gray-900">
+                                {call.contactName || 'Unknown'}
+                              </span>
+                              <Badge 
+                                variant={call.direction === 'OUTBOUND' ? 'default' : 'secondary'}
+                                className={`text-xs ${
+                                  call.direction === 'OUTBOUND' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
+                                }`}
+                              >
+                                {call.direction === 'OUTBOUND' ? 'Outbound' : 'Inbound'}
+                              </Badge>
+                              <Badge 
+                                variant={
+                                  call.status === 'completed' ? 'default' :
+                                  call.status === 'missed' ? 'destructive' : 'secondary'
+                                }
+                                className="text-xs"
+                              >
+                                {call.status}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-3 mt-1">
+                              <span className="text-sm text-gray-600 font-mono">
+                                {call.phoneNumber}
+                              </span>
+                              {call.duration > 0 && (
+                                <span className="text-sm text-gray-500">
+                                  Duration: {Math.floor(call.duration / 60)}:{(call.duration % 60).toString().padStart(2, '0')}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          
+                          {/* Call Time */}
+                          <div className="flex-shrink-0 text-sm text-gray-500">
+                            {new Date(call.timestamp).toLocaleString()}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               ) : (
                 /* Other Tabs Content */
                 <div>
+                  {/* Email Tab Header with Sync Gmail Button - Only for emails tab */}
+                  {activeTab === 'emails' && emailSettings?.gmailConnected && (
+                    <div className="flex items-center justify-between p-4 border-b bg-gray-50">
+                      <h3 className="text-lg font-semibold text-gray-900">Email Messages</h3>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={fetchGmailEmails}
+                        disabled={loadingEmails}
+                        className="text-gray-600 hover:text-gray-900"
+                      >
+                        <RefreshCw className={`w-4 h-4 mr-1 ${loadingEmails ? 'animate-spin' : ''}`} />
+                        <span className="text-sm">{loadingEmails ? 'Syncing...' : 'Sync Gmail'}</span>
+                      </Button>
+                    </div>
+                  )}
                   {filteredMessages.length === 0 ? (
                     <div className="p-12 text-center">
                       <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">

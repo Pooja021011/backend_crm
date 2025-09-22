@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { settingsService } from '../services/settingsService.js';
+import { smsSettingsRepository } from '../repositories/smsSettingsRepository.js';
 
 export const settingsController = {
   // Markets
@@ -188,5 +189,58 @@ export const settingsController = {
   updateStage: async (req: Request, res: Response) => res.json({ data: await settingsService.updateStage(req.params.stageId, { name: req.body.name, orderIndex: req.body.orderIndex, color: req.body.color }) }),
   deleteStage: async (req: Request, res: Response) => { await settingsService.deleteStage(req.params.stageId); res.json({ success: true }); },
   reorderStages: async (req: Request, res: Response) => res.json({ data: await settingsService.reorderStages(req.params.pipelineId, req.body.items) }),
+
+  // SMS Settings
+  getUserSmsSettings: async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ success: false, error: 'User not authenticated' });
+      }
+
+      const smsSettings = await smsSettingsRepository.getUserSmsSettings(userId);
+      res.json({ 
+        success: true, 
+        data: smsSettings || {
+          phoneNumber: null,
+          displayName: null,
+          active: true
+        }
+      });
+    } catch (error: any) {
+      console.error('Error getting SMS settings:', error);
+      res.status(500).json({ success: false, error: 'Failed to get SMS settings' });
+    }
+  },
+
+  upsertUserSmsSettings: async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ success: false, error: 'User not authenticated' });
+      }
+
+      const { phoneNumber, displayName, active } = req.body;
+
+      // Validate phone number format if provided
+      if (phoneNumber && !/^\+[1-9]\d{1,14}$/.test(phoneNumber)) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Invalid phone number format. Use E.164 format (e.g., +1234567890)' 
+        });
+      }
+
+      const smsSettings = await smsSettingsRepository.upsertUserSmsSettings(userId, {
+        phoneNumber,
+        displayName,
+        active: active !== undefined ? active : true,
+      });
+
+      res.json({ success: true, data: smsSettings });
+    } catch (error: any) {
+      console.error('Error saving SMS settings:', error);
+      res.status(500).json({ success: false, error: 'Failed to save SMS settings' });
+    }
+  },
 };
 

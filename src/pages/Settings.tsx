@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import { 
   Table,
   TableBody,
@@ -52,7 +53,8 @@ import {
   Users,
   UserCheck,
   UserX,
-  Shield
+  Shield,
+  MessageSquare
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -117,6 +119,16 @@ const Settings = () => {
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null);
+
+  // SMS Settings state
+  const [smsSettings, setSmsSettings] = useState<any>(null);
+  const [loadingSmsSettings, setLoadingSmsSettings] = useState(false);
+  const [savingSmsSettings, setSavingSmsSettings] = useState(false);
+
+  // Test SMS and Call state
+  const [sendingTestSMS, setSendingTestSMS] = useState(false);
+  const [makingTestCall, setMakingTestCall] = useState(false);
+  
 
   // Helper function to make API calls with automatic token refresh
   const makeApiCall = async (url: string, options: RequestInit = {}) => {
@@ -270,6 +282,140 @@ const Settings = () => {
       load();
     }
   }, [activeTab, emailSettings, user?.email]);
+
+  // Load SMS settings when SMS tab becomes active
+  useEffect(() => {
+    if (activeTab === 'sms') {
+      const loadSmsSettings = async () => {
+        setLoadingSmsSettings(true);
+        try {
+          const response = await makeApiCall(`${API_BASE}/settings/sms`);
+          const result = await response.json();
+          
+          if (result.success) {
+            setSmsSettings(result.data || {
+              phoneNumber: '',
+              displayName: '',
+              active: true
+            });
+          }
+        } catch (error) {
+          console.error('Failed to load SMS settings:', error);
+          toast({
+            title: "Error",
+            description: "Failed to load SMS settings",
+            variant: "destructive",
+          });
+        } finally {
+          setLoadingSmsSettings(false);
+        }
+      };
+
+      loadSmsSettings();
+    }
+  }, [activeTab]);
+
+  // SMS Settings functions
+  const saveSmsSettings = async () => {
+    if (!smsSettings) return;
+
+    setSavingSmsSettings(true);
+    try {
+      const response = await makeApiCall(`${API_BASE}/settings/sms`, {
+        method: 'POST',
+        body: JSON.stringify(smsSettings)
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        setSmsSettings(result.data);
+        toast({
+          title: "SMS Settings Saved",
+          description: "Your SMS settings have been saved successfully!",
+        });
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (error: any) {
+      toast({
+        title: "Save Failed",
+        description: error.message || "Failed to save SMS settings",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingSmsSettings(false);
+    }
+  };
+
+  // Send test SMS
+  const testSMSConnection = async () => {
+    if (!smsSettings?.phoneNumber) return;
+    
+    setSendingTestSMS(true);
+    try {
+      const response = await makeApiCall(`${API_BASE}/sms/send`, {
+        method: 'POST',
+        body: JSON.stringify({
+          to: smsSettings.phoneNumber, // Test to the same number
+          text: 'Test SMS from Real Estate CRM - Your SMS configuration is working!'
+        })
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        toast({
+          title: "SMS Connection Test Successful",
+          description: `SMS is working correctly with your number ${smsSettings.phoneNumber}`,
+          variant: "default"
+        });
+      } else {
+        throw new Error(result.error || 'SMS configuration has issues');
+      }
+    } catch (error: any) {
+      toast({
+        title: "SMS Connection Test Failed",
+        description: error.message || "SMS configuration has issues. Please check your settings.",
+        variant: "destructive",
+      });
+    } finally {
+      setSendingTestSMS(false);
+    }
+  };
+
+  // Test call connection
+  const testCallConnection = async () => {
+    if (!smsSettings?.phoneNumber) return;
+    
+    setMakingTestCall(true);
+    try {
+      const response = await makeApiCall(`${API_BASE}/calls/make`, {
+        method: 'POST',
+        body: JSON.stringify({
+          to: smsSettings.phoneNumber // Test to the same number
+        })
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        toast({
+          title: "Call Connection Test Successful",
+          description: `Call functionality is working correctly with your number ${smsSettings.phoneNumber}`,
+          variant: "default"
+        });
+      } else {
+        throw new Error(result.error || 'Call configuration has issues');
+      }
+    } catch (error: any) {
+      toast({
+        title: "Call Connection Test Failed",
+        description: error.message || "Call configuration has issues. Please check your settings.",
+        variant: "destructive",
+      });
+    } finally {
+      setMakingTestCall(false);
+    }
+  };
+
 
   // Load user profile data
   useEffect(() => {
@@ -1006,6 +1152,209 @@ const Settings = () => {
                       </Button>
                     </div>
                   </div>
+                </div>
+              </Card>
+            </div>
+          )}
+
+          {/* SMS and Call Tab - Only show when activeTab is 'sms' */}
+          {activeTab === 'sms' && (
+            <div className="space-y-8">
+              <Card className="bg-gradient-subtle border border-border/50 shadow-card overflow-hidden">
+                <div className="p-8">
+                  <div className="flex items-center gap-4 mb-8">
+                    <div className="p-3 rounded-xl bg-primary/10 border border-primary/20">
+                      <Phone className="w-6 h-6 text-primary" />
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-bold text-foreground">SMS and Call Settings</h2>
+                      <p className="text-muted-foreground mt-1">Configure your Telnyx phone number for SMS messaging</p>
+                    </div>
+                  </div>
+
+                  {loadingSmsSettings ? (
+                    <div className="flex items-center justify-center py-12">
+                      <div className="flex items-center gap-3">
+                        <RefreshCw className="w-5 h-5 animate-spin text-primary" />
+                        <span className="text-muted-foreground">Loading SMS settings...</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-8">
+                      {/* Phone Number Configuration */}
+                      <div className="space-y-6">
+                        <div className="flex items-center gap-3">
+                          <Phone className="w-5 h-5 text-primary" />
+                          <h3 className="text-lg font-semibold">Phone Number Configuration</h3>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div className="space-y-2">
+                            <Label htmlFor="phoneNumber" className="text-sm font-medium">
+                              Telnyx Phone Number <span className="text-red-500">*</span>
+                            </Label>
+                            <Input
+                              id="phoneNumber"
+                              placeholder="+1234567890"
+                              value={smsSettings?.phoneNumber || ''}
+                              onChange={(e) => setSmsSettings(prev => ({
+                                ...prev,
+                                phoneNumber: e.target.value
+                              }))}
+                              className="font-mono"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Enter your Telnyx phone number in E.164 format (e.g., +1234567890)
+                            </p>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label htmlFor="displayName" className="text-sm font-medium">
+                              Display Name (Optional)
+                            </Label>
+                            <Input
+                              id="displayName"
+                              placeholder="My Business Number"
+                              value={smsSettings?.displayName || ''}
+                              onChange={(e) => setSmsSettings(prev => ({
+                                ...prev,
+                                displayName: e.target.value
+                              }))}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Friendly name for this phone number
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg border">
+                          <div className="flex items-center gap-3">
+                            <Switch
+                              checked={smsSettings?.active !== false}
+                              onCheckedChange={(checked) => setSmsSettings(prev => ({
+                                ...prev,
+                                active: checked
+                              }))}
+                            />
+                            <div>
+                              <Label className="text-sm font-medium">Enable SMS</Label>
+                              <p className="text-xs text-muted-foreground">
+                                Allow sending and receiving SMS messages
+                              </p>
+                            </div>
+                          </div>
+                          <Badge variant={smsSettings?.active !== false ? "default" : "secondary"}>
+                            {smsSettings?.active !== false ? "Active" : "Inactive"}
+                          </Badge>
+                        </div>
+                      </div>
+
+                      {/* Test SMS Section */}
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-3">
+                          <MessageSquare className="w-5 h-5 text-green-500" />
+                          <h3 className="text-lg font-semibold">Test SMS Configuration</h3>
+                        </div>
+                        
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                          <div className="space-y-4">
+                            <p className="text-sm text-green-800">
+                              Test if SMS is working with your configured phone number: <span className="font-mono font-semibold">{smsSettings?.phoneNumber || 'Not configured'}</span>
+                            </p>
+                            
+                            <Button
+                              onClick={testSMSConnection}
+                              disabled={sendingTestSMS || !smsSettings?.phoneNumber}
+                              variant="outline"
+                              className="border-green-300 text-green-700 hover:bg-green-50"
+                            >
+                              {sendingTestSMS ? (
+                                <>
+                                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                                  Testing SMS...
+                                </>
+                              ) : (
+                                <>
+                                  <MessageSquare className="w-4 h-4 mr-2" />
+                                  Test SMS Connection
+                                </>
+                              )}
+                            </Button>
+                            
+                            {!smsSettings?.phoneNumber && (
+                              <p className="text-xs text-amber-600 flex items-center gap-1">
+                                <AlertCircle className="w-3 h-3" />
+                                Please configure your phone number first to test SMS
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Test Call Section */}
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-3">
+                          <Phone className="w-5 h-5 text-blue-500" />
+                          <h3 className="text-lg font-semibold">Test Call Configuration</h3>
+                        </div>
+                        
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                          <div className="space-y-4">
+                            <p className="text-sm text-blue-800">
+                              Test if calling is working with your configured phone number: <span className="font-mono font-semibold">{smsSettings?.phoneNumber || 'Not configured'}</span>
+                            </p>
+                            
+                            <Button
+                              onClick={testCallConnection}
+                              disabled={makingTestCall || !smsSettings?.phoneNumber}
+                              variant="outline"
+                              className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                            >
+                              {makingTestCall ? (
+                                <>
+                                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                                  Testing Call...
+                                </>
+                              ) : (
+                                <>
+                                  <Phone className="w-4 h-4 mr-2" />
+                                  Test Call Connection
+                                </>
+                              )}
+                            </Button>
+                            
+                            {!smsSettings?.phoneNumber && (
+                              <p className="text-xs text-amber-600 flex items-center gap-1">
+                                <AlertCircle className="w-3 h-3" />
+                                Please configure your phone number first to test calls
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Save Button */}
+                      <div className="flex justify-end pt-6 border-t">
+                        <Button
+                          onClick={saveSmsSettings}
+                          disabled={savingSmsSettings || !smsSettings?.phoneNumber?.trim()}
+                          className="min-w-[120px]"
+                        >
+                          {savingSmsSettings ? (
+                            <>
+                              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              <Save className="w-4 h-4 mr-2" />
+                              Save Settings
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </Card>
             </div>
