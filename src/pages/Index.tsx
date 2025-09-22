@@ -1,6 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { Building, Users, Calendar, TrendingUp, Home, BarChart3, MessageSquare, Phone, Mail, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import SMSWidget from "@/components/SMSWidget";
 
 const Index = () => {
   return (
@@ -113,20 +114,8 @@ const Index = () => {
           </div>
         </Card>
 
-        {/* Quick Actions Widget */}
-        <Card className="p-3 hover:shadow-lg transition-all duration-300 group border border-purple-200/50 bg-gradient-to-br from-purple-50/80 to-white cursor-pointer">
-          <div className="flex items-center justify-between mb-2">
-            <div className="p-2 rounded-lg bg-purple-100 text-purple-600 group-hover:bg-purple-200 transition-colors">
-              <Phone className="w-4 h-4" />
-            </div>
-            <div className="text-xs text-purple-600 font-bold">Actions</div>
-          </div>
-          <div className="space-y-1">
-            <p className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Quick Actions</p>
-            <p className="text-sm font-bold text-purple-900">Add Lead • Call</p>
-            <p className="text-xs text-purple-600">Schedule • Email</p>
-          </div>
-        </Card>
+        {/* Telnyx SMS Widget */}
+        <SMSWidget />
 
         {/* Alerts Widget */}
         <Card className="p-3 hover:shadow-lg transition-all duration-300 group border border-orange-200/50 bg-gradient-to-br from-orange-50/80 to-white">

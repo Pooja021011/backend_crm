@@ -6,6 +6,7 @@ import leadRoutes from './leadRoutes.js';
 import searchRoutes from './searchRoutes.js';
 import fileRoutes from './fileRoutes.js';
 import agentRoutes from './agentRoutes.js';
+import smsRoutes from './smsRoutes.js';
 
 const router = Router();
 
@@ -16,6 +17,7 @@ router.use('/leads', leadRoutes);
 router.use('/search', searchRoutes);
 router.use('/files', fileRoutes);
 router.use('/agents', agentRoutes);
+router.use('/sms', smsRoutes);
 
 export default router;
 

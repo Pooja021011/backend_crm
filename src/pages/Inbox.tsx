@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
 import { API_BASE } from "@/config/api";
 import { useToast } from "@/hooks/use-toast";
 
@@ -56,6 +57,10 @@ import {
   RefreshCw,
   Paperclip,
   Download,
+  Send,
+  Loader2,
+  Plus,
+  Search,
 } from "lucide-react";
 
 const Inbox = () => {
@@ -70,6 +75,17 @@ const Inbox = () => {
   const [sendingReply, setSendingReply] = useState(false);
   const [emailThread, setEmailThread] = useState<any[]>([]);
   const [loadingThread, setLoadingThread] = useState(false);
+  
+  // SMS-specific state
+  const [smsConversations, setSmsConversations] = useState<any[]>([]);
+  const [selectedConversation, setSelectedConversation] = useState<any>(null);
+  const [showSMSDetail, setShowSMSDetail] = useState(false);
+  const [smsMessage, setSmsMessage] = useState('');
+  const [sendingSMS, setSendingSMS] = useState(false);
+  const [loadingSMS, setLoadingSMS] = useState(false);
+  const [showNewSMS, setShowNewSMS] = useState(false);
+  const [newSMSNumber, setNewSMSNumber] = useState('');
+  
   const { toast } = useToast();
 
   // Helper function for API calls with automatic token refresh
@@ -431,6 +447,123 @@ const Inbox = () => {
     }
   };
 
+  // SMS Functions
+  const fetchSMSHistory = async () => {
+    setLoadingSMS(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE}/sms/history`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        setSmsConversations(result.data.conversations);
+      } else {
+        throw new Error(result.error || 'Failed to fetch SMS history');
+      }
+    } catch (error: any) {
+      console.error('Error fetching SMS history:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load SMS conversations",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingSMS(false);
+    }
+  };
+
+  const sendSMSMessage = async (phoneNumber: string, message: string) => {
+    setSendingSMS(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE}/sms/send`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          to: phoneNumber,
+          text: message,
+        }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        setSmsMessage('');
+        toast({
+          title: "SMS Sent",
+          description: `Message sent to ${phoneNumber}`,
+        });
+        
+        // Refresh SMS history to show the new message
+        await fetchSMSHistory();
+        
+        // If we have a selected conversation, refresh its messages
+        if (selectedConversation && selectedConversation.phoneNumber === phoneNumber) {
+          // In a real implementation, you'd fetch the updated conversation
+          // For now, we'll just add the message to the local state
+          const newMessage = {
+            id: Date.now().toString(),
+            text: message,
+            direction: 'OUTBOUND',
+            timestamp: new Date().toISOString(),
+            status: 'sent'
+          };
+          
+          setSelectedConversation(prev => ({
+            ...prev,
+            messages: [...prev.messages, newMessage],
+            lastMessage: message,
+            lastMessageTime: new Date().toISOString()
+          }));
+        }
+      } else {
+        throw new Error(result.error || 'Failed to send SMS');
+      }
+    } catch (error: any) {
+      toast({
+        title: "SMS Failed",
+        description: error.message || "Failed to send SMS",
+        variant: "destructive",
+      });
+    } finally {
+      setSendingSMS(false);
+    }
+  };
+
+  const handleSMSConversationClick = (conversation: any) => {
+    setSelectedConversation(conversation);
+    setShowSMSDetail(true);
+  };
+
+  const handleNewSMSSubmit = async () => {
+    if (!newSMSNumber.trim() || !smsMessage.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Phone number and message are required",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    await sendSMSMessage(newSMSNumber, smsMessage);
+    setShowNewSMS(false);
+    setNewSMSNumber('');
+    setSmsMessage('');
+  };
+
+  // Load SMS history when switching to SMS tab
+  useEffect(() => {
+    if (activeTab === 'sms') {
+      fetchSMSHistory();
+    }
+  }, [activeTab]);
+
   // Keep dummy data for non-email tabs, remove only email dummy data
   const allMessages = [
     // SMS
@@ -778,93 +911,182 @@ const Inbox = () => {
           {/* Messages List */}
           <TabsContent value={activeTab} className="mt-0">
             <div className="bg-white">
-              {filteredMessages.length === 0 ? (
-                <div className="p-12 text-center">
-                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Mail className="w-8 h-8 text-gray-400" />
+              {/* SMS Tab Content */}
+              {activeTab === 'sms' ? (
+                <div>
+                  {/* SMS Header with New Message Button */}
+                  <div className="flex items-center justify-between p-4 border-b bg-gray-50">
+                    <h3 className="text-lg font-semibold text-gray-900">SMS Conversations</h3>
+                    <Button
+                      onClick={() => setShowNewSMS(true)}
+                      size="sm"
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      New Message
+                    </Button>
                   </div>
-                  <p className="text-lg font-medium text-gray-500">No messages in this category</p>
-                  <p className="text-sm text-gray-400 mt-2">All caught up! Check back later for new messages.</p>
+
+                  {/* SMS Conversations List */}
+                  {loadingSMS ? (
+                    <div className="p-12 text-center">
+                      <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-green-600" />
+                      <p className="text-gray-600">Loading SMS conversations...</p>
+                    </div>
+                  ) : smsConversations.length === 0 ? (
+                    <div className="p-12 text-center">
+                      <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <MessageSquare className="w-8 h-8 text-green-600" />
+                      </div>
+                      <p className="text-lg font-medium text-gray-500">No SMS conversations yet</p>
+                      <p className="text-gray-400 mb-4">Start a new conversation to see messages here.</p>
+                      <Button
+                        onClick={() => setShowNewSMS(true)}
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Send First Message
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-200">
+                      {smsConversations.map((conversation) => (
+                        <div
+                          key={conversation.id}
+                          className="flex items-center gap-4 p-4 hover:bg-gray-50 cursor-pointer transition-colors"
+                          onClick={() => handleSMSConversationClick(conversation)}
+                        >
+                          {/* Contact Avatar */}
+                          <div className="flex-shrink-0">
+                            <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                              <MessageSquare className="w-5 h-5 text-green-600" />
+                            </div>
+                          </div>
+                          
+                          {/* Conversation Info */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-3 mb-1">
+                              <span className="font-medium text-gray-900">
+                                {conversation.contactName || conversation.phoneNumber}
+                              </span>
+                              {conversation.unreadCount > 0 && (
+                                <Badge className="bg-green-500 text-white text-xs">
+                                  {conversation.unreadCount}
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="text-sm text-gray-500 mb-1">
+                              {conversation.phoneNumber}
+                            </div>
+                            <div className="text-sm text-gray-600 truncate">
+                              {conversation.lastMessage}
+                            </div>
+                          </div>
+                          
+                          {/* Time */}
+                          <div className="flex-shrink-0 text-sm text-gray-500">
+                            {new Date(conversation.lastMessageTime).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ) : (
-                <div className="divide-y divide-gray-200">
-                  {filteredMessages.map((message) => (
-                    <div 
-                      key={message.id} 
-                      className={`flex items-center gap-4 px-6 py-4 transition-colors ${
-                        message.unread ? 'bg-blue-50/30' : ''
-                      } ${
-                        message.isGmail ? 'hover:bg-gray-50 cursor-pointer' : 'cursor-default'
-                      }`}
-                      onClick={() => handleEmailClick(message)}
-                    >
-                      {/* Checkbox */}
-                      <div onClick={(e) => e.stopPropagation()}>
-                        <Checkbox 
-                          checked={selectedItems.includes(message.id)}
-                          onCheckedChange={() => handleSelectItem(message.id)}
-                          className="border-gray-300"
-                        />
+                /* Other Tabs Content */
+                <div>
+                  {filteredMessages.length === 0 ? (
+                    <div className="p-12 text-center">
+                      <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Mail className="w-8 h-8 text-gray-400" />
                       </div>
-                      
-                      {/* Message Icon */}
-                      <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center">
-                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
-                          message.type === 'email' ? 'bg-blue-100 text-blue-600' :
-                          message.type === 'sms' ? 'bg-green-100 text-green-600' :
-                          message.type === 'call' ? 'bg-orange-100 text-orange-600' :
-                          message.type === 'task' ? 'bg-purple-100 text-purple-600' :
-                          'bg-gray-100 text-gray-600'
-                        }`}>
-                          {getMessageIcon(message.type)}
-                        </div>
-                      </div>
-                      
-                      {/* Message Content */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-3">
-                          <span className={`font-medium text-sm ${
-                            message.unread ? 'text-gray-900' : 'text-gray-600'
-                          }`}>
-                            {extractNameFromEmail(message.from)}
-                          </span>
-                          
-                          {/* Read/Unread Badge */}
-                          <Badge 
-                            variant={message.unread ? "default" : "secondary"} 
-                            className={`text-xs px-1.5 py-0.5 ${
-                              message.unread 
-                                ? 'bg-blue-100 text-blue-800 border-blue-200' 
-                                : 'bg-gray-100 text-gray-600 border-gray-200'
-                            }`}
-                          >
-                            {message.unread ? 'Unread' : 'Read'}
-                          </Badge>
-                          
-                          {message.starred && (
-                            <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 mt-1">
-                          <div className={`text-sm flex-1 ${
-                            message.unread ? 'text-gray-900 font-medium' : 'text-gray-600'
-                          }`}>
-                            {message.subject}
-                          </div>
-                          {message.threadCount > 1 && (
-                            <Badge variant="outline" className="text-xs bg-blue-50 text-blue-600 border-blue-200">
-                              {message.threadCount}
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                      
-                      {/* Time */}
-                      <div className="flex-shrink-0 text-sm text-gray-500">
-                        {message.time}
-                      </div>
+                      <p className="text-lg font-medium text-gray-500">No messages in this category</p>
+                      <p className="text-sm text-gray-400 mt-2">All caught up! Check back later for new messages.</p>
                     </div>
-                  ))}
+                  ) : (
+                    <div className="divide-y divide-gray-200">
+                      {filteredMessages.map((message) => (
+                        <div 
+                          key={message.id} 
+                          className={`flex items-center gap-4 px-6 py-4 transition-colors ${
+                            message.unread ? 'bg-blue-50/30' : ''
+                          } ${
+                            message.isGmail ? 'hover:bg-gray-50 cursor-pointer' : 'cursor-default'
+                          }`}
+                          onClick={() => handleEmailClick(message)}
+                        >
+                          {/* Checkbox */}
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <Checkbox 
+                              checked={selectedItems.includes(message.id)}
+                              onCheckedChange={() => handleSelectItem(message.id)}
+                              className="border-gray-300"
+                            />
+                          </div>
+                          
+                          {/* Message Icon */}
+                          <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center">
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
+                              message.type === 'email' ? 'bg-blue-100 text-blue-600' :
+                              message.type === 'sms' ? 'bg-green-100 text-green-600' :
+                              message.type === 'call' ? 'bg-orange-100 text-orange-600' :
+                              message.type === 'task' ? 'bg-purple-100 text-purple-600' :
+                              'bg-gray-100 text-gray-600'
+                            }`}>
+                              {getMessageIcon(message.type)}
+                            </div>
+                          </div>
+                          
+                          {/* Message Content */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-3">
+                              <span className={`font-medium text-sm ${
+                                message.unread ? 'text-gray-900' : 'text-gray-600'
+                              }`}>
+                                {extractNameFromEmail(message.from)}
+                              </span>
+                              
+                              {/* Read/Unread Badge */}
+                              <Badge 
+                                variant={message.unread ? "default" : "secondary"} 
+                                className={`text-xs px-1.5 py-0.5 ${
+                                  message.unread 
+                                    ? 'bg-blue-100 text-blue-800 border-blue-200' 
+                                    : 'bg-gray-100 text-gray-600 border-gray-200'
+                                }`}
+                              >
+                                {message.unread ? 'Unread' : 'Read'}
+                              </Badge>
+                              
+                              {message.starred && (
+                                <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 mt-1">
+                              <div className={`text-sm flex-1 ${
+                                message.unread ? 'text-gray-900 font-medium' : 'text-gray-600'
+                              }`}>
+                                {message.subject}
+                              </div>
+                              {message.threadCount > 1 && (
+                                <Badge variant="outline" className="text-xs bg-blue-50 text-blue-600 border-blue-200">
+                                  {message.threadCount}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          
+                          {/* Time */}
+                          <div className="flex-shrink-0 text-sm text-gray-500">
+                            {message.time}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1105,6 +1327,170 @@ const Inbox = () => {
               </div>
             </div>
           ) : null}
+        </DialogContent>
+      </Dialog>
+
+      {/* SMS Detail Modal */}
+      <Dialog open={showSMSDetail} onOpenChange={setShowSMSDetail}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquare className="w-5 h-5 text-green-600" />
+              {selectedConversation?.contactName || selectedConversation?.phoneNumber}
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedConversation && (
+            <div className="space-y-4">
+              {/* Conversation Header */}
+              <div className="border-b pb-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-medium text-gray-900">
+                      {selectedConversation.contactName || 'Unknown Contact'}
+                    </h3>
+                    <p className="text-sm text-gray-600">{selectedConversation.phoneNumber}</p>
+                  </div>
+                  <Badge className="bg-green-100 text-green-800">
+                    {selectedConversation.messages?.length || 0} messages
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Messages */}
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {selectedConversation.messages?.map((message: any) => (
+                  <div
+                    key={message.id}
+                    className={`flex ${message.direction === 'OUTBOUND' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div
+                      className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                        message.direction === 'OUTBOUND'
+                          ? 'bg-green-500 text-white'
+                          : 'bg-gray-200 text-gray-900'
+                      }`}
+                    >
+                      <p className="text-sm">{message.text}</p>
+                      <p className={`text-xs mt-1 ${
+                        message.direction === 'OUTBOUND' ? 'text-green-100' : 'text-gray-500'
+                      }`}>
+                        {new Date(message.timestamp).toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Reply Section */}
+              <div className="border-t pt-4">
+                <div className="space-y-3">
+                  <Textarea
+                    placeholder="Type your message..."
+                    value={smsMessage}
+                    onChange={(e) => setSmsMessage(e.target.value)}
+                    className="min-h-[80px] resize-none"
+                    disabled={sendingSMS}
+                  />
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs text-gray-500">
+                      {smsMessage.length}/160 characters
+                    </div>
+                    <Button
+                      onClick={() => sendSMSMessage(selectedConversation.phoneNumber, smsMessage)}
+                      disabled={sendingSMS || !smsMessage.trim()}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      {sendingSMS ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Sending...
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-4 h-4 mr-2" />
+                          Send SMS
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* New SMS Modal */}
+      <Dialog open={showNewSMS} onOpenChange={setShowNewSMS}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquare className="w-5 h-5 text-green-600" />
+              New SMS Message
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Phone Number</label>
+              <Input
+                placeholder="+1234567890"
+                value={newSMSNumber}
+                onChange={(e) => setNewSMSNumber(e.target.value)}
+                disabled={sendingSMS}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Message</label>
+              <Textarea
+                placeholder="Type your message..."
+                value={smsMessage}
+                onChange={(e) => setSmsMessage(e.target.value)}
+                className="min-h-[100px] resize-none"
+                disabled={sendingSMS}
+              />
+              <div className="text-xs text-gray-500 text-right">
+                {smsMessage.length}/160 characters
+              </div>
+            </div>
+            
+            <div className="flex gap-2 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowNewSMS(false);
+                  setNewSMSNumber('');
+                  setSmsMessage('');
+                }}
+                disabled={sendingSMS}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleNewSMSSubmit}
+                disabled={sendingSMS || !newSMSNumber.trim() || !smsMessage.trim()}
+                className="flex-1 bg-green-600 hover:bg-green-700"
+              >
+                {sendingSMS ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4 mr-2" />
+                    Send SMS
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

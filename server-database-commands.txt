@@ -1,0 +1,34 @@
+# Database Fix Commands for Your Server
+# =====================================
+
+# 1. Navigate to server directory
+cd /var/www/RealEstateCRMBackend/server
+
+# 2. Check current migration status
+npx prisma migrate status
+
+# 3. Check if UserEmailSettings table exists
+npx prisma db execute --stdin <<< "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'UserEmailSettings';"
+
+# 4. Apply all pending migrations
+npx prisma migrate deploy
+
+# 5. Generate Prisma client
+npx prisma generate
+
+# 6. Verify table was created
+npx prisma db execute --stdin <<< "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'UserEmailSettings';"
+
+# 7. Check table structure
+npx prisma db execute --stdin <<< "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'UserEmailSettings' ORDER BY ordinal_position;"
+
+# 8. Restart PM2 processes
+pm2 restart all
+
+# 9. Test the SMTP functionality again
+
+# If migrations fail, try force deploy:
+# npx prisma migrate deploy --force
+
+# If still failing, check database connection:
+# npx prisma db execute --stdin <<< "SELECT current_database(), current_user;"
