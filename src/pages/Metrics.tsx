@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
@@ -7,6 +7,8 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { TrendingUp, TrendingDown, Users, DollarSign, Target, Clock, BarChart3, Activity, Zap, Trophy, Award, FileText, MessageSquare, Phone, CheckSquare, MessageCircle, Bell } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
+import { API_BASE } from '@/config/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Metrics = () => {
   const [selectedPeriod, setSelectedPeriod] = useState('This Month');
@@ -14,18 +16,20 @@ const Metrics = () => {
   const [showLeads, setShowLeads] = useState(true);
   const [showConversion, setShowConversion] = useState(true);
   const [activeTab, setActiveTab] = useState('company');
+  const [kpis, setKpis] = useState<{ contractsSigned: number; contractsSold: number; projectedProfit: number | null; closedProfit: number | null; averageOfferPrice: number | null; averageContractPrice: number | null; averageSoldPrice: number | null; averageDealProfit: number | null } | null>(null);
+  const [kpiLoading, setKpiLoading] = useState(false);
 
   // Company Overview Data
   const companyMetrics = [
-    { title: 'Total Leads', value: '1,247', change: '+12%', trend: 'up', icon: Users },
-    { title: 'Active Deals', value: '89', change: '+8%', trend: 'up', icon: Target },
-    { title: 'Revenue', value: '$485K', change: '+15%', trend: 'up', icon: DollarSign },
-    { title: 'Conversion Rate', value: '24%', change: '+3%', trend: 'up', icon: TrendingUp },
-    { title: 'Avg Deal Size', value: '$12.5K', change: '-2%', trend: 'down', icon: DollarSign },
-    { title: 'Sales Cycle', value: '45 days', change: '-5%', trend: 'up', icon: Clock },
-    { title: 'Pipeline Value', value: '$2.1M', change: '+18%', trend: 'up', icon: Target },
-    { title: 'Win Rate', value: '32%', change: '+7%', trend: 'up', icon: TrendingUp },
-    { title: 'Lost Deals', value: '156', change: '-12%', trend: 'up', icon: TrendingDown },
+    { title: 'Total Leads', value: '—', change: '', trend: 'up', icon: Users },
+    { title: 'Active Deals', value: '—', change: '', trend: 'up', icon: Target },
+    { title: 'Revenue', value: '—', change: '', trend: 'up', icon: DollarSign },
+    { title: 'Conversion Rate', value: '—', change: '', trend: 'up', icon: TrendingUp },
+    { title: 'Avg Deal Size', value: '—', change: '', trend: 'down', icon: DollarSign },
+    { title: 'Sales Cycle', value: '—', change: '', trend: 'up', icon: Clock },
+    { title: 'Pipeline Value', value: '—', change: '', trend: 'up', icon: Target },
+    { title: 'Win Rate', value: '—', change: '', trend: 'up', icon: TrendingUp },
+    { title: 'Lost Deals', value: '—', change: '', trend: 'up', icon: TrendingDown },
   ];
 
   // Marketing Overview Data
@@ -38,21 +42,151 @@ const Metrics = () => {
     { title: 'Social Media Reach', value: '8.5K', change: '+18%', trend: 'up' },
   ];
 
-  // Chart data for Marketing Overview
-  const chartData = [
-    { name: 'Jan', revenue: 4000, leads: 240, conversion: 18, totalLeads: 240, contractedLeads: 45, soldLeads: 38, closedLeads: 32 },
-    { name: 'Feb', revenue: 3000, leads: 198, conversion: 22, totalLeads: 198, contractedLeads: 42, soldLeads: 35, closedLeads: 28 },
-    { name: 'Mar', revenue: 2000, leads: 180, conversion: 25, totalLeads: 180, contractedLeads: 38, soldLeads: 32, closedLeads: 25 },
-    { name: 'Apr', revenue: 2780, leads: 220, conversion: 28, totalLeads: 220, contractedLeads: 48, soldLeads: 42, closedLeads: 35 },
-    { name: 'May', revenue: 1890, leads: 160, conversion: 24, totalLeads: 160, contractedLeads: 35, soldLeads: 28, closedLeads: 22 },
-    { name: 'Jun', revenue: 2390, leads: 200, conversion: 26, totalLeads: 200, contractedLeads: 42, soldLeads: 36, closedLeads: 30 },
-    { name: 'Jul', revenue: 3200, leads: 280, conversion: 30, totalLeads: 280, contractedLeads: 58, soldLeads: 48, closedLeads: 42 },
-    { name: 'Aug', revenue: 3800, leads: 320, conversion: 32, totalLeads: 320, contractedLeads: 68, soldLeads: 58, closedLeads: 48 },
-    { name: 'Sep', revenue: 4200, leads: 350, conversion: 35, totalLeads: 350, contractedLeads: 75, soldLeads: 65, closedLeads: 55 },
-    { name: 'Oct', revenue: 4800, leads: 380, conversion: 38, totalLeads: 380, contractedLeads: 82, soldLeads: 72, closedLeads: 62 },
-    { name: 'Nov', revenue: 5200, leads: 420, conversion: 42, totalLeads: 420, contractedLeads: 92, soldLeads: 78, closedLeads: 68 },
-    { name: 'Dec', revenue: 5800, leads: 480, conversion: 45, totalLeads: 480, contractedLeads: 105, soldLeads: 88, closedLeads: 75 },
-  ];
+  const { user } = useAuth();
+  const [flowData, setFlowData] = useState<{ name: string; totalLeads: number; contractedLeads: number; soldLeads: number; closedLeads: number }[]>([]);
+  const [isLoadingFlow, setIsLoadingFlow] = useState(false);
+  const [flowError, setFlowError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const load = async () => {
+      setIsLoadingFlow(true);
+      setFlowError(null);
+      try {
+        const accessToken = localStorage.getItem('accessToken');
+        const res = await fetch(`${API_BASE}/metrics/lead-deal-flow`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` },
+        });
+        const json = await res.json();
+        setFlowData(json?.data || []);
+      } catch (e) {
+        setFlowError('Failed to load metrics');
+      } finally {
+        setIsLoadingFlow(false);
+      }
+    };
+    load();
+  }, [user?.id]);
+
+  // Lead Sources dynamic component
+  const DynamicLeadSources: React.FC = () => {
+    const [data, setData] = useState<{ label: string; count: number }[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+      const load = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+          const accessToken = localStorage.getItem('accessToken');
+          const res = await fetch(`${API_BASE}/metrics/lead-sources`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+          });
+          const json = await res.json();
+          const buckets: { name: string; sources: Record<string, number> }[] = json?.data || [];
+          // Aggregate across last 12 months into total per source
+          const totals: Record<string, number> = {};
+          for (const b of buckets) {
+            for (const [k, v] of Object.entries(b.sources)) {
+              totals[k] = (totals[k] || 0) + (v as number);
+            }
+          }
+          const items = Object.entries(totals)
+            .map(([label, count]) => ({ label, count }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 8); // top 8
+          setData(items);
+        } catch (e) {
+          setError('Failed to load lead sources');
+        } finally {
+          setLoading(false);
+        }
+      };
+      load();
+    }, [user?.id]);
+
+    if (loading) return <div className="text-sm text-gray-500">Loading lead sources...</div>;
+    if (error) return <div className="text-sm text-red-500">{error}</div>;
+    if (!data.length) return <div className="text-sm text-gray-500">No data</div>;
+
+    const maxCount = Math.max(...data.map(d => d.count));
+
+    return (
+      <div className="space-y-4">
+        {data.map((item, idx) => (
+          <div key={idx} className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-700">{item.label}</span>
+              <span className="text-sm font-bold text-gray-900">{item.count}</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${maxCount ? Math.round((item.count / maxCount) * 100) : 0}%` }}></div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  // Fetch KPIs once per selectedPeriod
+  useEffect(() => {
+    const load = async () => {
+      setKpiLoading(true);
+      try {
+        const accessToken = localStorage.getItem('accessToken');
+        const res = await fetch(`${API_BASE}/metrics/company-kpis?timeframe=${encodeURIComponent(selectedPeriod)}`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` },
+        });
+        const json = await res.json();
+        setKpis(json?.data || null);
+      } finally {
+        setKpiLoading(false);
+      }
+    };
+    load();
+  }, [selectedPeriod]);
+
+  const numberOrDash = (n: number | null | undefined) => n == null ? '—' : new Intl.NumberFormat().format(n);
+
+  const ContractsSignedCard: React.FC = () => {
+    return (
+      <div className="space-y-2">
+        <p className="text-sm font-bold text-blue-600 uppercase tracking-wider">Contracts Signed</p>
+        <p className="text-3xl font-black text-blue-900">{kpiLoading ? '…' : numberOrDash(kpis?.contractsSigned)}</p>
+        <p className="text-xs text-blue-600">Acquisitions Team</p>
+      </div>
+    );
+  };
+
+  const ContractsSoldCard: React.FC = () => {
+    return (
+      <div className="space-y-2">
+        <p className="text-sm font-bold text-green-600 uppercase tracking-wider">Contracts Sold</p>
+        <p className="text-3xl font-black text-green-900">{kpiLoading ? '…' : numberOrDash(kpis?.contractsSold)}</p>
+        <p className="text-xs text-green-600">Dispositions Team</p>
+      </div>
+    );
+  };
+
+  const ProjectedProfitCard: React.FC = () => {
+    return (
+      <div className="space-y-2">
+        <p className="text-sm font-bold text-purple-600 uppercase tracking-wider">Projected Profit</p>
+        <p className="text-3xl font-black text-purple-900">{kpiLoading ? '…' : kpis?.projectedProfit == null ? '—' : `$${numberOrDash(kpis.projectedProfit)}`}</p>
+        <p className="text-xs text-purple-600">Current Timeframe</p>
+      </div>
+    );
+  };
+
+  const ClosedProfitCard: React.FC = () => {
+    return (
+      <div className="space-y-2">
+        <p className="text-sm font-bold text-orange-600 uppercase tracking-wider">Closed Profit</p>
+        <p className="text-3xl font-black text-orange-900">{kpiLoading ? '…' : kpis?.closedProfit == null ? '—' : `$${numberOrDash(kpis.closedProfit)}`}</p>
+        <p className="text-xs text-orange-600">Final Profit</p>
+      </div>
+    );
+  };
 
   const pieData = [
     { name: 'Website', value: 35, color: '#3b82f6' },
@@ -191,11 +325,7 @@ const Metrics = () => {
                 </div>
                 <div className="text-xs text-green-600 font-bold bg-green-100 px-2 py-1 rounded-full">+12%</div>
               </div>
-              <div className="space-y-2">
-                <p className="text-sm font-bold text-blue-600 uppercase tracking-wider">Contracts Signed</p>
-                <p className="text-3xl font-black text-blue-900">24</p>
-                <p className="text-xs text-blue-600">Acquisitions Team</p>
-              </div>
+              <ContractsSignedCard />
             </Card>
 
             {/* Contracts Sold */}
@@ -206,11 +336,7 @@ const Metrics = () => {
                 </div>
                 <div className="text-xs text-green-600 font-bold bg-green-100 px-2 py-1 rounded-full">+8%</div>
               </div>
-              <div className="space-y-2">
-                <p className="text-sm font-bold text-green-600 uppercase tracking-wider">Contracts Sold</p>
-                <p className="text-3xl font-black text-green-900">18</p>
-                <p className="text-xs text-green-600">Dispositions Team</p>
-              </div>
+              <ContractsSoldCard />
             </Card>
 
             {/* Projected Profit */}
@@ -221,11 +347,7 @@ const Metrics = () => {
                 </div>
                 <div className="text-xs text-green-600 font-bold bg-green-100 px-2 py-1 rounded-full">+15%</div>
               </div>
-              <div className="space-y-2">
-                <p className="text-sm font-bold text-purple-600 uppercase tracking-wider">Projected Profit</p>
-                <p className="text-3xl font-black text-purple-900">$485K</p>
-                <p className="text-xs text-purple-600">Current Timeframe</p>
-              </div>
+              <ProjectedProfitCard />
             </Card>
 
             {/* Closed Profit */}
@@ -236,11 +358,7 @@ const Metrics = () => {
                 </div>
                 <div className="text-xs text-green-600 font-bold bg-green-100 px-2 py-1 rounded-full">+22%</div>
               </div>
-              <div className="space-y-2">
-                <p className="text-sm font-bold text-orange-600 uppercase tracking-wider">Closed Profit</p>
-                <p className="text-3xl font-black text-orange-900">$342K</p>
-                <p className="text-xs text-orange-600">Final Profit</p>
-              </div>
+              <ClosedProfitCard />
             </Card>
           </div>
 
@@ -263,7 +381,7 @@ const Metrics = () => {
               </div>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                  <BarChart data={flowData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis 
                       dataKey="name" 
@@ -291,6 +409,12 @@ const Metrics = () => {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
+              {isLoadingFlow && (
+                <div className="text-center text-sm text-gray-500 mt-2">Loading flow data...</div>
+              )}
+              {flowError && (
+                <div className="text-center text-sm text-red-500 mt-2">{flowError}</div>
+              )}
               <div className="flex items-center justify-center gap-6 mt-4 text-sm">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
@@ -311,50 +435,10 @@ const Metrics = () => {
               </div>
             </Card>
 
-            {/* Lead Sources - 25% width */}
+            {/* Lead Sources - 25% width (dynamic) */}
             <Card className="p-6 hover:shadow-lg transition-shadow">
               <h3 className="text-lg font-semibold text-gray-900 mb-6">Lead Source</h3>
-              <div className="space-y-4">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-700">Cold Calling</span>
-                    <span className="text-sm font-bold text-gray-900">32</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div className="bg-blue-500 h-2 rounded-full" style={{ width: '85%' }}></div>
-                  </div>
-                </div>
-                
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-700">Direct Mail</span>
-                    <span className="text-sm font-bold text-gray-900">28</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div className="bg-blue-500 h-2 rounded-full" style={{ width: '75%' }}></div>
-                  </div>
-                </div>
-                
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-700">SMS Blast</span>
-                    <span className="text-sm font-bold text-gray-900">15</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div className="bg-blue-500 h-2 rounded-full" style={{ width: '40%' }}></div>
-                  </div>
-                </div>
-                
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-700">Website</span>
-                    <span className="text-sm font-bold text-gray-900">12</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div className="bg-blue-500 h-2 rounded-full" style={{ width: '32%' }}></div>
-                  </div>
-                </div>
-              </div>
+              <DynamicLeadSources />
             </Card>
           </div>
 
@@ -370,7 +454,7 @@ const Metrics = () => {
               </div>
               <div className="space-y-2">
                 <p className="text-sm font-bold text-gray-600 uppercase tracking-wider">Average Offer Price</p>
-                <p className="text-3xl font-black text-gray-900">$285,000.00</p>
+                <p className="text-3xl font-black text-gray-900">{kpiLoading ? '…' : kpis?.averageOfferPrice == null ? '—' : `$${numberOrDash(kpis.averageOfferPrice)}`}</p>
                 <p className="text-xs text-gray-500">Per Property</p>
               </div>
             </Card>
@@ -385,7 +469,7 @@ const Metrics = () => {
               </div>
               <div className="space-y-2">
                 <p className="text-sm font-bold text-gray-600 uppercase tracking-wider">Average Contract Price</p>
-                <p className="text-3xl font-black text-gray-900">$315,000.00</p>
+                <p className="text-3xl font-black text-gray-900">{kpiLoading ? '…' : kpis?.averageContractPrice == null ? '—' : `$${numberOrDash(kpis.averageContractPrice)}`}</p>
                 <p className="text-xs text-gray-500">Per Contract</p>
               </div>
             </Card>
@@ -400,7 +484,7 @@ const Metrics = () => {
               </div>
               <div className="space-y-2">
                 <p className="text-sm font-bold text-gray-600 uppercase tracking-wider">Average Sold Price</p>
-                <p className="text-3xl font-black text-gray-900">$425,000.00</p>
+                <p className="text-3xl font-black text-gray-900">{kpiLoading ? '…' : kpis?.averageSoldPrice == null ? '—' : `$${numberOrDash(kpis.averageSoldPrice)}`}</p>
                 <p className="text-xs text-gray-500">Per Sale</p>
               </div>
             </Card>
@@ -415,7 +499,7 @@ const Metrics = () => {
               </div>
               <div className="space-y-2">
                 <p className="text-sm font-bold text-gray-600 uppercase tracking-wider">Average Deal Profit</p>
-                <p className="text-3xl font-black text-gray-900">$110,000.00</p>
+                <p className="text-3xl font-black text-gray-900">{kpiLoading ? '…' : kpis?.averageDealProfit == null ? '—' : `$${numberOrDash(kpis.averageDealProfit)}`}</p>
                 <p className="text-xs text-gray-500">Per Deal</p>
               </div>
             </Card>
