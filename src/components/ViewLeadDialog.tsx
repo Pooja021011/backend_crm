@@ -27,6 +27,10 @@ import {
 import { format } from "date-fns";
 import type { Lead } from "@/hooks/useLeads";
 import { LeadDocumentsTab } from "./LeadDocumentsTab";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { API_BASE } from "@/config/api";
 
 interface ViewLeadDialogProps {
   lead: Lead;
@@ -39,6 +43,54 @@ export const ViewLeadDialog: React.FC<ViewLeadDialogProps> = ({
   open,
   onOpenChange,
 }) => {
+  const [dealLoading, setDealLoading] = React.useState(false);
+  const [contractPrice, setContractPrice] = React.useState<string>("");
+  const [soldPrice, setSoldPrice] = React.useState<string>("");
+  const [netProfit, setNetProfit] = React.useState<string>("");
+  const [contractedAt, setContractedAt] = React.useState<string>("");
+  const [closedAt, setClosedAt] = React.useState<string>("");
+
+  React.useEffect(() => {
+    if (!open) return;
+    const load = async () => {
+      try {
+        setDealLoading(true);
+        const accessToken = localStorage.getItem('accessToken');
+        const res = await fetch(`${API_BASE}/deals/${lead.id}`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
+        const json = await res.json();
+        const d = json?.data;
+        if (d) {
+          setContractPrice(d.contractPrice != null ? String(d.contractPrice) : "");
+          setSoldPrice(d.soldPrice != null ? String(d.soldPrice) : "");
+          setNetProfit(d.netProfit != null ? String(d.netProfit) : "");
+          setContractedAt(d.contractedAt ? new Date(d.contractedAt).toISOString().slice(0,16) : "");
+          setClosedAt(d.closedAt ? new Date(d.closedAt).toISOString().slice(0,16) : "");
+        } else {
+          setContractPrice(""); setSoldPrice(""); setNetProfit(""); setContractedAt(""); setClosedAt("");
+        }
+      } finally {
+        setDealLoading(false);
+      }
+    };
+    load();
+  }, [open, lead.id]);
+
+  const saveDeal = async () => {
+    const accessToken = localStorage.getItem('accessToken');
+    await fetch(`${API_BASE}/deals/${lead.id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
+      body: JSON.stringify({
+        contractPrice: contractPrice ? Number(contractPrice) : null,
+        soldPrice: soldPrice ? Number(soldPrice) : null,
+        netProfit: netProfit ? Number(netProfit) : null,
+        contractedAt: contractedAt || null,
+        closedAt: closedAt || null,
+      })
+    });
+  };
   const getLeadTypeColor = (type: string) => {
     switch (type) {
       case 'SELLER': return 'bg-green-100 text-green-800';
@@ -393,6 +445,45 @@ export const ViewLeadDialog: React.FC<ViewLeadDialogProps> = ({
             {lead.leadType === 'SELLER' && renderSellerDetails()}
             {lead.leadType === 'BUYER' && renderBuyerDetails()}
             {lead.leadType === 'VENDOR' && renderVendorDetails()}
+
+            {/* Deal Information */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <DollarSign className="w-5 h-5" />
+                  Deal Information
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <Label className="text-sm">Contract Price</Label>
+                    <Input type="number" value={contractPrice} onChange={(e) => setContractPrice(e.target.value)} disabled={dealLoading} />
+                  </div>
+                  <div>
+                    <Label className="text-sm">Sold Price</Label>
+                    <Input type="number" value={soldPrice} onChange={(e) => setSoldPrice(e.target.value)} disabled={dealLoading} />
+                  </div>
+                  <div>
+                    <Label className="text-sm">Net Profit</Label>
+                    <Input type="number" value={netProfit} onChange={(e) => setNetProfit(e.target.value)} disabled={dealLoading} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm">Contracted At</Label>
+                    <Input type="datetime-local" value={contractedAt} onChange={(e) => setContractedAt(e.target.value)} disabled={dealLoading} />
+                  </div>
+                  <div>
+                    <Label className="text-sm">Closed At</Label>
+                    <Input type="datetime-local" value={closedAt} onChange={(e) => setClosedAt(e.target.value)} disabled={dealLoading} />
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <Button onClick={saveDeal} disabled={dealLoading}>Save Deal</Button>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="documents" className="mt-6">

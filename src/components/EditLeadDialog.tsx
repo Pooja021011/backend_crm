@@ -42,6 +42,8 @@ import {
   formatPhoneNumber 
 } from "@/utils/validation";
 import type { Lead } from "@/hooks/useLeads";
+import { Input } from "@/components/ui/input";
+import { API_BASE } from "@/config/api";
 
 interface EditLeadDialogProps {
   lead: Lead;
@@ -56,6 +58,10 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
   onOpenChange,
   onLeadUpdated,
 }) => {
+  // Deal editing state (optional quick edit without opening view dialog)
+  const [dealContractPrice, setDealContractPrice] = useState<string>("");
+  const [dealSoldPrice, setDealSoldPrice] = useState<string>("");
+  const [dealNetProfit, setDealNetProfit] = useState<string>("");
   const { updateLead } = useLeads();
   const { markets, leadSources, getCountiesByMarket, isLoading: settingsLoading } = useSettings();
   const { agents, isLoading: agentsLoading, getActiveAgents } = useAgents();
@@ -104,6 +110,18 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
   // Initialize form data when lead changes
   useEffect(() => {
     if (!lead) return;
+    // Load deal for quick edit
+    (async () => {
+      try {
+        const accessToken = localStorage.getItem('accessToken');
+        const res = await fetch(`${API_BASE}/deals/${lead.id}`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+        const json = await res.json();
+        const d = json?.data;
+        setDealContractPrice(d?.contractPrice != null ? String(d.contractPrice) : "");
+        setDealSoldPrice(d?.soldPrice != null ? String(d.soldPrice) : "");
+        setDealNetProfit(d?.netProfit != null ? String(d.netProfit) : "");
+      } catch {}
+    })();
 
     const contactInfo = lead.seller || lead.buyer || lead.vendor;
     
@@ -213,6 +231,20 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
       }
 
       await updateLead(lead.id, updateData);
+
+      // Save deal quick edits if any value provided
+      if (dealContractPrice || dealSoldPrice || dealNetProfit) {
+        const accessToken = localStorage.getItem('accessToken');
+        await fetch(`${API_BASE}/deals/${lead.id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
+          body: JSON.stringify({
+            contractPrice: dealContractPrice ? Number(dealContractPrice) : null,
+            soldPrice: dealSoldPrice ? Number(dealSoldPrice) : null,
+            netProfit: dealNetProfit ? Number(dealNetProfit) : null,
+          })
+        });
+      }
       
       toast({
         title: "Lead Updated",
@@ -359,6 +391,7 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
               {lead.leadType === 'BUYER' && <TabsTrigger value="criteria">Criteria</TabsTrigger>}
               {lead.leadType === 'VENDOR' && <TabsTrigger value="service">Service</TabsTrigger>}
               <TabsTrigger value="notes">Notes</TabsTrigger>
+            <TabsTrigger value="deal">Deal</TabsTrigger>
             </TabsList>
 
             <TabsContent value="contact" className="space-y-4">
@@ -649,6 +682,30 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
                 </CardContent>
               </Card>
             </TabsContent>
+
+          <TabsContent value="deal" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Deal (Quick Edit)</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <Label>Contract Price</Label>
+                    <Input type="number" value={dealContractPrice} onChange={(e) => setDealContractPrice(e.target.value)} />
+                  </div>
+                  <div>
+                    <Label>Sold Price</Label>
+                    <Input type="number" value={dealSoldPrice} onChange={(e) => setDealSoldPrice(e.target.value)} />
+                  </div>
+                  <div>
+                    <Label>Net Profit</Label>
+                    <Input type="number" value={dealNetProfit} onChange={(e) => setDealNetProfit(e.target.value)} />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
           </Tabs>
 
           <DialogFooter>

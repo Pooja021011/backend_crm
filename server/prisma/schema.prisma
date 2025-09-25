@@ -256,6 +256,7 @@ model Lead {
   communications   Communication[]
   marketingLinks   MarketingLink[]
   leadFiles        LeadFile[]
+  deal             Deal?
 
   @@index([leadType])
   @@index([marketId])
@@ -502,6 +503,23 @@ model MarketingLink {
   createdById String?
   createdBy   User?    @relation("CreatedByUser", fields: [createdById], references: [id])
   createdAt   DateTime @default(now())
+}
+
+// Deals/Financials
+model Deal {
+  id            String   @id @default(uuid())
+  leadId        String   @unique
+  lead          Lead     @relation(fields: [leadId], references: [id])
+
+  contractPrice Int?
+  soldPrice     Int?
+  netProfit     Int?     // direct profit amount if known
+
+  contractedAt  DateTime?
+  closedAt      DateTime?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 // Comparable sales (internal DB)

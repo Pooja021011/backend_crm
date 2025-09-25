@@ -14,7 +14,7 @@ export const metricsRepository = {
       where: {
         changedAt: { gte: from, lt: to },
       },
-      include: { toStage: { include: { pipeline: true } } },
+      include: { toStage: { include: { pipeline: true } }, fromStage: true },
     }),
 
   // Lead source distribution per month using Lead.createdAt and source stored on lead.customFields or related tables (if any)
@@ -41,6 +41,73 @@ export const metricsRepository = {
         offerAmount: { not: null },
       },
       select: { leadId: true, offerAmount: true },
+    }),
+
+  getPipelineByKey: (key: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION') =>
+    prisma.pipelineDefinition.findUnique({ where: { key }, include: { stages: { orderBy: { orderIndex: 'asc' } } } }),
+
+  countLeadsByStageBetween: async (stageIds: string[], from: Date, to: Date) => {
+    // groupBy leads current stage
+    const groups = await prisma.lead.groupBy({
+      by: ['pipelineStageId'],
+      where: {
+        pipelineStageId: { in: stageIds },
+        createdAt: { gte: from, lt: to },
+      },
+      _count: { pipelineStageId: true },
+    });
+    const map: Record<string, number> = {};
+    for (const g of groups) {
+      const key = (g as any).pipelineStageId as string | null;
+      if (key) map[key] = (g as any)._count.pipelineStageId as number;
+    }
+    return map;
+  },
+
+  getStageHistoryForLeads: (leadIds: string[]) =>
+    prisma.stageHistory.findMany({
+      where: { leadId: { in: leadIds } },
+      include: { toStage: { include: { pipeline: true } }, fromStage: true },
+      orderBy: { changedAt: 'asc' },
+    }),
+
+  getLeadsByStagesBetween: (stageIds: string[], from: Date, to: Date) =>
+    prisma.lead.findMany({
+      where: { pipelineStageId: { in: stageIds }, createdAt: { gte: from, lt: to } },
+      select: { id: true, pipelineStageId: true },
+    }),
+
+  getCommunicationsBetween: (from: Date, to: Date, createdById?: string) =>
+    prisma.communication.findMany({
+      where: {
+        occurredAt: { gte: from, lt: to },
+        ...(createdById ? { createdById } : {}),
+      },
+      select: { id: true, type: true, direction: true, occurredAt: true },
+      orderBy: { occurredAt: 'asc' },
+    }),
+
+  getDispositionsClosedLeadIdsBetween: async (from: Date, to: Date) => {
+    const rows = await prisma.stageHistory.findMany({
+      where: {
+        changedAt: { gte: from, lt: to },
+        toStage: { pipeline: { key: 'DISPOSITIONS' as any }, name: { contains: 'Closed', mode: 'insensitive' } },
+      },
+      select: { leadId: true },
+      distinct: ['leadId'] as any,
+    });
+    return rows.map(r => r.leadId);
+  },
+
+  getDealsBetween: (from: Date, to: Date) =>
+    prisma.deal.findMany({
+      where: {
+        OR: [
+          { contractedAt: { gte: from, lt: to } },
+          { closedAt: { gte: from, lt: to } },
+        ],
+      },
+      select: { contractPrice: true, soldPrice: true, netProfit: true, leadId: true, contractedAt: true, closedAt: true },
     }),
 };
 

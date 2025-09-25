@@ -16,6 +16,22 @@ const Metrics = () => {
   const [showLeads, setShowLeads] = useState(true);
   const [showConversion, setShowConversion] = useState(true);
   const [activeTab, setActiveTab] = useState('company');
+  // Teams (Acq/Disp) pipeline overview
+  const [acqTotal, setAcqTotal] = useState<number>(0);
+  const [tranTotal, setTranTotal] = useState<number>(0);
+  const [tranClearToClose, setTranClearToClose] = useState<number>(0);
+  const [dispTotal, setDispTotal] = useState<number>(0);
+  const [dispClosed, setDispClosed] = useState<number>(0);
+  const [projProfit, setProjProfit] = useState<number>(0);
+  const [closedProfit, setClosedProfit] = useState<number>(0);
+  // Communications overview state
+  const [commLoading, setCommLoading] = useState(false);
+  const [callStats, setCallStats] = useState<{ totalMade: number; totalReceived: number; totalTime: string; averageTime: string } | null>(null);
+  const [callsByHour, setCallsByHour] = useState<{ hour: string; outbound: number; inbound: number }[]>([]);
+  const [smsStats, setSmsStats] = useState<{ totalSent: number; totalReceived: number } | null>(null);
+  const [smsByHour, setSmsByHour] = useState<{ hour: string; outbound: number; inbound: number }[]>([]);
+  const [callSuccessRate, setCallSuccessRate] = useState<number>(0);
+  const [smsDeliveryRate, setSmsDeliveryRate] = useState<number>(0);
   const [kpis, setKpis] = useState<{ contractsSigned: number; contractsSold: number; projectedProfit: number | null; closedProfit: number | null; averageOfferPrice: number | null; averageContractPrice: number | null; averageSoldPrice: number | null; averageDealProfit: number | null } | null>(null);
   const [kpiLoading, setKpiLoading] = useState(false);
 
@@ -127,6 +143,230 @@ const Metrics = () => {
       </div>
     );
   };
+
+  // Pipeline dynamic components
+  const PipelineFunnel: React.FC<{ selectedPeriod: string }> = ({ selectedPeriod }) => {
+    const [stages, setStages] = useState<{ name: string; count: number; color: string }[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    useEffect(() => {
+      const load = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+          const accessToken = localStorage.getItem('accessToken');
+          const res = await fetch(`${API_BASE}/metrics/pipeline-overview?timeframe=${encodeURIComponent(selectedPeriod)}`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+          });
+          const json = await res.json();
+          setStages((json?.data?.stages || []).map((s: any) => ({ name: s.name, count: s.count, color: s.color })));
+        } catch (e) { setError('Failed to load pipeline'); } finally { setLoading(false); }
+      };
+      load();
+    }, [selectedPeriod]);
+    const maxCount = Math.max(1, ...stages.map(s => s.count));
+    return (
+      <div className="bg-white border rounded-lg p-6 shadow-sm">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Sales Pipeline Funnel</h3>
+        {loading && <div className="text-sm text-gray-500">Loading...</div>}
+        {error && <div className="text-sm text-red-500">{error}</div>}
+        <div className="overflow-x-auto">
+          <div className="min-w-[1000px] pb-4">
+            <div className="flex items-end justify-between gap-3 px-2">
+              {stages.map((stage, index) => {
+                const height = (stage.count / maxCount) * 180;
+                return (
+                  <div key={index} className="flex flex-col items-center space-y-2 min-w-[100px]">
+                    <Badge className={`text-white text-xs px-2 py-1 font-medium uppercase tracking-wide whitespace-nowrap ${stage.color}`}>
+                      {stage.name.split(' ').slice(0, 2).join(' ').toUpperCase()}
+                    </Badge>
+                    <div className="text-xl font-bold text-gray-900">{stage.count}</div>
+                    <div className="relative flex flex-col items-center">
+                      <div className={`${stage.color} rounded-t-lg relative`} style={{ width: '50px', height: `${Math.max(30, height)}px`, minHeight: '30px' }}>
+                        <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-white rounded-full border-2 border-gray-200"></div>
+                      </div>
+                    </div>
+                    <Badge variant="secondary" className="bg-gray-800 text-white text-xs px-2 py-1 font-bold">—</Badge>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="text-xs text-gray-500 text-center mt-2 px-4">💡 Scroll horizontally to view all pipeline stages</div>
+        </div>
+      </div>
+    );
+  };
+
+  const PipelineTable: React.FC<{ selectedPeriod: string }> = ({ selectedPeriod }) => {
+    const [rows, setRows] = useState<{ name: string; count: number; value: string; weightedValue: string; avgTimeToAdvance: string; conversionRate: string; lost: number }[]>([]);
+    useEffect(() => {
+      const load = async () => {
+        const accessToken = localStorage.getItem('accessToken');
+        const res = await fetch(`${API_BASE}/metrics/pipeline-overview?timeframe=${encodeURIComponent(selectedPeriod)}`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` },
+        });
+        const json = await res.json();
+        setRows(json?.data?.table || []);
+      };
+      load();
+    }, [selectedPeriod]);
+    return (
+      <div className="bg-white border rounded-lg shadow-sm">
+        <div className="p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Pipeline Details</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse bg-white rounded-lg shadow-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b">
+                  <th className="text-left p-4 text-sm font-medium text-gray-600 min-w-[180px]">Stage</th>
+                  <th className="text-left p-4 text-sm font-medium text-gray-600 min-w-[80px]">Count</th>
+                  <th className="text-left p-4 text-sm font-medium text-gray-600 min-w-[100px]">Value</th>
+                  <th className="text-left p-4 text-sm font-medium text-gray-600 min-w-[120px]">Weighted Value</th>
+                  <th className="text-left p-4 text-sm font-medium text-gray-600 min-w-[140px]">Avg Time to Advance</th>
+                  <th className="text-left p-4 text-sm font-medium text-gray-600 min-w-[120px]">Conversion Rate</th>
+                  <th className="text-left p-4 text-sm font-medium text-gray-600 min-w-[80px]">Lost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((stage, index) => (
+                  <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="p-4 text-sm font-medium">{stage.name}</td>
+                    <td className="p-4 text-sm font-bold">{stage.count}</td>
+                    <td className="p-4 text-sm">{stage.value}</td>
+                    <td className="p-4 text-sm">{stage.weightedValue}</td>
+                    <td className="p-4 text-sm">{stage.avgTimeToAdvance}</td>
+                    <td className="p-4 text-sm font-medium">{stage.conversionRate}</td>
+                    <td className="p-4 text-sm text-red-500 font-medium">{stage.lost}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const PipelineTimeline: React.FC<{ selectedPeriod: string }> = ({ selectedPeriod }) => {
+    const [rows, setRows] = useState<{ type: string; created_appt: string; appt_offer: string; created_offer: string; offer_closed: string }[]>([]);
+    useEffect(() => {
+      const load = async () => {
+        const accessToken = localStorage.getItem('accessToken');
+        const res = await fetch(`${API_BASE}/metrics/pipeline-overview?timeframe=${encodeURIComponent(selectedPeriod)}`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` },
+        });
+        const json = await res.json();
+        setRows(json?.data?.timeline || []);
+      };
+      load();
+    }, [selectedPeriod]);
+    return (
+      <div className="bg-green-50 p-6 rounded-lg">
+        <div className="flex items-center space-x-3 mb-6">
+          <Clock className="h-6 w-6 text-green-600" />
+          <h3 className="text-xl font-semibold">PIPELINE TIMELINE METRICS</h3>
+          <Badge className="bg-blue-500 text-white">Average Days Between Stages</Badge>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full bg-white rounded-lg shadow-sm">
+            <thead>
+              <tr className="text-left border-b bg-gray-50">
+                <th className="p-4 text-sm font-medium text-gray-600 min-w-[140px]">Marketing Type</th>
+                <th className="p-4 text-sm font-medium text-gray-600 min-w-[140px]">Created → Appt. Set</th>
+                <th className="p-4 text-sm font-medium text-gray-600 min-w-[140px]">Appt. Set → Offer Made</th>
+                <th className="p-4 text-sm font-medium text-gray-600 min-w-[140px]">Created → Offer Made</th>
+                <th className="p-4 text-sm font-medium text-gray-600 min-w-[140px]">Offer Made → Closed</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, index) => (
+                <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="p-4 text-sm flex items-center space-x-3">
+                    <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                    <span className={row.type === 'Total' ? 'font-bold text-gray-900' : 'font-medium text-gray-700'}>
+                      {row.type}
+                    </span>
+                  </td>
+                  <td className="p-4 text-sm font-medium">{row.created_appt}</td>
+                  <td className="p-4 text-sm font-medium">{row.appt_offer}</td>
+                  <td className="p-4 text-sm font-medium">{row.created_offer}</td>
+                  <td className="p-4 text-sm font-medium">{row.offer_closed}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  // Fetch communications overview when tab is communications or when period changes
+  useEffect(() => {
+    if (activeTab !== 'communications') return;
+    const load = async () => {
+      setCommLoading(true);
+      try {
+        const accessToken = localStorage.getItem('accessToken');
+        const res = await fetch(`${API_BASE}/metrics/communications-overview?timeframe=${encodeURIComponent(selectedPeriod)}`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` },
+        });
+        const json = await res.json();
+        setCallStats(json?.data?.callStats || { totalMade: 0, totalReceived: 0, totalTime: '—', averageTime: '—' });
+        setCallsByHour(json?.data?.callsByHour || []);
+        setSmsStats(json?.data?.smsStats || { totalSent: 0, totalReceived: 0 });
+        setSmsByHour(json?.data?.smsByHour || []);
+        setCallSuccessRate(json?.data?.callSuccessRate || 0);
+        setSmsDeliveryRate(json?.data?.smsDeliveryRate || 0);
+      } finally {
+        setCommLoading(false);
+      }
+    };
+    load();
+  }, [activeTab, selectedPeriod]);
+
+  // Fetch Team pipelines on tab switch
+  useEffect(() => {
+    const accessToken = localStorage.getItem('accessToken');
+    const fetchPipe = async (pipeline: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION') => {
+      const res = await fetch(`${API_BASE}/metrics/pipeline-overview?timeframe=${encodeURIComponent(selectedPeriod)}&pipeline=${pipeline}`, {
+        headers: { 'Authorization': `Bearer ${accessToken}` },
+      });
+      const json = await res.json();
+      return json?.data?.stages as { name: string; count: number }[] || [];
+    };
+    const load = async () => {
+      // Fetch team KPIs in one call
+      try {
+        const kpiRes = await fetch(`${API_BASE}/metrics/team-kpis?timeframe=${encodeURIComponent(selectedPeriod)}`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` },
+        });
+        const k = await kpiRes.json();
+        setAcqTotal(k?.data?.acqTotal || 0);
+        setTranTotal(k?.data?.tranTotal || 0);
+        setTranClearToClose(k?.data?.tranClearToClose || 0);
+        setDispTotal(k?.data?.dispTotal || 0);
+        setDispClosed(k?.data?.dispClosed || 0);
+        setProjProfit(k?.data?.projectedProfit || 0);
+        setClosedProfit(k?.data?.closedProfit || 0);
+      } catch {}
+      if (activeTab === 'acquisitions' || activeTab === 'pipeline' || activeTab === 'company') {
+        const stages = await fetchPipe('ACQUISITIONS');
+        setAcqTotal(stages.reduce((a, s) => a + (s.count || 0), 0));
+      }
+      if (activeTab === 'acquisitions' || activeTab === 'transaction-coordinator' || activeTab === 'pipeline') {
+        const tStages = await fetchPipe('TRANSACTION');
+        setTranTotal(tStages.reduce((a, s) => a + (s.count || 0), 0));
+        setTranClearToClose(tStages.filter(s => s.name.toLowerCase().includes('clear to close')).reduce((a, s) => a + (s.count || 0), 0));
+      }
+      if (activeTab === 'dispositions-team' || activeTab === 'pipeline') {
+        const dStages = await fetchPipe('DISPOSITIONS');
+        setDispTotal(dStages.reduce((a, s) => a + (s.count || 0), 0));
+        setDispClosed(dStages.filter(s => s.name.toLowerCase().includes('closed')).reduce((a, s) => a + (s.count || 0), 0));
+      }
+    };
+    load();
+  }, [activeTab, selectedPeriod]);
 
   // Fetch KPIs once per selectedPeriod
   useEffect(() => {
@@ -630,149 +870,13 @@ const Metrics = () => {
           </div>
 
           {/* Pipeline Funnel Chart Container */}
-          <div className="bg-white border rounded-lg p-6 shadow-sm">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Sales Pipeline Funnel</h3>
-            <div className="overflow-x-auto">
-              <div className="min-w-[1400px] pb-4">
-                {/* Pipeline Funnel Chart */}
-                <div className="flex items-end justify-between gap-3 px-2">
-                  {pipelineData.map((stage, index) => {
-                    const maxCount = Math.max(...pipelineData.map(s => s.count));
-                    const height = (stage.count / maxCount) * 180;
-                    
-                    return (
-                      <div key={index} className="flex flex-col items-center space-y-2 min-w-[100px]">
-                        {/* Status Badge */}
-                        <Badge className={`${stage.badge} text-white text-xs px-2 py-1 font-medium uppercase tracking-wide whitespace-nowrap`}>
-                          {stage.name.split(' ').slice(0, 2).join(' ').toUpperCase()}
-                        </Badge>
-                        
-                        {/* Count Number */}
-                        <div className="text-xl font-bold text-gray-900">
-                          {stage.count}
-                        </div>
-                        
-                        {/* Vertical Bar with Circle */}
-                        <div className="relative flex flex-col items-center">
-                          <div 
-                            className={`${stage.color} rounded-t-lg relative`}
-                            style={{ 
-                              width: '50px', 
-                              height: `${height}px`,
-                              minHeight: '30px'
-                            }}
-                          >
-                            {/* White Circle on top */}
-                            <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-white rounded-full border-2 border-gray-200"></div>
-                          </div>
-                        </div>
-                        
-                        {/* Conversion Percentage */}
-                        <Badge variant="secondary" className="bg-gray-800 text-white text-xs px-2 py-1 font-bold">
-                          {stage.percentage}
-                        </Badge>
-                        
-                        {/* Lost Indicator */}
-                        {stage.lost > 0 && (
-                          <div className="flex flex-col items-center space-y-1">
-                            <div className="flex items-center space-x-1 text-red-500 text-xs font-medium">
-                              <span>↘</span>
-                              <span>{stage.lost} LOST</span>
-                            </div>
-                            <div className="text-red-500 text-xs bg-red-50 px-2 py-1 rounded font-medium">
-                              {stage.lostPercentage}
-                            </div>
-                          </div>
-                        )}
-                        
-                        {/* Stage Label */}
-                        <div className="text-xs text-gray-600 text-center font-medium mt-2 max-w-[90px] leading-tight">
-                          {stage.name}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-              <div className="text-xs text-gray-500 text-center mt-2 px-4">
-                💡 Scroll horizontally to view all pipeline stages
-              </div>
-            </div>
-          </div>
+          <PipelineFunnel selectedPeriod={selectedPeriod} />
 
           {/* Pipeline Table Container */}
-          <div className="bg-white border rounded-lg shadow-sm">
-            <div className="p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Pipeline Details</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse bg-white rounded-lg shadow-sm">
-                  <thead>
-                    <tr className="bg-gray-50 border-b">
-                      <th className="text-left p-4 text-sm font-medium text-gray-600 min-w-[180px]">Stage</th>
-                      <th className="text-left p-4 text-sm font-medium text-gray-600 min-w-[80px]">Count</th>
-                      <th className="text-left p-4 text-sm font-medium text-gray-600 min-w-[100px]">Value</th>
-                      <th className="text-left p-4 text-sm font-medium text-gray-600 min-w-[120px]">Weighted Value</th>
-                      <th className="text-left p-4 text-sm font-medium text-gray-600 min-w-[140px]">Avg Time to Advance</th>
-                      <th className="text-left p-4 text-sm font-medium text-gray-600 min-w-[120px]">Conversion Rate</th>
-                      <th className="text-left p-4 text-sm font-medium text-gray-600 min-w-[80px]">Lost</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pipelineData.map((stage, index) => (
-                      <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="p-4 text-sm font-medium">{stage.name}</td>
-                        <td className="p-4 text-sm font-bold">{stage.count}</td>
-                        <td className="p-4 text-sm">${(stage.count * 12.5).toFixed(0)}K</td>
-                        <td className="p-4 text-sm">${(stage.count * 8.5).toFixed(0)}K</td>
-                        <td className="p-4 text-sm">{Math.floor(Math.random() * 10) + 3} days</td>
-                        <td className="p-4 text-sm font-medium">{stage.percentage}</td>
-                        <td className="p-4 text-sm text-red-500 font-medium">{stage.lost}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+          <PipelineTable selectedPeriod={selectedPeriod} />
 
           {/* Timeline Metrics */}
-          <div className="bg-green-50 p-6 rounded-lg">
-            <div className="flex items-center space-x-3 mb-6">
-              <Clock className="h-6 w-6 text-green-600" />
-              <h3 className="text-xl font-semibold">PIPELINE TIMELINE METRICS</h3>
-              <Badge className="bg-blue-500 text-white">Average Days Between Stages</Badge>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full bg-white rounded-lg shadow-sm">
-                <thead>
-                  <tr className="text-left border-b bg-gray-50">
-                    <th className="p-4 text-sm font-medium text-gray-600 min-w-[140px]">Marketing Type</th>
-                    <th className="p-4 text-sm font-medium text-gray-600 min-w-[140px]">Created → Appt. Set</th>
-                    <th className="p-4 text-sm font-medium text-gray-600 min-w-[140px]">Appt. Set → Offer Made</th>
-                    <th className="p-4 text-sm font-medium text-gray-600 min-w-[140px]">Created → Offer Made</th>
-                    <th className="p-4 text-sm font-medium text-gray-600 min-w-[140px]">Offer Made → Closed</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {timelineData.map((row, index) => (
-                    <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="p-4 text-sm flex items-center space-x-3">
-                        <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                        <span className={row.type === 'Total' ? 'font-bold text-gray-900' : 'font-medium text-gray-700'}>
-                          {row.type}
-                        </span>
-                      </td>
-                      <td className="p-4 text-sm font-medium">{row.created_appt}</td>
-                      <td className="p-4 text-sm font-medium">{row.appt_offer}</td>
-                      <td className="p-4 text-sm font-medium">{row.created_offer}</td>
-                      <td className="p-4 text-sm font-medium">{row.offer_closed}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <PipelineTimeline selectedPeriod={selectedPeriod} />
         </div>
       )}
 
@@ -1106,13 +1210,13 @@ const Metrics = () => {
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-center">
-                      <div className="text-2xl font-black text-blue-600">32</div>
-                      <div className="text-xs text-gray-600 font-medium">of 40</div>
-                    </div>
+                <div className="text-center">
+                  <div className="text-2xl font-black text-blue-600">{acqTotal}</div>
+                  <div className="text-xs text-gray-600 font-medium">Total</div>
+                </div>
                   </div>
                 </div>
-                <div className="text-lg font-bold text-blue-900">80%</div>
+                <div className="text-lg font-bold text-blue-900">{acqTotal}</div>
                 <p className="text-xs text-blue-600">Properties in Pipeline</p>
               </div>
             </Card>
@@ -1147,13 +1251,13 @@ const Metrics = () => {
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="text-center">
-                      <div className="text-2xl font-black text-green-600">28</div>
-                      <div className="text-xs text-gray-600 font-medium">of 38</div>
+                      <div className="text-2xl font-black text-green-600">{tranClearToClose}</div>
+                      <div className="text-xs text-gray-600 font-medium">Clear to Close</div>
                     </div>
                   </div>
                 </div>
-                <div className="text-lg font-bold text-green-900">74%</div>
-                <p className="text-xs text-green-600">Clear to Close</p>
+                <div className="text-lg font-bold text-green-900">{tranTotal}</div>
+                <p className="text-xs text-green-600">In Transaction</p>
               </div>
             </Card>
 
@@ -1202,7 +1306,7 @@ const Metrics = () => {
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Projected Profit */}
             <Card className="p-8 hover:shadow-lg transition-shadow bg-gradient-to-br from-orange-50 to-white border border-orange-200">
-              <div className="text-center space-y-4">
+                <div className="text-center space-y-4">
                 <h3 className="text-sm font-bold text-orange-600 uppercase tracking-wider">Projected Profit</h3>
                 <div className="relative w-32 h-32 mx-auto">
                   <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
@@ -1224,19 +1328,19 @@ const Metrics = () => {
                       strokeWidth="8"
                       fill="none"
                       strokeLinecap="round"
-                      strokeDasharray={`${(750000/1000000) * 314} 314`}
+                      strokeDasharray={`${(projProfit && projProfit > 0 ? Math.min(projProfit, 1000000) / 1000000 : 0) * 314} 314`}
                       className="transition-all duration-1000 ease-out"
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="text-center">
-                      <div className="text-xl font-black text-orange-600">$750K</div>
+                      <div className="text-xl font-black text-orange-600">${Math.round((projProfit||0)/1000)}K</div>
                       <div className="text-xs text-gray-600 font-medium">of $1M</div>
                     </div>
                   </div>
                 </div>
-                <div className="text-lg font-bold text-orange-900">75%</div>
-                <p className="text-xs text-orange-600">$750,000.00</p>
+                <div className="text-lg font-bold text-orange-900">{projProfit ? Math.round((projProfit/1000000)*100) : 0}%</div>
+                <p className="text-xs text-orange-600">${new Intl.NumberFormat().format(projProfit||0)}</p>
               </div>
             </Card>
 
@@ -1282,7 +1386,7 @@ const Metrics = () => {
 
             {/* Closed Profit */}
             <Card className="p-8 hover:shadow-lg transition-shadow bg-gradient-to-br from-blue-50 to-white border border-blue-200">
-              <div className="text-center space-y-4">
+                <div className="text-center space-y-4">
                 <h3 className="text-sm font-bold text-blue-600 uppercase tracking-wider">Closed Profit</h3>
                 <div className="relative w-32 h-32 mx-auto">
                   <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
@@ -1304,19 +1408,19 @@ const Metrics = () => {
                       strokeWidth="8"
                       fill="none"
                       strokeLinecap="round"
-                      strokeDasharray={`${(620000/800000) * 314} 314`}
+                      strokeDasharray={`${(closedProfit && closedProfit > 0 ? Math.min(closedProfit, 800000) / 800000 : 0) * 314} 314`}
                       className="transition-all duration-1000 ease-out"
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="text-center">
-                      <div className="text-xl font-black text-blue-600">$620K</div>
+                      <div className="text-xl font-black text-blue-600">${Math.round((closedProfit||0)/1000)}K</div>
                       <div className="text-xs text-gray-600 font-medium">of $800K</div>
                     </div>
                   </div>
                 </div>
-                <div className="text-lg font-bold text-blue-900">78%</div>
-                <p className="text-xs text-blue-600">$620,000.00</p>
+                <div className="text-lg font-bold text-blue-900">{closedProfit ? Math.round((closedProfit/800000)*100) : 0}%</div>
+                <p className="text-xs text-blue-600">${new Intl.NumberFormat().format(closedProfit||0)}</p>
               </div>
             </Card>
 
@@ -1396,7 +1500,7 @@ const Metrics = () => {
                 </div>
                 <div className="space-y-1">
                   <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Total Properties in Pipeline</h3>
-                  <p className="text-lg font-bold text-gray-900">28 of 40</p>
+                  <p className="text-lg font-bold text-gray-900">{dispTotal}</p>
                   <p className="text-xs text-gray-500">Properties in dispositions pipeline</p>
                 </div>
               </div>
@@ -1434,8 +1538,8 @@ const Metrics = () => {
                 </div>
                 <div className="space-y-1">
                   <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Total Properties Sold</h3>
-                  <p className="text-lg font-bold text-gray-900">7 of 10</p>
-                  <p className="text-xs text-gray-500">Properties sold this month</p>
+                  <p className="text-lg font-bold text-gray-900">{dispClosed}</p>
+                  <p className="text-xs text-gray-500">Closed this period</p>
                 </div>
               </div>
             </Card>
