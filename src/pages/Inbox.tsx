@@ -772,8 +772,10 @@ const Inbox = () => {
   // Fetch assigned tasks
   const fetchTasks = async () => {
     setLoadingTasks(true);
+    console.log('📋 Fetching tasks...');
     try {
       const accessToken = localStorage.getItem('accessToken');
+      console.log('🔑 Using token for tasks:', accessToken ? 'Token exists' : 'NO TOKEN!');
       const res = await fetch(`${API_BASE}/inbox/tasks`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
       
       if (!res.ok) {
@@ -812,8 +814,10 @@ const Inbox = () => {
   // Fetch communications
   const fetchCommunications = async () => {
     setLoadingComms(true);
+    console.log('💬 Fetching communications...');
     try {
       const accessToken = localStorage.getItem('accessToken');
+      console.log('🔑 Using token for communications:', accessToken ? 'Token exists' : 'NO TOKEN!');
       const res = await fetch(`${API_BASE}/inbox/communications?timeframe=This%20Month`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
       
       if (!res.ok) {
@@ -970,11 +974,17 @@ const Inbox = () => {
 
   // Load data on component mount
   useEffect(() => {
+    console.log('🚀 Inbox component mounted, loading data...');
+    const token = localStorage.getItem('accessToken');
+    console.log('🔑 Access token exists:', !!token);
+    console.log('📋 Current state - Tasks:', assignedTasks.length, 'Communications:', leadCommunications.length);
+    
     fetchTasks();
     fetchCommunications();
     fetchReminders();
     fetchReminderCounts();
-    fetchNotifications();
+    // Skip notifications for now due to backend error
+    // fetchNotifications();
   }, []);
 
   // Load on tab switch
@@ -984,7 +994,8 @@ const Inbox = () => {
     if (activeTab === 'reminders') {
       fetchReminders();
       fetchReminderCounts();
-      fetchNotifications(); // Also fetch notifications for reminders tab
+      // Skip notifications for now due to backend error
+      // fetchNotifications(); // Also fetch notifications for reminders tab
     }
   }, [activeTab]);
 
@@ -996,8 +1007,10 @@ const Inbox = () => {
       // For emails tab, show all Gmail emails (all categories)
       return [...gmailEmails];
     } else if (source === 'tasks') {
+      console.log(`🔍 Getting tasks for display: ${assignedTasks.length} items`, assignedTasks);
       return assignedTasks;
     } else if (source === 'communications') {
+      console.log(`🔍 Getting communications for display: ${leadCommunications.length} items`, leadCommunications);
       return leadCommunications;
     } else if (source === 'reminders') {
       // Combine reminders and notifications for the reminders tab
