@@ -44,6 +44,8 @@ const navigationItems = [
       { title: "Email Sync", url: "/settings?tab=email", icon: Mail },
       { title: "SMS and Call", url: "/settings?tab=sms", icon: MessageSquare },
       { title: "Agents", url: "/settings?tab=agents", icon: UserCog, adminOnly: true },
+      { title: "Marketing Platforms", url: "/settings?tab=marketing-platforms", icon: Building2, adminOnly: true },
+      { title: "Pipeline", url: "/settings?tab=pipeline", icon: TrendingUp, adminOnly: true },
     ]
   },
 ];

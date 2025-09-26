@@ -24,13 +24,18 @@ import {
   Star,
   FileText
 } from "lucide-react";
-import { format } from "date-fns";
+import { safeDateFormat } from "@/utils/validation";
 import type { Lead } from "@/hooks/useLeads";
 import { LeadDocumentsTab } from "./LeadDocumentsTab";
+import { UnderwritingCalculator } from "./UnderwritingCalculator";
+import { CompsManager } from "./CompsManager";
+import { BuyerManagement } from "./BuyerManagement";
+import { MarketingResources } from "./MarketingResources";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { API_BASE } from "@/config/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface ViewLeadDialogProps {
   lead: Lead;
@@ -43,6 +48,33 @@ export const ViewLeadDialog: React.FC<ViewLeadDialogProps> = ({
   open,
   onOpenChange,
 }) => {
+  const { user } = useAuth();
+  
+  // Role-based access control
+  const userRoles = user?.roles || [];
+  const isAdmin = userRoles.includes('ADMIN');
+  const isExecutive = userRoles.includes('EXECUTIVE');
+  const isManager = userRoles.includes('MANAGER');
+  const isACQ = userRoles.includes('ACQ');
+  const isDisp = userRoles.includes('DISP');
+  const isTC = userRoles.includes('TC');
+
+  // Feature access permissions
+  const canAccessUnderwriting = isAdmin || isExecutive || isManager || isACQ || isTC;
+  const canAccessComps = isAdmin || isExecutive || isManager || isACQ || isTC;
+  const canAccessBuyerMgmt = isAdmin || isExecutive || isManager || isDisp || isTC;
+  const canAccessMarketing = isAdmin || isExecutive || isManager || isACQ || isDisp || isTC;
+
+  // Calculate grid columns based on available tabs
+  const getTabsGridCols = () => {
+    let count = 3; // details, documents, activity always visible
+    if (canAccessUnderwriting) count++;
+    if (canAccessComps) count++;
+    if (canAccessBuyerMgmt) count++;
+    if (canAccessMarketing) count++;
+    return `grid-cols-${count}`;
+  };
+  
   const [dealLoading, setDealLoading] = React.useState(false);
   const [contractPrice, setContractPrice] = React.useState<string>("");
   const [soldPrice, setSoldPrice] = React.useState<string>("");
@@ -111,11 +143,7 @@ export const ViewLeadDialog: React.FC<ViewLeadDialogProps> = ({
   };
 
   const formatDate = (dateString: string) => {
-    try {
-      return format(new Date(dateString), 'MMM dd, yyyy');
-    } catch {
-      return dateString;
-    }
+    return safeDateFormat(dateString, 'MMM dd, yyyy');
   };
 
   const renderSellerDetails = () => {
@@ -397,9 +425,21 @@ export const ViewLeadDialog: React.FC<ViewLeadDialogProps> = ({
         </DialogHeader>
 
         <Tabs defaultValue="details" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="details">Lead Details</TabsTrigger>
+          <TabsList className={`grid w-full ${getTabsGridCols()}`}>
+            <TabsTrigger value="details">Details</TabsTrigger>
             <TabsTrigger value="documents">Documents</TabsTrigger>
+            {canAccessUnderwriting && (
+              <TabsTrigger value="underwriting">Underwriting</TabsTrigger>
+            )}
+            {canAccessComps && (
+              <TabsTrigger value="comps">Comps</TabsTrigger>
+            )}
+            {canAccessBuyerMgmt && (
+              <TabsTrigger value="buyers">Buyers</TabsTrigger>
+            )}
+            {canAccessMarketing && (
+              <TabsTrigger value="marketing">Marketing</TabsTrigger>
+            )}
             <TabsTrigger value="activity">Activity</TabsTrigger>
           </TabsList>
 
@@ -489,6 +529,38 @@ export const ViewLeadDialog: React.FC<ViewLeadDialogProps> = ({
           <TabsContent value="documents" className="mt-6">
             <LeadDocumentsTab lead={lead} />
           </TabsContent>
+
+          {canAccessUnderwriting && (
+            <TabsContent value="underwriting" className="mt-6">
+              <UnderwritingCalculator leadId={lead.id} />
+            </TabsContent>
+          )}
+
+          {canAccessComps && (
+            <TabsContent value="comps" className="mt-6">
+              <CompsManager 
+                leadId={lead.id} 
+                leadAddress={lead.address ? {
+                  address1: lead.address.address1,
+                  city: lead.address.city,
+                  state: lead.address.state,
+                  zip: lead.address.zip
+                } : undefined}
+              />
+            </TabsContent>
+          )}
+
+          {canAccessBuyerMgmt && (
+            <TabsContent value="buyers" className="mt-6">
+              <BuyerManagement leadId={lead.id} />
+            </TabsContent>
+          )}
+
+          {canAccessMarketing && (
+            <TabsContent value="marketing" className="mt-6">
+              <MarketingResources leadId={lead.id} />
+            </TabsContent>
+          )}
 
           <TabsContent value="activity" className="mt-6">
             <Card>

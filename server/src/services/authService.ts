@@ -22,7 +22,13 @@ export const authService = {
 
     await tokenRepository.create(user.id, hashToken(refreshToken), new Date(Date.now() + 30 * 24 * 3600 * 1000));
 
-    return { user, accessToken, refreshToken };
+    // Include roles in the user object for frontend
+    const userWithRoles = {
+      ...user,
+      roles: roles
+    };
+
+    return { user: userWithRoles, accessToken, refreshToken };
   },
 
   async refresh(refreshToken: string) {
@@ -35,7 +41,14 @@ export const authService = {
 
     const roles = user.roles.map((ur) => ur.role.name as RoleName);
     const accessToken = tokenUtil.signAccess({ id: user.id, roles });
-    return { user, accessToken };
+    
+    // Include roles in the user object for frontend
+    const userWithRoles = {
+      ...user,
+      roles: roles
+    };
+    
+    return { user: userWithRoles, accessToken };
   },
 
   async logout(refreshToken: string) {

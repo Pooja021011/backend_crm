@@ -1,64 +1,144 @@
-import type { Request, Response } from 'express';
-import PDFDocument from 'pdfkit';
-import fs from 'node:fs';
-import path from 'node:path';
-import { underwritingService } from '../services/underwritingService.js';
-import { underwritingRepository } from '../repositories/underwritingRepository.js';
-import { fileRepository } from '../repositories/fileRepository.js';
-
-const uploadDir = path.resolve(process.cwd(), 'server', 'uploads');
-fs.mkdirSync(uploadDir, { recursive: true });
+import { Request, Response } from 'express';
+import { underwritingService } from '../services/underwritingService';
+import { logger } from '../config/logger';
 
 export const underwritingController = {
-  list: async (req: Request, res: Response) => {
-    const data = await underwritingService.list(req.params.id);
-    res.json({ data });
+  async listScenarios(req: Request, res: Response): Promise<void> {
+    try {
+      const { leadId } = req.params;
+      const scenarios = await underwritingService.getScenariosByLeadId(leadId);
+      res.json(scenarios);
+    } catch (error) {
+      logger.error('Error listing underwriting scenarios: ' + (error as Error).message);
+      res.status(500).json({ error: 'Failed to list scenarios' });
+    }
   },
-  create: async (req: Request, res: Response) => {
-    const { name, inputs, isPrimary } = req.body;
-    const created = await underwritingService.create(req.params.id, { name, inputs, isPrimary, createdById: (req as any).user?.id });
-    res.status(201).json({ data: created });
-  },
-  update: async (req: Request, res: Response) => {
-    const { name, inputs, isPrimary } = req.body;
-    const updated = await underwritingService.update(req.params.scenarioId, req.params.id, { name, inputs, isPrimary });
-    res.json({ data: updated });
-  },
-  delete: async (req: Request, res: Response) => {
-    await underwritingService.delete(req.params.scenarioId);
-    res.json({ success: true });
-  },
-  exportPdf: async (req: Request, res: Response) => {
-    const scenario = await underwritingRepository.findById(req.params.scenarioId);
-    if (!scenario) return res.status(404).json({ error: 'Not found' });
-    const filename = `underwriting-${scenario.id}.pdf`;
-    const storageKey = Date.now() + '-' + filename;
-    const filePath = path.join(uploadDir, storageKey);
 
-    const doc = new PDFDocument();
-    doc.pipe(fs.createWriteStream(filePath));
-    doc.fontSize(18).text('Underwriting Summary', { underline: true });
-    doc.moveDown();
-    doc.fontSize(12).text(`Lead ID: ${scenario.leadId}`);
-    doc.text(`Scenario: ${scenario.name}`);
-    doc.moveDown();
-    doc.text('Inputs:');
-    doc.text(JSON.stringify(scenario.inputs, null, 2));
-    doc.moveDown();
-    doc.text('Outputs:');
-    doc.text(JSON.stringify(scenario.outputs, null, 2));
-    doc.end();
+  async getScenario(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      const scenario = await underwritingService.getScenarioById(id);
+      
+      if (!scenario) {
+        res.status(404).json({ error: 'Scenario not found' });
+        return;
+      }
 
-    await new Promise((r) => setTimeout(r, 200));
-
-    const saved = await fileRepository.createForLead(req.params.id, {
-      filename,
-      mimeType: 'application/pdf',
-      size: fs.statSync(filePath).size,
-      storageKey,
-      uploadedById: (req as any).user?.id || null,
-    });
-    res.status(201).json({ data: saved });
+      res.json(scenario);
+    } catch (error) {
+      logger.error('Error getting underwriting scenario: ' + (error as Error).message);
+      res.status(500).json({ error: 'Failed to get scenario' });
+    }
   },
+
+  async createScenario(req: Request, res: Response): Promise<void> {
+    try {
+      const { leadId } = req.params;
+      const userId = (req as any).user?.id;
+      
+      const scenarioData = {
+        ...req.body,
+        leadId,
+        createdById: userId
+      };
+
+      const scenario = await underwritingService.createScenario(scenarioData);
+      res.status(201).json(scenario);
+    } catch (error) {
+      logger.error('Error creating underwriting scenario: ' + (error as Error).message);
+      
+      if (error instanceof Error && error.message.includes('must be')) {
+        res.status(400).json({ error: error.message });
+      } else {
+        res.status(500).json({ error: 'Failed to create scenario' });
+      }
+    }
+  },
+
+  async updateScenario(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      const scenario = await underwritingService.updateScenario(id, req.body);
+      res.json(scenario);
+    } catch (error) {
+      logger.error('Error updating underwriting scenario: ' + (error as Error).message);
+      
+      if (error instanceof Error && error.message.includes('must be')) {
+        res.status(400).json({ error: error.message });
+      } else if (error instanceof Error && error.message === 'Scenario not found') {
+        res.status(404).json({ error: error.message });
+      } else {
+        res.status(500).json({ error: 'Failed to update scenario' });
+      }
+    }
+  },
+
+  async deleteScenario(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      await underwritingService.deleteScenario(id);
+      res.status(204).send();
+    } catch (error) {
+      logger.error('Error deleting underwriting scenario: ' + (error as Error).message);
+      res.status(500).json({ error: 'Failed to delete scenario' });
+    }
+  },
+
+  async setPrimary(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      const scenario = await underwritingService.setPrimaryScenario(id);
+      res.json(scenario);
+    } catch (error) {
+      logger.error('Error setting primary scenario: ' + (error as Error).message);
+      res.status(500).json({ error: 'Failed to set primary scenario' });
+    }
+  },
+
+  async calculateScenario(req: Request, res: Response): Promise<void> {
+    try {
+      const inputs = req.body;
+      const outputs = underwritingService.calculateScenario(inputs);
+      res.json({ inputs, outputs });
+    } catch (error) {
+      logger.error('Error calculating scenario: ' + (error as Error).message);
+      res.status(500).json({ error: 'Failed to calculate scenario' });
+    }
+  },
+
+  async duplicateScenario(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      const { name } = req.body;
+      const userId = (req as any).user?.id;
+
+      if (!name || name.trim().length === 0) {
+        res.status(400).json({ error: 'Name is required for duplicate scenario' });
+        return;
+      }
+
+      const scenario = await underwritingService.duplicateScenario(id, name.trim(), userId);
+      res.status(201).json(scenario);
+    } catch (error) {
+      logger.error('Error duplicating scenario: ' + (error as Error).message);
+      
+      if (error instanceof Error && error.message === 'Scenario not found') {
+        res.status(404).json({ error: error.message });
+      } else {
+        res.status(500).json({ error: 'Failed to duplicate scenario' });
+      }
+    }
+  },
+
+  async exportToPDF(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      
+      // TODO: Implement PDF export
+      res.status(501).json({ error: 'PDF export not yet implemented' });
+    } catch (error) {
+      logger.error('Error exporting scenario to PDF: ' + (error as Error).message);
+      res.status(500).json({ error: 'Failed to export scenario' });
+    }
+  }
 };
-

@@ -21,6 +21,9 @@
     "db:fresh": "rm -rf node_modules/@prisma node_modules/.prisma && npm install",
     "server:restart": "pm2 restart all --update-env"
   },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
   "dependencies": {
     "@prisma/client": "^5.17.0",
     "argon2": "^0.43.0",

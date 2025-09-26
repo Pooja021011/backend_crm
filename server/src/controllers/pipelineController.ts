@@ -155,5 +155,156 @@ export const pipelineController = {
         error: 'Internal server error'
       });
     }
+  },
+
+  /**
+   * Get pipeline access for user
+   */
+  async getPipelineAccess(req: Request, res: Response) {
+    try {
+      const user = (req as any).user;
+      const userRoles = user?.roles || [];
+      
+      const access = pipelineService.getPipelineAccess(userRoles);
+      
+      res.json({
+        success: true,
+        data: access
+      });
+    } catch (error: any) {
+      logger.error('Error in getPipelineAccess controller', { error: error.message });
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  },
+
+  /**
+   * Update needs attention status for leads
+   */
+  async updateNeedsAttention(req: Request, res: Response) {
+    try {
+      const user = (req as any).user;
+      const userRoles = user?.roles || [];
+      const userId = user?.id;
+      
+      await pipelineService.updateNeedsAttentionStatus(userRoles, userId);
+      
+      res.json({
+        success: true,
+        message: 'Needs attention status updated successfully'
+      });
+    } catch (error: any) {
+      logger.error('Error in updateNeedsAttention controller', { error: error.message });
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  },
+
+  /**
+   * Create default stages for a pipeline (Admin only)
+   */
+  async createDefaultStages(req: Request, res: Response) {
+    try {
+      const { pipelineKey } = req.params;
+      const user = (req as any).user;
+      
+      // Check admin permission
+      if (!user?.roles?.includes('ADMIN')) {
+        return res.status(403).json({
+          success: false,
+          error: 'Admin access required'
+        });
+      }
+      
+      await pipelineService.createDefaultStages(pipelineKey.toUpperCase());
+      
+      res.json({
+        success: true,
+        message: 'Default stages created successfully'
+      });
+    } catch (error: any) {
+      logger.error('Error in createDefaultStages controller', { error: error.message });
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  },
+
+  /**
+   * Update pipeline stage (Admin only)
+   */
+  async updatePipelineStage(req: Request, res: Response) {
+    try {
+      const { stageId } = req.params;
+      const user = (req as any).user;
+      
+      // Check admin permission
+      if (!user?.roles?.includes('ADMIN')) {
+        return res.status(403).json({
+          success: false,
+          error: 'Admin access required'
+        });
+      }
+      
+      await pipelineService.updatePipelineStage(stageId, req.body);
+      
+      res.json({
+        success: true,
+        message: 'Pipeline stage updated successfully'
+      });
+    } catch (error: any) {
+      logger.error('Error in updatePipelineStage controller', { error: error.message });
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  },
+
+  /**
+   * Get enhanced pipeline leads with role-based filtering
+   */
+  async getEnhancedPipelineLeads(req: Request, res: Response) {
+    try {
+      const { pipelineKey } = req.params;
+      const user = (req as any).user;
+      const userRoles = user?.roles || [];
+      const userId = user?.id;
+      
+      const filters = {
+        needsAttention: req.query.needsAttention === 'true',
+        leadSourceId: req.query.leadSourceId as string,
+        userRole: userRoles[0], // Primary role
+        userId: userId
+      };
+
+      const leads = await pipelineService.getPipelineLeads(pipelineKey.toUpperCase(), filters);
+
+      res.json({
+        success: true,
+        data: leads
+      });
+    } catch (error: any) {
+      logger.error('Error in getEnhancedPipelineLeads controller', { error: error.message });
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  },
+
+  async getLeadSources(req: Request, res: Response): Promise<void> {
+    try {
+      const sources = await pipelineService.getLeadSources();
+      res.json({ success: true, data: sources });
+    } catch (error) {
+      logger.error('Error getting lead sources:', error);
+      res.status(500).json({ success: false, error: 'Failed to get lead sources' });
+    }
   }
 };

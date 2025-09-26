@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -64,6 +65,9 @@ import {
 } from "lucide-react";
 
 const Inbox = () => {
+  const { toast } = useToast();
+  const navigate = useNavigate();
+  
   const [activeTab, setActiveTab] = useState("emails");
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [gmailEmails, setGmailEmails] = useState<any[]>([]);
@@ -89,9 +93,21 @@ const Inbox = () => {
   // Call history state
   const [callHistory, setCallHistory] = useState<any[]>([]);
   const [loadingCallHistory, setLoadingCallHistory] = useState(false);
+  // Tasks / Communications state
+  const [assignedTasks, setAssignedTasks] = useState<any[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
+  const [leadCommunications, setLeadCommunications] = useState<any[]>([]);
+  const [loadingComms, setLoadingComms] = useState(false);
   
-  const { toast } = useToast();
-
+  // Reminders state
+  const [reminders, setReminders] = useState<any[]>([]);
+  const [loadingReminders, setLoadingReminders] = useState(false);
+  const [reminderCounts, setReminderCounts] = useState<any>(null);
+  
+  // Notifications state
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+  
   // Helper function for API calls with automatic token refresh
   const makeApiCall = async (url: string, options: RequestInit) => {
     const response = await fetch(url, options);
@@ -279,8 +295,61 @@ const Inbox = () => {
   };
 
 
-  // Handle email click to open detail modal (ONLY for Gmail emails)
+  // Handle email/task/communication/reminder click
   const handleEmailClick = async (email: any) => {
+    // Handle task clicks - navigate to lead details and remove from list
+    if (email.type === 'task' && email.leadAddress) {
+      navigate(`/leads?address=${encodeURIComponent(email.leadAddress)}`);
+      
+      // Remove task from the list
+      setAssignedTasks(prevTasks => prevTasks.filter(task => task.id !== email.id));
+      
+      toast({
+        title: "Task Completed & Lead Opened",
+        description: `Opened ${email.from} details and removed task from list`,
+      });
+      return;
+    }
+    
+    // Handle communication clicks - navigate to lead details
+    if (email.type === 'communication' && email.leadAddress) {
+      navigate(`/leads?address=${encodeURIComponent(email.leadAddress)}`);
+      
+      toast({
+        title: "Lead Opened",
+        description: `Opened ${email.from} details for communication`,
+      });
+      return;
+    }
+    
+    // Handle reminder clicks - navigate to lead details and mark as completed
+    if (email.type === 'reminder' && email.leadAddress) {
+      navigate(`/leads?address=${encodeURIComponent(email.leadAddress)}`);
+      
+      // Mark reminder as completed (remove from list)
+      setReminders(prevReminders => prevReminders.filter(reminder => reminder.id !== email.id));
+      
+      toast({
+        title: "Reminder Completed & Lead Opened",
+        description: `Opened ${email.from} details and completed reminder`,
+      });
+      return;
+    }
+    
+    // Handle notification clicks - navigate to lead details and mark as read
+    if (email.type === 'notification' && email.leadAddress) {
+      navigate(`/leads?address=${encodeURIComponent(email.leadAddress)}`);
+      
+      // Mark notification as read (remove from list)
+      setNotifications(prevNotifications => prevNotifications.filter(notification => notification.id !== email.id));
+      
+      toast({
+        title: "Notification Read & Lead Opened",
+        description: `Opened ${email.from} details and marked notification as read`,
+      });
+      return;
+    }
+    
     // Only allow popup for Gmail emails
     if (!email.isGmail) {
       return; // Do nothing for non-Gmail emails
@@ -429,6 +498,34 @@ const Inbox = () => {
           description: "Your reply has been sent successfully!",
         });
         
+        // Auto-clear notifications for ACQ/DISP agents
+        try {
+          const autoClearResponse = await fetch(`${API_BASE}/notifications/auto-clear/message-reply`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${accessToken}`
+            },
+            body: JSON.stringify({
+              leadId: selectedEmail.leadId || selectedEmail.id // Use leadId if available
+            })
+          });
+          
+          if (autoClearResponse.ok) {
+            const autoClearResult = await autoClearResponse.json();
+            if (autoClearResult.data?.cleared > 0) {
+              console.log(`🔄 Auto-cleared ${autoClearResult.data.cleared} notifications after reply`);
+              // Refresh notifications to update the UI
+              if (activeTab === 'reminders') {
+                fetchNotifications();
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Auto-clear failed:', error);
+          // Don't show error to user, this is background functionality
+        }
+        
         // Close the email detail modal and redirect to list
         setShowEmailDetail(false);
         setSelectedEmail(null);
@@ -503,6 +600,35 @@ const Inbox = () => {
           title: "SMS Sent",
           description: `Message sent to ${phoneNumber}`,
         });
+        
+        // Auto-clear notifications for ACQ/DISP agents
+        try {
+          const accessToken = localStorage.getItem('accessToken');
+          const autoClearResponse = await fetch(`${API_BASE}/notifications/auto-clear/message-reply`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${accessToken}`
+            },
+            body: JSON.stringify({
+              leadId: selectedConversation?.leadId || phoneNumber // Use leadId if available
+            })
+          });
+          
+          if (autoClearResponse.ok) {
+            const autoClearResult = await autoClearResponse.json();
+            if (autoClearResult.data?.cleared > 0) {
+              console.log(`🔄 Auto-cleared ${autoClearResult.data.cleared} notifications after SMS reply`);
+              // Refresh notifications to update the UI
+              if (activeTab === 'reminders') {
+                fetchNotifications();
+              }
+            }
+          }
+        } catch (error) {
+          console.error('SMS auto-clear failed:', error);
+          // Don't show error to user, this is background functionality
+        }
         
         // Refresh SMS history to show the new message
         await fetchSMSHistory();
@@ -594,109 +720,273 @@ const Inbox = () => {
     }
   };
 
-  // Keep dummy data for non-email tabs, remove only email dummy data
-  const allMessages = [
-    // SMS
+  // Optional placeholder for calls/SMS until wired
+  const staticOther = [
     {
-      id: "5",
-      from: "Mike Chen",
-      subject: "Property showing follow-up", 
-      preview: "Thanks for showing me the property yesterday. When can we schedule the inspection?",
-      time: "1 hour ago",
-      type: "sms",
-      source: "sms",
-      unread: true,
-      starred: false,
-      priority: "normal"
-    },
-    {
-      id: "6",
-      from: "Jennifer Martinez",
-      subject: "Price negotiation",
-      preview: "Hi! I'm interested in making an offer on the downtown property. Can we discuss pricing?",
-      time: "2 hours ago",
-      type: "sms",
-      source: "sms", 
-      unread: false,
-      starred: false,
-      priority: "normal"
-    },
-    // Missed Calls
-    {
-      id: "7",
-      from: "Emily Davis",
-      subject: "Missed call - Property inquiry",
-      preview: "Missed call regarding the Riverside property listing. Left voicemail.",
-      time: "3 hours ago",
+      id: "missed-1",
+      from: "Unknown",
+      subject: "Missed call",
+      preview: "Missed call",
+      time: new Date().toLocaleString(),
       type: "call",
       source: "calls",
-      unread: true,
-      starred: false,
-      priority: "normal"
-    },
-    {
-      id: "8",
-      from: "David Wilson",
-      subject: "Missed call - Closing questions",
-      preview: "Missed call about closing date and final walkthrough scheduling.",
-      time: "4 hours ago",
-      type: "call",
-      source: "calls",
-      unread: false,
-      starred: false,
-      priority: "normal"
-    },
-    // Tasks
-    {
-      id: "9",
-      from: "System",
-      subject: "Follow up with Oak Street lead",
-      preview: "Schedule follow-up call with Sarah Johnson regarding her interest in 123 Oak Street property.",
-      time: "5 hours ago",
-      type: "task",
-      source: "tasks",
-      unread: true,
-      starred: false,
-      priority: "high"
-    },
-    {
-      id: "10",
-      from: "System", 
-      subject: "Prepare contract documents",
-      preview: "Draft purchase agreement for Maple Avenue property - due by end of week.",
-      time: "1 day ago",
-      type: "task",
-      source: "tasks",
-      unread: false,
-      starred: false,
-      priority: "medium"
-    },
-    // Communications (Lead messages)
-    {
-      id: "11",
-      from: "Lead: Pine Boulevard",
-      subject: "New buyer inquiry",
-      preview: "New potential buyer has expressed interest in the Pine Boulevard property through the lead form.",
-      time: "6 hours ago",
-      type: "communication",
-      source: "communications",
-      unread: true,
-      starred: false,
-      priority: "normal"
-    },
-    {
-      id: "12",
-      from: "Lead: Elm Court",
-      subject: "Seller updated motivation",
-      preview: "Property seller has updated their motivation level and timeline in the lead details.",
-      time: "1 day ago",
-      type: "communication", 
-      source: "communications",
       unread: false,
       starred: false,
       priority: "normal"
     }
   ];
+
+  // Helper function to create meaningful lead titles
+  const createLeadTitle = (lead: any): string => {
+    if (!lead) return 'Unknown Property';
+    
+    // Try to create a descriptive title
+    let title = '';
+    
+    // Add property type/description if available
+    if (lead.leadType === 'SELLER') {
+      title = 'Property for Sale';
+    } else if (lead.leadType === 'BUYER') {
+      title = 'Buyer Lead';
+    } else if (lead.leadType === 'VENDOR') {
+      title = 'Vendor Lead';
+    } else {
+      title = 'Property Lead';
+    }
+    
+    // Add address if available
+    if (lead.address) {
+      title += ` - ${lead.address.address1}`;
+    }
+    
+    // Add client name if available
+    if (lead.seller && lead.seller.firstName) {
+      title += ` (${lead.seller.firstName} ${lead.seller.lastName})`;
+    } else if (lead.buyer && lead.buyer.firstName) {
+      title += ` (${lead.buyer.firstName} ${lead.buyer.lastName})`;
+    }
+    
+    return title;
+  };
+
+  // Fetch assigned tasks
+  const fetchTasks = async () => {
+    setLoadingTasks(true);
+    try {
+      const accessToken = localStorage.getItem('accessToken');
+      const res = await fetch(`${API_BASE}/inbox/tasks`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+      
+      if (!res.ok) {
+        console.error(`Tasks API error: ${res.status} ${res.statusText}`);
+        setAssignedTasks([]);
+        return;
+      }
+      
+      const json = await res.json();
+      console.log('Tasks response:', json);
+      
+      const items = (json?.data || []).map((t: any) => ({
+        id: t.id,
+        from: t.lead ? createLeadTitle(t.lead) : 'Task',
+        subject: t.title,
+        preview: t.description || '',
+        time: new Date(t.dueAt).toLocaleString(),
+        type: 'task',
+        source: 'tasks',
+        unread: t.status === 'OPEN',
+        starred: false,
+        priority: 'normal',
+        leadId: t.lead?.id,
+        leadAddress: t.lead?.address ? `${t.lead.address.address1}, ${t.lead.address.city}, ${t.lead.address.state}` : ''
+      }));
+      setAssignedTasks(items);
+      console.log('Processed tasks:', items.length);
+    } catch (error) {
+      console.error('Error fetching tasks:', error);
+      setAssignedTasks([]);
+    } finally {
+      setLoadingTasks(false);
+    }
+  };
+
+  // Fetch communications
+  const fetchCommunications = async () => {
+    setLoadingComms(true);
+    try {
+      const accessToken = localStorage.getItem('accessToken');
+      const res = await fetch(`${API_BASE}/inbox/communications?timeframe=This%20Month`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+      
+      if (!res.ok) {
+        console.error(`Communications API error: ${res.status} ${res.statusText}`);
+        setLeadCommunications([]);
+        return;
+      }
+      
+      const json = await res.json();
+      console.log('Communications response:', json);
+      
+      const items = (json?.data || []).map((c: any) => ({
+        id: c.id,
+        from: c.lead ? createLeadTitle(c.lead) : (c.subject || c.type),
+        subject: c.subject || `${c.type} ${c.direction}`,
+        preview: c.content || c.notes || c.body || '',
+        time: new Date(c.occurredAt).toLocaleString(),
+        type: 'communication',
+        source: 'communications',
+        unread: c.direction === 'INBOUND',
+        starred: false,
+        priority: 'normal',
+        leadId: c.lead?.id,
+        leadAddress: c.lead?.address ? `${c.lead.address.address1}, ${c.lead.address.city}, ${c.lead.address.state}` : '',
+        commType: c.type,
+        direction: c.direction
+      }));
+      setLeadCommunications(items);
+      console.log('Processed communications:', items.length);
+    } catch (error) {
+      console.error('Error fetching communications:', error);
+      setLeadCommunications([]);
+    } finally {
+      setLoadingComms(false);
+    }
+  };
+
+  // Fetch reminders
+  const fetchReminders = async () => {
+    setLoadingReminders(true);
+    try {
+      const accessToken = localStorage.getItem('accessToken');
+      const res = await fetch(`${API_BASE}/reminders`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+      
+      if (!res.ok) {
+        console.error(`Reminders API error: ${res.status} ${res.statusText}`);
+        const errorText = await res.text();
+        console.error('Error response:', errorText);
+        setReminders([]); // Set empty array on error
+        return;
+      }
+      
+      const json = await res.json();
+      console.log('Reminders response:', json);
+      
+      if (json.success) {
+        const items = (json?.data || []).map((r: any) => ({
+          id: r.id,
+          from: r.lead ? createLeadTitle(r.lead) : r.title,
+          subject: r.title,
+          preview: r.message || r.description || '',
+          time: new Date(r.scheduledFor || r.createdAt).toLocaleString(),
+          type: 'reminder',
+          source: 'reminders',
+          unread: r.status === 'PENDING',
+          starred: false,
+          priority: (r.priority || 'medium').toLowerCase(),
+          reminderType: r.type,
+          leadId: r.leadId,
+          leadAddress: r.lead?.address ? `${r.lead.address.address1}, ${r.lead.address.city}, ${r.lead.address.state}` : '',
+          dueDate: r.scheduledFor || r.dueDate,
+          status: r.status
+        }));
+        setReminders(items);
+        console.log('Processed reminders:', items.length);
+      } else {
+        console.error('Reminders API returned success: false', json);
+        setReminders([]);
+      }
+    } catch (error) {
+      console.error('Error fetching reminders:', error);
+      setReminders([]);
+      // Don't show toast for reminders failure, it's not critical
+    } finally {
+      setLoadingReminders(false);
+    }
+  };
+
+  // Fetch reminder counts
+  const fetchReminderCounts = async () => {
+    try {
+      const accessToken = localStorage.getItem('accessToken');
+      const res = await fetch(`${API_BASE}/reminders/counts`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+      const json = await res.json();
+      
+      if (json.success) {
+        setReminderCounts(json.data);
+      }
+    } catch (error) {
+      console.error('Error fetching reminder counts:', error);
+    }
+  };
+
+  // Fetch notifications
+  const fetchNotifications = async () => {
+    setLoadingNotifications(true);
+    try {
+      const accessToken = localStorage.getItem('accessToken');
+      const res = await fetch(`${API_BASE}/notifications`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+      
+      if (!res.ok) {
+        console.error(`Notifications API error: ${res.status} ${res.statusText}`);
+        const errorText = await res.text();
+        console.error('Error response:', errorText);
+        setNotifications([]); // Set empty array on error
+        return;
+      }
+      
+      const json = await res.json();
+      console.log('Notifications response:', json);
+      
+      if (json.success) {
+        const items = (json?.data || []).map((n: any) => ({
+          id: n.id,
+          from: n.lead ? createLeadTitle(n.lead) : n.title,
+          subject: n.title,
+          preview: n.message || '',
+          time: new Date(n.createdAt).toLocaleString(),
+          type: 'notification',
+          source: 'notifications',
+          unread: !n.isRead,
+          starred: false,
+          priority: (n.priority || 'medium').toLowerCase(),
+          notificationType: n.type,
+          leadId: n.lead?.id,
+          leadAddress: n.lead?.address ? `${n.lead.address.address1}, ${n.lead.address.city}, ${n.lead.address.state}` : '',
+          dealId: n.deal?.id,
+          triggeredBy: n.triggeredBy
+        }));
+        setNotifications(items);
+        console.log('Processed notifications:', items.length);
+      } else {
+        console.error('Notifications API returned success: false', json);
+        setNotifications([]);
+      }
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+      setNotifications([]);
+      // Don't show toast for notifications failure, it's not critical
+    } finally {
+      setLoadingNotifications(false);
+    }
+  };
+
+  // Load data on component mount
+  useEffect(() => {
+    fetchTasks();
+    fetchCommunications();
+    fetchReminders();
+    fetchReminderCounts();
+    fetchNotifications();
+  }, []);
+
+  // Load on tab switch
+  useEffect(() => {
+    if (activeTab === 'tasks') fetchTasks();
+    if (activeTab === 'communications') fetchCommunications();
+    if (activeTab === 'reminders') {
+      fetchReminders();
+      fetchReminderCounts();
+      fetchNotifications(); // Also fetch notifications for reminders tab
+    }
+  }, [activeTab]);
 
   const getFilteredMessages = (source: string) => {
     if (source === "primary") {
@@ -705,9 +995,16 @@ const Inbox = () => {
     } else if (source === "emails") {
       // For emails tab, show all Gmail emails (all categories)
       return [...gmailEmails];
+    } else if (source === 'tasks') {
+      return assignedTasks;
+    } else if (source === 'communications') {
+      return leadCommunications;
+    } else if (source === 'reminders') {
+      // Combine reminders and notifications for the reminders tab
+      return [...reminders, ...notifications];
     } else {
       // For other tabs, show dummy data + Gmail emails
-      const combinedMessages = [...allMessages, ...gmailEmails];
+      const combinedMessages = [...staticOther, ...gmailEmails];
       if (source === "all") return combinedMessages;
       return combinedMessages.filter(message => message.source === source);
     }
@@ -725,6 +1022,8 @@ const Inbox = () => {
       case 'call': return '📞';
       case 'task': return '✅';
       case 'communication': return '💼';
+      case 'reminder': return '🔔';
+      case 'notification': return '📢';
       default: return '📄';
     }
   };
@@ -880,6 +1179,11 @@ const Inbox = () => {
               <div className="flex items-center gap-2">
                 <Bell className="w-4 h-4" />
                 <span>Reminders</span>
+                {getUnreadCount("reminders") > 0 && (
+                  <Badge className="bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">
+                    {getUnreadCount("reminders")}
+                  </Badge>
+                )}
               </div>
             </TabsTrigger>
           </TabsList>
@@ -1110,7 +1414,7 @@ const Inbox = () => {
               ) : (
                 /* Other Tabs Content */
                 <div>
-                  {/* Email Tab Header with Sync Gmail Button - Only for emails tab */}
+                  {/* Tab Headers with Refresh Buttons */}
                   {activeTab === 'emails' && emailSettings?.gmailConnected && (
                     <div className="flex items-center justify-between p-4 border-b bg-gray-50">
                       <h3 className="text-lg font-semibold text-gray-900">Email Messages</h3>
@@ -1123,6 +1427,54 @@ const Inbox = () => {
                       >
                         <RefreshCw className={`w-4 h-4 mr-1 ${loadingEmails ? 'animate-spin' : ''}`} />
                         <span className="text-sm">{loadingEmails ? 'Syncing...' : 'Sync Gmail'}</span>
+                      </Button>
+                    </div>
+                  )}
+                  
+                  {activeTab === 'tasks' && (
+                    <div className="flex items-center justify-between p-4 border-b bg-gray-50">
+                      <h3 className="text-lg font-semibold text-gray-900">Assigned Tasks</h3>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={fetchTasks}
+                        disabled={loadingTasks}
+                        className="text-gray-600 hover:text-gray-900"
+                      >
+                        <RefreshCw className={`w-4 h-4 mr-1 ${loadingTasks ? 'animate-spin' : ''}`} />
+                        <span className="text-sm">{loadingTasks ? 'Loading...' : 'Refresh Tasks'}</span>
+                      </Button>
+                    </div>
+                  )}
+                  
+                  {activeTab === 'communications' && (
+                    <div className="flex items-center justify-between p-4 border-b bg-gray-50">
+                      <h3 className="text-lg font-semibold text-gray-900">Lead Communications</h3>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={fetchCommunications}
+                        disabled={loadingComms}
+                        className="text-gray-600 hover:text-gray-900"
+                      >
+                        <RefreshCw className={`w-4 h-4 mr-1 ${loadingComms ? 'animate-spin' : ''}`} />
+                        <span className="text-sm">{loadingComms ? 'Loading...' : 'Refresh Communications'}</span>
+                      </Button>
+                    </div>
+                  )}
+                  
+                  {activeTab === 'reminders' && (
+                    <div className="flex items-center justify-between p-4 border-b bg-gray-50">
+                      <h3 className="text-lg font-semibold text-gray-900">Reminders & Notifications</h3>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={fetchReminders}
+                        disabled={loadingReminders}
+                        className="text-gray-600 hover:text-gray-900"
+                      >
+                        <RefreshCw className={`w-4 h-4 mr-1 ${loadingReminders ? 'animate-spin' : ''}`} />
+                        <span className="text-sm">{loadingReminders ? 'Loading...' : 'Refresh Reminders'}</span>
                       </Button>
                     </div>
                   )}
@@ -1142,7 +1494,7 @@ const Inbox = () => {
                           className={`flex items-center gap-4 px-6 py-4 transition-colors ${
                             message.unread ? 'bg-blue-50/30' : ''
                           } ${
-                            message.isGmail ? 'hover:bg-gray-50 cursor-pointer' : 'cursor-default'
+                            message.isGmail || message.type === 'task' || message.type === 'communication' || message.type === 'reminder' || message.type === 'notification' ? 'hover:bg-gray-50 cursor-pointer' : 'cursor-default'
                           }`}
                           onClick={() => handleEmailClick(message)}
                         >
@@ -1162,6 +1514,18 @@ const Inbox = () => {
                               message.type === 'sms' ? 'bg-green-100 text-green-600' :
                               message.type === 'call' ? 'bg-orange-100 text-orange-600' :
                               message.type === 'task' ? 'bg-purple-100 text-purple-600' :
+                              message.type === 'reminder' ? (
+                                message.priority === 'urgent' ? 'bg-red-100 text-red-600' :
+                                message.priority === 'high' ? 'bg-orange-100 text-orange-600' :
+                                message.priority === 'medium' ? 'bg-yellow-100 text-yellow-600' :
+                                'bg-blue-100 text-blue-600'
+                              ) :
+                              message.type === 'notification' ? (
+                                message.priority === 'urgent' ? 'bg-red-100 text-red-600' :
+                                message.priority === 'high' ? 'bg-orange-100 text-orange-600' :
+                                message.priority === 'medium' ? 'bg-yellow-100 text-yellow-600' :
+                                'bg-green-100 text-green-600'
+                              ) :
                               'bg-gray-100 text-gray-600'
                             }`}>
                               {getMessageIcon(message.type)}
@@ -1188,6 +1552,21 @@ const Inbox = () => {
                               >
                                 {message.unread ? 'Unread' : 'Read'}
                               </Badge>
+                              
+                              {/* Priority Badge for Reminders and Notifications */}
+                              {(message.type === 'reminder' || message.type === 'notification') && (
+                                <Badge 
+                                  variant="outline"
+                                  className={`text-xs px-1.5 py-0.5 ${
+                                    message.priority === 'urgent' ? 'bg-red-50 text-red-700 border-red-200' :
+                                    message.priority === 'high' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                                    message.priority === 'medium' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                                    'bg-blue-50 text-blue-700 border-blue-200'
+                                  }`}
+                                >
+                                  {message.priority?.toUpperCase()}
+                                </Badge>
+                              )}
                               
                               {message.starred && (
                                 <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />

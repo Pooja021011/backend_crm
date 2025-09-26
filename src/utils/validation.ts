@@ -1,4 +1,5 @@
 // Validation utilities for form fields
+import { format, isValid } from 'date-fns';
 
 export interface ValidationResult {
   isValid: boolean;
@@ -153,4 +154,29 @@ export const validateCity = (city: string): ValidationResult => {
   }
   
   return { isValid: true };
+};
+
+// Date utility functions for safe date handling
+export const safeDate = (dateValue: Date | string | null | undefined): Date => {
+  if (!dateValue) return new Date();
+  const date = new Date(dateValue);
+  return isValid(date) ? date : new Date();
+};
+
+// Safe date formatting with fallback
+export const safeDateFormat = (dateValue: Date | string | null | undefined, formatString: string): string => {
+  const date = safeDate(dateValue);
+  try {
+    return format(date, formatString);
+  } catch (error) {
+    console.warn('Date formatting error:', error, 'for value:', dateValue);
+    return format(new Date(), formatString);
+  }
+};
+
+// Check if a date value is valid
+export const isValidDate = (dateValue: Date | string | null | undefined): boolean => {
+  if (!dateValue) return false;
+  const date = new Date(dateValue);
+  return isValid(date);
 };

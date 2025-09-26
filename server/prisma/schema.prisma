@@ -30,6 +30,8 @@ model User {
   createdCommunications Communication[] @relation("CreatedByUser")
   createdMarketingLinks MarketingLink[] @relation("CreatedByUser")
   emailSettings UserEmailSettings?
+  targetedNotifications Notification[] @relation("NotificationTarget")
+  triggeredNotifications Notification[] @relation("NotificationTriggeredBy")
   smsSettings UserSmsSettings?
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
@@ -209,6 +211,10 @@ model PipelineStage {
   name        String
   orderIndex  Int
   color       String?
+  description String?
+  isDefault   Boolean            @default(false) // For system default stages
+  requiresAction Boolean         @default(false) // For needs attention logic
+  attentionThresholdHours Int?   // Hours before flagged as needing attention
   leads       Lead[]
   fromStageHistory StageHistory[] @relation("FromStage")
   toStageHistory   StageHistory[] @relation("ToStage")
@@ -241,6 +247,17 @@ model Lead {
   createdById      String?
   createdBy        User?          @relation("CreatedByUserLeads", fields: [createdById], references: [id])
   customFields     Json?
+  
+  // Pipeline-specific fields
+  priceReduction   Boolean        @default(false)
+  clearToClose     Boolean        @default(false)
+  sold             Boolean        @default(false)
+  lastContactAt    DateTime?
+  stageEnteredAt   DateTime?      // When lead entered current stage
+  needsAttention   Boolean        @default(false)
+  attentionReason  String?        // Why it needs attention
+  leadSourceId     String?        // Reference to lead source for filtering
+  
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
@@ -257,6 +274,10 @@ model Lead {
   marketingLinks   MarketingLink[]
   leadFiles        LeadFile[]
   deal             Deal?
+  leadComparables  LeadComparable[]
+  buyerOffers      BuyerOffer[]
+  marketingResources MarketingResource[]
+  notifications    Notification[]
 
   @@index([leadType])
   @@index([marketId])
@@ -372,6 +393,7 @@ model File {
   leadFiles    LeadFile[]
   categories   FileCategorization[]
   communicationAttachments CommunicationAttachment[]
+  marketingResources MarketingResource[]
 }
 
 model FileVersion {
@@ -435,6 +457,7 @@ model Buyer {
   criteria     Json?
   createdAt    DateTime @default(now())
   leadBuyers   LeadBuyer[]
+  buyerOffers  BuyerOffer[]
 }
 
 model LeadBuyer {
@@ -518,6 +541,8 @@ model Deal {
   contractedAt  DateTime?
   closedAt      DateTime?
 
+  notifications Notification[]
+
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
@@ -539,5 +564,109 @@ model Comparable {
   dateSold  DateTime?
   images    String[]
   createdAt DateTime @default(now())
+  leadComps LeadComparable[]
+}
+
+// Link comparables to leads
+model LeadComparable {
+  id           String     @id @default(uuid())
+  leadId       String
+  comparableId String
+  lead         Lead       @relation(fields: [leadId], references: [id])
+  comparable   Comparable @relation(fields: [comparableId], references: [id])
+  addedAt      DateTime   @default(now())
+
+  @@index([leadId])
+}
+
+// Buyer offers and negotiations
+model BuyerOffer {
+  id          String   @id @default(uuid())
+  leadId      String
+  buyerId     String
+  lead        Lead     @relation(fields: [leadId], references: [id])
+  buyer       Buyer    @relation(fields: [buyerId], references: [id])
+  
+  offerAmount Int
+  terms       Json?    // financing, closing date, contingencies, etc.
+  status      String   // pending, accepted, rejected, countered
+  notes       String?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([leadId, buyerId])
+}
+
+// Marketing resources (flyers, photos, videos, etc.)
+model MarketingResource {
+  id          String   @id @default(uuid())
+  leadId      String
+  lead        Lead     @relation(fields: [leadId], references: [id])
+  
+  title       String
+  type        String   // flyer, photo, video, listing_link, campaign_link
+  url         String?  // for external links
+  fileId      String?  // for uploaded files
+  file        File?    @relation(fields: [fileId], references: [id])
+  
+  description String?
+  isActive    Boolean  @default(true)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([leadId, type])
+}
+
+// Event-based Notifications
+model Notification {
+  id            String   @id @default(uuid())
+  type          String   // 'NEW_CONTRACT', 'NEW_LEAD', 'NEW_DEAL_ASSIGNED'
+  title         String
+  message       String
+  priority      String   @default("MEDIUM") // 'LOW', 'MEDIUM', 'HIGH', 'URGENT'
+  isRead        Boolean  @default(false)
+  
+  // Target user information
+  targetUserId  String?
+  targetUser    User?    @relation("NotificationTarget", fields: [targetUserId], references: [id])
+  targetRoles   String[] // Array of role names to target
+  
+  // Related entities
+  leadId        String?
+  lead          Lead?    @relation(fields: [leadId], references: [id])
+  dealId        String?
+  deal          Deal?    @relation(fields: [dealId], references: [id])
+  
+  // Metadata
+  data          Json?    // Additional data for the notification
+  triggeredBy   String?  // User ID who triggered the event
+  triggeredUser User?    @relation("NotificationTriggeredBy", fields: [triggeredBy], references: [id])
+  
+  createdAt     DateTime @default(now())
+  readAt        DateTime?
+
+  @@index([targetUserId, isRead])
+  @@index([targetRoles, isRead])
+  @@index([type, createdAt])
+}
+
+// Marketing Platform Settings
+model MarketingPlatform {
+  id            String   @id @default(uuid())
+  name          String
+  type          String   // 'listing', 'social', 'email', 'advertising', 'analytics', 'other'
+  baseUrl       String
+  description   String?
+  isActive      Boolean  @default(true)
+  apiEndpoint   String?
+  authRequired  Boolean  @default(false)
+  configFields  Json     // Array of field configurations
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([type, isActive])
 }
 

@@ -62,8 +62,8 @@ export const PipelineColumn = ({ stage, leads }: PipelineColumnProps) => {
   };
 
   return (
-    <div className="w-full min-w-[280px]">
-      <Card className={`h-fit min-h-[400px] flex flex-col border ${getColumnBorderClass(stage.color)}`}>
+    <div className="w-80 min-w-[320px] flex-shrink-0">
+      <Card className={`h-fit min-h-[500px] flex flex-col border ${getColumnBorderClass(stage.color)}`}>
         {/* Column Header */}
         <div className="p-3 border-b flex-shrink-0">
           <div className="flex items-center justify-between">
@@ -79,15 +79,18 @@ export const PipelineColumn = ({ stage, leads }: PipelineColumnProps) => {
         {/* Column Content */}
         <div 
           ref={setNodeRef}
-          className="p-2 flex-1 overflow-y-auto min-h-[300px]"
+          className="p-3 flex-1 overflow-y-auto min-h-[400px]"
         >
           <SortableContext 
             items={leads.map(lead => lead.id)} 
             strategy={verticalListSortingStrategy}
           >
             {leads.length === 0 ? (
-              <div className="flex items-center justify-center h-32 text-gray-400 text-sm border-2 border-dashed border-gray-300 rounded-lg">
-                Drop leads here
+              <div className="flex items-center justify-center h-40 text-gray-400 text-sm border-2 border-dashed border-gray-300 rounded-lg bg-gray-50/50">
+                <div className="text-center">
+                  <div className="text-lg mb-1">📋</div>
+                  <div>Drop leads here</div>
+                </div>
               </div>
             ) : (
               leads.map((lead) => (

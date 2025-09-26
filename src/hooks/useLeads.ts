@@ -114,6 +114,7 @@ export interface LeadsHookReturn {
   fetchLeads: () => Promise<void>;
   getLeadsByType: (type: LeadType) => Lead[];
   searchLeads: (query: string) => Lead[];
+  filterLeads: (filters: any) => Promise<void>;
   importLeadsFromCSV: (file: File, type: LeadType) => Promise<{ success: number; errors: string[] }>;
   exportLeadsToCSV: (leadsToExport: Lead[], type: LeadType) => void;
   sortLeads: (leadsToSort: Lead[], key: string, direction: 'asc' | 'desc') => Lead[];
@@ -302,6 +303,40 @@ export const useLeads = (): LeadsHookReturn => {
         field && field.toLowerCase().includes(lowercaseQuery)
       );
     });
+  };
+
+  const filterLeads = async (filters: any) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      // Build query parameters
+      const params = new URLSearchParams();
+      
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          if (Array.isArray(value) && value.length > 0) {
+            value.forEach(v => params.append(key, v));
+          } else {
+            params.append(key, String(value));
+          }
+        }
+      });
+      
+      const response = await httpFetch(`/leads?${params.toString()}`);
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to filter leads');
+      }
+      
+      setLeads(data.data || []);
+    } catch (err) {
+      console.error('Filter error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to filter leads');
+      setLeads([]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const importLeadsFromCSV = async (file: File, type: LeadType): Promise<{ success: number; errors: string[] }> => {
@@ -516,6 +551,7 @@ export const useLeads = (): LeadsHookReturn => {
     fetchLeads,
     getLeadsByType,
     searchLeads,
+    filterLeads,
     importLeadsFromCSV,
     exportLeadsToCSV,
     sortLeads,

@@ -32,7 +32,9 @@ function userSerializer(u: any) {
     lastName: u.lastName,
     email: u.email,
     phone: u.phone,
-    roles: u.roles?.map((r: any) => r.role.name) || [],
+    roles: Array.isArray(u.roles) && typeof u.roles[0] === 'string' 
+      ? u.roles 
+      : u.roles?.map((r: any) => r.role.name) || [],
     status: u.status,
     createdAt: u.createdAt,
   };

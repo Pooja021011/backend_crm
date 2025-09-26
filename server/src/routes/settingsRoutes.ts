@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { settingsController } from '../controllers/settingsController.js';
 import { authenticate, requireRoles } from '../middleware/auth.js';
+import marketingPlatformRoutes from './marketingPlatformRoutes.js';
 
 const router = Router();
 
@@ -61,6 +62,9 @@ router.post('/pipelines/:pipelineId/stages', (req, res, next) => settingsControl
 router.patch('/pipelines/:pipelineId/stages/reorder', (req, res, next) => settingsController.reorderStages(req, res).catch(next));
 router.patch('/pipelines/:pipelineId/stages/:stageId', (req, res, next) => settingsController.updateStage(req, res).catch(next));
 router.delete('/pipelines/:pipelineId/stages/:stageId', (req, res, next) => settingsController.deleteStage(req, res).catch(next));
+
+// Marketing platform settings (admin only)
+router.use('/', marketingPlatformRoutes);
 
 export default router;
 

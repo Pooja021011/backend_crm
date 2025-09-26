@@ -46,7 +46,7 @@ import { useAgents, type Agent } from "@/hooks/useAgents";
 import { useToast } from "@/hooks/use-toast";
 import { AddAgentDialog } from "@/components/AddAgentDialog";
 import { EditAgentDialog } from "@/components/EditAgentDialog";
-import { format } from "date-fns";
+import { safeDateFormat } from "@/utils/validation";
 
 const Agents = () => {
   const { agents, isLoading, error, deleteAgent, refreshAgents } = useAgents();
@@ -119,11 +119,7 @@ const Agents = () => {
   };
 
   const formatDate = (dateString: string) => {
-    try {
-      return format(new Date(dateString), 'MMM dd, yyyy');
-    } catch {
-      return dateString;
-    }
+    return safeDateFormat(dateString, 'MMM dd, yyyy');
   };
 
   if (error) {

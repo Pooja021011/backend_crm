@@ -20,6 +20,9 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+// Alias for backward compatibility
+export const authMiddleware = authenticate;
+
 export function requireRoles(...allowed: string[]) {
   return function (req: Request, res: Response, next: NextFunction) {
     const user = (req as any).user as AuthUser | undefined;

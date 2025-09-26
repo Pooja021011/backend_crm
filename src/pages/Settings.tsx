@@ -64,7 +64,9 @@ import { useToast } from "@/hooks/use-toast";
 import { useAgents, type Agent } from "@/hooks/useAgents";
 import { AddAgentDialog } from "@/components/AddAgentDialog";
 import { EditAgentDialog } from "@/components/EditAgentDialog";
-import { format } from "date-fns";
+import { MarketingPlatformSettings } from "@/components/MarketingPlatformSettings";
+import { PipelineSettings } from "@/components/PipelineSettings";
+import { safeDateFormat } from "@/utils/validation";
 
 type EmailSettings = {
   email: string;
@@ -748,16 +750,12 @@ const Settings = () => {
   };
 
   const formatDate = (dateString: string) => {
-    try {
-      return format(new Date(dateString), 'MMM dd, yyyy');
-    } catch {
-      return dateString;
-    }
+    return safeDateFormat(dateString, 'MMM dd, yyyy');
   };
 
   return (
-    <div className="max-w-6xl mx-auto">
-      <div>
+    <div className="max-w-6xl mx-auto" style={{ overflow: 'visible' }}>
+      <div style={{ overflow: 'visible' }}>
           {/* Profile Tab - Only show when activeTab is 'profile' */}
           {activeTab === 'profile' && (
             <div className="space-y-8">
@@ -1628,6 +1626,20 @@ const Settings = () => {
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
+            </div>
+          )}
+
+          {/* Marketing Platform Settings Tab - Only show when activeTab is 'marketing-platforms' */}
+          {activeTab === 'marketing-platforms' && (
+            <div className="space-y-8">
+              <MarketingPlatformSettings userRoles={user?.roles || []} />
+            </div>
+          )}
+
+          {/* Pipeline Settings Tab - Only show when activeTab is 'pipeline' */}
+          {activeTab === 'pipeline' && (
+            <div className="space-y-8 relative" style={{ overflow: 'visible', position: 'relative' }}>
+              <PipelineSettings userRoles={user?.roles || []} />
             </div>
           )}
       </div>

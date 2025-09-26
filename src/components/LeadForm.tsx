@@ -17,6 +17,7 @@ import { useAuth } from '@/contexts/AuthContext';
 // Validation schemas
 const sellerLeadSchema = z.object({
   type: z.literal('SELLER'),
+  pipelineStageId: z.string().min(1, 'Pipeline stage is required'),
   address: z.object({
     address1: z.string().min(3, 'Address must be at least 3 characters'),
     city: z.string().min(1, 'City is required'),
@@ -35,6 +36,7 @@ const sellerLeadSchema = z.object({
 
 const buyerLeadSchema = z.object({
   type: z.literal('BUYER'),
+  pipelineStageId: z.string().min(1, 'Pipeline stage is required'),
   buyer: z.object({
     firstName: z.string().min(1, 'First name is required'),
     lastName: z.string().min(1, 'Last name is required'),
@@ -52,6 +54,7 @@ const buyerLeadSchema = z.object({
 
 const vendorLeadSchema = z.object({
   type: z.literal('VENDOR'),
+  pipelineStageId: z.string().min(1, 'Pipeline stage is required'),
   vendor: z.object({
     firstName: z.string().min(1, 'First name is required'),
     lastName: z.string().min(1, 'Last name is required'),
@@ -77,6 +80,8 @@ interface LeadFormProps {
 export const LeadForm: React.FC<LeadFormProps> = ({ type, onSubmit, onCancel, isLoading = false }) => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [pipelineStages, setPipelineStages] = useState<any[]>([]);
+  const [loadingStages, setLoadingStages] = useState(true);
   
   // Get the appropriate schema based on type
   const getSchema = () => {
@@ -91,6 +96,7 @@ export const LeadForm: React.FC<LeadFormProps> = ({ type, onSubmit, onCancel, is
     resolver: zodResolver(getSchema()),
     defaultValues: {
       type,
+      pipelineStageId: '',
       ...(type === 'SELLER' && {
         address: { address1: '', city: '', state: '', zip: '' },
         seller: { firstName: '', lastName: '', phone: '', email: '', motivation: '', notes: '' }
@@ -104,6 +110,44 @@ export const LeadForm: React.FC<LeadFormProps> = ({ type, onSubmit, onCancel, is
       }),
     },
   });
+
+  // Load pipeline stages based on lead type
+  React.useEffect(() => {
+    const loadPipelineStages = async () => {
+      try {
+        setLoadingStages(true);
+        let pipelineKey = 'ACQUISITIONS'; // Default
+        
+        if (type === 'SELLER') {
+          pipelineKey = 'ACQUISITIONS';
+        } else if (type === 'BUYER') {
+          pipelineKey = 'DISPOSITIONS';
+        } else if (type === 'VENDOR') {
+          pipelineKey = 'ACQUISITIONS'; // Fallback
+        }
+        
+        const response = await fetch(`/api/v1/pipeline/${pipelineKey}/stages`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          setPipelineStages(data.data || []);
+        }
+      } catch (error) {
+        console.error('Error loading pipeline stages:', error);
+        toast({
+          title: "Warning",
+          description: "Could not load pipeline stages. Please refresh the page.",
+          variant: "destructive"
+        });
+      } finally {
+        setLoadingStages(false);
+      }
+    };
+    
+    loadPipelineStages();
+  }, [type, toast]);
 
   const { register, handleSubmit, formState: { errors, isValid, touchedFields }, watch, setValue } = form;
 

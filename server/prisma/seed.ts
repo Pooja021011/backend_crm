@@ -12,8 +12,8 @@ async function upsertRoles() {
 }
 
 async function upsertAdmin() {
-  const adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com';
-  const adminPassword = process.env.ADMIN_PASSWORD || 'Admin@123';
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin@admin.com';
+  const adminPassword = process.env.ADMIN_PASSWORD || 'Admin@123#';
   const hash = await argon2.hash(adminPassword);
 
   await prisma.user.upsert({
@@ -72,10 +72,30 @@ async function upsertPipelines() {
 }
 
 async function replaceStages(pipelineId: string, names: string[]) {
-  // remove existing stages and insert new set in order
+  // First delete stage history that references these stages
+  await prisma.stageHistory.deleteMany({
+    where: {
+      OR: [
+        { fromStage: { pipelineId } },
+        { toStage: { pipelineId } }
+      ]
+    }
+  });
+  
+  // Then delete existing stages
   await prisma.pipelineStage.deleteMany({ where: { pipelineId } });
+  
+  // Insert new stages in order
   for (let i = 0; i < names.length; i++) {
-    await prisma.pipelineStage.create({ data: { pipelineId, name: names[i], orderIndex: i } });
+    await prisma.pipelineStage.create({ 
+      data: { 
+        pipelineId, 
+        name: names[i], 
+        orderIndex: i,
+        color: i === 0 ? 'blue' : i === names.length - 1 ? 'green' : 'gray',
+        isDefault: true
+      } 
+    });
   }
 }
 
@@ -254,6 +274,123 @@ async function upsertDocCategories() {
   }
 }
 
+async function createSampleLeads() {
+  // Get the admin user
+  const adminUser = await prisma.user.findFirst({
+    where: { roles: { some: { role: { name: 'ADMIN' } } } }
+  });
+
+  if (!adminUser) {
+    console.log('No admin user found, skipping sample leads');
+    return;
+  }
+
+  // Get the first market and county
+  const market = await prisma.market.findFirst();
+  const county = await prisma.county.findFirst();
+  
+  // Get acquisitions pipeline stages
+  const acqPipeline = await prisma.pipelineDefinition.findUnique({
+    where: { key: 'ACQUISITIONS' },
+    include: { stages: { orderBy: { orderIndex: 'asc' } } }
+  });
+
+  if (!acqPipeline || acqPipeline.stages.length === 0) {
+    console.log('No acquisitions pipeline found, skipping sample leads');
+    return;
+  }
+
+  const sampleLeads = [
+    {
+      address: "123 Main St, Charlotte, NC",
+      sellerFirstName: "John",
+      sellerLastName: "Doe",
+      sellerPhone: "(555) 123-4567",
+      sellerEmail: "john.doe@example.com",
+      stageIndex: 0
+    },
+    {
+      address: "456 Oak Ave, Raleigh, NC", 
+      sellerFirstName: "Jane",
+      sellerLastName: "Smith",
+      sellerPhone: "(555) 234-5678",
+      sellerEmail: "jane.smith@example.com",
+      stageIndex: 1
+    },
+    {
+      address: "789 Pine Rd, Durham, NC",
+      sellerFirstName: "Mike",
+      sellerLastName: "Johnson",
+      sellerPhone: "(555) 345-6789",
+      sellerEmail: "mike.johnson@example.com",
+      stageIndex: 2
+    },
+    {
+      address: "321 Elm St, Greensboro, NC",
+      sellerFirstName: "Sarah",
+      sellerLastName: "Wilson",
+      sellerPhone: "(555) 456-7890",
+      sellerEmail: "sarah.wilson@example.com",
+      stageIndex: 3
+    },
+    {
+      address: "654 Maple Dr, Winston-Salem, NC",
+      sellerFirstName: "Tom",
+      sellerLastName: "Anderson",
+      sellerPhone: "(555) 567-8901",
+      sellerEmail: "tom.anderson@example.com",
+      stageIndex: 4
+    }
+  ];
+
+  for (const leadData of sampleLeads) {
+    const stageIndex = Math.min(leadData.stageIndex, acqPipeline.stages.length - 1);
+    const stage = acqPipeline.stages[stageIndex];
+    
+    // Check if lead already exists
+    const existingLead = await prisma.lead.findFirst({
+      where: { 
+        address: { address1: leadData.address }
+      }
+    });
+
+    if (existingLead) {
+      continue; // Skip if lead already exists
+    }
+
+    // Create the lead
+    const lead = await prisma.lead.create({
+      data: {
+        leadType: 'SELLER',
+        marketId: market?.id,
+        assignedUserId: adminUser.id,
+        createdById: adminUser.id,
+        pipelineStageId: stage.id,
+        stageEnteredAt: new Date(),
+        address: {
+          create: {
+            address1: leadData.address,
+            city: "Charlotte",
+            state: "NC", 
+            zip: "28202",
+            countyId: county?.id
+          }
+        },
+        seller: {
+          create: {
+            firstName: leadData.sellerFirstName,
+            lastName: leadData.sellerLastName,
+            phone: leadData.sellerPhone,
+            email: leadData.sellerEmail
+          }
+        }
+      }
+    });
+
+    console.log(`Created sample lead: ${leadData.address} in stage: ${stage.name}`);
+  }
+}
+
 async function main() {
   await upsertRoles();
   await upsertAdmin();
@@ -263,6 +400,7 @@ async function main() {
   await upsertAssetClasses();
   await upsertPriceRanges();
   await upsertDocCategories();
+  await createSampleLeads();
   console.log('Seed complete.');
 }
 

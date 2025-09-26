@@ -5,6 +5,18 @@ export const listLeadsQuery = z.object({
   marketId: z.string().uuid().optional(),
   pipelineStageId: z.string().uuid().optional(),
   status: z.string().optional(),
+  countyId: z.string().uuid().optional(),
+  createdFrom: z.string().datetime().optional(),
+  createdTo: z.string().datetime().optional(),
+  updatedFrom: z.string().datetime().optional(),
+  updatedTo: z.string().datetime().optional(),
+  tasksDueBefore: z.string().datetime().optional(),
+  priceRangeIds: z.array(z.string().uuid()).optional(),
+  assetClassIds: z.array(z.string().uuid()).optional(),
+  vipBuyer: z.coerce.boolean().optional(),
+  blacklistedBuyer: z.coerce.boolean().optional(),
+  vendorCompany: z.string().optional(),
+  vendorIndustry: z.string().optional(),
   q: z.string().optional(),
   sort: z.string().optional(),
   order: z.enum(['asc', 'desc']).optional(),
@@ -14,6 +26,7 @@ export const listLeadsQuery = z.object({
 
 export const changeStageSchema = z.object({
   toStageId: z.string().uuid(),
+  reason: z.string().optional(),
 });
 
 export const createSellerLeadSchema = z.object({
@@ -35,7 +48,7 @@ export const createSellerLeadSchema = z.object({
     notes: z.string().optional(),
   }),
   assignedUserId: z.string().uuid().optional(),
-  pipelineStageId: z.string().uuid().optional(),
+  pipelineStageId: z.string().uuid('Pipeline stage is required'),
 });
 
 export const createBuyerLeadSchema = z.object({
@@ -54,7 +67,7 @@ export const createBuyerLeadSchema = z.object({
     priceRangeIds: z.array(z.string().uuid()).optional(),
   }).optional(),
   assignedUserId: z.string().uuid().optional(),
-  pipelineStageId: z.string().uuid().optional(),
+  pipelineStageId: z.string().uuid('Pipeline stage is required'),
 });
 
 export const createVendorLeadSchema = z.object({
@@ -70,7 +83,7 @@ export const createVendorLeadSchema = z.object({
     marketIds: z.array(z.string().uuid()).optional(),
   }),
   assignedUserId: z.string().uuid().optional(),
-  pipelineStageId: z.string().uuid().optional(),
+  pipelineStageId: z.string().uuid('Pipeline stage is required'),
 });
 
 export const createTaskSchema = z.object({

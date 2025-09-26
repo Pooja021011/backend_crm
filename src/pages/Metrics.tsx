@@ -1210,10 +1210,10 @@ const Metrics = () => {
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-center">
+                    <div className="text-center">
                   <div className="text-2xl font-black text-blue-600">{acqTotal}</div>
                   <div className="text-xs text-gray-600 font-medium">Total</div>
-                </div>
+                    </div>
                   </div>
                 </div>
                 <div className="text-lg font-bold text-blue-900">{acqTotal}</div>
@@ -1306,7 +1306,7 @@ const Metrics = () => {
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Projected Profit */}
             <Card className="p-8 hover:shadow-lg transition-shadow bg-gradient-to-br from-orange-50 to-white border border-orange-200">
-                <div className="text-center space-y-4">
+              <div className="text-center space-y-4">
                 <h3 className="text-sm font-bold text-orange-600 uppercase tracking-wider">Projected Profit</h3>
                 <div className="relative w-32 h-32 mx-auto">
                   <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
@@ -1386,7 +1386,7 @@ const Metrics = () => {
 
             {/* Closed Profit */}
             <Card className="p-8 hover:shadow-lg transition-shadow bg-gradient-to-br from-blue-50 to-white border border-blue-200">
-                <div className="text-center space-y-4">
+              <div className="text-center space-y-4">
                 <h3 className="text-sm font-bold text-blue-600 uppercase tracking-wider">Closed Profit</h3>
                 <div className="relative w-32 h-32 mx-auto">
                   <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">

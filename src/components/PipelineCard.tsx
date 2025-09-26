@@ -9,9 +9,10 @@ import {
   TrendingDown,
   CheckCircle2
 } from "lucide-react";
-import { format, differenceInDays, differenceInHours } from "date-fns";
+import { differenceInDays, differenceInHours } from "date-fns";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { safeDate, safeDateFormat } from "@/utils/validation";
 
 interface PipelineCardProps {
   lead: {
@@ -55,14 +56,23 @@ export const PipelineCard = ({ lead, isDragging }: PipelineCardProps) => {
     transition,
   };
 
+
   const getTimeInStatus = () => {
-    const hours = differenceInHours(new Date(), new Date(lead.statusChangedDate));
-    const days = differenceInDays(new Date(), new Date(lead.statusChangedDate));
-    
-    if (days > 0) {
-      return `${days} day${days > 1 ? 's' : ''}`;
-    } else {
-      return `${hours} hour${hours > 1 ? 's' : ''}`;
+    try {
+      const statusDate = safeDate(lead.statusChangedDate);
+      const now = new Date();
+      
+      const hours = differenceInHours(now, statusDate);
+      const days = differenceInDays(now, statusDate);
+      
+      if (days > 0) {
+        return `${days} day${days > 1 ? 's' : ''}`;
+      } else {
+        return `${Math.max(0, hours)} hour${hours !== 1 ? 's' : ''}`;
+      }
+    } catch (error) {
+      console.warn('Error calculating time in status:', error);
+      return '0 hours';
     }
   };
 
@@ -77,10 +87,12 @@ export const PipelineCard = ({ lead, isDragging }: PipelineCardProps) => {
       style={style}
       {...attributes}
       {...listeners}
-      className={`p-3 mb-2 border border-gray-200 bg-white shadow-sm hover:shadow-md transition-all duration-200 cursor-grab active:cursor-grabbing ${
-        isSortableDragging ? 'opacity-30 scale-95' : ''
+      className={`p-3 mb-3 border border-gray-200 bg-white shadow-sm hover:shadow-lg hover:border-blue-300 transition-all duration-200 cursor-grab active:cursor-grabbing rounded-lg ${
+        isSortableDragging ? 'opacity-50 scale-95 rotate-2' : ''
       } ${
-        isDragging ? 'rotate-6 scale-110 shadow-2xl' : ''
+        isDragging ? 'rotate-6 scale-110 shadow-2xl border-blue-400' : ''
+      } ${
+        lead.status === 'urgent' ? 'border-red-300 bg-red-50' : ''
       }`}
     >
       <div className="space-y-2">
@@ -117,7 +129,7 @@ export const PipelineCard = ({ lead, isDragging }: PipelineCardProps) => {
           <div className="flex items-center gap-1">
             <Calendar className="w-3 h-3" />
             <span>Created</span>
-            <span className="font-medium">{format(new Date(lead.dateCreated), 'MMM dd')}</span>
+            <span className="font-medium">{safeDateFormat(lead.dateCreated, 'MMM dd')}</span>
           </div>
           <div className="flex items-center gap-1">
             <Clock className="w-3 h-3" />

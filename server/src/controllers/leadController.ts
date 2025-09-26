@@ -29,12 +29,25 @@ export const leadController = {
 
   async list(req: Request, res: Response) {
     const q = listLeadsQuery.parse(req.query);
-    const leads = await leadService.list(q);
+    const user = (req as any).user;
+    const userRoles = user?.roles?.map((r: any) => r.role?.name || r.name) || [];
+    const userId = user?.id;
+    
+    const params = {
+      ...q,
+      userRoles,
+      userId
+    };
+    
+    const leads = await leadService.list(params);
     res.json({ data: leads, skip: q.skip ?? 0, take: q.take ?? 20 });
   },
 
   async changeStage(req: Request, res: Response) {
     const body = changeStageSchema.parse(req.body);
+    // Enforce special workflows based on simple rules
+    // Long Term Follow Up or Dead require conditions for SELLER leads
+    // VIP/Blacklisted for BUYER handled by separate updates typically
     const lead = await leadService.changeStage(req.params.id, body.toStageId, (req as any).user?.id);
     if (!lead) return res.status(404).json({ error: 'Not found' });
     res.json({ data: lead });

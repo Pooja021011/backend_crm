@@ -19,98 +19,327 @@ import {
 } from "lucide-react";
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCenter } from "@dnd-kit/core";
 import { snapCenterToCursor } from "@dnd-kit/modifiers";
-import { differenceInHours, isToday, addDays } from "date-fns";
+import { differenceInHours, isToday, addDays, isSameMonth } from "date-fns";
 import { API_BASE, makeApiCall } from "@/config/api";
+import { safeDate } from "@/utils/validation";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Pipeline = () => {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [needsAttentionView, setNeedsAttentionView] = useState(false);
-  const [transactionPipelineView, setTransactionPipelineView] = useState(true);
+  const [transactionPipelineView, setTransactionPipelineView] = useState(false);
+  const [dispositionsView, setDispositionsView] = useState(false);
+  const [selectedLeadSource, setSelectedLeadSource] = useState<string>('all');
+  const [leadSources, setLeadSources] = useState<any[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [pipelineAccess, setPipelineAccess] = useState<any>(null);
   
   // API state
   const [pipelineStages, setPipelineStages] = useState<any[]>([]);
   const [leads, setLeads] = useState<any[]>([]);
-  const [needsAttentionCount, setNeedsAttentionCount] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [movingLead, setMovingLead] = useState(false);
-  
-  // Pipeline configuration - using ACQUISITIONS pipeline by default
-  const currentPipeline = 'ACQUISITIONS';
+  const [needsAttentionCount, setNeedsAttentionCount] = useState(0);
 
-  // API functions
-  const fetchPipelineData = async () => {
+  // Sample data - replace with API calls
+  const sampleStages = [
+    { id: "new-lead", name: "New Lead", color: "blue", orderIndex: 0 },
+    { id: "contacted", name: "Contact Made", color: "orange", orderIndex: 1 },
+    { id: "appointment", name: "Appointment Set", color: "purple", orderIndex: 2 },
+    { id: "under-contract", name: "Under Contract", color: "green", orderIndex: 3 },
+    { id: "closed", name: "Closed", color: "gray", orderIndex: 4 }
+  ];
+
+  const sampleLeads = [
+    {
+      id: "1",
+      address: "123 Main St, Charlotte, NC",
+      sellerName: "John Doe",
+      dateCreated: new Date().toISOString(),
+      statusChangedDate: new Date().toISOString(),
+      lastContactDate: new Date().toISOString(),
+      priceReduction: false,
+      clearToClose: false,
+      originalPrice: 150000,
+      currentPrice: 145000,
+      stage: "new-lead",
+      assignedAgent: "Agent Smith",
+      leadType: "SELLER",
+      status: "active"
+    },
+    {
+      id: "2", 
+      address: "456 Oak Ave, Raleigh, NC",
+      sellerName: "Jane Smith",
+      dateCreated: new Date().toISOString(),
+      statusChangedDate: new Date().toISOString(),
+      lastContactDate: new Date().toISOString(),
+      priceReduction: true,
+      clearToClose: true,
+      originalPrice: 200000,
+      currentPrice: 185000,
+      stage: "contacted",
+      assignedAgent: "Agent Johnson",
+      leadType: "SELLER", 
+      status: "active"
+    },
+    {
+      id: "3",
+      address: "789 Pine Rd, Durham, NC",
+      sellerName: "Mike Johnson",
+      dateCreated: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+      statusChangedDate: new Date().toISOString(),
+      lastContactDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+      priceReduction: false,
+      clearToClose: false,
+      originalPrice: 180000,
+      currentPrice: 180000,
+      stage: "appointment",
+      assignedAgent: "Agent Davis",
+      leadType: "SELLER",
+      status: "active"
+    },
+    {
+      id: "4",
+      address: "321 Elm St, Greensboro, NC",
+      sellerName: "Sarah Wilson",
+      dateCreated: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+      statusChangedDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+      lastContactDate: new Date().toISOString(),
+      priceReduction: false,
+      clearToClose: true,
+      originalPrice: 220000,
+      currentPrice: 210000,
+      stage: "under-contract",
+      assignedAgent: "Agent Brown",
+      leadType: "SELLER",
+      status: "active"
+    },
+    {
+      id: "5",
+      address: "654 Maple Dr, Winston-Salem, NC",
+      sellerName: "Tom Anderson",
+      dateCreated: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+      statusChangedDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+      lastContactDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+      priceReduction: true,
+      clearToClose: false,
+      originalPrice: 175000,
+      currentPrice: 165000,
+      stage: "closed",
+      assignedAgent: "Agent Smith",
+      leadType: "SELLER",
+      status: "active"
+    },
+    {
+      id: "6",
+      address: "987 Cedar Ln, Asheville, NC",
+      sellerName: "Lisa Garcia",
+      dateCreated: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+      statusChangedDate: new Date().toISOString(),
+      lastContactDate: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
+      priceReduction: false,
+      clearToClose: false,
+      originalPrice: 195000,
+      currentPrice: 195000,
+      stage: "new-lead",
+      assignedAgent: "Agent Johnson",
+      leadType: "SELLER",
+      status: "urgent"
+    },
+    {
+      id: "7",
+      address: "147 Birch Ave, Fayetteville, NC",
+      sellerName: "David Lee",
+      dateCreated: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+      statusChangedDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+      lastContactDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+      priceReduction: false,
+      clearToClose: false,
+      originalPrice: 160000,
+      currentPrice: 160000,
+      stage: "contacted",
+      assignedAgent: "Agent Davis",
+      leadType: "SELLER",
+      status: "active"
+    },
+    {
+      id: "8",
+      address: "258 Willow St, Wilmington, NC",
+      sellerName: "Jennifer Taylor",
+      dateCreated: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
+      statusChangedDate: new Date().toISOString(),
+      lastContactDate: new Date().toISOString(),
+      priceReduction: true,
+      clearToClose: false,
+      originalPrice: 240000,
+      currentPrice: 225000,
+      stage: "appointment",
+      assignedAgent: "Agent Brown",
+      leadType: "SELLER",
+      status: "active"
+    }
+  ];
+
+  useEffect(() => {
+    loadPipelineAccess();
+    loadPipelineData();
+    loadLeadSources();
+  }, []);
+
+  useEffect(() => {
+    loadPipelineData();
+  }, [transactionPipelineView, needsAttentionView, dispositionsView, selectedLeadSource]);
+
+  const loadPipelineAccess = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/pipeline/access`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setPipelineAccess(data.data);
+      }
+    } catch (error) {
+      console.error('Failed to load pipeline access:', error);
+    }
+  };
+
+  const loadLeadSources = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/pipeline/lead-sources`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setLeadSources(data.data || []);
+      }
+    } catch (error) {
+      console.error('Failed to load lead sources:', error);
+    }
+  };
+
+  const loadPipelineData = async () => {
     try {
       setLoading(true);
       
-      // Fetch pipeline stages, leads, and needs attention count in parallel
-      const [stagesResponse, leadsResponse, needsAttentionResponse] = await Promise.all([
-        makeApiCall(`${API_BASE}/pipeline/${currentPipeline}/stages`),
-        makeApiCall(`${API_BASE}/pipeline/${currentPipeline}/leads${needsAttentionView ? '?needsAttention=true' : ''}`),
-        makeApiCall(`${API_BASE}/pipeline/${currentPipeline}/leads?needsAttention=true`)
-      ]);
-
-      if (stagesResponse.ok && leadsResponse.ok && needsAttentionResponse.ok) {
-        const stagesData = await stagesResponse.json();
-        const leadsData = await leadsResponse.json();
-        const needsAttentionData = await needsAttentionResponse.json();
-
-        if (stagesData.success && leadsData.success && needsAttentionData.success) {
-          // Map stages to include colors for UI
-          const stagesWithColors = stagesData.data.map((stage: any, index: number) => ({
-            ...stage,
-            color: getStageColor(stage.name, index)
-          }));
-
-          setPipelineStages(stagesWithColors);
-          setLeads(leadsData.data);
-          setNeedsAttentionCount(needsAttentionData.data.length);
-        } else {
-          throw new Error('Failed to fetch pipeline data');
-        }
-      } else {
-        throw new Error('Failed to fetch pipeline data');
+      // Real API calls enabled
+      
+      // Check user permissions first
+      if (!user?.roles?.includes('ADMIN') && !user?.roles?.includes('MANAGER') && 
+          !user?.roles?.includes('ACQ') && !user?.roles?.includes('DISP') && 
+          !user?.roles?.includes('TC')) {
+        toast({
+          title: "Access Denied",
+          description: "You don't have permission to view the pipeline",
+          variant: "destructive"
+        });
+        return;
       }
-    } catch (error: any) {
-      console.error('Error fetching pipeline data:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load pipeline data. Please try again.",
-        variant: "destructive"
-      });
+
+      // Load pipeline stages
+      const stagesResponse = await makeApiCall(`${API_BASE}/pipeline/ACQUISITIONS/stages`);
+      if (stagesResponse.ok) {
+        const stagesData = await stagesResponse.json();
+        setPipelineStages(stagesData.data || sampleStages);
+      } else {
+        console.log('Failed to load stages, using sample data');
+        setPipelineStages(sampleStages);
+      }
+
+      // Load pipeline leads with role-based filtering
+      const filters = new URLSearchParams();
+      if (needsAttentionView) filters.append('needsAttention', 'true');
+      if (!user?.roles?.includes('ADMIN') && !user?.roles?.includes('MANAGER')) {
+        filters.append('assignedUserId', user?.id || '');
+      }
+
+      // Try enhanced pipeline leads first
+      const leadsResponse = await makeApiCall(`${API_BASE}/pipeline/ACQUISITIONS/enhanced-leads?${filters}`);
+      
+      if (leadsResponse.ok) {
+        const leadsData = await leadsResponse.json();
+        
+        // Transform API data to match our component interface
+        const transformedLeads = (leadsData.data || []).map((lead: any) => ({
+          id: lead.id,
+          address: lead.address?.address1 || 'No address',
+          sellerName: lead.seller ? `${lead.seller.firstName} ${lead.seller.lastName}` : 'No seller',
+          buyerName: lead.buyer ? `${lead.buyer.firstName} ${lead.buyer.lastName}` : undefined,
+          dateCreated: lead.createdAt,
+          statusChangedDate: lead.stageEnteredAt || lead.updatedAt,
+          lastContactDate: lead.lastContactAt || lead.updatedAt,
+          priceReduction: lead.priceReduction || false,
+          clearToClose: lead.clearToClose || false,
+          originalPrice: lead.deal?.contractPrice || 0,
+          currentPrice: lead.deal?.soldPrice || 0,
+          // Use the stage field from backend API, fallback to pipelineStage.id
+          stage: lead.stage || lead.pipelineStage?.id || 'unknown-stage',
+          stageName: lead.stageName || lead.pipelineStage?.name || 'Unknown Stage',
+          assignedAgent: lead.assignedUser ? `${lead.assignedUser.firstName} ${lead.assignedUser.lastName}` : undefined,
+          leadType: lead.leadType,
+          status: lead.needsAttention ? 'urgent' : 'active'
+        }));
+        
+        setLeads(transformedLeads);
+        setNeedsAttentionCount(transformedLeads.filter((l: any) => l.status === 'urgent').length);
+      } else {
+        
+        // Fallback to basic leads API
+        const basicLeadsResponse = await makeApiCall(`${API_BASE}/leads`);
+        console.log('Basic leads response status:', basicLeadsResponse.status);
+        
+        if (basicLeadsResponse.ok) {
+          const basicLeadsData = await basicLeadsResponse.json();
+          console.log('Basic API leads response:', basicLeadsData);
+          
+          // Filter only leads with pipeline stages
+          const leadsWithStages = (basicLeadsData.data || []).filter((lead: any) => lead.pipelineStageId);
+          console.log('Leads with stages:', leadsWithStages.length);
+          
+          // Transform basic leads data
+          const transformedLeads = leadsWithStages.map((lead: any) => ({
+            id: lead.id,
+            address: lead.address?.address1 || `Lead ${lead.id.substring(0, 8)}`,
+            sellerName: lead.seller ? `${lead.seller.firstName} ${lead.seller.lastName}` : 'Unknown Seller',
+            buyerName: lead.buyer ? `${lead.buyer.firstName} ${lead.buyer.lastName}` : undefined,
+            dateCreated: lead.createdAt,
+            statusChangedDate: lead.updatedAt,
+            lastContactDate: lead.updatedAt,
+            priceReduction: false,
+            clearToClose: false,
+            originalPrice: 0,
+            currentPrice: 0,
+            stage: lead.pipelineStageId || 'new-lead',
+            stageName: 'Unknown Stage',
+            assignedAgent: lead.assignedUser ? `${lead.assignedUser.firstName} ${lead.assignedUser.lastName}` : undefined,
+            leadType: lead.leadType,
+            status: 'active'
+          }));
+          
+          setLeads(transformedLeads);
+          setNeedsAttentionCount(0);
+          console.log('Loaded basic leads from database:', transformedLeads.length);
+          console.log('Sample basic lead:', transformedLeads[0]);
+        } else {
+          console.log('Both API calls failed, using sample data');
+          setLeads(sampleLeads);
+          setNeedsAttentionCount(0);
+        }
+      }
+
+    } catch (error) {
+      console.error('Error loading pipeline data:', error);
+      // Use sample data as fallback
+      setPipelineStages(sampleStages);
+      setLeads(sampleLeads);
+      setNeedsAttentionCount(0);
+      console.log('Using sample data due to error');
     } finally {
       setLoading(false);
     }
   };
-
-  // Helper function to assign colors to stages
-  const getStageColor = (stageName: string, index: number) => {
-    const colors = ['blue', 'gray', 'orange', 'purple', 'blue', 'orange', 'purple', 'orange', 'green'];
-    if (stageName.toLowerCase().includes('closed') || stageName.toLowerCase().includes('complete')) {
-      return 'green';
-    }
-    if (stageName.toLowerCase().includes('contract') || stageName.toLowerCase().includes('under')) {
-      return 'green';
-    }
-    if (stageName.toLowerCase().includes('contact') || stageName.toLowerCase().includes('made')) {
-      return 'orange';
-    }
-    if (stageName.toLowerCase().includes('appointment') || stageName.toLowerCase().includes('set')) {
-      return 'purple';
-    }
-    return colors[index % colors.length];
-  };
-
-  // Load data on component mount and when filters change
-  useEffect(() => {
-    fetchPipelineData();
-  }, [needsAttentionView]);
-
-  const getLeadsForStage = (stageId: string) => {
-    return leads.filter(lead => lead.stage === stageId);
-  };
-
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string);
@@ -118,34 +347,33 @@ const Pipeline = () => {
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
+    setActiveId(null);
     
-    if (!over || movingLead) return;
+    if (!over) return;
 
     const leadId = active.id as string;
     const newStageId = over.id as string;
 
-    // Find the lead and check if it's actually moving to a different stage
-    const lead = leads.find(l => l.id === leadId);
-    if (!lead || lead.stage === newStageId) {
-      setActiveId(null);
-      return;
-    }
+    // Find the lead being moved
+    const leadToMove = leads.find(lead => lead.id === leadId);
+    if (!leadToMove || leadToMove.stage === newStageId) return;
+
+    const stageName = pipelineStages.find(s => s.id === newStageId)?.name || newStageId;
+    
+    // Update UI immediately (optimistic update)
+    setLeads(prev => prev.map(lead => 
+      lead.id === leadId 
+        ? { ...lead, stage: newStageId, statusChangedDate: new Date().toISOString() }
+        : lead
+    ));
 
     try {
-      setMovingLead(true);
-
-      // Optimistically update the UI
-      setLeads(currentLeads => 
-        currentLeads.map(l => 
-          l.id === leadId 
-            ? { ...l, stage: newStageId, statusChangedDate: new Date() }
-            : l
-        )
-      );
-
-      // Make API call to move the lead
+      // API call to move lead
       const response = await makeApiCall(`${API_BASE}/pipeline/leads/${leadId}/move`, {
         method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ stageId: newStageId })
       });
 
@@ -153,166 +381,213 @@ const Pipeline = () => {
         throw new Error('Failed to move lead');
       }
 
-      const result = await response.json();
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to move lead');
-      }
-
       toast({
         title: "Lead Moved",
-        description: `Lead successfully moved to ${result.data.newStageName}`,
+        description: `${leadToMove.address} moved to ${stageName}`,
       });
-
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error moving lead:', error);
       
-      // Revert the optimistic update
-      setLeads(currentLeads => 
-        currentLeads.map(l => 
-          l.id === leadId 
-            ? { ...l, stage: lead.stage, statusChangedDate: lead.statusChangedDate }
-            : l
-        )
-      );
+      // Revert optimistic update on error
+      setLeads(prev => prev.map(lead => 
+        lead.id === leadId 
+          ? { ...lead, stage: leadToMove.stage, statusChangedDate: leadToMove.statusChangedDate }
+          : lead
+      ));
 
       toast({
         title: "Error",
-        description: error.message || "Failed to move lead. Please try again.",
+        description: "Failed to move lead. Please try again.",
         variant: "destructive"
       });
-    } finally {
-      setMovingLead(false);
-      setActiveId(null);
     }
+  };
+
+  const getLeadsForStage = (stageId: string) => {
+    const filteredLeads = leads.filter(lead => {
+      // Match by stage ID (UUID from database) or stage name
+      const matches = lead.stage === stageId || lead.stageName === stageId;
+      return matches;
+    });
+    
+    
+    return filteredLeads;
   };
 
   const activeLead = activeId ? leads.find(lead => lead.id === activeId) : null;
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <span className="ml-2">Loading pipeline...</span>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      {/* Header matching reference design */}
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Sales Pipeline</h1>
-          <p className="text-sm text-gray-600">Track and manage deals through your sales pipeline</p>
+        <div className="flex items-center gap-4">
+          <h1 className="text-3xl font-bold">Pipeline</h1>
+          <Badge variant="outline" className="flex items-center gap-1">
+            <Workflow className="h-3 w-3" />
+            {leads.length} Active Leads
+          </Badge>
         </div>
         
         <div className="flex items-center gap-4">
-          {/* Needs Attention Toggle */}
-          <div className="flex items-center gap-3 bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
-            <AlertTriangle className="w-4 h-4 text-orange-500" />
-            <Label htmlFor="needs-attention" className="text-sm font-medium text-gray-700">
-              Needs Attention
-            </Label>
-            <Switch
-              id="needs-attention"
-              checked={needsAttentionView}
-              onCheckedChange={setNeedsAttentionView}
-              className="data-[state=checked]:bg-orange-500"
-            />
-            {needsAttentionCount > 0 && (
-              <Badge className="bg-orange-500 text-white text-xs">
-                {needsAttentionCount}
-              </Badge>
-            )}
-          </div>
-
-          {/* Transaction Pipeline Toggle */}
-          <div className="flex items-center gap-3 bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
-            <Workflow className="w-4 h-4 text-blue-500" />
-            <Label htmlFor="transaction-pipeline" className="text-sm font-medium text-gray-700">
-              Transaction Pipeline
-            </Label>
+          {/* Role-based controls */}
+          {pipelineAccess?.availableToggles?.includes('TRANSACTION_PIPELINE') && (
+            <div className="flex items-center space-x-2">
             <Switch
               id="transaction-pipeline"
               checked={transactionPipelineView}
               onCheckedChange={setTransactionPipelineView}
-              className="data-[state=checked]:bg-blue-500"
-            />
-          </div>
-
-          {/* Action Buttons - Hidden as requested */}
-          {false && (
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" className="gap-2">
-                <Filter className="w-4 h-4" />
-                Filter
-              </Button>
-              <Button size="sm" className="gap-2 bg-green-600 hover:bg-green-700">
-                <Plus className="w-4 h-4" />
-                Add Lead
-              </Button>
+              />
+              <Label htmlFor="transaction-pipeline">Transaction Pipeline</Label>
             </div>
           )}
+
+          {pipelineAccess?.availableToggles?.includes('DISPOSITIONS_TOGGLE') && (
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="dispositions-view"
+                checked={dispositionsView}
+                onCheckedChange={setDispositionsView}
+              />
+              <Label htmlFor="dispositions-view">Dispositions View</Label>
+            </div>
+          )}
+
+          {pipelineAccess?.availableToggles?.includes('SOURCE_DROPDOWN') && (
+            <div className="flex items-center space-x-2">
+              <Label htmlFor="lead-source">Source:</Label>
+              <select
+                id="lead-source"
+                value={selectedLeadSource}
+                onChange={(e) => setSelectedLeadSource(e.target.value)}
+                className="px-3 py-1 border rounded-md text-sm"
+              >
+                <option value="all">All Sources</option>
+                {leadSources.map(source => (
+                  <option key={source.id} value={source.id}>
+                    {source.name}
+                  </option>
+                ))}
+              </select>
+          </div>
+          )}
+          
+          {pipelineAccess?.availableToggles?.includes('NEEDS_ATTENTION') && (
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="needs-attention"
+                checked={needsAttentionView}
+                onCheckedChange={setNeedsAttentionView}
+              />
+              <Label htmlFor="needs-attention">
+                Needs Attention {needsAttentionCount > 0 && `(${needsAttentionCount})`}
+              </Label>
+            </div>
+          )}
+          
+          <Button variant="outline" size="sm">
+            <Filter className="h-4 w-4 mr-2" />
+            Filter
+          </Button>
+          
+          <Button size="sm">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Lead
+          </Button>
         </div>
       </div>
 
-      {/* Loading State */}
-      {loading && (
-        <Card className="p-12 text-center border border-gray-200 bg-gray-50">
-          <Loader2 className="w-8 h-8 text-gray-400 mx-auto mb-4 animate-spin" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">
-            Loading Pipeline Data
-          </h3>
-          <p className="text-gray-600">
-            Fetching leads and pipeline stages...
-          </p>
+      {/* Pipeline Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="p-4">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-blue-500" />
+            <span className="text-sm font-medium">New Leads</span>
+          </div>
+          <div className="text-2xl font-bold mt-1">
+            {pipelineStages.length > 0 ? getLeadsForStage(pipelineStages[0].id).length : 0}
+          </div>
         </Card>
-      )}
+        
+        <Card className="p-4">
+          <div className="flex items-center gap-2">
+            <DollarSign className="h-4 w-4 text-green-500" />
+            <span className="text-sm font-medium">Under Contract</span>
+          </div>
+          <div className="text-2xl font-bold mt-1">
+            {pipelineStages.find(s => s.name.toLowerCase().includes('contract')) ? 
+              getLeadsForStage(pipelineStages.find(s => s.name.toLowerCase().includes('contract'))!.id).length : 0}
+          </div>
+        </Card>
+        
+        <Card className="p-4">
+          <div className="flex items-center gap-2">
+            <Users className="h-4 w-4 text-purple-500" />
+            <span className="text-sm font-medium">This Month</span>
+          </div>
+          <div className="text-2xl font-bold mt-1">
+            {leads.filter(lead => {
+              const createdDate = safeDate(lead.dateCreated);
+              const today = new Date();
+              return isSameMonth(createdDate, today);
+            }).length}
+          </div>
+        </Card>
+        
+        <Card className="p-4">
+          <div className="flex items-center gap-2">
+            <FileText className="h-4 w-4 text-orange-500" />
+            <span className="text-sm font-medium">Completed</span>
+          </div>
+          <div className="text-2xl font-bold mt-1">
+            {pipelineStages.length > 0 ? getLeadsForStage(pipelineStages[pipelineStages.length - 1].id).length : 0}
+          </div>
+        </Card>
+      </div>
 
-      {/* Pipeline Board - Horizontal Scrolling Grid */}
-      {!loading && transactionPipelineView && (
+
+      {/* Drag and Drop Pipeline */}
         <DndContext
           collisionDetection={closestCenter}
-          modifiers={[snapCenterToCursor]}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
+        modifiers={[snapCenterToCursor]}
         >
-          <div className="pipeline-container overflow-x-auto pb-4">
-            <div className="flex gap-4 min-w-max">
-              {pipelineStages.map((stage) => (
+        <div className="flex gap-6 overflow-x-auto pb-4 min-h-[600px]">
+          {pipelineStages.map(stage => (
                 <PipelineColumn
                   key={stage.id}
                   stage={stage}
                   leads={getLeadsForStage(stage.id)}
                 />
               ))}
-            </div>
           </div>
 
           <DragOverlay>
-            {activeLead ? (
+          {activeLead && (
               <PipelineCard lead={activeLead} isDragging />
-            ) : null}
+          )}
           </DragOverlay>
         </DndContext>
-      )}
 
-      {/* Alternative view when transaction pipeline is off */}
-      {!transactionPipelineView && (
-        <Card className="p-12 text-center border border-gray-200 bg-gray-50">
-          <Workflow className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">
-            Transaction Pipeline View Disabled
-          </h3>
-          <p className="text-gray-600">
-            Enable "Transaction Pipeline" toggle to view the kanban board
-          </p>
-        </Card>
-      )}
-
-      {/* Needs Attention Summary */}
-      {!loading && needsAttentionView && needsAttentionCount > 0 && (
-        <Card className="p-6 bg-orange-50 border border-orange-200">
-          <div className="flex items-start gap-4">
-            <div className="p-2 bg-orange-100 rounded-lg">
-              <AlertTriangle className="w-6 h-6 text-orange-600" />
-            </div>
+      {/* Needs Attention Info */}
+      {needsAttentionView && needsAttentionCount > 0 && (
+        <Card className="p-6 border border-orange-200 bg-orange-50">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-orange-500 mt-0.5" />
             <div>
-              <h3 className="text-lg font-semibold text-orange-900 mb-2">
-                {needsAttentionCount} Lead{needsAttentionCount > 1 ? 's' : ''} Need Immediate Attention
+              <h3 className="font-medium text-orange-900 mb-2">
+                {needsAttentionCount} Lead{needsAttentionCount !== 1 ? 's' : ''} Need{needsAttentionCount === 1 ? 's' : ''} Attention
               </h3>
-              <div className="text-sm text-orange-800 space-y-1">
+              <div className="text-sm text-orange-700 space-y-1">
                 <p>• Leads with no contact in 72+ hours</p>
                 <p>• Leads with urgent status</p>
                 <p>• Leads requiring immediate follow-up</p>

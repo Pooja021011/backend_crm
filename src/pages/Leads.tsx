@@ -63,6 +63,7 @@ import { ImportCSVDialog } from "@/components/ImportCSVDialog";
 import { LeadActions } from "@/components/LeadActions";
 import { generateCSVTemplate } from "@/utils/csvUtils";
 import { toast } from "@/hooks/use-toast";
+import { API_BASE } from "@/config/api";
 
 const Leads = () => {
   const navigate = useNavigate();
@@ -75,29 +76,132 @@ const Leads = () => {
     deleteLead, 
     getLeadsByType, 
     searchLeads,
+    filterLeads,
     importLeadsFromCSV,
     exportLeadsToCSV,
     sortLeads
   } = useLeads();
   
-  const [activeTab, setActiveTab] = useState<LeadType>("SELLER");
+  // Set default tab based on user role
+  const getDefaultTab = (): LeadType => {
+    const userRoles = user?.roles?.map((r: any) => r.role?.name || r.name) || [];
+    const isACQ = userRoles.includes('ACQ');
+    const isDisp = userRoles.includes('DISP');
+    const isAdmin = userRoles.includes('ADMIN');
+    const isExecutive = userRoles.includes('EXECUTIVE');
+    const isManager = userRoles.includes('MANAGER');
+    const isTC = userRoles.includes('TC');
+
+    // ACQ agents see seller leads only
+    if (isACQ && !isAdmin && !isExecutive && !isManager && !isTC) {
+      return "SELLER";
+    }
+    // DISP agents see buyer leads only
+    if (isDisp && !isAdmin && !isExecutive && !isManager && !isTC) {
+      return "BUYER";
+    }
+    // Default to SELLER for other roles
+    return "SELLER";
+  };
+
+  const [activeTab, setActiveTab] = useState<LeadType>(getDefaultTab());
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [isAddLeadOpen, setIsAddLeadOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+  const [selectedMarket, setSelectedMarket] = useState("");
+  const [selectedStatus, setSelectedStatus] = useState("");
+  const [selectedPipelineStatus, setSelectedPipelineStatus] = useState("");
+  const [selectedDateRange, setSelectedDateRange] = useState("");
+  
+  // Dynamic filter data
+  const [markets, setMarkets] = useState<any[]>([]);
+  const [pipelineStages, setPipelineStages] = useState<any[]>([]);
+  const [leadStatuses, setLeadStatuses] = useState<string[]>([]);
+  const [loadingFilters, setLoadingFilters] = useState(false);
+  
+  // Role-based access control
+  const userRoles = user?.roles || [];
+  const isACQ = userRoles.includes('ACQ');
+  const isDisp = userRoles.includes('DISP');
+  const isTC = userRoles.includes('TC');
+  const isAdmin = userRoles.includes('ADMIN');
+  const isManager = userRoles.includes('MANAGER');
+  const isExecutive = userRoles.includes('EXECUTIVE');
+
+  // Role-based lead type access
+  const canViewSellerLeads = isAdmin || isExecutive || isManager || isACQ || isTC;
+  const canViewBuyerLeads = isAdmin || isExecutive || isManager || isDisp || isTC;
+  const canViewVendorLeads = isAdmin || isExecutive || isManager;
   
   // Sorting functionality
   const { sortConfig, handleSort, resetSort } = useSortable({ key: 'updatedAt', direction: 'desc' });
 
-  // Load all leads on component mount
+  // Load all leads and filter data on component mount
   useEffect(() => {
     fetchLeads(); // Fetch all leads without type filter
+    loadFilterData(); // Load dynamic filter options
   }, []);
 
-  // Clear selected items when switching tabs
+  // Load dynamic filter data
+  const loadFilterData = async () => {
+    setLoadingFilters(true);
+    try {
+      // Fetch markets
+      const marketsResponse = await fetch(`${API_BASE}/settings/markets`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
+      });
+      if (marketsResponse.ok) {
+        const marketsData = await marketsResponse.json();
+        setMarkets(marketsData.data || []);
+      }
+
+      // Fetch all pipeline stages (from all pipelines)
+      const allStages: any[] = [];
+      const pipelineKeys = ['ACQUISITIONS', 'DISPOSITIONS', 'TRANSACTION'];
+      
+      for (const pipelineKey of pipelineKeys) {
+        try {
+          const stagesResponse = await fetch(`${API_BASE}/pipeline/${pipelineKey}/stages`, {
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
+          });
+          if (stagesResponse.ok) {
+            const stagesData = await stagesResponse.json();
+            if (stagesData.data) {
+              allStages.push(...stagesData.data.map((stage: any) => ({
+                ...stage,
+                pipelineKey
+              })));
+            }
+          }
+        } catch (error) {
+          console.error(`Error fetching ${pipelineKey} stages:`, error);
+        }
+      }
+      
+      setPipelineStages(allStages);
+
+      // Get unique lead statuses from current leads
+      const uniqueStatuses = [...new Set(leads.map(lead => lead.status).filter(Boolean))];
+      setLeadStatuses(uniqueStatuses);
+      
+    } catch (error) {
+      console.error('Error loading filter data:', error);
+    } finally {
+      setLoadingFilters(false);
+    }
+  };
+
+  // Clear selected items and filters when switching tabs
   useEffect(() => {
     setSelectedItems([]);
+    setSelectedMarket("");
+    setSelectedStatus("");
+    setSelectedPipelineStatus("");
+    setSelectedDateRange("");
   }, [activeTab]);
+
 
   // Get filtered and sorted leads based on search and active tab
   const getCurrentLeads = useMemo(() => {
@@ -108,13 +212,60 @@ const Leads = () => {
       filteredLeads = searchLeads(searchQuery).filter(lead => lead.leadType === activeTab);
     }
     
+    // Apply additional filters
+    if (selectedMarket) {
+      filteredLeads = filteredLeads.filter(lead => {
+        return lead.marketId === selectedMarket;
+      });
+    }
+    
+    if (selectedStatus) {
+      filteredLeads = filteredLeads.filter(lead => {
+        return lead.status === selectedStatus;
+      });
+    }
+    
+    if (selectedPipelineStatus) {
+      filteredLeads = filteredLeads.filter(lead => {
+        return lead.pipelineStageId === selectedPipelineStatus;
+      });
+    }
+    
+    if (selectedDateRange) {
+      const now = new Date();
+      const filterDate = new Date();
+      
+      switch (selectedDateRange) {
+        case 'today':
+          filterDate.setHours(0, 0, 0, 0);
+          filteredLeads = filteredLeads.filter(lead => new Date(lead.createdAt) >= filterDate);
+          break;
+        case 'week':
+          filterDate.setDate(now.getDate() - 7);
+          filteredLeads = filteredLeads.filter(lead => new Date(lead.createdAt) >= filterDate);
+          break;
+        case 'month':
+          filterDate.setMonth(now.getMonth() - 1);
+          filteredLeads = filteredLeads.filter(lead => new Date(lead.createdAt) >= filterDate);
+          break;
+        case 'quarter':
+          filterDate.setMonth(now.getMonth() - 3);
+          filteredLeads = filteredLeads.filter(lead => new Date(lead.createdAt) >= filterDate);
+          break;
+        case 'year':
+          filterDate.setFullYear(now.getFullYear(), 0, 1);
+          filteredLeads = filteredLeads.filter(lead => new Date(lead.createdAt) >= filterDate);
+          break;
+      }
+    }
+    
     // Apply sorting
     if (sortConfig.key && sortConfig.direction) {
       filteredLeads = sortLeads(filteredLeads, sortConfig.key, sortConfig.direction);
     }
     
     return filteredLeads;
-  }, [getLeadsByType, activeTab, searchQuery, searchLeads, sortConfig, sortLeads]);
+  }, [getLeadsByType, activeTab, searchQuery, searchLeads, selectedMarket, selectedStatus, selectedPipelineStatus, selectedDateRange, sortConfig, sortLeads]);
 
   const getLeadCount = (type: "SELLER" | "BUYER" | "VENDOR") => {
     return getLeadsByType(type).length;
@@ -535,61 +686,178 @@ const Leads = () => {
           </div>
         </div>
 
-        {/* Search Bar */}
-        <div className="bg-white border-b border-gray-200 px-6 py-3">
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <Input
-              placeholder="Search leads by name, phone, email, or address..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 h-9 border-gray-300 focus:border-blue-500 focus:ring-blue-500/20"
-            />
+
+        {/* Collapsible Filters */}
+        {showFilters && (
+          <div className="bg-white border-b border-gray-200 px-6 py-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Search Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Search</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <Input
+                    placeholder="Name, phone, email, address..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10 h-9 border-gray-300 focus:border-blue-500 focus:ring-blue-500/20"
+                  />
+                </div>
+              </div>
+              {/* Market Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Market</label>
+                <select 
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  value={selectedMarket}
+                  onChange={(e) => setSelectedMarket(e.target.value)}
+                  disabled={loadingFilters}
+                >
+                  <option value="">All Markets</option>
+                  {markets.map(market => (
+                    <option key={market.id} value={market.id}>
+                      {market.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Status Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Lead Status</label>
+                <select 
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  value={selectedStatus}
+                  onChange={(e) => setSelectedStatus(e.target.value)}
+                  disabled={loadingFilters}
+                >
+                  <option value="">All Statuses</option>
+                  {leadStatuses.map(status => (
+                    <option key={status} value={status}>
+                      {status?.replace('_', ' ') || 'Unknown'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Pipeline Status Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Pipeline Status</label>
+                <select 
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  value={selectedPipelineStatus}
+                  onChange={(e) => setSelectedPipelineStatus(e.target.value)}
+                  disabled={loadingFilters}
+                >
+                  <option value="">All Stages</option>
+                  {pipelineStages.map(stage => (
+                    <option key={stage.id} value={stage.id}>
+                      {stage.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Date Range Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Date Range</label>
+                <select 
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  value={selectedDateRange}
+                  onChange={(e) => setSelectedDateRange(e.target.value)}
+                >
+                  <option value="">All Time</option>
+                  <option value="today">Today ({new Date().toLocaleDateString()})</option>
+                  <option value="week">This Week</option>
+                  <option value="month">This Month ({new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })})</option>
+                  <option value="quarter">This Quarter</option>
+                  <option value="year">This Year ({new Date().getFullYear()})</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Filter Actions */}
+            <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
+              <div className="text-sm text-gray-600">
+                {currentLeads.length} leads found
+              </div>
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => {
+                    // Clear all filters
+                    setSearchQuery("");
+                    setSelectedMarket("");
+                    setSelectedStatus("");
+                    setSelectedPipelineStatus("");
+                    setSelectedDateRange("");
+                  }}
+                >
+                  Clear Filters
+                </Button>
+                <Button 
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowFilters(false);
+                  }}
+                >
+                  Close Panel
+                </Button>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Tabs */}
         <div className="bg-white border-b border-gray-200 px-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="h-12 bg-transparent border-0 p-0 space-x-6">
-              <TabsTrigger 
-                value="SELLER" 
-                className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-blue-500 data-[state=active]:text-blue-600 rounded-none border-b-2 border-transparent hover:border-gray-300 px-0 pb-3"
-              >
-                <div className="flex items-center gap-2">
-                  <Building className="w-4 h-4" />
-                  <span>Seller Leads</span>
-                  <Badge className="bg-blue-500 text-white text-xs px-1.5 py-0.5 rounded-full">
-                    {getLeadCount("SELLER")}
-                  </Badge>
-                </div>
-              </TabsTrigger>
+              {canViewSellerLeads && (
+                <TabsTrigger 
+                  value="SELLER" 
+                  className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-blue-500 data-[state=active]:text-blue-600 rounded-none border-b-2 border-transparent hover:border-gray-300 px-0 pb-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <Building className="w-4 h-4" />
+                    <span>Seller Leads</span>
+                    <Badge className="bg-blue-500 text-white text-xs px-1.5 py-0.5 rounded-full">
+                      {getLeadCount("SELLER")}
+                    </Badge>
+                  </div>
+                </TabsTrigger>
+              )}
               
-              <TabsTrigger 
-                value="BUYER" 
-                className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-blue-500 data-[state=active]:text-blue-600 rounded-none border-b-2 border-transparent hover:border-gray-300 px-0 pb-3"
-              >
-                <div className="flex items-center gap-2">
-                  <Users className="w-4 h-4" />
-                  <span>Buyer Leads</span>
-                  <Badge className="bg-blue-500 text-white text-xs px-1.5 py-0.5 rounded-full">
-                    {getLeadCount("BUYER")}
-                  </Badge>
-                </div>
-              </TabsTrigger>
+              {canViewBuyerLeads && (
+                <TabsTrigger 
+                  value="BUYER" 
+                  className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-blue-500 data-[state=active]:text-blue-600 rounded-none border-b-2 border-transparent hover:border-gray-300 px-0 pb-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <Users className="w-4 h-4" />
+                    <span>Buyer Leads</span>
+                    <Badge className="bg-blue-500 text-white text-xs px-1.5 py-0.5 rounded-full">
+                      {getLeadCount("BUYER")}
+                    </Badge>
+                  </div>
+                </TabsTrigger>
+              )}
               
-              <TabsTrigger 
-                value="VENDOR" 
-                className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-blue-500 data-[state=active]:text-blue-600 rounded-none border-b-2 border-transparent hover:border-gray-300 px-0 pb-3"
-              >
-                <div className="flex items-center gap-2">
-                  <UserCheck className="w-4 h-4" />
-                  <span>Vendor Leads</span>
-                  <Badge className="bg-blue-500 text-white text-xs px-1.5 py-0.5 rounded-full">
-                    {getLeadCount("VENDOR")}
-                  </Badge>
-                </div>
-              </TabsTrigger>
+              {canViewVendorLeads && (
+                <TabsTrigger 
+                  value="VENDOR" 
+                  className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-blue-500 data-[state=active]:text-blue-600 rounded-none border-b-2 border-transparent hover:border-gray-300 px-0 pb-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <UserCheck className="w-4 h-4" />
+                    <span>Vendor Leads</span>
+                    <Badge className="bg-blue-500 text-white text-xs px-1.5 py-0.5 rounded-full">
+                      {getLeadCount("VENDOR")}
+                    </Badge>
+                  </div>
+                </TabsTrigger>
+              )}
             </TabsList>
 
             {/* Toolbar */}
@@ -767,9 +1035,15 @@ const Leads = () => {
                   </DropdownMenuContent>
                 </DropdownMenu>
                 
-                <Button variant="outline" size="sm" className="gap-2">
+                {/* Filter Button */}
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="gap-2"
+                  onClick={() => setShowFilters(!showFilters)}
+                >
                   <Filter className="w-4 h-4" />
-                  Filter
+                  {showFilters ? 'Hide' : 'Filter'}
                 </Button>
                 
                 {/* Add Lead Dialog */}
