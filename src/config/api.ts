@@ -1,33 +1,6 @@
-// API Configuration
+// API Configuration - Server IP Hardcoded
 export const getApiBaseUrl = (): string => {
-  // Debug logging
-  console.log('🔍 API Config Debug:');
-  console.log('VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL);
-  console.log('DEV mode:', import.meta.env.DEV);
-  console.log('All env vars:', import.meta.env);
-  
-  // Force HTTP protocol, never HTTPS
-  // Priority: .env file first, then fallback
-  
-  // Always try .env file first
-  if (import.meta.env.VITE_API_BASE_URL) {
-    let baseUrl = import.meta.env.VITE_API_BASE_URL;
-    
-    // Ensure URL starts with http:// (not https://)
-    if (baseUrl.startsWith('https://')) {
-      baseUrl = baseUrl.replace('https://', 'http://');
-    }
-    
-    if (!baseUrl.startsWith('http://')) {
-      baseUrl = `http://${baseUrl}`;
-    }
-    
-    console.log('✅ Using env variable:', baseUrl);
-    return baseUrl;
-  }
-  
-  // Fallback - always use server IP (no localhost fallback)
-  console.log('⚠️ Using fallback URL: http://20.200.122.55:4000/api/v1');
+  // Hardcoded server IP - Force HTTP, never HTTPS
   return 'http://20.200.122.55:4000/api/v1';
 };
 
