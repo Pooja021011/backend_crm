@@ -22,7 +22,7 @@ export default defineConfig(({ mode }) => ({
     // Disable HMR over HTTPS
     hmr: {
       port: 8081,
-      host: 'localhost'
+      host: '0.0.0.0'
     }
   },
   plugins: [

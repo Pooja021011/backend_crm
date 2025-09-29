@@ -1,23 +1,34 @@
 // API Configuration
 export const getApiBaseUrl = (): string => {
+  // Debug logging
+  console.log('🔍 API Config Debug:');
+  console.log('VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL);
+  console.log('DEV mode:', import.meta.env.DEV);
+  console.log('All env vars:', import.meta.env);
+  
   // Force HTTP protocol, never HTTPS
-  // Priority: .env file -> fallback based on environment
-  const isDev = import.meta.env.DEV || window.location.hostname === 'localhost';
-  const defaultUrl = isDev ? 'http://localhost:4000/api/v1' : 'http://20.200.122.55:4000/api/v1';
+  // Priority: .env file first, then fallback
   
-  // Get from .env file (VITE_API_BASE_URL) or use default
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || defaultUrl;
-  
-  // Ensure URL starts with http:// (not https://)
-  if (baseUrl.startsWith('https://')) {
-    return baseUrl.replace('https://', 'http://');
+  // Always try .env file first
+  if (import.meta.env.VITE_API_BASE_URL) {
+    let baseUrl = import.meta.env.VITE_API_BASE_URL;
+    
+    // Ensure URL starts with http:// (not https://)
+    if (baseUrl.startsWith('https://')) {
+      baseUrl = baseUrl.replace('https://', 'http://');
+    }
+    
+    if (!baseUrl.startsWith('http://')) {
+      baseUrl = `http://${baseUrl}`;
+    }
+    
+    console.log('✅ Using env variable:', baseUrl);
+    return baseUrl;
   }
   
-  if (!baseUrl.startsWith('http://')) {
-    return `http://${baseUrl}`;
-  }
-  
-  return baseUrl;
+  // Fallback - always use server IP (no localhost fallback)
+  console.log('⚠️ Using fallback URL: http://20.200.122.55:4000/api/v1');
+  return 'http://20.200.122.55:4000/api/v1';
 };
 
 export const API_BASE = getApiBaseUrl();

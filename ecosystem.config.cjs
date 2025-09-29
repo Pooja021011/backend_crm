@@ -21,7 +21,8 @@ module.exports = {
       args: 'run dev',
       cwd: './',
       env: {
-        NODE_ENV: 'development'
+        NODE_ENV: 'development',
+        VITE_API_BASE_URL: 'http://20.200.122.55:4000/api/v1'
       },
       watch: false,
       ignore_watch: ['node_modules', 'dist', '.vite'],
