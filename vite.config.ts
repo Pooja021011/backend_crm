@@ -12,10 +12,17 @@ export default defineConfig(({ mode }) => ({
     strictPort: true,
     https: false,
     cors: true,
-    // PM2 compatibility headers
+    // Force HTTP and prevent any HTTPS redirects
     headers: {
       'Strict-Transport-Security': 'max-age=0',
-      'X-Content-Type-Options': 'nosniff'
+      'X-Content-Type-Options': 'nosniff',
+      'X-Forwarded-Proto': 'http',
+      'X-Forwarded-Ssl': 'off'
+    },
+    // Disable HMR over HTTPS
+    hmr: {
+      port: 8081,
+      host: 'localhost'
     }
   },
   plugins: [
