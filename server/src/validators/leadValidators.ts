@@ -48,7 +48,7 @@ export const createSellerLeadSchema = z.object({
     notes: z.string().optional(),
   }),
   assignedUserId: z.string().uuid().optional(),
-  pipelineStageId: z.string().uuid('Pipeline stage is required'),
+  pipelineStageId: z.string().uuid().optional(),
 });
 
 export const createBuyerLeadSchema = z.object({
@@ -67,7 +67,7 @@ export const createBuyerLeadSchema = z.object({
     priceRangeIds: z.array(z.string().uuid()).optional(),
   }).optional(),
   assignedUserId: z.string().uuid().optional(),
-  pipelineStageId: z.string().uuid('Pipeline stage is required'),
+  pipelineStageId: z.string().uuid().optional(),
 });
 
 export const createVendorLeadSchema = z.object({
@@ -83,7 +83,7 @@ export const createVendorLeadSchema = z.object({
     marketIds: z.array(z.string().uuid()).optional(),
   }),
   assignedUserId: z.string().uuid().optional(),
-  pipelineStageId: z.string().uuid('Pipeline stage is required'),
+  pipelineStageId: z.string().uuid().optional(),
 });
 
 export const createTaskSchema = z.object({

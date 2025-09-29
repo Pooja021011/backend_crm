@@ -2,9 +2,9 @@ import { prisma } from '../config/db.js';
 import type { LeadType, TaskStatus } from '@prisma/client';
 
 export type LeadCreateInput =
-  | { type: 'SELLER'; marketId?: string; address: { address1: string; city: string; state: string; zip: string; countyId?: string }; seller: { firstName: string; lastName: string; phone: string; email: string; motivation?: string; notes?: string }; assignedUserId?: string; pipelineStageId: string }
-  | { type: 'BUYER'; marketId?: string; buyer: { firstName: string; lastName: string; phone: string; email: string; vip?: boolean }; criteria?: { marketIds?: string[]; assetClassIds?: string[]; priceRangeIds?: string[] }; assignedUserId?: string; pipelineStageId: string }
-  | { type: 'VENDOR'; marketId?: string; vendor: { firstName: string; lastName: string; phone: string; email: string; company: string; industry: string; marketIds?: string[] }; assignedUserId?: string; pipelineStageId: string };
+  | { type: 'SELLER'; marketId?: string; address: { address1: string; city: string; state: string; zip: string; countyId?: string }; seller: { firstName: string; lastName: string; phone: string; email: string; motivation?: string; notes?: string }; assignedUserId?: string; pipelineStageId?: string }
+  | { type: 'BUYER'; marketId?: string; buyer: { firstName: string; lastName: string; phone: string; email: string; vip?: boolean }; criteria?: { marketIds?: string[]; assetClassIds?: string[]; priceRangeIds?: string[] }; assignedUserId?: string; pipelineStageId?: string }
+  | { type: 'VENDOR'; marketId?: string; vendor: { firstName: string; lastName: string; phone: string; email: string; company: string; industry: string; marketIds?: string[] }; assignedUserId?: string; pipelineStageId?: string };
 
 export const leadRepository = {
   async create(input: LeadCreateInput, createdById?: string) {
@@ -20,11 +20,48 @@ export const leadRepository = {
       return stage;
     };
 
-    if (input.type === 'SELLER') {
-      const { address, seller, marketId, assignedUserId, pipelineStageId } = input;
+    // Get default pipeline stage for lead type
+    const getDefaultPipelineStage = async (leadType: string) => {
+      let pipelineKey = 'ACQUISITIONS'; // Default
       
-      // Validate pipeline stage exists
-      await validatePipelineStage(pipelineStageId);
+      if (leadType === 'SELLER') {
+        pipelineKey = 'ACQUISITIONS';
+      } else if (leadType === 'BUYER') {
+        pipelineKey = 'DISPOSITIONS';  
+      } else if (leadType === 'VENDOR') {
+        pipelineKey = 'ACQUISITIONS'; // Fallback
+      }
+      
+      // Get the first stage (orderIndex = 0) of the appropriate pipeline
+      const stage = await prisma.pipelineStage.findFirst({
+        where: {
+          pipeline: { key: pipelineKey },
+          orderIndex: 0 // First stage (New Lead)
+        },
+        include: { pipeline: true }
+      });
+      
+      if (!stage) {
+        throw new Error(`No default stage found for pipeline ${pipelineKey}`);
+      }
+      
+      console.log(`Found default stage: ${stage.name} for ${leadType} lead`);
+      return stage;
+    };
+
+    if (input.type === 'SELLER') {
+      const { address, seller, marketId, assignedUserId } = input;
+      let { pipelineStageId } = input;
+      
+      // If no pipelineStageId provided, get default stage
+      if (!pipelineStageId) {
+        const defaultStage = await getDefaultPipelineStage('SELLER');
+        pipelineStageId = defaultStage.id;
+        console.log(`Auto-assigned default stage: ${defaultStage.name} for SELLER lead`);
+      } else {
+        // Validate provided pipeline stage exists
+        await validatePipelineStage(pipelineStageId);
+      }
       
       return prisma.lead.create({
         data: {
@@ -41,10 +78,18 @@ export const leadRepository = {
       });
     }
     if (input.type === 'BUYER') {
-      const { buyer, criteria, marketId, assignedUserId, pipelineStageId } = input;
+      const { buyer, criteria, marketId, assignedUserId } = input;
+      let { pipelineStageId } = input;
       
-      // Validate pipeline stage exists
-      await validatePipelineStage(pipelineStageId);
+      // If no pipelineStageId provided, get default stage
+      if (!pipelineStageId) {
+        const defaultStage = await getDefaultPipelineStage('BUYER');
+        pipelineStageId = defaultStage.id;
+        console.log(`Auto-assigned default stage: ${defaultStage.name} for BUYER lead`);
+      } else {
+        // Validate provided pipeline stage exists
+        await validatePipelineStage(pipelineStageId);
+      }
       
       return prisma.lead.create({
         data: {
@@ -60,23 +105,33 @@ export const leadRepository = {
         include: includeLead,
       });
     }
-    const { vendor, marketId, assignedUserId, pipelineStageId } = input;
-    
-    // Validate pipeline stage exists
-    await validatePipelineStage(pipelineStageId);
-    
-    return prisma.lead.create({
-      data: {
-        leadType: 'VENDOR',
-        marketId: marketId || null,
-        assignedUserId: assignedUserId || null,
-        pipelineStageId: pipelineStageId,
-        stageEnteredAt: new Date(),
-        createdById: createdById || null,
-        vendor: { create: vendor },
-      },
-      include: includeLead,
-    });
+    if (input.type === 'VENDOR') {
+      const { vendor, marketId, assignedUserId } = input;
+      let { pipelineStageId } = input;
+      
+      // If no pipelineStageId provided, get default stage
+      if (!pipelineStageId) {
+        const defaultStage = await getDefaultPipelineStage('VENDOR');
+        pipelineStageId = defaultStage.id;
+        console.log(`Auto-assigned default stage: ${defaultStage.name} for VENDOR lead`);
+      } else {
+        // Validate provided pipeline stage exists
+        await validatePipelineStage(pipelineStageId);
+      }
+      
+      return prisma.lead.create({
+        data: {
+          leadType: 'VENDOR',
+          marketId: marketId || null,
+          assignedUserId: assignedUserId || null,
+          pipelineStageId: pipelineStageId,
+          stageEnteredAt: new Date(),
+          createdById: createdById || null,
+          vendor: { create: vendor },
+        },
+        include: includeLead,
+      });
+    }
   },
 
   async update(id: string, data: any) {
