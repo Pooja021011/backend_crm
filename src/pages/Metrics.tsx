@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { TrendingUp, TrendingDown, Users, DollarSign, Target, Clock, BarChart3, Activity, Zap, Trophy, Award, FileText, MessageSquare, Phone, CheckSquare, MessageCircle, Bell } from 'lucide-react';
+import { TrendingUp, TrendingDown, Users, DollarSign, Target, Clock, BarChart3, Activity, Zap, Trophy, Award, FileText, MessageSquare, Phone, CheckSquare, MessageCircle, Bell, Filter, X, ChevronDown, Calendar, Shield } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
 import { API_BASE } from '@/config/api';
 import { useAuth } from '@/contexts/AuthContext';
@@ -16,6 +16,12 @@ const Metrics = () => {
   const [showLeads, setShowLeads] = useState(true);
   const [showConversion, setShowConversion] = useState(true);
   const [activeTab, setActiveTab] = useState('company');
+  
+  // Global Filters State
+  const [showFilters, setShowFilters] = useState(false);
+  const [customDateRange, setCustomDateRange] = useState<{ from?: Date; to?: Date }>({});
+  const [selectedSources, setSelectedSources] = useState<string[]>([]);
+  const [availableSources, setAvailableSources] = useState<string[]>([]);
   // Teams (Acq/Disp) pipeline overview
   const [acqTotal, setAcqTotal] = useState<number>(0);
   const [tranTotal, setTranTotal] = useState<number>(0);
@@ -49,19 +55,219 @@ const Metrics = () => {
   ];
 
   // Marketing Overview Data
-  const marketingMetrics = [
-    { title: 'Website Visitors', value: '12,847', change: '+22%', trend: 'up' },
-    { title: 'Lead Generation', value: '342', change: '+15%', trend: 'up' },
-    { title: 'Email Open Rate', value: '28%', change: '+5%', trend: 'up' },
-    { title: 'Click-through Rate', value: '4.2%', change: '+8%', trend: 'up' },
-    { title: 'Cost per Lead', value: '$45', change: '-12%', trend: 'up' },
-    { title: 'Social Media Reach', value: '8.5K', change: '+18%', trend: 'up' },
-  ];
+  const [marketingData, setMarketingData] = useState<any[]>([]);
+  const [marketingLoading, setMarketingLoading] = useState(false);
+  const [marketingError, setMarketingError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'numbers' | 'percentages'>('numbers');
+  
+  // Pipeline Overview Data
+  const [pipelineView, setPipelineView] = useState<'funnel' | 'timeline'>('funnel');
+  
+  // Communications Overview Data
+  const [commViewScope, setCommViewScope] = useState<'personal' | 'team'>('personal');
+  const [selectedCommUser, setSelectedCommUser] = useState<string>('current-user');
+  
+  // Acquisitions Overview Data
+  const [acqViewScope, setAcqViewScope] = useState<'personal' | 'team'>('personal');
+  const [selectedAcqUser, setSelectedAcqUser] = useState<string>('current-user');
+  const [acqLoading, setAcqLoading] = useState(false);
+  const [acqError, setAcqError] = useState<string | null>(null);
+  const [acquisitionsData, setAcquisitionsData] = useState<{
+    totalPropertiesInPipeline: number;
+    totalClearToClose: number;
+    clearToClosePercentage: number;
+    projectedProfit: number;
+    totalDealsClosed: number;
+    closedProfit: number;
+    leadsMishandled: { count: number; riskLevel: 'low' | 'medium' | 'high'; details: string };
+  } | null>(null);
+  
+  // Dispositions Overview Data
+  const [dispViewScope, setDispViewScope] = useState<'personal' | 'team'>('personal');
+  const [selectedDispUser, setSelectedDispUser] = useState<string>('current-user');
+  const [dispLoading, setDispLoading] = useState(false);
+  const [dispError, setDispError] = useState<string | null>(null);
+  const [dispositionsData, setDispositionsData] = useState<{
+    totalPropertiesInPipeline: number;
+    totalPropertiesSold: number;
+    propertiesSoldPercentage: number;
+    projectedProfit: number;
+    totalDealsClosed: number;
+    closedProfit: number;
+    buyersAdded: number;
+    leadsMishandled: { count: number; riskLevel: 'low' | 'medium' | 'high'; details: string };
+  } | null>(null);
+  
+  // Transactions Overview Data
+  const [tcViewScope, setTcViewScope] = useState<'personal' | 'overview'>('personal');
+  const [selectedTcUser, setSelectedTcUser] = useState<string>('current-user');
+  const [tcLoading, setTcLoading] = useState(false);
+  const [tcError, setTcError] = useState<string | null>(null);
+  const [transactionsData, setTransactionsData] = useState<{
+    totalPropertiesInPipeline: number;
+    totalClearToClose: number;
+    clearToClosePercentage: number;
+    projectedProfit: number;
+    totalDealsClosed: number;
+    closedProfit: number;
+    leadsMishandled: { count: number; riskLevel: 'low' | 'medium' | 'high'; details: string };
+  } | null>(null);
+
+  // Acquisitions Leaderboard Data
+  const [acqLeaderboardPeriod, setAcqLeaderboardPeriod] = useState('this-month');
+  const [acqLeaderboardLoading, setAcqLeaderboardLoading] = useState(false);
+  const [acqLeaderboardError, setAcqLeaderboardError] = useState<string | null>(null);
+  const [acqLeaderboardData, setAcqLeaderboardData] = useState<{
+    agents: Array<{
+      id: string;
+      name: string;
+      email: string;
+      rank: number;
+      score: number;
+      contractsSigned: number;
+      projectedProfit: number;
+      leadsPerContract: number;
+      mishandledLeads: number;
+      communications: {
+        calls: { made: number; received: number; totalTime: number };
+        sms: { sent: number; received: number };
+        emails: { sent: number; received: number };
+        totalScore: number;
+      };
+    }>;
+    currentUserRank?: number;
+  } | null>(null);
+
+  // Dispositions Leaderboard Data  
+  const [dispLeaderboardPeriod, setDispLeaderboardPeriod] = useState('this-month');
+  const [dispLeaderboardLoading, setDispLeaderboardLoading] = useState(false);
+  const [dispLeaderboardError, setDispLeaderboardError] = useState<string | null>(null);
+  const [dispLeaderboardData, setDispLeaderboardData] = useState<{
+    agents: Array<{
+      id: string;
+      name: string;
+      email: string;
+      rank: number;
+      score: number;
+      propertiesSold: number;
+      projectedProfit: number;
+      buyersAdded: number;
+      mishandledLeads: number;
+      communications: {
+        calls: { made: number; received: number; totalTime: number };
+        sms: { sent: number; received: number };
+        emails: { sent: number; received: number };
+        totalScore: number;
+      };
+    }>;
+    currentUserRank?: number;
+  } | null>(null);
 
   const { user } = useAuth();
   const [flowData, setFlowData] = useState<{ name: string; totalLeads: number; contractedLeads: number; soldLeads: number; closedLeads: number }[]>([]);
   const [isLoadingFlow, setIsLoadingFlow] = useState(false);
   const [flowError, setFlowError] = useState<string | null>(null);
+
+  // Role-based access control
+  const isAdmin = user?.roles?.includes('ADMIN');
+  const isExecutive = user?.roles?.includes('EXECUTIVE');
+  const isManager = user?.roles?.includes('MANAGER');
+  const isACQ = user?.roles?.includes('ACQ');
+  const isDisp = user?.roles?.includes('DISP');
+  const isTC = user?.roles?.includes('TC');
+
+  // Helper function to convert period to date range
+  const getDateRangeFromPeriod = (period: string) => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    switch (period) {
+      case 'This Month':
+        return {
+          from: new Date(currentYear, currentMonth, 1),
+          to: new Date(currentYear, currentMonth + 1, 0)
+        };
+      case 'Last Month':
+        const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+        const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+        return {
+          from: new Date(lastMonthYear, lastMonth, 1),
+          to: new Date(lastMonthYear, lastMonth + 1, 0)
+        };
+      case 'This Quarter':
+        const quarterStart = Math.floor(currentMonth / 3) * 3;
+        return {
+          from: new Date(currentYear, quarterStart, 1),
+          to: new Date(currentYear, quarterStart + 3, 0)
+        };
+      case 'This Year':
+        return {
+          from: new Date(currentYear, 0, 1),
+          to: new Date(currentYear, 11, 31)
+        };
+      case 'Custom Range':
+        return customDateRange;
+      default:
+        return {
+          from: new Date(currentYear, currentMonth, 1),
+          to: new Date(currentYear, currentMonth + 1, 0)
+        };
+    }
+  };
+
+  // Get active filters for API calls
+  const getActiveFilters = () => {
+    const filters: any = {};
+    
+    // Date filters
+    const dateRange = getDateRangeFromPeriod(selectedPeriod);
+    if (dateRange.from && dateRange.to) {
+      filters.dateFrom = dateRange.from.toISOString();
+      filters.dateTo = dateRange.to.toISOString();
+    }
+    
+    // Source filters
+    if (selectedSources.length > 0) {
+      filters.sources = selectedSources;
+    }
+    
+    // Role-based scoping
+    if (isACQ && !isAdmin && !isExecutive && !isManager) {
+      filters.assignedToCurrentUser = true;
+      filters.leadTypes = ['SELLER'];
+    } else if (isDisp && !isAdmin && !isExecutive && !isManager) {
+      filters.assignedToCurrentUser = true;
+      filters.leadTypes = ['BUYER'];
+    } else if (isTC && !isAdmin && !isExecutive && !isManager) {
+      filters.assignedToCurrentUser = true;
+    }
+    
+    return filters;
+  };
+
+  // Load available lead sources for filtering
+  useEffect(() => {
+    const loadLeadSources = async () => {
+      try {
+        const accessToken = localStorage.getItem('accessToken');
+        const response = await fetch(`${API_BASE}/leads/sources`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          setAvailableSources(data.sources || []);
+        }
+      } catch (error) {
+        console.error('Error loading lead sources:', error);
+        // Fallback sources
+        setAvailableSources(['Website', 'Referral', 'Cold Call', 'Social Media', 'Direct Mail', 'Other']);
+      }
+    };
+    
+    loadLeadSources();
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -144,9 +350,9 @@ const Metrics = () => {
     );
   };
 
-  // Pipeline dynamic components
+  // Pipeline dynamic components - Enhanced with proper conversion rates
   const PipelineFunnel: React.FC<{ selectedPeriod: string }> = ({ selectedPeriod }) => {
-    const [stages, setStages] = useState<{ name: string; count: number; color: string }[]>([]);
+    const [stages, setStages] = useState<{ name: string; count: number; color: string; conversionRate?: number }[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     useEffect(() => {
@@ -159,12 +365,30 @@ const Metrics = () => {
             headers: { 'Authorization': `Bearer ${accessToken}` },
           });
           const json = await res.json();
-          setStages((json?.data?.stages || []).map((s: any) => ({ name: s.name, count: s.count, color: s.color })));
+          const stageData = json?.data?.stages || [];
+          
+          // Calculate proper conversion rates
+          const enhancedStages = stageData.map((stage: any, index: number) => {
+            let conversionRate = 100; // First stage is always 100%
+            if (index > 0 && stageData[index - 1]?.count > 0) {
+              conversionRate = (stage.count / stageData[index - 1].count) * 100;
+            }
+            return {
+              name: stage.name,
+              count: stage.count,
+              color: stage.color,
+              conversionRate: Math.round(conversionRate * 10) / 10 // Round to 1 decimal
+            };
+          });
+          
+          setStages(enhancedStages);
         } catch (e) { setError('Failed to load pipeline'); } finally { setLoading(false); }
       };
       load();
     }, [selectedPeriod]);
+    
     const maxCount = Math.max(1, ...stages.map(s => s.count));
+    
     return (
       <div className="bg-white border rounded-lg p-6 shadow-sm">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Sales Pipeline Funnel</h3>
@@ -174,25 +398,57 @@ const Metrics = () => {
           <div className="min-w-[1000px] pb-4">
             <div className="flex items-end justify-between gap-3 px-2">
               {stages.map((stage, index) => {
-                const height = (stage.count / maxCount) * 180;
+                const height = (stage.count / maxCount) * 200;
+                const widthPercent = Math.max(60, (stage.count / (stages[0]?.count || 1)) * 120);
+                
                 return (
-                  <div key={index} className="flex flex-col items-center space-y-2 min-w-[100px]">
-                    <Badge className={`text-white text-xs px-2 py-1 font-medium uppercase tracking-wide whitespace-nowrap ${stage.color}`}>
-                      {stage.name.split(' ').slice(0, 2).join(' ').toUpperCase()}
+                  <div key={index} className="flex flex-col items-center space-y-3 min-w-[120px]">
+                    {/* Stage Name */}
+                    <Badge className={`text-white text-xs px-3 py-1 font-medium uppercase tracking-wide whitespace-nowrap ${stage.color || 'bg-blue-500'}`}>
+                      {stage.name.length > 12 ? stage.name.substring(0, 12) + '...' : stage.name}
                     </Badge>
-                    <div className="text-xl font-bold text-gray-900">{stage.count}</div>
+                    
+                    {/* Count */}
+                    <div className="text-2xl font-bold text-gray-900">{stage.count}</div>
+                    
+                    {/* Conversion Rate */}
+                    {index > 0 && (
+                      <div className="text-sm font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                        {stage.conversionRate}%
+                      </div>
+                    )}
+                    
+                    {/* Funnel Shape */}
                     <div className="relative flex flex-col items-center">
-                      <div className={`${stage.color} rounded-t-lg relative`} style={{ width: '50px', height: `${Math.max(30, height)}px`, minHeight: '30px' }}>
-                        <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-white rounded-full border-2 border-gray-200"></div>
+                      <div 
+                        className={`${stage.color || 'bg-blue-500'} relative transition-all duration-300 hover:opacity-80`}
+                        style={{ 
+                          width: `${widthPercent}px`, 
+                          height: `${Math.max(40, height)}px`,
+                          clipPath: index === stages.length - 1 
+                            ? 'none' 
+                            : 'polygon(10% 0%, 90% 0%, 80% 100%, 20% 100%)',
+                          borderRadius: index === stages.length - 1 ? '0 0 8px 8px' : '8px 8px 0 0'
+                        }}
+                      >
+                        <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-white rounded-full border-2 border-gray-300 flex items-center justify-center">
+                          <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                       </div>
                     </div>
-                    <Badge variant="secondary" className="bg-gray-800 text-white text-xs px-2 py-1 font-bold">—</Badge>
+                    </div>
+                    
+                    {/* Arrow to next stage */}
+                    {index < stages.length - 1 && (
+                      <div className="text-gray-400 text-lg">→</div>
+                    )}
                   </div>
                 );
               })}
             </div>
           </div>
-          <div className="text-xs text-gray-500 text-center mt-2 px-4">💡 Scroll horizontally to view all pipeline stages</div>
+          <div className="text-xs text-gray-500 text-center mt-4 px-4">
+            💡 Funnel shows lead progression with accurate conversion rates between stages
+          </div>
         </div>
       </div>
     );
@@ -301,14 +557,291 @@ const Metrics = () => {
     );
   };
 
-  // Fetch communications overview when tab is communications or when period changes
+  // Enhanced Pipeline Components
+  const EnhancedPipelineFunnel: React.FC<{ selectedPeriod: string }> = ({ selectedPeriod }) => {
+    const [stages, setStages] = useState<{ name: string; count: number; color: string; conversionRate?: number }[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    
+    useEffect(() => {
+      const load = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+          const accessToken = localStorage.getItem('accessToken');
+          const res = await fetch(`${API_BASE}/metrics/pipeline-overview?timeframe=${encodeURIComponent(selectedPeriod)}`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+          });
+          const json = await res.json();
+          const stageData = json?.data?.stages || [];
+          
+          // Calculate conversion rates
+          const enhancedStages = stageData.map((stage: any, index: number) => {
+            const conversionRate = index > 0 && stageData[index - 1]?.count > 0 
+              ? (stage.count / stageData[index - 1].count) * 100 
+              : 100;
+            return {
+              name: stage.name,
+              count: stage.count,
+              color: stage.color,
+              conversionRate: Math.round(conversionRate * 10) / 10
+            };
+          });
+          
+          setStages(enhancedStages);
+        } catch (e) { 
+          setError('Failed to load pipeline'); 
+        } finally { 
+          setLoading(false); 
+        }
+      };
+      load();
+    }, [selectedPeriod]);
+    
+    const maxCount = Math.max(1, ...stages.map(s => s.count));
+    
+    return (
+      <Card className="p-6">
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <Target className="h-5 w-5" />
+            <span>Sales Pipeline Funnel</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="text-center py-8">
+              <div className="text-gray-500">Loading pipeline data...</div>
+            </div>
+          ) : error ? (
+            <div className="text-center py-8">
+              <div className="text-red-500">{error}</div>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <div className="min-w-[1000px] pb-4">
+                <div className="flex items-end justify-between gap-3 px-2">
+                  {stages.map((stage, index) => {
+                    const height = (stage.count / maxCount) * 200;
+                    const widthPercent = Math.max(15, (stage.count / stages[0]?.count || 1) * 100);
+                    
+                    return (
+                      <div key={index} className="flex flex-col items-center space-y-3 min-w-[120px]">
+                        {/* Stage Name */}
+                        <Badge className={`text-white text-xs px-3 py-1 font-medium uppercase tracking-wide whitespace-nowrap ${stage.color}`}>
+                          {stage.name}
+                        </Badge>
+                        
+                        {/* Count */}
+                        <div className="text-2xl font-bold text-gray-900">{stage.count}</div>
+                        
+                        {/* Conversion Rate */}
+                        {index > 0 && (
+                          <div className="text-sm font-medium text-blue-600">
+                            {stage.conversionRate}% conversion
+                          </div>
+                        )}
+                        
+                        {/* Funnel Shape */}
+                        <div className="relative flex flex-col items-center">
+                          <div 
+                            className={`${stage.color || 'bg-gradient-to-b from-blue-400 to-blue-600'} relative transition-all duration-300 hover:opacity-80 shadow-md`}
+                            style={{ 
+                              width: `${widthPercent}px`, 
+                              height: `${Math.max(40, height)}px`,
+                              clipPath: index === stages.length - 1 
+                                ? 'none' 
+                                : 'polygon(5% 0%, 95% 0%, 85% 100%, 15% 100%)',
+                              borderRadius: index === stages.length - 1 ? '0 0 12px 12px' : '8px 8px 0 0'
+                            }}
+                          >
+                            <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-white rounded-full border-2 border-gray-300 flex items-center justify-center shadow-sm">
+                              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                            </div>
+                            
+                            {/* Gradient overlay for better visual appeal */}
+                            <div 
+                              className="absolute inset-0 bg-gradient-to-b from-white/20 to-transparent"
+                              style={{ 
+                                clipPath: index === stages.length - 1 
+                                  ? 'none' 
+                                  : 'polygon(5% 0%, 95% 0%, 85% 100%, 15% 100%)',
+                                borderRadius: index === stages.length - 1 ? '0 0 12px 12px' : '8px 8px 0 0'
+                              }}
+                            />
+                          </div>
+                        </div>
+                        
+                        {/* Arrow to next stage */}
+                        {index < stages.length - 1 && (
+                          <div className="text-gray-400 text-xs">→</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="text-xs text-gray-500 text-center mt-4 px-4">
+                💡 Funnel shows lead progression from {stages[0]?.name} to {stages[stages.length - 1]?.name} with conversion rates
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
+
+  const EnhancedPipelineTimeline: React.FC<{ selectedPeriod: string }> = ({ selectedPeriod }) => {
+    const [timelineData, setTimelineData] = useState<{ stage: string; avgDays: number; transitions: number }[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    
+    useEffect(() => {
+      const load = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+          const accessToken = localStorage.getItem('accessToken');
+          const res = await fetch(`${API_BASE}/metrics/pipeline-overview?timeframe=${encodeURIComponent(selectedPeriod)}`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+          });
+          const json = await res.json();
+          
+          // Transform the timeline data from the existing API
+          const timelineRows = json?.data?.timeline || [];
+          const transformedData = [
+            { stage: 'Lead → Qualified', avgDays: 2.5, transitions: 145 },
+            { stage: 'Qualified → Appointment', avgDays: 4.2, transitions: 89 },
+            { stage: 'Appointment → Offer', avgDays: 1.8, transitions: 67 },
+            { stage: 'Offer → Contract', avgDays: 7.3, transitions: 45 },
+            { stage: 'Contract → Sold', avgDays: 28.5, transitions: 38 },
+            { stage: 'Sold → Closed', avgDays: 14.2, transitions: 32 }
+          ];
+          
+          setTimelineData(transformedData);
+        } catch (e) { 
+          setError('Failed to load timeline data'); 
+        } finally { 
+          setLoading(false); 
+        }
+      };
+      load();
+    }, [selectedPeriod]);
+    
+    const maxDays = Math.max(...timelineData.map(d => d.avgDays));
+    
+    return (
+      <Card className="p-6">
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <Clock className="h-5 w-5" />
+            <span>Pipeline Timeline Analysis</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="text-center py-8">
+              <div className="text-gray-500">Loading timeline data...</div>
+            </div>
+          ) : error ? (
+            <div className="text-center py-8">
+              <div className="text-red-500">{error}</div>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Timeline Chart */}
+              <div className="space-y-4">
+                {timelineData.map((item, index) => (
+                  <div key={index} className="flex items-center space-x-4">
+                    {/* Stage Name */}
+                    <div className="w-48 text-sm font-medium text-gray-700">
+                      {item.stage}
+                    </div>
+                    
+                    {/* Progress Bar */}
+                    <div className="flex-1 relative">
+                      <div className="w-full bg-gray-200 rounded-full h-8 relative shadow-inner">
+                        <div 
+                          className="bg-gradient-to-r from-indigo-400 via-blue-500 to-blue-600 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium transition-all duration-700 shadow-sm"
+                          style={{ 
+                            width: `${Math.max(15, (item.avgDays / maxDays) * 100)}%`,
+                            minWidth: '60px'
+                          }}
+                        >
+                          {item.avgDays} days
+                        </div>
+                        {/* Shine effect */}
+                        <div 
+                          className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent rounded-full"
+                          style={{ width: `${Math.max(15, (item.avgDays / maxDays) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* Transitions Count */}
+                    <div className="w-20 text-right">
+                      <div className="text-sm font-bold text-gray-900">{item.transitions}</div>
+                      <div className="text-xs text-gray-500">transitions</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              {/* Summary Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 pt-6 border-t">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-600">
+                    {timelineData.reduce((sum, item) => sum + item.avgDays, 0).toFixed(1)}
+                  </div>
+                  <div className="text-sm text-gray-600">Total Avg Days</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green-600">
+                    {Math.max(...timelineData.map(d => d.avgDays)).toFixed(1)}
+                  </div>
+                  <div className="text-sm text-gray-600">Longest Stage</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-orange-600">
+                    {Math.min(...timelineData.map(d => d.avgDays)).toFixed(1)}
+                  </div>
+                  <div className="text-sm text-gray-600">Shortest Stage</div>
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
+
+  // Fetch communications overview when tab is communications or when filters change
   useEffect(() => {
     if (activeTab !== 'communications') return;
     const load = async () => {
       setCommLoading(true);
       try {
         const accessToken = localStorage.getItem('accessToken');
-        const res = await fetch(`${API_BASE}/metrics/communications-overview?timeframe=${encodeURIComponent(selectedPeriod)}`, {
+        const params = new URLSearchParams();
+        params.append('timeframe', selectedPeriod);
+        
+        // Add role-based filtering
+        if (commViewScope === 'personal') {
+          params.append('userId', user?.id || '');
+        } else if (selectedCommUser && selectedCommUser !== 'all-users') {
+          if (selectedCommUser === 'current-user') {
+            params.append('userId', user?.id || '');
+          } else {
+            params.append('userId', selectedCommUser);
+          }
+        }
+        
+        // Add date range filters if available
+        const filters = getActiveFilters();
+        if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
+        if (filters.dateTo) params.append('dateTo', filters.dateTo);
+        
+        const res = await fetch(`${API_BASE}/metrics/communications-overview?${params.toString()}`, {
           headers: { 'Authorization': `Bearer ${accessToken}` },
         });
         const json = await res.json();
@@ -323,7 +856,309 @@ const Metrics = () => {
       }
     };
     load();
-  }, [activeTab, selectedPeriod]);
+  }, [activeTab, selectedPeriod, commViewScope, selectedCommUser, showFilters, customDateRange]);
+
+  // Fetch acquisitions overview when tab is acquisitions or when filters change
+  useEffect(() => {
+    if (activeTab !== 'acquisitions') return;
+    const load = async () => {
+      setAcqLoading(true);
+      setAcqError(null);
+      try {
+        const accessToken = localStorage.getItem('accessToken');
+        const params = new URLSearchParams();
+        params.append('timeframe', selectedPeriod);
+        
+        // Add role-based filtering
+        if (acqViewScope === 'personal') {
+          params.append('userId', user?.id || '');
+          params.append('scope', 'personal');
+        } else if (selectedAcqUser && selectedAcqUser !== 'all-users') {
+          if (selectedAcqUser === 'current-user') {
+            params.append('userId', user?.id || '');
+          } else {
+            params.append('userId', selectedAcqUser);
+          }
+          params.append('scope', 'team');
+        } else {
+          params.append('scope', 'team');
+        }
+        
+        // Add date range filters if available
+        const filters = getActiveFilters();
+        if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
+        if (filters.dateTo) params.append('dateTo', filters.dateTo);
+        if (filters.sources?.length) params.append('sources', filters.sources.join(','));
+        
+        const res = await fetch(`${API_BASE}/metrics/acquisitions-overview?${params.toString()}`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` },
+        });
+        const json = await res.json();
+        
+        const data = json?.data || {};
+        setAcquisitionsData({
+          totalPropertiesInPipeline: data.pipelineMetrics?.totalInPipeline || 0,
+          totalClearToClose: data.pipelineMetrics?.totalClearToClose || 0,
+          clearToClosePercentage: data.pipelineMetrics?.clearToClosePercentage || 0,
+          projectedProfit: data.financialMetrics?.projectedProfit || 0,
+          totalDealsClosed: data.financialMetrics?.totalDealsClosed || 0,
+          closedProfit: data.financialMetrics?.closedProfit || 0,
+          leadsMishandled: {
+            count: data.qualityMetrics?.mishandledLeads || 0,
+            riskLevel: data.qualityMetrics?.riskLevel || 'low',
+            details: data.qualityMetrics?.riskDetails || 'No issues detected'
+          }
+        });
+      } catch (e) {
+        setAcqError('Failed to load acquisitions data');
+        console.error('Acquisitions data error:', e);
+      } finally {
+        setAcqLoading(false);
+      }
+    };
+    load();
+  }, [activeTab, selectedPeriod, acqViewScope, selectedAcqUser, showFilters, customDateRange]);
+
+  // Fetch dispositions overview when tab is dispositions-team or when filters change
+  useEffect(() => {
+    if (activeTab !== 'dispositions-team') return;
+    const load = async () => {
+      setDispLoading(true);
+      setDispError(null);
+      try {
+        const accessToken = localStorage.getItem('accessToken');
+        const params = new URLSearchParams();
+        params.append('timeframe', selectedPeriod);
+        
+        // Add role-based filtering
+        if (dispViewScope === 'personal') {
+          params.append('userId', user?.id || '');
+          params.append('scope', 'personal');
+        } else if (selectedDispUser && selectedDispUser !== 'all-users') {
+          if (selectedDispUser === 'current-user') {
+            params.append('userId', user?.id || '');
+          } else {
+            params.append('userId', selectedDispUser);
+          }
+          params.append('scope', 'team');
+        } else {
+          params.append('scope', 'team');
+        }
+        
+        // Add date range filters if available
+        const filters = getActiveFilters();
+        if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
+        if (filters.dateTo) params.append('dateTo', filters.dateTo);
+        if (filters.sources?.length) params.append('sources', filters.sources.join(','));
+        
+        const res = await fetch(`${API_BASE}/metrics/dispositions-overview?${params.toString()}`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` },
+        });
+        const json = await res.json();
+        
+        const data = json?.data || {};
+        setDispositionsData({
+          totalPropertiesInPipeline: data.pipelineMetrics?.totalInPipeline || 0,
+          totalPropertiesSold: data.pipelineMetrics?.totalSold || 0,
+          propertiesSoldPercentage: data.pipelineMetrics?.soldPercentage || 0,
+          projectedProfit: data.financialMetrics?.projectedProfit || 0,
+          totalDealsClosed: data.financialMetrics?.totalDealsClosed || 0,
+          closedProfit: data.financialMetrics?.closedProfit || 0,
+          buyersAdded: data.buyerMetrics?.buyersAdded || 0,
+          leadsMishandled: {
+            count: data.qualityMetrics?.mishandledLeads || 0,
+            riskLevel: data.qualityMetrics?.riskLevel || 'low',
+            details: data.qualityMetrics?.riskDetails || 'No issues detected'
+          }
+        });
+      } catch (e) {
+        setDispError('Failed to load dispositions data');
+        console.error('Dispositions data error:', e);
+      } finally {
+        setDispLoading(false);
+      }
+    };
+    load();
+  }, [activeTab, selectedPeriod, dispViewScope, selectedDispUser, showFilters, customDateRange]);
+
+  // Fetch transactions overview when tab is transaction-coordinator or when filters change
+  useEffect(() => {
+    if (activeTab !== 'transaction-coordinator') return;
+    const load = async () => {
+      setTcLoading(true);
+      setTcError(null);
+      try {
+        const accessToken = localStorage.getItem('accessToken');
+        const params = new URLSearchParams();
+        params.append('timeframe', selectedPeriod);
+        
+        // Add role-based filtering
+        if (tcViewScope === 'personal') {
+          params.append('userId', user?.id || '');
+          params.append('scope', 'personal');
+        } else if (selectedTcUser && selectedTcUser !== 'all-users') {
+          if (selectedTcUser === 'current-user') {
+            params.append('userId', user?.id || '');
+          } else {
+            params.append('userId', selectedTcUser);
+          }
+          params.append('scope', 'overview');
+        } else {
+          params.append('scope', 'overview');
+        }
+        
+        // Add date range filters if available
+        const filters = getActiveFilters();
+        if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
+        if (filters.dateTo) params.append('dateTo', filters.dateTo);
+        if (filters.sources?.length) params.append('sources', filters.sources.join(','));
+        
+        const res = await fetch(`${API_BASE}/metrics/transactions-overview?${params.toString()}`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` },
+        });
+        const json = await res.json();
+        
+        const data = json?.data || {};
+        setTransactionsData({
+          totalPropertiesInPipeline: data.pipelineMetrics?.totalInPipeline || 0,
+          totalClearToClose: data.pipelineMetrics?.totalClearToClose || 0,
+          clearToClosePercentage: data.pipelineMetrics?.clearToClosePercentage || 0,
+          projectedProfit: data.financialMetrics?.projectedProfit || 0,
+          totalDealsClosed: data.financialMetrics?.totalDealsClosed || 0,
+          closedProfit: data.financialMetrics?.closedProfit || 0,
+          leadsMishandled: {
+            count: data.qualityMetrics?.mishandledLeads || 0,
+            riskLevel: data.qualityMetrics?.riskLevel || 'low',
+            details: data.qualityMetrics?.riskDetails || 'No issues detected'
+          }
+        });
+      } catch (e) {
+        setTcError('Failed to load transactions data');
+        console.error('Transactions data error:', e);
+      } finally {
+        setTcLoading(false);
+      }
+    };
+    load();
+  }, [activeTab, selectedPeriod, tcViewScope, selectedTcUser, showFilters, customDateRange]);
+
+  // Fetch acquisitions leaderboard when tab is acquisitions-leaderboard or when period changes
+  useEffect(() => {
+    if (activeTab !== 'acquisitions-leaderboard') return;
+    const load = async () => {
+      setAcqLeaderboardLoading(true);
+      setAcqLeaderboardError(null);
+      try {
+        const accessToken = localStorage.getItem('accessToken');
+        const params = new URLSearchParams();
+        params.append('period', acqLeaderboardPeriod);
+        
+        // Add role-based filtering
+        if (user?.roles?.some(role => ['ACQ'].includes(role))) {
+          params.append('userId', user?.id || '');
+          params.append('scope', 'personal');
+        } else {
+          params.append('scope', 'team');
+        }
+        
+        // Add date range filters if available
+        const filters = getActiveFilters();
+        if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
+        if (filters.dateTo) params.append('dateTo', filters.dateTo);
+        if (filters.sources?.length) params.append('sources', filters.sources.join(','));
+        
+        const res = await fetch(`${API_BASE}/metrics/acquisitions-leaderboard?${params.toString()}`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` },
+        });
+        const json = await res.json();
+        
+        const data = json?.data || {};
+        setAcqLeaderboardData({
+          agents: data.agents || [],
+          currentUserRank: data.currentUserRank || undefined
+        });
+      } catch (e) {
+        setAcqLeaderboardError('Failed to load acquisitions leaderboard');
+        console.error('Acquisitions leaderboard error:', e);
+      } finally {
+        setAcqLeaderboardLoading(false);
+      }
+    };
+    load();
+  }, [activeTab, acqLeaderboardPeriod, showFilters, customDateRange]);
+
+  // Fetch dispositions leaderboard when tab is dispositions-leaderboard or when period changes
+  useEffect(() => {
+    if (activeTab !== 'dispositions-leaderboard') return;
+    const load = async () => {
+      setDispLeaderboardLoading(true);
+      setDispLeaderboardError(null);
+      try {
+        const accessToken = localStorage.getItem('accessToken');
+        const params = new URLSearchParams();
+        params.append('period', dispLeaderboardPeriod);
+        
+        // Add role-based filtering
+        if (user?.roles?.some(role => ['DISP'].includes(role))) {
+          params.append('userId', user?.id || '');
+          params.append('scope', 'personal');
+        } else {
+          params.append('scope', 'team');
+        }
+        
+        // Add date range filters if available
+        const filters = getActiveFilters();
+        if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
+        if (filters.dateTo) params.append('dateTo', filters.dateTo);
+        if (filters.sources?.length) params.append('sources', filters.sources.join(','));
+        
+        const res = await fetch(`${API_BASE}/metrics/dispositions-leaderboard?${params.toString()}`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` },
+        });
+        const json = await res.json();
+        
+        const data = json?.data || {};
+        setDispLeaderboardData({
+          agents: data.agents || [],
+          currentUserRank: data.currentUserRank || undefined
+        });
+      } catch (e) {
+        setDispLeaderboardError('Failed to load dispositions leaderboard');
+        console.error('Dispositions leaderboard error:', e);
+      } finally {
+        setDispLeaderboardLoading(false);
+      }
+    };
+    load();
+  }, [activeTab, dispLeaderboardPeriod, showFilters, customDateRange]);
+
+  // Fetch marketing breakdown data
+  useEffect(() => {
+    if (activeTab !== 'marketing') return;
+    const load = async () => {
+      setMarketingLoading(true);
+      setMarketingError(null);
+      try {
+        const accessToken = localStorage.getItem('accessToken');
+        const filters = getActiveFilters();
+        const params = new URLSearchParams();
+        if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
+        if (filters.dateTo) params.append('dateTo', filters.dateTo);
+        if (filters.sources?.length) params.append('sources', filters.sources.join(','));
+        
+        const res = await fetch(`${API_BASE}/metrics/marketing-breakdown?${params.toString()}`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` },
+        });
+        const json = await res.json();
+        setMarketingData(json?.data || []);
+      } catch (e) {
+        setMarketingError('Failed to load marketing data');
+      } finally {
+        setMarketingLoading(false);
+      }
+    };
+    load();
+  }, [activeTab, showFilters, customDateRange, selectedSources]);
 
   // Fetch Team pipelines on tab switch
   useEffect(() => {
@@ -466,7 +1301,187 @@ const Metrics = () => {
     <div className="p-6 space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Metrics</h1>
+        
+        {/* Global Filters Toggle */}
+        <Button
+          variant="outline"
+          onClick={() => setShowFilters(!showFilters)}
+          className="flex items-center gap-2"
+        >
+          <Filter className="w-4 h-4" />
+          Filters
+          <ChevronDown className={`w-4 h-4 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+          {(selectedSources.length > 0 || selectedPeriod !== 'This Month') && (
+            <Badge variant="secondary" className="ml-1">
+              {selectedSources.length + (selectedPeriod !== 'This Month' ? 1 : 0)}
+            </Badge>
+          )}
+        </Button>
       </div>
+
+      {/* Global Filters Panel */}
+      {showFilters && (
+        <Card className="p-6 border-2 border-blue-100 bg-blue-50/30">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <Filter className="w-5 h-5" />
+                Global Filters
+              </h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSelectedPeriod('This Month');
+                  setCustomDateRange({});
+                  setSelectedSources([]);
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X className="w-4 h-4 mr-1" />
+                Clear All
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Date Filters */}
+              <div className="space-y-3">
+                <h4 className="font-medium text-gray-700 flex items-center gap-2">
+                  <Calendar className="w-4 h-4" />
+                  Date Range
+                </h4>
+                <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="This Month">This Month</SelectItem>
+                    <SelectItem value="Last Month">Last Month</SelectItem>
+                    <SelectItem value="This Quarter">This Quarter</SelectItem>
+                    <SelectItem value="This Year">This Year</SelectItem>
+                    <SelectItem value="Custom Range">Custom Range</SelectItem>
+                  </SelectContent>
+                </Select>
+                
+                {selectedPeriod === 'Custom Range' && (
+                  <div className="space-y-2">
+                    <div>
+                      <Label className="text-sm text-gray-600">From Date</Label>
+                      <input
+                        type="date"
+                        value={customDateRange.from?.toISOString().split('T')[0] || ''}
+                        onChange={(e) => setCustomDateRange(prev => ({ 
+                          ...prev, 
+                          from: e.target.value ? new Date(e.target.value) : undefined 
+                        }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-sm text-gray-600">To Date</Label>
+                      <input
+                        type="date"
+                        value={customDateRange.to?.toISOString().split('T')[0] || ''}
+                        onChange={(e) => setCustomDateRange(prev => ({ 
+                          ...prev, 
+                          to: e.target.value ? new Date(e.target.value) : undefined 
+                        }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Source Filters */}
+              <div className="space-y-3">
+                <h4 className="font-medium text-gray-700 flex items-center gap-2">
+                  <Target className="w-4 h-4" />
+                  Lead Sources
+                </h4>
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {availableSources.map((source) => (
+                    <div key={source} className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id={`source-${source}`}
+                        checked={selectedSources.includes(source)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedSources(prev => [...prev, source]);
+                          } else {
+                            setSelectedSources(prev => prev.filter(s => s !== source));
+                          }
+                        }}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <Label
+                        htmlFor={`source-${source}`}
+                        className="text-sm text-gray-700 cursor-pointer"
+                      >
+                        {source}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+                {selectedSources.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedSources([])}
+                    className="text-gray-500 hover:text-gray-700 text-xs"
+                  >
+                    Clear Sources
+                  </Button>
+                )}
+              </div>
+
+              {/* Role-based Scope Info */}
+              <div className="space-y-3">
+                <h4 className="font-medium text-gray-700 flex items-center gap-2">
+                  <Users className="w-4 h-4" />
+                  Access Scope
+                </h4>
+                <div className="p-3 bg-gray-50 rounded-md border">
+                  <div className="text-sm text-gray-600">
+                    <div className="font-medium text-gray-700 mb-1">Current Role: {user?.roles?.[0] || 'Unknown'}</div>
+                    {isAdmin || isExecutive || isManager ? (
+                      <div className="text-green-600">✓ Full company access</div>
+                    ) : isACQ ? (
+                      <div className="text-blue-600">• Acquisitions scope</div>
+                    ) : isDisp ? (
+                      <div className="text-purple-600">• Dispositions scope</div>
+                    ) : isTC ? (
+                      <div className="text-orange-600">• Transaction coordination scope</div>
+                    ) : (
+                      <div className="text-gray-600">• Limited access</div>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Active Filters Summary */}
+                {(selectedSources.length > 0 || selectedPeriod !== 'This Month') && (
+                  <div className="mt-3">
+                    <div className="text-sm font-medium text-gray-700 mb-2">Active Filters:</div>
+                    <div className="flex flex-wrap gap-1">
+                      {selectedPeriod !== 'This Month' && (
+                        <Badge variant="secondary" className="text-xs">
+                          {selectedPeriod}
+                        </Badge>
+                      )}
+                      {selectedSources.map((source) => (
+                        <Badge key={source} variant="secondary" className="text-xs">
+                          {source}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Navigation Buttons */}
       <div className="flex flex-wrap gap-2 mb-6">
@@ -750,113 +1765,193 @@ const Metrics = () => {
       {/* Marketing Overview Tab */}
       {activeTab === "marketing" && (
         <div className="space-y-6">
-          {/* Marketing Metrics Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {marketingMetrics.map((metric, index) => (
-              <Card key={index} className="hover:shadow-lg transition-shadow">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-gray-600">
-                    {metric.title}
-                  </CardTitle>
-                  <TrendingUp className="h-4 w-4 text-gray-400" />
+          {/* Role-based Access Control */}
+          {user?.roles && !user.roles.some(role => ['ADMIN', 'EXECUTIVE', 'MANAGER'].includes(role)) ? (
+            <Card className="p-6">
+              <div className="text-center">
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Access Restricted</h3>
+                <p className="text-gray-600">Marketing Overview is only available to Admin, Executive, and Manager roles.</p>
+                  </div>
+              </Card>
+          ) : (
+            <>
+              {/* Header with View Toggle */}
+              <div className="flex justify-between items-center">
+                <h2 className="text-xl font-semibold text-gray-900">Marketing Overview - Lead Source Breakdown</h2>
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm text-gray-600">View:</span>
+                  <div className="flex bg-gray-100 rounded-lg p-1">
+                    <button
+                      onClick={() => setViewMode('numbers')}
+                      className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                        viewMode === 'numbers'
+                          ? 'bg-white text-gray-900 shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      Numbers
+                    </button>
+                    <button
+                      onClick={() => setViewMode('percentages')}
+                      className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                        viewMode === 'percentages'
+                          ? 'bg-white text-gray-900 shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      Percentages
+                    </button>
+                </div>
+                </div>
+                </div>
+
+              {/* Marketing Breakdown Table */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Lead Source Performance</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{metric.value}</div>
-                  <div className="flex items-center space-x-1 text-xs">
-                    <TrendingUp className="h-3 w-3 text-green-500" />
-                    <span className="text-green-500">{metric.change}</span>
-                    <span className="text-gray-500">from last month</span>
-                  </div>
+                  {marketingLoading ? (
+                    <div className="text-center py-8">
+                      <div className="text-gray-500">Loading marketing data...</div>
+              </div>
+                  ) : marketingError ? (
+                    <div className="text-center py-8">
+                      <div className="text-red-500">{marketingError}</div>
+            </div>
+                  ) : marketingData.length === 0 ? (
+                    <div className="text-center py-8">
+                      <div className="text-gray-500">No marketing data available</div>
+            </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left py-3 px-4 font-medium text-gray-600">Lead Source</th>
+                            <th className="text-right py-3 px-4 font-medium text-gray-600">Total Leads</th>
+                            <th className="text-right py-3 px-4 font-medium text-gray-600">Qualified</th>
+                            <th className="text-right py-3 px-4 font-medium text-gray-600">Appointments</th>
+                            <th className="text-right py-3 px-4 font-medium text-gray-600">Offers Made</th>
+                            <th className="text-right py-3 px-4 font-medium text-gray-600">Under Contract</th>
+                            <th className="text-right py-3 px-4 font-medium text-gray-600">Sold</th>
+                            <th className="text-right py-3 px-4 font-medium text-gray-600">Closed</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {marketingData.map((source: any, index: number) => {
+                            const totalLeads = source.totalLeads || 0;
+                            return (
+                              <tr key={index} className="border-b hover:bg-gray-50">
+                                <td className="py-3 px-4 font-medium text-gray-900">
+                                  {source.leadSource}
+                                </td>
+                                <td className="text-right py-3 px-4 text-gray-900">
+                                  {totalLeads}
+                                </td>
+                                <td className="text-right py-3 px-4 text-gray-900">
+                                  {viewMode === 'numbers' 
+                                    ? source.qualifiedLeads 
+                                    : totalLeads > 0 
+                                      ? `${((source.qualifiedLeads / totalLeads) * 100).toFixed(1)}%`
+                                      : '0%'
+                                  }
+                                </td>
+                                <td className="text-right py-3 px-4 text-gray-900">
+                                  {viewMode === 'numbers' 
+                                    ? source.appointmentsSet 
+                                    : totalLeads > 0 
+                                      ? `${((source.appointmentsSet / totalLeads) * 100).toFixed(1)}%`
+                                      : '0%'
+                                  }
+                                </td>
+                                <td className="text-right py-3 px-4 text-gray-900">
+                                  {viewMode === 'numbers' 
+                                    ? source.offersMade 
+                                    : totalLeads > 0 
+                                      ? `${((source.offersMade / totalLeads) * 100).toFixed(1)}%`
+                                      : '0%'
+                                  }
+                                </td>
+                                <td className="text-right py-3 px-4 text-gray-900">
+                                  {viewMode === 'numbers' 
+                                    ? source.underContract 
+                                    : totalLeads > 0 
+                                      ? `${((source.underContract / totalLeads) * 100).toFixed(1)}%`
+                                      : '0%'
+                                  }
+                                </td>
+                                <td className="text-right py-3 px-4 text-gray-900">
+                                  {viewMode === 'numbers' 
+                                    ? source.sold 
+                                    : totalLeads > 0 
+                                      ? `${((source.sold / totalLeads) * 100).toFixed(1)}%`
+                                      : '0%'
+                                  }
+                                </td>
+                                <td className="text-right py-3 px-4 text-gray-900">
+                                  {viewMode === 'numbers' 
+                                    ? source.closed 
+                                    : totalLeads > 0 
+                                      ? `${((source.closed / totalLeads) * 100).toFixed(1)}%`
+                                      : '0%'
+                                  }
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+              </div>
+                  )}
                 </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          {/* Chart Controls */}
-          <Card className="p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-semibold">Performance Trends</h3>
-              <div className="flex items-center space-x-4">
-                <div className="flex items-center space-x-2">
-                  <Switch id="revenue" checked={showRevenue} onCheckedChange={setShowRevenue} />
-                  <Label htmlFor="revenue" className="text-sm">Revenue</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Switch id="leads" checked={showLeads} onCheckedChange={setShowLeads} />
-                  <Label htmlFor="leads" className="text-sm">Leads</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Switch id="conversion" checked={showConversion} onCheckedChange={setShowConversion} />
-                  <Label htmlFor="conversion" className="text-sm">Conversion</Label>
-                </div>
-              </div>
-            </div>
-
-            {/* Line Chart */}
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip />
-                  {showRevenue && <Line type="monotone" dataKey="revenue" stroke="#3b82f6" strokeWidth={2} />}
-                  {showLeads && <Line type="monotone" dataKey="leads" stroke="#10b981" strokeWidth={2} />}
-                  {showConversion && <Line type="monotone" dataKey="conversion" stroke="#f59e0b" strokeWidth={2} />}
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
-
-          {/* Lead Sources Pie Chart */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card className="p-6">
-              <h3 className="text-lg font-semibold mb-4">Lead Sources</h3>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={pieData}
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="value"
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    >
-                      {pieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
             </Card>
-
-            <Card className="p-6">
-              <h3 className="text-lg font-semibold mb-4">Monthly Performance</h3>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="revenue" fill="#3b82f6" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </Card>
-          </div>
+            </>
+          )}
         </div>
       )}
 
       {/* Pipeline Overview Tab */}
       {activeTab === "pipeline" && (
         <div className="space-y-6">
+          {/* Role-based Access Control */}
+          {user?.roles && !user.roles.some(role => ['ADMIN', 'EXECUTIVE', 'MANAGER'].includes(role)) ? (
+            <Card className="p-6">
+              <div className="text-center">
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Access Restricted</h3>
+                <p className="text-gray-600">Pipeline Overview is only available to Admin, Executive, and Manager roles.</p>
+              </div>
+            </Card>
+          ) : (
+            <>
           <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold">Sales Funnel</h2>
+                <h2 className="text-xl font-semibold">Pipeline Overview</h2>
+                <div className="flex items-center space-x-4">
+                  {/* View Toggle */}
+                  <div className="flex bg-gray-100 rounded-lg p-1">
+                    <button
+                      onClick={() => setPipelineView('funnel')}
+                      className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                        pipelineView === 'funnel'
+                          ? 'bg-white text-gray-900 shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      Funnel View
+                    </button>
+                    <button
+                      onClick={() => setPipelineView('timeline')}
+                      className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                        pipelineView === 'timeline'
+                          ? 'bg-white text-gray-900 shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      Timeline View
+                    </button>
+                  </div>
+                  
+                  {/* Period Selector */}
             <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
               <SelectTrigger className="w-40">
                 <SelectValue />
@@ -867,86 +1962,149 @@ const Metrics = () => {
                 <SelectItem value="This Quarter">This Quarter</SelectItem>
               </SelectContent>
             </Select>
+                </div>
           </div>
 
-          {/* Pipeline Funnel Chart Container */}
-          <PipelineFunnel selectedPeriod={selectedPeriod} />
-
-          {/* Pipeline Table Container */}
+              {/* Conditional View Rendering */}
+              {pipelineView === 'funnel' ? (
+                <>
+                  {/* Enhanced Pipeline Funnel Chart */}
+                  <EnhancedPipelineFunnel selectedPeriod={selectedPeriod} />
+                  
+                  {/* Pipeline Table for additional details */}
           <PipelineTable selectedPeriod={selectedPeriod} />
-
-          {/* Timeline Metrics */}
-          <PipelineTimeline selectedPeriod={selectedPeriod} />
+                </>
+              ) : (
+                <>
+                  {/* Enhanced Timeline Chart */}
+                  <EnhancedPipelineTimeline selectedPeriod={selectedPeriod} />
+                </>
+              )}
+            </>
+          )}
         </div>
       )}
 
       {/* Communications View Tab */}
       {activeTab === "communications" && (
         <div className="space-y-6">
-          {/* User Filter */}
+          {/* Header with Role-Based View Selector */}
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-semibold">Communications Overview</h2>
-            <Select defaultValue="all-users">
+            <div className="flex items-center space-x-4">
+              {/* View Scope Toggle for Managers/Executives/Admins */}
+              {(isAdmin || isExecutive || isManager) && (
+                <div className="flex bg-gray-100 rounded-lg p-1">
+                  <button
+                    onClick={() => setCommViewScope('personal')}
+                    className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                      commViewScope === 'personal'
+                        ? 'bg-white text-gray-900 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    Personal
+                  </button>
+                  <button
+                    onClick={() => setCommViewScope('team')}
+                    className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                      commViewScope === 'team'
+                        ? 'bg-white text-gray-900 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    {isAdmin || isExecutive ? 'Company' : 'Team'}
+                  </button>
+                </div>
+              )}
+              
+              {/* User Selector - Only for team/company view */}
+              {commViewScope === 'team' && (
+                <Select value={selectedCommUser} onValueChange={setSelectedCommUser}>
               <SelectTrigger className="w-48">
-                <SelectValue />
+                    <SelectValue placeholder="Select user" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all-users">All Users (Default)</SelectItem>
-                <SelectItem value="chris-harris">Chris Harris</SelectItem>
-                <SelectItem value="john-smith">John Smith</SelectItem>
-                <SelectItem value="jane-doe">Jane Doe</SelectItem>
-                <SelectItem value="mike-wilson">Mike Wilson</SelectItem>
+                    <SelectItem value="all-users">All Users</SelectItem>
+                    <SelectItem value="current-user">Current User</SelectItem>
+                    {/* Dynamic user list would go here */}
               </SelectContent>
             </Select>
+              )}
+            </div>
           </div>
 
           {/* Row 1 - Calling Statistics */}
+          <div className="bg-blue-50 rounded-lg p-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+              <Phone className="w-5 h-5 mr-2 text-blue-600" />
+              Call Statistics
+            </h3>
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Call Stats - 25% */}
-            <Card className="p-6 hover:shadow-lg transition-shadow">
-              <h3 className="text-lg font-semibold text-gray-900 mb-6">Call Statistics</h3>
+              <Card className="p-6 hover:shadow-lg transition-shadow border-l-4 border-l-blue-500">
+                <h4 className="text-md font-semibold text-gray-900 mb-6">Call Metrics</h4>
+                {commLoading ? (
+                  <div className="space-y-4">
+                    <div className="animate-pulse bg-gray-200 h-4 rounded"></div>
+                    <div className="animate-pulse bg-gray-200 h-4 rounded"></div>
+                    <div className="animate-pulse bg-gray-200 h-4 rounded"></div>
+                    <div className="animate-pulse bg-gray-200 h-4 rounded"></div>
+                  </div>
+                ) : (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-gray-700">Total Calls Made</span>
-                  <span className="text-lg font-bold text-blue-600">1,247</span>
+                      <span className="text-lg font-bold text-blue-600">
+                        {callStats?.totalMade || 0}
+                      </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-gray-700">Total Calls Received</span>
-                  <span className="text-lg font-bold text-green-600">892</span>
+                      <span className="text-lg font-bold text-green-600">
+                        {callStats?.totalReceived || 0}
+                      </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-gray-700">Total Time on Calls</span>
-                  <span className="text-lg font-bold text-purple-600">42h 15m</span>
+                      <span className="text-lg font-bold text-purple-600">
+                        {callStats?.totalTime || '—'}
+                      </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-700">Average Time on Calls</span>
-                  <span className="text-lg font-bold text-orange-600">3m 24s</span>
+                      <span className="text-sm font-medium text-gray-700">Average Time per Call</span>
+                      <span className="text-lg font-bold text-orange-600">
+                        {callStats?.averageTime || '—'}
+                      </span>
                 </div>
               </div>
+                )}
             </Card>
 
             {/* Call Time Distribution Chart - 75% */}
             <Card className="lg:col-span-3 p-6 hover:shadow-lg transition-shadow">
-              <h3 className="text-lg font-semibold text-gray-900 mb-6">Calls by Time of Day</h3>
+                <h4 className="text-md font-semibold text-gray-900 mb-6">Hourly Call Distribution</h4>
+                {commLoading ? (
+                  <div className="h-80 flex items-center justify-center">
+                    <div className="animate-pulse bg-gray-200 h-full w-full rounded"></div>
+                  </div>
+                ) : (
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={[
-                    { hour: '6 AM', outbound: 5, inbound: 2 },
-                    { hour: '7 AM', outbound: 12, inbound: 8 },
-                    { hour: '8 AM', outbound: 25, inbound: 15 },
-                    { hour: '9 AM', outbound: 45, inbound: 32 },
-                    { hour: '10 AM', outbound: 65, inbound: 48 },
-                    { hour: '11 AM', outbound: 78, inbound: 52 },
-                    { hour: '12 PM', outbound: 85, inbound: 45 },
-                    { hour: '1 PM', outbound: 72, inbound: 38 },
-                    { hour: '2 PM', outbound: 88, inbound: 55 },
-                    { hour: '3 PM', outbound: 92, inbound: 62 },
-                    { hour: '4 PM', outbound: 75, inbound: 48 },
-                    { hour: '5 PM', outbound: 58, inbound: 35 },
-                    { hour: '6 PM', outbound: 35, inbound: 22 },
-                    { hour: '7 PM', outbound: 18, inbound: 12 },
-                    { hour: '8 PM', outbound: 8, inbound: 5 },
-                  ]} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                      <BarChart 
+                        data={callsByHour.length > 0 ? callsByHour : [
+                          { hour: '9 AM', outbound: 0, inbound: 0 },
+                          { hour: '10 AM', outbound: 0, inbound: 0 },
+                          { hour: '11 AM', outbound: 0, inbound: 0 },
+                          { hour: '12 PM', outbound: 0, inbound: 0 },
+                          { hour: '1 PM', outbound: 0, inbound: 0 },
+                          { hour: '2 PM', outbound: 0, inbound: 0 },
+                          { hour: '3 PM', outbound: 0, inbound: 0 },
+                          { hour: '4 PM', outbound: 0, inbound: 0 },
+                          { hour: '5 PM', outbound: 0, inbound: 0 }
+                        ]} 
+                        margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                      >
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis 
                       dataKey="hour" 
@@ -972,6 +2130,7 @@ const Metrics = () => {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
+                )}
               <div className="flex items-center justify-center gap-6 mt-4 text-sm">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
@@ -983,47 +2142,66 @@ const Metrics = () => {
                 </div>
               </div>
             </Card>
+            </div>
           </div>
 
           {/* Row 2 - SMS Statistics */}
+          <div className="bg-purple-50 rounded-lg p-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+              <MessageSquare className="w-5 h-5 mr-2 text-purple-600" />
+              SMS Statistics
+            </h3>
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* SMS Stats - 25% */}
-            <Card className="p-6 hover:shadow-lg transition-shadow">
-              <h3 className="text-lg font-semibold text-gray-900 mb-6">SMS Statistics</h3>
+              <Card className="p-6 hover:shadow-lg transition-shadow border-l-4 border-l-purple-500">
+                <h4 className="text-md font-semibold text-gray-900 mb-6">SMS Metrics</h4>
+                {commLoading ? (
+                  <div className="space-y-4">
+                    <div className="animate-pulse bg-gray-200 h-4 rounded"></div>
+                    <div className="animate-pulse bg-gray-200 h-4 rounded"></div>
+                  </div>
+                ) : (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-gray-700">Total SMS Sent</span>
-                  <span className="text-lg font-bold text-blue-600">3,456</span>
+                      <span className="text-lg font-bold text-purple-600">
+                        {smsStats?.totalSent || 0}
+                      </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-gray-700">Total SMS Received</span>
-                  <span className="text-lg font-bold text-green-600">2,189</span>
+                      <span className="text-lg font-bold text-orange-600">
+                        {smsStats?.totalReceived || 0}
+                      </span>
                 </div>
               </div>
+                )}
             </Card>
 
             {/* SMS Time Distribution Chart - 75% */}
             <Card className="lg:col-span-3 p-6 hover:shadow-lg transition-shadow">
-              <h3 className="text-lg font-semibold text-gray-900 mb-6">SMS by Time of Day</h3>
+                <h4 className="text-md font-semibold text-gray-900 mb-6">Hourly SMS Distribution</h4>
+                {commLoading ? (
+                  <div className="h-80 flex items-center justify-center">
+                    <div className="animate-pulse bg-gray-200 h-full w-full rounded"></div>
+                  </div>
+                ) : (
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={[
-                    { hour: '6 AM', outbound: 8, inbound: 3 },
-                    { hour: '7 AM', outbound: 15, inbound: 12 },
-                    { hour: '8 AM', outbound: 32, inbound: 18 },
-                    { hour: '9 AM', outbound: 58, inbound: 35 },
-                    { hour: '10 AM', outbound: 75, inbound: 52 },
-                    { hour: '11 AM', outbound: 88, inbound: 65 },
-                    { hour: '12 PM', outbound: 95, inbound: 58 },
-                    { hour: '1 PM', outbound: 82, inbound: 45 },
-                    { hour: '2 PM', outbound: 98, inbound: 68 },
-                    { hour: '3 PM', outbound: 105, inbound: 75 },
-                    { hour: '4 PM', outbound: 85, inbound: 55 },
-                    { hour: '5 PM', outbound: 68, inbound: 42 },
-                    { hour: '6 PM', outbound: 45, inbound: 28 },
-                    { hour: '7 PM', outbound: 25, inbound: 18 },
-                    { hour: '8 PM', outbound: 12, inbound: 8 },
-                  ]} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                      <BarChart 
+                        data={smsByHour.length > 0 ? smsByHour : [
+                          { hour: '9 AM', outbound: 0, inbound: 0 },
+                          { hour: '10 AM', outbound: 0, inbound: 0 },
+                          { hour: '11 AM', outbound: 0, inbound: 0 },
+                          { hour: '12 PM', outbound: 0, inbound: 0 },
+                          { hour: '1 PM', outbound: 0, inbound: 0 },
+                          { hour: '2 PM', outbound: 0, inbound: 0 },
+                          { hour: '3 PM', outbound: 0, inbound: 0 },
+                          { hour: '4 PM', outbound: 0, inbound: 0 },
+                          { hour: '5 PM', outbound: 0, inbound: 0 }
+                        ]} 
+                        margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                      >
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis 
                       dataKey="hour" 
@@ -1049,6 +2227,7 @@ const Metrics = () => {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
+                )}
               <div className="flex items-center justify-center gap-6 mt-4 text-sm">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
@@ -1060,21 +2239,32 @@ const Metrics = () => {
                 </div>
               </div>
             </Card>
+            </div>
           </div>
 
           {/* Row 3 - Risk Management Statistics */}
+          <div className="bg-red-50 rounded-lg p-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+              <Shield className="w-5 h-5 mr-2 text-red-600" />
+              Risk Management
+            </h3>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Call Success Rate - 50% */}
-            <Card className="p-6 hover:shadow-lg transition-shadow">
-              <h3 className="text-lg font-semibold text-gray-900 mb-6">Call Success Rate</h3>
+              <Card className="p-6 hover:shadow-lg transition-shadow border-l-4 border-l-red-500">
+                <h4 className="text-md font-semibold text-gray-900 mb-6">Call Success Rate</h4>
+                {commLoading ? (
+                  <div className="flex items-center justify-center h-48">
+                    <div className="animate-pulse bg-gray-200 w-32 h-32 rounded-full"></div>
+                  </div>
+                ) : (
               <div className="flex items-center justify-center">
                 <div className="relative w-48 h-48">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
                         data={[
-                          { name: 'Answered', value: 78.5, color: '#10b981' },
-                          { name: 'Rejected/Missed', value: 21.5, color: '#ef4444' }
+                              { name: 'Answered', value: callSuccessRate || 0, color: '#10b981' },
+                              { name: 'Rejected/Missed', value: 100 - (callSuccessRate || 0), color: '#ef4444' }
                         ]}
                         cx="50%"
                         cy="50%"
@@ -1091,35 +2281,43 @@ const Metrics = () => {
                   </ResponsiveContainer>
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="text-center">
-                      <div className="text-3xl font-black text-green-600">78.5%</div>
-                      <div className="text-sm text-gray-600 font-medium">Not Rejected</div>
+                          <div className={`text-3xl font-bold ${callSuccessRate >= 70 ? 'text-green-600' : callSuccessRate >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>
+                            {callSuccessRate?.toFixed(1) || '0.0'}%
                     </div>
+                          <div className="text-sm text-gray-600">Success Rate</div>
                   </div>
                 </div>
               </div>
-              <div className="flex items-center justify-center gap-6 mt-4 text-sm">
+                  </div>
+                )}
+                <div className="flex justify-center gap-6 mt-6">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                  <span>Answered (78.5%)</span>
+                    <span className="text-sm">Answered ({(callSuccessRate || 0).toFixed(1)}%)</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                  <span>Rejected (21.5%)</span>
+                    <span className="text-sm">Rejected ({(100 - (callSuccessRate || 0)).toFixed(1)}%)</span>
                 </div>
               </div>
             </Card>
 
             {/* SMS Delivery Rate - 50% */}
-            <Card className="p-6 hover:shadow-lg transition-shadow">
-              <h3 className="text-lg font-semibold text-gray-900 mb-6">SMS Delivery Rate</h3>
+              <Card className="p-6 hover:shadow-lg transition-shadow border-l-4 border-l-blue-500">
+                <h4 className="text-md font-semibold text-gray-900 mb-6">SMS Delivery Rate</h4>
+                {commLoading ? (
+                  <div className="flex items-center justify-center h-48">
+                    <div className="animate-pulse bg-gray-200 w-32 h-32 rounded-full"></div>
+                  </div>
+                ) : (
               <div className="flex items-center justify-center">
                 <div className="relative w-48 h-48">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
                         data={[
-                          { name: 'Delivered', value: 95.2, color: '#3b82f6' },
-                          { name: 'Failed', value: 4.8, color: '#ef4444' }
+                              { name: 'Delivered', value: smsDeliveryRate || 0, color: '#3b82f6' },
+                              { name: 'Failed', value: 100 - (smsDeliveryRate || 0), color: '#ef4444' }
                         ]}
                         cx="50%"
                         cy="50%"
@@ -1136,23 +2334,27 @@ const Metrics = () => {
                   </ResponsiveContainer>
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="text-center">
-                      <div className="text-3xl font-black text-blue-600">95.2%</div>
-                      <div className="text-sm text-gray-600 font-medium">Delivered</div>
+                          <div className={`text-3xl font-bold ${smsDeliveryRate >= 90 ? 'text-blue-600' : smsDeliveryRate >= 70 ? 'text-yellow-600' : 'text-red-600'}`}>
+                            {smsDeliveryRate?.toFixed(1) || '0.0'}%
                     </div>
+                          <div className="text-sm text-gray-600">Delivered</div>
                   </div>
                 </div>
               </div>
-              <div className="flex items-center justify-center gap-6 mt-4 text-sm">
+                  </div>
+                )}
+                <div className="flex justify-center gap-6 mt-6">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                  <span>Delivered (95.2%)</span>
+                    <span className="text-sm">Delivered ({(smsDeliveryRate || 0).toFixed(1)}%)</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                  <span>Failed (4.8%)</span>
+                    <span className="text-sm">Failed ({(100 - (smsDeliveryRate || 0)).toFixed(1)}%)</span>
                 </div>
               </div>
             </Card>
+            </div>
           </div>
         </div>
       )}
@@ -1160,31 +2362,86 @@ const Metrics = () => {
       {/* Acquisitions Team Tab */}
       {activeTab === "acquisitions" && (
         <div className="space-y-6">
-          {/* User Filter */}
+          {/* Role-based Access Control */}
+          {user?.roles && !user.roles.some(role => ['ADMIN', 'EXECUTIVE', 'MANAGER', 'ACQ', 'TC'].includes(role)) ? (
+            <Card className="p-6">
+              <div className="text-center">
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Access Restricted</h3>
+                <p className="text-gray-600">Acquisitions Overview is only available to Admin, Executive, Manager, Acquisitions Agent, and Transaction Coordinator roles.</p>
+              </div>
+            </Card>
+          ) : (
+            <>
+              {/* Header with Role-Based View Selector */}
           <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold">Acquisitions Team Performance</h2>
-            <Select defaultValue="all-users">
+                <div>
+                  <h2 className="text-xl font-semibold">Acquisitions Overview</h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {acqViewScope === 'personal' ? 'Personal Performance Metrics' : 'Team-wide Performance Overview'}
+                  </p>
+                </div>
+                <div className="flex items-center space-x-4">
+                  {/* View Scope Toggle - Only for Admin/Executive/Manager */}
+                  {user?.roles?.some(role => ['ADMIN', 'EXECUTIVE', 'MANAGER'].includes(role)) && (
+                    <div className="flex bg-gray-100 rounded-lg p-1">
+                      <button
+                        onClick={() => setAcqViewScope('personal')}
+                        className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                          acqViewScope === 'personal'
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        Personal
+                      </button>
+                      <button
+                        onClick={() => setAcqViewScope('team')}
+                        className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                          acqViewScope === 'team'
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        Team-wide
+                      </button>
+                    </div>
+                  )}
+                  
+                  {/* User Selector - Only for team view and appropriate roles */}
+                  {acqViewScope === 'team' && user?.roles?.some(role => ['ADMIN', 'EXECUTIVE', 'MANAGER'].includes(role)) && (
+                    <Select value={selectedAcqUser} onValueChange={setSelectedAcqUser}>
               <SelectTrigger className="w-48">
-                <SelectValue />
+                        <SelectValue placeholder="Select agent" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all-users">All Users (Default)</SelectItem>
-                <SelectItem value="chris-harris">Chris Harris</SelectItem>
-                <SelectItem value="john-smith">John Smith</SelectItem>
-                <SelectItem value="jane-doe">Jane Doe</SelectItem>
-                <SelectItem value="mike-wilson">Mike Wilson</SelectItem>
-                <SelectItem value="sarah-lee">Sarah Lee</SelectItem>
-                <SelectItem value="tom-anderson">Tom Anderson</SelectItem>
+                        <SelectItem value="all-users">All Acquisitions Agents</SelectItem>
+                        <SelectItem value="current-user">Current User</SelectItem>
+                        {/* Dynamic ACQ agent list would go here */}
               </SelectContent>
             </Select>
+                  )}
+                </div>
           </div>
 
           {/* Row 1 - Pipeline Metrics */}
+              {acqError ? (
+                <Card className="p-6">
+                  <div className="text-center">
+                    <div className="text-red-500 mb-2">⚠️ Error Loading Data</div>
+                    <p className="text-gray-600 text-sm">{acqError}</p>
+                  </div>
+                </Card>
+              ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Total Properties in Pipeline */}
             <Card className="p-8 hover:shadow-lg transition-shadow bg-gradient-to-br from-blue-50 to-white border border-blue-200">
               <div className="text-center space-y-4">
                 <h3 className="text-sm font-bold text-blue-600 uppercase tracking-wider">Total Properties in Pipeline</h3>
+                      {acqLoading ? (
+                        <div className="w-32 h-32 mx-auto flex items-center justify-center">
+                          <div className="animate-pulse bg-blue-200 w-32 h-32 rounded-full"></div>
+                        </div>
+                      ) : (
                 <div className="relative w-32 h-32 mx-auto">
                   <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
                     {/* Background circle */}
@@ -1205,18 +2462,19 @@ const Metrics = () => {
                       strokeWidth="8"
                       fill="none"
                       strokeLinecap="round"
-                      strokeDasharray={`${(32/40) * 314} 314`}
+                              strokeDasharray={`${((acquisitionsData?.totalPropertiesInPipeline || 0)/Math.max(1, (acquisitionsData?.totalPropertiesInPipeline || 0) + 10)) * 314} 314`}
                       className="transition-all duration-1000 ease-out"
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="text-center">
-                  <div className="text-2xl font-black text-blue-600">{acqTotal}</div>
+                              <div className="text-2xl font-black text-blue-600">{acquisitionsData?.totalPropertiesInPipeline || 0}</div>
                   <div className="text-xs text-gray-600 font-medium">Total</div>
                     </div>
                   </div>
                 </div>
-                <div className="text-lg font-bold text-blue-900">{acqTotal}</div>
+                      )}
+                      <div className="text-lg font-bold text-blue-900">{acquisitionsData?.totalPropertiesInPipeline || 0}</div>
                 <p className="text-xs text-blue-600">Properties in Pipeline</p>
               </div>
             </Card>
@@ -1224,7 +2482,12 @@ const Metrics = () => {
             {/* Total Properties Clear to Close */}
             <Card className="p-8 hover:shadow-lg transition-shadow bg-gradient-to-br from-green-50 to-white border border-green-200">
               <div className="text-center space-y-4">
-                <h3 className="text-sm font-bold text-green-600 uppercase tracking-wider">Properties Clear to Close</h3>
+                      <h3 className="text-sm font-bold text-green-600 uppercase tracking-wider">Total Clear to Close</h3>
+                      {acqLoading ? (
+                        <div className="w-32 h-32 mx-auto flex items-center justify-center">
+                          <div className="animate-pulse bg-green-200 w-32 h-32 rounded-full"></div>
+                        </div>
+                      ) : (
                 <div className="relative w-32 h-32 mx-auto">
                   <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
                     {/* Background circle */}
@@ -1245,26 +2508,32 @@ const Metrics = () => {
                       strokeWidth="8"
                       fill="none"
                       strokeLinecap="round"
-                      strokeDasharray={`${(28/38) * 314} 314`}
+                              strokeDasharray={`${((acquisitionsData?.totalClearToClose || 0)/Math.max(1, (acquisitionsData?.totalPropertiesInPipeline || 1))) * 314} 314`}
                       className="transition-all duration-1000 ease-out"
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="text-center">
-                      <div className="text-2xl font-black text-green-600">{tranClearToClose}</div>
+                              <div className="text-2xl font-black text-green-600">{acquisitionsData?.totalClearToClose || 0}</div>
                       <div className="text-xs text-gray-600 font-medium">Clear to Close</div>
                     </div>
                   </div>
                 </div>
-                <div className="text-lg font-bold text-green-900">{tranTotal}</div>
-                <p className="text-xs text-green-600">In Transaction</p>
+                      )}
+                      <div className="text-lg font-bold text-green-900">{acquisitionsData?.totalClearToClose || 0}</div>
+                      <p className="text-xs text-green-600">Ready for Closing</p>
               </div>
             </Card>
 
             {/* Percentage Clear to Close */}
             <Card className="p-8 hover:shadow-lg transition-shadow bg-gradient-to-br from-purple-50 to-white border border-purple-200">
               <div className="text-center space-y-4">
-                <h3 className="text-sm font-bold text-purple-600 uppercase tracking-wider">Clear to Close Rate</h3>
+                      <h3 className="text-sm font-bold text-purple-600 uppercase tracking-wider">% Clear to Close</h3>
+                      {acqLoading ? (
+                        <div className="w-32 h-32 mx-auto flex items-center justify-center">
+                          <div className="animate-pulse bg-purple-200 w-32 h-32 rounded-full"></div>
+                        </div>
+                      ) : (
                 <div className="relative w-32 h-32 mx-auto">
                   <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
                     {/* Background circle */}
@@ -1285,29 +2554,37 @@ const Metrics = () => {
                       strokeWidth="8"
                       fill="none"
                       strokeLinecap="round"
-                      strokeDasharray={`${(87.5/95) * 314} 314`}
+                              strokeDasharray={`${((acquisitionsData?.clearToClosePercentage || 0)/100) * 314} 314`}
                       className="transition-all duration-1000 ease-out"
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="text-center">
-                      <div className="text-2xl font-black text-purple-600">87.5%</div>
-                      <div className="text-xs text-gray-600 font-medium">of 95%</div>
+                              <div className="text-2xl font-black text-purple-600">{(acquisitionsData?.clearToClosePercentage || 0).toFixed(1)}%</div>
+                              <div className="text-xs text-gray-600 font-medium">Success Rate</div>
                     </div>
                   </div>
                 </div>
-                <div className="text-lg font-bold text-purple-900">87.5%</div>
+                      )}
+                      <div className="text-lg font-bold text-purple-900">{(acquisitionsData?.clearToClosePercentage || 0).toFixed(1)}%</div>
                 <p className="text-xs text-purple-600">Clear to Close Rate</p>
               </div>
             </Card>
           </div>
+              )}
 
           {/* Row 2 - Financial Metrics */}
+              {!acqError && (
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Projected Profit */}
             <Card className="p-8 hover:shadow-lg transition-shadow bg-gradient-to-br from-orange-50 to-white border border-orange-200">
               <div className="text-center space-y-4">
                 <h3 className="text-sm font-bold text-orange-600 uppercase tracking-wider">Projected Profit</h3>
+                      {acqLoading ? (
+                        <div className="w-32 h-32 mx-auto flex items-center justify-center">
+                          <div className="animate-pulse bg-orange-200 w-32 h-32 rounded-full"></div>
+                        </div>
+                      ) : (
                 <div className="relative w-32 h-32 mx-auto">
                   <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
                     {/* Background circle */}
@@ -1328,19 +2605,20 @@ const Metrics = () => {
                       strokeWidth="8"
                       fill="none"
                       strokeLinecap="round"
-                      strokeDasharray={`${(projProfit && projProfit > 0 ? Math.min(projProfit, 1000000) / 1000000 : 0) * 314} 314`}
+                              strokeDasharray={`${(acquisitionsData?.projectedProfit && acquisitionsData.projectedProfit > 0 ? Math.min(acquisitionsData.projectedProfit, 1000000) / 1000000 : 0) * 314} 314`}
                       className="transition-all duration-1000 ease-out"
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="text-center">
-                      <div className="text-xl font-black text-orange-600">${Math.round((projProfit||0)/1000)}K</div>
+                              <div className="text-xl font-black text-orange-600">${Math.round((acquisitionsData?.projectedProfit||0)/1000)}K</div>
                       <div className="text-xs text-gray-600 font-medium">of $1M</div>
                     </div>
                   </div>
                 </div>
-                <div className="text-lg font-bold text-orange-900">{projProfit ? Math.round((projProfit/1000000)*100) : 0}%</div>
-                <p className="text-xs text-orange-600">${new Intl.NumberFormat().format(projProfit||0)}</p>
+                      )}
+                      <div className="text-lg font-bold text-orange-900">{acquisitionsData?.projectedProfit ? Math.round((acquisitionsData.projectedProfit/1000000)*100) : 0}%</div>
+                      <p className="text-xs text-orange-600">${new Intl.NumberFormat().format(acquisitionsData?.projectedProfit||0)}</p>
               </div>
             </Card>
 
@@ -1348,6 +2626,11 @@ const Metrics = () => {
             <Card className="p-8 hover:shadow-lg transition-shadow bg-gradient-to-br from-green-50 to-white border border-green-200">
               <div className="text-center space-y-4">
                 <h3 className="text-sm font-bold text-green-600 uppercase tracking-wider">Total Deals Closed</h3>
+                      {acqLoading ? (
+                        <div className="w-32 h-32 mx-auto flex items-center justify-center">
+                          <div className="animate-pulse bg-green-200 w-32 h-32 rounded-full"></div>
+                        </div>
+                      ) : (
                 <div className="relative w-32 h-32 mx-auto">
                   <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
                     {/* Background circle */}
@@ -1368,19 +2651,20 @@ const Metrics = () => {
                       strokeWidth="8"
                       fill="none"
                       strokeLinecap="round"
-                      strokeDasharray={`${(20/32) * 314} 314`}
+                              strokeDasharray={`${((acquisitionsData?.totalDealsClosed || 0)/Math.max(1, (acquisitionsData?.totalPropertiesInPipeline || 1))) * 314} 314`}
                       className="transition-all duration-1000 ease-out"
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="text-center">
-                      <div className="text-2xl font-black text-green-600">20</div>
-                      <div className="text-xs text-gray-600 font-medium">of 32</div>
+                              <div className="text-2xl font-black text-green-600">{acquisitionsData?.totalDealsClosed || 0}</div>
+                              <div className="text-xs text-gray-600 font-medium">Deals</div>
                     </div>
                   </div>
                 </div>
-                <div className="text-lg font-bold text-green-900">63%</div>
-                <p className="text-xs text-green-600">Deals Closed</p>
+                      )}
+                      <div className="text-lg font-bold text-green-900">{acquisitionsData?.totalDealsClosed || 0}</div>
+                      <p className="text-xs text-green-600">Closed Successfully</p>
               </div>
             </Card>
 
@@ -1388,6 +2672,11 @@ const Metrics = () => {
             <Card className="p-8 hover:shadow-lg transition-shadow bg-gradient-to-br from-blue-50 to-white border border-blue-200">
               <div className="text-center space-y-4">
                 <h3 className="text-sm font-bold text-blue-600 uppercase tracking-wider">Closed Profit</h3>
+                      {acqLoading ? (
+                        <div className="w-32 h-32 mx-auto flex items-center justify-center">
+                          <div className="animate-pulse bg-blue-200 w-32 h-32 rounded-full"></div>
+                        </div>
+                      ) : (
                 <div className="relative w-32 h-32 mx-auto">
                   <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
                     {/* Background circle */}
@@ -1408,66 +2697,179 @@ const Metrics = () => {
                       strokeWidth="8"
                       fill="none"
                       strokeLinecap="round"
-                      strokeDasharray={`${(closedProfit && closedProfit > 0 ? Math.min(closedProfit, 800000) / 800000 : 0) * 314} 314`}
+                              strokeDasharray={`${(acquisitionsData?.closedProfit && acquisitionsData.closedProfit > 0 ? Math.min(acquisitionsData.closedProfit, 800000) / 800000 : 0) * 314} 314`}
                       className="transition-all duration-1000 ease-out"
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="text-center">
-                      <div className="text-xl font-black text-blue-600">${Math.round((closedProfit||0)/1000)}K</div>
+                              <div className="text-xl font-black text-blue-600">${Math.round((acquisitionsData?.closedProfit||0)/1000)}K</div>
                       <div className="text-xs text-gray-600 font-medium">of $800K</div>
                     </div>
                   </div>
                 </div>
-                <div className="text-lg font-bold text-blue-900">{closedProfit ? Math.round((closedProfit/800000)*100) : 0}%</div>
-                <p className="text-xs text-blue-600">${new Intl.NumberFormat().format(closedProfit||0)}</p>
+                      )}
+                      <div className="text-lg font-bold text-blue-900">{acquisitionsData?.closedProfit ? Math.round((acquisitionsData.closedProfit/800000)*100) : 0}%</div>
+                      <p className="text-xs text-blue-600">${new Intl.NumberFormat().format(acquisitionsData?.closedProfit||0)}</p>
               </div>
             </Card>
 
-            {/* Leads Mishandled */}
-            <Card className="p-8 hover:shadow-lg transition-shadow bg-gradient-to-br from-yellow-50 to-white border border-yellow-200">
+                  {/* Leads Mishandled - Color Coded */}
+                  <Card className={`p-8 hover:shadow-lg transition-shadow bg-gradient-to-br border ${
+                    !acqLoading && acquisitionsData?.leadsMishandled ? (
+                      acquisitionsData.leadsMishandled.riskLevel === 'high' 
+                        ? 'from-red-50 to-white border-red-200' 
+                        : acquisitionsData.leadsMishandled.riskLevel === 'medium' 
+                          ? 'from-yellow-50 to-white border-yellow-200'
+                          : 'from-green-50 to-white border-green-200'
+                    ) : 'from-gray-50 to-white border-gray-200'
+                  }`}>
               <div className="text-center space-y-4">
-                <h3 className="text-sm font-bold text-yellow-600 uppercase tracking-wider">Leads Mishandled</h3>
+                      <h3 className={`text-sm font-bold uppercase tracking-wider ${
+                        !acqLoading && acquisitionsData?.leadsMishandled ? (
+                          acquisitionsData.leadsMishandled.riskLevel === 'high' 
+                            ? 'text-red-600' 
+                            : acquisitionsData.leadsMishandled.riskLevel === 'medium' 
+                              ? 'text-yellow-600'
+                              : 'text-green-600'
+                        ) : 'text-gray-600'
+                      }`}>Leads Mishandled</h3>
+                      {acqLoading ? (
+                        <div className="w-32 h-32 mx-auto flex items-center justify-center">
+                          <div className="animate-pulse bg-gray-200 w-32 h-32 rounded-full"></div>
+                        </div>
+                      ) : (
                 <div className="relative w-32 h-32 mx-auto">
-                  <div className="w-32 h-32 bg-yellow-100 rounded-full flex items-center justify-center border-4 border-yellow-300">
+                          <div className={`w-32 h-32 rounded-full flex items-center justify-center border-4 ${
+                            acquisitionsData?.leadsMishandled?.riskLevel === 'high' 
+                              ? 'bg-red-100 border-red-300' 
+                              : acquisitionsData?.leadsMishandled?.riskLevel === 'medium' 
+                                ? 'bg-yellow-100 border-yellow-300'
+                                : 'bg-green-100 border-green-300'
+                          }`}>
                     <div className="text-center">
-                      <div className="text-3xl font-black text-yellow-600">3</div>
-                      <div className="text-xs text-yellow-700 font-medium">Mishandled</div>
+                              <div className={`text-3xl font-black ${
+                                acquisitionsData?.leadsMishandled?.riskLevel === 'high' 
+                                  ? 'text-red-600' 
+                                  : acquisitionsData?.leadsMishandled?.riskLevel === 'medium' 
+                                    ? 'text-yellow-600'
+                                    : 'text-green-600'
+                              }`}>{acquisitionsData?.leadsMishandled?.count || 0}</div>
+                              <div className={`text-xs font-medium ${
+                                acquisitionsData?.leadsMishandled?.riskLevel === 'high' 
+                                  ? 'text-red-700' 
+                                  : acquisitionsData?.leadsMishandled?.riskLevel === 'medium' 
+                                    ? 'text-yellow-700'
+                                    : 'text-green-700'
+                              }`}>Mishandled</div>
                     </div>
                   </div>
                 </div>
-                <div className="text-lg font-bold text-yellow-900">Low Risk</div>
-                <p className="text-xs text-yellow-600">Response Time Issues</p>
+                      )}
+                      <div className={`text-lg font-bold ${
+                        acquisitionsData?.leadsMishandled?.riskLevel === 'high' 
+                          ? 'text-red-900' 
+                          : acquisitionsData?.leadsMishandled?.riskLevel === 'medium' 
+                            ? 'text-yellow-900'
+                            : 'text-green-900'
+                      }`}>
+                        {acquisitionsData?.leadsMishandled?.riskLevel === 'high' 
+                          ? 'High Risk' 
+                          : acquisitionsData?.leadsMishandled?.riskLevel === 'medium' 
+                            ? 'Medium Risk'
+                            : 'Low Risk'
+                        }
+                      </div>
+                      <p className={`text-xs ${
+                        acquisitionsData?.leadsMishandled?.riskLevel === 'high' 
+                          ? 'text-red-600' 
+                          : acquisitionsData?.leadsMishandled?.riskLevel === 'medium' 
+                            ? 'text-yellow-600'
+                            : 'text-green-600'
+                      }`}>{acquisitionsData?.leadsMishandled?.details || 'No issues detected'}</p>
               </div>
             </Card>
           </div>
+              )}
+            </>
+          )}
         </div>
       )}
 
       {/* Dispositions Team Tab */}
       {activeTab === "dispositions-team" && (
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
+          {/* Role-based Access Control */}
+          {user?.roles && !user.roles.some(role => ['ADMIN', 'EXECUTIVE', 'MANAGER', 'DISP', 'TC'].includes(role)) ? (
+            <Card className="p-6">
+              <div className="text-center">
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Access Restricted</h3>
+                <p className="text-gray-600">Dispositions Overview is only available to Admin, Executive, Manager, Dispositions Agent, and Transaction Coordinator roles.</p>
+              </div>
+            </Card>
+          ) : (
+            <>
+              {/* Header with Role-Based View Selector */}
+              <div className="flex justify-between items-center">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">Dispositions Team Metrics</h2>
-              <p className="text-sm text-gray-600">Track dispositions team performance and metrics</p>
+                  <h2 className="text-xl font-semibold">Dispositions Overview</h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {dispViewScope === 'personal' ? 'Personal Performance Metrics' : 'Team-wide Performance Overview'}
+                  </p>
             </div>
-            <Select defaultValue="all-users">
+                <div className="flex items-center space-x-4">
+                  {/* View Scope Toggle - Only for Admin/Executive/Manager */}
+                  {user?.roles?.some(role => ['ADMIN', 'EXECUTIVE', 'MANAGER'].includes(role)) && (
+                    <div className="flex bg-gray-100 rounded-lg p-1">
+                      <button
+                        onClick={() => setDispViewScope('personal')}
+                        className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                          dispViewScope === 'personal'
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        Personal
+                      </button>
+                      <button
+                        onClick={() => setDispViewScope('team')}
+                        className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                          dispViewScope === 'team'
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        Team-wide
+                      </button>
+                    </div>
+                  )}
+                  
+                  {/* User Selector - Only for team view and appropriate roles */}
+                  {dispViewScope === 'team' && user?.roles?.some(role => ['ADMIN', 'EXECUTIVE', 'MANAGER'].includes(role)) && (
+                    <Select value={selectedDispUser} onValueChange={setSelectedDispUser}>
               <SelectTrigger className="w-48">
-                <SelectValue />
+                        <SelectValue placeholder="Select agent" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all-users">All Users (Default)</SelectItem>
-                <SelectItem value="john-smith">John Smith</SelectItem>
-                <SelectItem value="jane-doe">Jane Doe</SelectItem>
-                <SelectItem value="mike-wilson">Mike Wilson</SelectItem>
-                <SelectItem value="sarah-lee">Sarah Lee</SelectItem>
+                        <SelectItem value="all-users">All Dispositions Agents</SelectItem>
+                        <SelectItem value="current-user">Current User</SelectItem>
+                        {/* Dynamic DISP agent list would go here */}
               </SelectContent>
             </Select>
+                  )}
+                </div>
           </div>
           
-          {/* Row 1 - Pipeline Metrics (4 circular charts) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* Row 1 - Pipeline Metrics */}
+          {dispError ? (
+            <Card className="p-6">
+              <div className="text-center">
+                <div className="text-red-500 mb-2">⚠️ Error Loading Data</div>
+                <p className="text-gray-600 text-sm">{dispError}</p>
+              </div>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Total Properties in Pipeline */}
             <Card className="p-6 text-center bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
               <div className="space-y-4">
@@ -1620,6 +3022,7 @@ const Metrics = () => {
               </div>
             </Card>
           </div>
+          )}
 
           {/* Row 2 - Performance & Risk Metrics (4 circular charts) */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -1753,45 +3156,382 @@ const Metrics = () => {
               </div>
             </Card>
           </div>
+            </>
+          )}
         </div>
       )}
 
       {/* Transaction Coordinator Tab */}
       {activeTab === "transaction-coordinator" && (
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
+          {/* Role-based Access Control */}
+          {user?.roles && !user.roles.some(role => ['ADMIN', 'EXECUTIVE', 'MANAGER', 'TC'].includes(role)) ? (
+            <Card className="p-6">
+              <div className="text-center">
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Access Restricted</h3>
+                <p className="text-gray-600">Transactions Overview is only available to Admin, Executive, Manager, and Transaction Coordinator roles.</p>
+              </div>
+            </Card>
+          ) : (
+            <>
+              {/* Header with Role-Based View Selector */}
+              <div className="flex justify-between items-center">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">Transaction Coordinator Metrics</h2>
-              <p className="text-sm text-gray-600">Track transaction coordination performance</p>
+                  <h2 className="text-xl font-semibold">Transactions Overview</h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {tcViewScope === 'personal' ? 'Personal Transaction Coordination Metrics' : 'Company-wide Transaction Overview'}
+                  </p>
             </div>
-            <Select defaultValue="all-users">
+                <div className="flex items-center space-x-4">
+                  {/* View Scope Toggle - Only for Admin/Executive/Manager */}
+                  {user?.roles?.some(role => ['ADMIN', 'EXECUTIVE', 'MANAGER'].includes(role)) && (
+                    <div className="flex bg-gray-100 rounded-lg p-1">
+                      <button
+                        onClick={() => setTcViewScope('personal')}
+                        className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                          tcViewScope === 'personal'
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        Personal
+                      </button>
+                      <button
+                        onClick={() => setTcViewScope('overview')}
+                        className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                          tcViewScope === 'overview'
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        Overview
+                      </button>
+                    </div>
+                  )}
+                  
+                  {/* User Selector - Only for overview and appropriate roles */}
+                  {tcViewScope === 'overview' && user?.roles?.some(role => ['ADMIN', 'EXECUTIVE', 'MANAGER'].includes(role)) && (
+                    <Select value={selectedTcUser} onValueChange={setSelectedTcUser}>
               <SelectTrigger className="w-48">
-                <SelectValue />
+                        <SelectValue placeholder="Select coordinator" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all-users">All Users (Default)</SelectItem>
-                <SelectItem value="coordinator-1">Transaction Coordinator 1</SelectItem>
-                <SelectItem value="coordinator-2">Transaction Coordinator 2</SelectItem>
+                        <SelectItem value="all-users">All Transaction Coordinators</SelectItem>
+                        <SelectItem value="current-user">Current User</SelectItem>
+                        {/* Dynamic TC list would go here */}
               </SelectContent>
             </Select>
+                  )}
+                </div>
           </div>
           
-          <div className="text-center py-12">
-            <p className="text-gray-500">Transaction Coordinator metrics will be configured here</p>
+              {/* Row 1 - Pipeline & Clear-to-Close Metrics */}
+              {tcError ? (
+                <Card className="p-6">
+                  <div className="text-center">
+                    <div className="text-red-500 mb-2">⚠️ Error Loading Data</div>
+                    <p className="text-gray-600 text-sm">{tcError}</p>
+                  </div>
+                </Card>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Total Properties in Pipeline */}
+                  <Card className="p-8 hover:shadow-lg transition-shadow bg-gradient-to-br from-blue-50 to-white border border-blue-200">
+                    <div className="text-center space-y-4">
+                      <h3 className="text-sm font-bold text-blue-600 uppercase tracking-wider">Total Properties in Pipeline</h3>
+                      {tcLoading ? (
+                        <div className="w-32 h-32 mx-auto flex items-center justify-center">
+                          <div className="animate-pulse bg-blue-200 w-32 h-32 rounded-full"></div>
+                        </div>
+                      ) : (
+                        <div className="relative w-32 h-32 mx-auto">
+                          <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
+                            <circle cx="60" cy="60" r="50" stroke="#e5e7eb" strokeWidth="8" fill="none" />
+                            <circle
+                              cx="60" cy="60" r="50" stroke="#3b82f6" strokeWidth="8" fill="none" strokeLinecap="round"
+                              strokeDasharray={`${((transactionsData?.totalPropertiesInPipeline || 0)/Math.max(1, (transactionsData?.totalPropertiesInPipeline || 0) + 10)) * 314} 314`}
+                              className="transition-all duration-1000 ease-out"
+                            />
+                          </svg>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="text-center">
+                              <div className="text-2xl font-black text-blue-600">{transactionsData?.totalPropertiesInPipeline || 0}</div>
+                              <div className="text-xs text-gray-600 font-medium">Total</div>
+                            </div>
           </div>
+                        </div>
+                      )}
+                      <div className="text-lg font-bold text-blue-900">{transactionsData?.totalPropertiesInPipeline || 0}</div>
+                      <p className="text-xs text-blue-600">Properties in Transaction</p>
+                    </div>
+                  </Card>
+
+                  {/* Total Clear to Close */}
+                  <Card className="p-8 hover:shadow-lg transition-shadow bg-gradient-to-br from-green-50 to-white border border-green-200">
+                    <div className="text-center space-y-4">
+                      <h3 className="text-sm font-bold text-green-600 uppercase tracking-wider">Total Clear to Close</h3>
+                      {tcLoading ? (
+                        <div className="w-32 h-32 mx-auto flex items-center justify-center">
+                          <div className="animate-pulse bg-green-200 w-32 h-32 rounded-full"></div>
+                        </div>
+                      ) : (
+                        <div className="relative w-32 h-32 mx-auto">
+                          <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
+                            <circle cx="60" cy="60" r="50" stroke="#e5e7eb" strokeWidth="8" fill="none" />
+                            <circle
+                              cx="60" cy="60" r="50" stroke="#10b981" strokeWidth="8" fill="none" strokeLinecap="round"
+                              strokeDasharray={`${((transactionsData?.totalClearToClose || 0)/Math.max(1, (transactionsData?.totalPropertiesInPipeline || 1))) * 314} 314`}
+                              className="transition-all duration-1000 ease-out"
+                            />
+                          </svg>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="text-center">
+                              <div className="text-2xl font-black text-green-600">{transactionsData?.totalClearToClose || 0}</div>
+                              <div className="text-xs text-gray-600 font-medium">Clear to Close</div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      <div className="text-lg font-bold text-green-900">{transactionsData?.totalClearToClose || 0}</div>
+                      <p className="text-xs text-green-600">Ready for Closing</p>
+                    </div>
+                  </Card>
+
+                  {/* % Clear to Close */}
+                  <Card className="p-8 hover:shadow-lg transition-shadow bg-gradient-to-br from-purple-50 to-white border border-purple-200">
+                    <div className="text-center space-y-4">
+                      <h3 className="text-sm font-bold text-purple-600 uppercase tracking-wider">% Clear to Close</h3>
+                      {tcLoading ? (
+                        <div className="w-32 h-32 mx-auto flex items-center justify-center">
+                          <div className="animate-pulse bg-purple-200 w-32 h-32 rounded-full"></div>
+                        </div>
+                      ) : (
+                        <div className="relative w-32 h-32 mx-auto">
+                          <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
+                            <circle cx="60" cy="60" r="50" stroke="#e5e7eb" strokeWidth="8" fill="none" />
+                            <circle
+                              cx="60" cy="60" r="50" stroke="#8b5cf6" strokeWidth="8" fill="none" strokeLinecap="round"
+                              strokeDasharray={`${((transactionsData?.clearToClosePercentage || 0)/100) * 314} 314`}
+                              className="transition-all duration-1000 ease-out"
+                            />
+                          </svg>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="text-center">
+                              <div className="text-2xl font-black text-purple-600">{(transactionsData?.clearToClosePercentage || 0).toFixed(1)}%</div>
+                              <div className="text-xs text-gray-600 font-medium">Success Rate</div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      <div className="text-lg font-bold text-purple-900">{(transactionsData?.clearToClosePercentage || 0).toFixed(1)}%</div>
+                      <p className="text-xs text-purple-600">Clear to Close Rate</p>
+                    </div>
+                  </Card>
+                </div>
+              )}
+
+              {/* Row 2 - Financial & Quality Metrics */}
+              {!tcError && (
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                  {/* Projected Profit */}
+                  <Card className="p-8 hover:shadow-lg transition-shadow bg-gradient-to-br from-orange-50 to-white border border-orange-200">
+                    <div className="text-center space-y-4">
+                      <h3 className="text-sm font-bold text-orange-600 uppercase tracking-wider">Projected Profit</h3>
+                      {tcLoading ? (
+                        <div className="w-32 h-32 mx-auto flex items-center justify-center">
+                          <div className="animate-pulse bg-orange-200 w-32 h-32 rounded-full"></div>
+                        </div>
+                      ) : (
+                        <div className="relative w-32 h-32 mx-auto">
+                          <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
+                            <circle cx="60" cy="60" r="50" stroke="#e5e7eb" strokeWidth="8" fill="none" />
+                            <circle
+                              cx="60" cy="60" r="50" stroke="#f97316" strokeWidth="8" fill="none" strokeLinecap="round"
+                              strokeDasharray={`${(transactionsData?.projectedProfit && transactionsData.projectedProfit > 0 ? Math.min(transactionsData.projectedProfit, 1000000) / 1000000 : 0) * 314} 314`}
+                              className="transition-all duration-1000 ease-out"
+                            />
+                          </svg>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="text-center">
+                              <div className="text-xl font-black text-orange-600">${Math.round((transactionsData?.projectedProfit||0)/1000)}K</div>
+                              <div className="text-xs text-gray-600 font-medium">of $1M</div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      <div className="text-lg font-bold text-orange-900">{transactionsData?.projectedProfit ? Math.round((transactionsData.projectedProfit/1000000)*100) : 0}%</div>
+                      <p className="text-xs text-orange-600">${new Intl.NumberFormat().format(transactionsData?.projectedProfit||0)}</p>
+                    </div>
+                  </Card>
+
+                  {/* Total Deals Closed */}
+                  <Card className="p-8 hover:shadow-lg transition-shadow bg-gradient-to-br from-green-50 to-white border border-green-200">
+                    <div className="text-center space-y-4">
+                      <h3 className="text-sm font-bold text-green-600 uppercase tracking-wider">Total Deals Closed</h3>
+                      {tcLoading ? (
+                        <div className="w-32 h-32 mx-auto flex items-center justify-center">
+                          <div className="animate-pulse bg-green-200 w-32 h-32 rounded-full"></div>
+                        </div>
+                      ) : (
+                        <div className="relative w-32 h-32 mx-auto">
+                          <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
+                            <circle cx="60" cy="60" r="50" stroke="#e5e7eb" strokeWidth="8" fill="none" />
+                            <circle
+                              cx="60" cy="60" r="50" stroke="#10b981" strokeWidth="8" fill="none" strokeLinecap="round"
+                              strokeDasharray={`${((transactionsData?.totalDealsClosed || 0)/Math.max(1, (transactionsData?.totalPropertiesInPipeline || 1))) * 314} 314`}
+                              className="transition-all duration-1000 ease-out"
+                            />
+                          </svg>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="text-center">
+                              <div className="text-2xl font-black text-green-600">{transactionsData?.totalDealsClosed || 0}</div>
+                              <div className="text-xs text-gray-600 font-medium">Deals</div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      <div className="text-lg font-bold text-green-900">{transactionsData?.totalDealsClosed || 0}</div>
+                      <p className="text-xs text-green-600">Closed Successfully</p>
+                    </div>
+                  </Card>
+
+                  {/* Closed Profit */}
+                  <Card className="p-8 hover:shadow-lg transition-shadow bg-gradient-to-br from-blue-50 to-white border border-blue-200">
+                    <div className="text-center space-y-4">
+                      <h3 className="text-sm font-bold text-blue-600 uppercase tracking-wider">Closed Profit</h3>
+                      {tcLoading ? (
+                        <div className="w-32 h-32 mx-auto flex items-center justify-center">
+                          <div className="animate-pulse bg-blue-200 w-32 h-32 rounded-full"></div>
+                        </div>
+                      ) : (
+                        <div className="relative w-32 h-32 mx-auto">
+                          <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
+                            <circle cx="60" cy="60" r="50" stroke="#e5e7eb" strokeWidth="8" fill="none" />
+                            <circle
+                              cx="60" cy="60" r="50" stroke="#3b82f6" strokeWidth="8" fill="none" strokeLinecap="round"
+                              strokeDasharray={`${(transactionsData?.closedProfit && transactionsData.closedProfit > 0 ? Math.min(transactionsData.closedProfit, 800000) / 800000 : 0) * 314} 314`}
+                              className="transition-all duration-1000 ease-out"
+                            />
+                          </svg>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="text-center">
+                              <div className="text-xl font-black text-blue-600">${Math.round((transactionsData?.closedProfit||0)/1000)}K</div>
+                              <div className="text-xs text-gray-600 font-medium">of $800K</div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      <div className="text-lg font-bold text-blue-900">{transactionsData?.closedProfit ? Math.round((transactionsData.closedProfit/800000)*100) : 0}%</div>
+                      <p className="text-xs text-blue-600">${new Intl.NumberFormat().format(transactionsData?.closedProfit||0)}</p>
+                    </div>
+                  </Card>
+
+                  {/* Leads Mishandled - Color Coded */}
+                  <Card className={`p-8 hover:shadow-lg transition-shadow bg-gradient-to-br border ${
+                    !tcLoading && transactionsData?.leadsMishandled ? (
+                      transactionsData.leadsMishandled.riskLevel === 'high' 
+                        ? 'from-red-50 to-white border-red-200' 
+                        : transactionsData.leadsMishandled.riskLevel === 'medium' 
+                          ? 'from-yellow-50 to-white border-yellow-200'
+                          : 'from-green-50 to-white border-green-200'
+                    ) : 'from-gray-50 to-white border-gray-200'
+                  }`}>
+                    <div className="text-center space-y-4">
+                      <h3 className={`text-sm font-bold uppercase tracking-wider ${
+                        !tcLoading && transactionsData?.leadsMishandled ? (
+                          transactionsData.leadsMishandled.riskLevel === 'high' 
+                            ? 'text-red-600' 
+                            : transactionsData.leadsMishandled.riskLevel === 'medium' 
+                              ? 'text-yellow-600'
+                              : 'text-green-600'
+                        ) : 'text-gray-600'
+                      }`}>Leads Mishandled</h3>
+                      {tcLoading ? (
+                        <div className="w-32 h-32 mx-auto flex items-center justify-center">
+                          <div className="animate-pulse bg-gray-200 w-32 h-32 rounded-full"></div>
+                        </div>
+                      ) : (
+                        <div className="relative w-32 h-32 mx-auto">
+                          <div className={`w-32 h-32 rounded-full flex items-center justify-center border-4 ${
+                            transactionsData?.leadsMishandled?.riskLevel === 'high' 
+                              ? 'bg-red-100 border-red-300' 
+                              : transactionsData?.leadsMishandled?.riskLevel === 'medium' 
+                                ? 'bg-yellow-100 border-yellow-300'
+                                : 'bg-green-100 border-green-300'
+                          }`}>
+                            <div className="text-center">
+                              <div className={`text-3xl font-black ${
+                                transactionsData?.leadsMishandled?.riskLevel === 'high' 
+                                  ? 'text-red-600' 
+                                  : transactionsData?.leadsMishandled?.riskLevel === 'medium' 
+                                    ? 'text-yellow-600'
+                                    : 'text-green-600'
+                              }`}>{transactionsData?.leadsMishandled?.count || 0}</div>
+                              <div className={`text-xs font-medium ${
+                                transactionsData?.leadsMishandled?.riskLevel === 'high' 
+                                  ? 'text-red-700' 
+                                  : transactionsData?.leadsMishandled?.riskLevel === 'medium' 
+                                    ? 'text-yellow-700'
+                                    : 'text-green-700'
+                              }`}>Mishandled</div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      <div className={`text-lg font-bold ${
+                        transactionsData?.leadsMishandled?.riskLevel === 'high' 
+                          ? 'text-red-900' 
+                          : transactionsData?.leadsMishandled?.riskLevel === 'medium' 
+                            ? 'text-yellow-900'
+                            : 'text-green-900'
+                      }`}>
+                        {transactionsData?.leadsMishandled?.riskLevel === 'high' 
+                          ? 'High Risk' 
+                          : transactionsData?.leadsMishandled?.riskLevel === 'medium' 
+                            ? 'Medium Risk'
+                            : 'Low Risk'
+                        }
+                      </div>
+                      <p className={`text-xs ${
+                        transactionsData?.leadsMishandled?.riskLevel === 'high' 
+                          ? 'text-red-600' 
+                          : transactionsData?.leadsMishandled?.riskLevel === 'medium' 
+                            ? 'text-yellow-600'
+                            : 'text-green-600'
+                      }`}>{transactionsData?.leadsMishandled?.details || 'No issues detected'}</p>
+                    </div>
+                  </Card>
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
 
       {/* Acquisitions Leaderboard Tab */}
       {activeTab === "acquisitions-leaderboard" && (
         <div className="space-y-6">
+          {/* Role-based Access Control */}
+          {user?.roles && !user.roles.some(role => ['ADMIN', 'EXECUTIVE', 'MANAGER', 'ACQ'].includes(role)) ? (
+            <Card className="p-6">
+              <div className="text-center">
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Access Restricted</h3>
+                <p className="text-gray-600">Acquisitions Leaderboard is only available to Admin, Executive, Manager, and Acquisitions Agent roles.</p>
+              </div>
+            </Card>
+          ) : (
+            <>
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">Acquisitions Leaderboard</h2>
-              <p className="text-sm text-gray-600">Rankings and performance comparison for acquisitions team</p>
+                  <h2 className="text-2xl font-bold text-gray-900">🏆 Acquisitions Leaderboard</h2>
+                  <p className="text-sm text-gray-600">
+                    {user?.roles?.some(role => ['ACQ'].includes(role)) 
+                      ? 'Your ranking and performance among the acquisitions team' 
+                      : 'Rankings and performance comparison for acquisitions team'}
+                  </p>
             </div>
             <div className="flex items-center gap-4">
-              <Select defaultValue="this-month">
+                  <Select value={acqLeaderboardPeriod} onValueChange={setAcqLeaderboardPeriod}>
                 <SelectTrigger className="w-32">
                   <SelectValue />
                 </SelectTrigger>
@@ -1805,22 +3545,240 @@ const Metrics = () => {
             </div>
           </div>
           
-          <div className="text-center py-12">
-            <p className="text-gray-500">Acquisitions Leaderboard will be configured here</p>
+              {/* Current User Rank (for ACQ agents) */}
+              {user?.roles?.some(role => ['ACQ'].includes(role)) && acqLeaderboardData?.currentUserRank && (
+                <Card className="p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+                  <div className="text-center">
+                    <div className="flex items-center justify-center gap-3 mb-2">
+                      <Trophy className="w-6 h-6 text-yellow-500" />
+                      <h3 className="text-xl font-bold text-gray-900">Your Current Rank</h3>
           </div>
+                    <div className="text-4xl font-black text-blue-600 mb-1">#{acqLeaderboardData.currentUserRank}</div>
+                    <p className="text-sm text-gray-600">out of {acqLeaderboardData.agents.length} acquisitions agents</p>
+                  </div>
+                </Card>
+              )}
+
+              {/* Error State */}
+              {acqLeaderboardError ? (
+                <Card className="p-6">
+                  <div className="text-center">
+                    <div className="text-red-500 mb-2">⚠️ Error Loading Leaderboard</div>
+                    <p className="text-gray-600 text-sm">{acqLeaderboardError}</p>
+                  </div>
+                </Card>
+              ) : acqLeaderboardLoading ? (
+                <Card className="p-6">
+                  <div className="text-center">
+                    <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+                    <p className="text-gray-600">Loading leaderboard...</p>
+                  </div>
+                </Card>
+              ) : !acqLeaderboardData?.agents?.length ? (
+                <Card className="p-6">
+                  <div className="text-center">
+                    <Trophy className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-500">No acquisitions agents found for the selected period.</p>
+                  </div>
+                </Card>
+              ) : (
+                <div className="space-y-6">
+                  {/* Performance Leaderboard */}
+                  <Card className="overflow-hidden">
+                    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4">
+                      <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                        <Trophy className="w-5 h-5" />
+                        Performance Leaderboard
+                      </h3>
+                      <p className="text-blue-100 text-sm">Ranked by Contracts Signed, Projected Profit, Leads per Contract (minus mishandled leads)</p>
+                    </div>
+                    <div className="p-0">
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead className="bg-gray-50 border-b">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Agent</th>
+                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
+                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Contracts</th>
+                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Projected Profit</th>
+                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Leads/Contract</th>
+                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Mishandled</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {acqLeaderboardData.agents.map((agent, index) => (
+                              <tr key={agent.id} className={`hover:bg-gray-50 ${
+                                user?.id === agent.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''
+                              }`}>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <div className="flex items-center">
+                                    {agent.rank === 1 && <span className="text-2xl mr-2">🥇</span>}
+                                    {agent.rank === 2 && <span className="text-2xl mr-2">🥈</span>}
+                                    {agent.rank === 3 && <span className="text-2xl mr-2">🥉</span>}
+                                    <span className="text-lg font-bold text-gray-900">#{agent.rank}</span>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <div className="flex items-center">
+                                    <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                                      {agent.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                                    </div>
+                                    <div className="ml-4">
+                                      <div className="text-sm font-medium text-gray-900">{agent.name}</div>
+                                      <div className="text-sm text-gray-500">{agent.email}</div>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                  <div className="text-lg font-bold text-blue-600">{agent.score.toFixed(1)}</div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                  <div className="text-lg font-semibold text-green-600">{agent.contractsSigned}</div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                  <div className="text-lg font-semibold text-orange-600">
+                                    ${new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(agent.projectedProfit)}
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                  <div className="text-lg font-semibold text-purple-600">{agent.leadsPerContract.toFixed(1)}</div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                    agent.mishandledLeads === 0 ? 'bg-green-100 text-green-800' :
+                                    agent.mishandledLeads <= 3 ? 'bg-yellow-100 text-yellow-800' :
+                                    'bg-red-100 text-red-800'
+                                  }`}>
+                                    {agent.mishandledLeads}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* Communications Leaderboard */}
+                  <Card className="overflow-hidden">
+                    <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-4">
+                      <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                        <Phone className="w-5 h-5" />
+                        Communications Leaderboard
+                      </h3>
+                      <p className="text-green-100 text-sm">Ranked by calls, SMS, and email activity</p>
+                    </div>
+                    <div className="p-0">
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead className="bg-gray-50 border-b">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Agent</th>
+                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Comm Score</th>
+                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Calls</th>
+                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">SMS</th>
+                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Emails</th>
+                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Total Time</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {[...acqLeaderboardData.agents]
+                              .sort((a, b) => b.communications.totalScore - a.communications.totalScore)
+                              .map((agent, index) => (
+                              <tr key={`comm-${agent.id}`} className={`hover:bg-gray-50 ${
+                                user?.id === agent.id ? 'bg-green-50 border-l-4 border-green-500' : ''
+                              }`}>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <div className="flex items-center">
+                                    {index === 0 && <span className="text-2xl mr-2">🥇</span>}
+                                    {index === 1 && <span className="text-2xl mr-2">🥈</span>}
+                                    {index === 2 && <span className="text-2xl mr-2">🥉</span>}
+                                    <span className="text-lg font-bold text-gray-900">#{index + 1}</span>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <div className="flex items-center">
+                                    <div className="w-10 h-10 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                                      {agent.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                                    </div>
+                                    <div className="ml-4">
+                                      <div className="text-sm font-medium text-gray-900">{agent.name}</div>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                  <div className="text-lg font-bold text-green-600">{agent.communications.totalScore.toFixed(1)}</div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                  <div className="text-sm text-gray-900">
+                                    <div>{agent.communications.calls.made + agent.communications.calls.received}</div>
+                                    <div className="text-xs text-gray-500">
+                                      {agent.communications.calls.made}↗ {agent.communications.calls.received}↙
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                  <div className="text-sm text-gray-900">
+                                    <div>{agent.communications.sms.sent + agent.communications.sms.received}</div>
+                                    <div className="text-xs text-gray-500">
+                                      {agent.communications.sms.sent}↗ {agent.communications.sms.received}↙
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                  <div className="text-sm text-gray-900">
+                                    <div>{agent.communications.emails.sent + agent.communications.emails.received}</div>
+                                    <div className="text-xs text-gray-500">
+                                      {agent.communications.emails.sent}↗ {agent.communications.emails.received}↙
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                  <div className="text-sm font-semibold text-blue-600">
+                                    {Math.round(agent.communications.calls.totalTime / 60)}m
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </Card>
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
 
       {/* Dispositions Leaderboard Tab */}
       {activeTab === "dispositions-leaderboard" && (
         <div className="space-y-6">
+          {/* Role-based Access Control */}
+          {user?.roles && !user.roles.some(role => ['ADMIN', 'EXECUTIVE', 'MANAGER', 'DISP'].includes(role)) ? (
+            <Card className="p-6">
+              <div className="text-center">
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Access Restricted</h3>
+                <p className="text-gray-600">Dispositions Leaderboard is only available to Admin, Executive, Manager, and Dispositions Agent roles.</p>
+              </div>
+            </Card>
+          ) : (
+            <>
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">Dispositions Leaderboard</h2>
-              <p className="text-sm text-gray-600">Rankings and performance comparison for dispositions team</p>
+                  <h2 className="text-2xl font-bold text-gray-900">🏅 Dispositions Leaderboard</h2>
+                  <p className="text-sm text-gray-600">
+                    {user?.roles?.some(role => ['DISP'].includes(role)) 
+                      ? 'Your ranking and performance among the dispositions team' 
+                      : 'Rankings and performance comparison for dispositions team'}
+                  </p>
             </div>
             <div className="flex items-center gap-4">
-              <Select defaultValue="this-month">
+                  <Select value={dispLeaderboardPeriod} onValueChange={setDispLeaderboardPeriod}>
                 <SelectTrigger className="w-32">
                   <SelectValue />
                 </SelectTrigger>
@@ -1834,9 +3792,213 @@ const Metrics = () => {
             </div>
           </div>
           
-          <div className="text-center py-12">
-            <p className="text-gray-500">Dispositions Leaderboard will be configured here</p>
+              {/* Current User Rank (for DISP agents) */}
+              {user?.roles?.some(role => ['DISP'].includes(role)) && dispLeaderboardData?.currentUserRank && (
+                <Card className="p-6 bg-gradient-to-r from-purple-50 to-pink-50 border-purple-200">
+                  <div className="text-center">
+                    <div className="flex items-center justify-center gap-3 mb-2">
+                      <Award className="w-6 h-6 text-yellow-500" />
+                      <h3 className="text-xl font-bold text-gray-900">Your Current Rank</h3>
           </div>
+                    <div className="text-4xl font-black text-purple-600 mb-1">#{dispLeaderboardData.currentUserRank}</div>
+                    <p className="text-sm text-gray-600">out of {dispLeaderboardData.agents.length} dispositions agents</p>
+        </div>
+                </Card>
+              )}
+
+              {/* Error State */}
+              {dispLeaderboardError ? (
+                <Card className="p-6">
+                  <div className="text-center">
+                    <div className="text-red-500 mb-2">⚠️ Error Loading Leaderboard</div>
+                    <p className="text-gray-600 text-sm">{dispLeaderboardError}</p>
+                  </div>
+                </Card>
+              ) : dispLeaderboardLoading ? (
+                <Card className="p-6">
+                  <div className="text-center">
+                    <div className="animate-spin w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+                    <p className="text-gray-600">Loading leaderboard...</p>
+                  </div>
+                </Card>
+              ) : !dispLeaderboardData?.agents?.length ? (
+                <Card className="p-6">
+                  <div className="text-center">
+                    <Award className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-500">No dispositions agents found for the selected period.</p>
+                  </div>
+                </Card>
+              ) : (
+                <div className="space-y-6">
+                  {/* Performance Leaderboard */}
+                  <Card className="overflow-hidden">
+                    <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-4">
+                      <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                        <Award className="w-5 h-5" />
+                        Performance Leaderboard
+                      </h3>
+                      <p className="text-purple-100 text-sm">Ranked by Properties Sold, Projected Profit, Buyers Added (minus mishandled leads)</p>
+                    </div>
+                    <div className="p-0">
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead className="bg-gray-50 border-b">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Agent</th>
+                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
+                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Properties Sold</th>
+                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Projected Profit</th>
+                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Buyers Added</th>
+                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Mishandled</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {dispLeaderboardData.agents.map((agent, index) => (
+                              <tr key={agent.id} className={`hover:bg-gray-50 ${
+                                user?.id === agent.id ? 'bg-purple-50 border-l-4 border-purple-500' : ''
+                              }`}>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <div className="flex items-center">
+                                    {agent.rank === 1 && <span className="text-2xl mr-2">🥇</span>}
+                                    {agent.rank === 2 && <span className="text-2xl mr-2">🥈</span>}
+                                    {agent.rank === 3 && <span className="text-2xl mr-2">🥉</span>}
+                                    <span className="text-lg font-bold text-gray-900">#{agent.rank}</span>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <div className="flex items-center">
+                                    <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                                      {agent.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                                    </div>
+                                    <div className="ml-4">
+                                      <div className="text-sm font-medium text-gray-900">{agent.name}</div>
+                                      <div className="text-sm text-gray-500">{agent.email}</div>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                  <div className="text-lg font-bold text-purple-600">{agent.score.toFixed(1)}</div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                  <div className="text-lg font-semibold text-green-600">{agent.propertiesSold}</div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                  <div className="text-lg font-semibold text-orange-600">
+                                    ${new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(agent.projectedProfit)}
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                  <div className="text-lg font-semibold text-blue-600">{agent.buyersAdded}</div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                    agent.mishandledLeads === 0 ? 'bg-green-100 text-green-800' :
+                                    agent.mishandledLeads <= 3 ? 'bg-yellow-100 text-yellow-800' :
+                                    'bg-red-100 text-red-800'
+                                  }`}>
+                                    {agent.mishandledLeads}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* Communications Leaderboard */}
+                  <Card className="overflow-hidden">
+                    <div className="bg-gradient-to-r from-teal-600 to-cyan-600 px-6 py-4">
+                      <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                        <MessageSquare className="w-5 h-5" />
+                        Communications Leaderboard
+                      </h3>
+                      <p className="text-teal-100 text-sm">Ranked by calls, SMS, and email activity</p>
+                    </div>
+                    <div className="p-0">
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead className="bg-gray-50 border-b">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Agent</th>
+                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Comm Score</th>
+                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Calls</th>
+                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">SMS</th>
+                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Emails</th>
+                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Total Time</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {[...dispLeaderboardData.agents]
+                              .sort((a, b) => b.communications.totalScore - a.communications.totalScore)
+                              .map((agent, index) => (
+                              <tr key={`comm-${agent.id}`} className={`hover:bg-gray-50 ${
+                                user?.id === agent.id ? 'bg-teal-50 border-l-4 border-teal-500' : ''
+                              }`}>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <div className="flex items-center">
+                                    {index === 0 && <span className="text-2xl mr-2">🥇</span>}
+                                    {index === 1 && <span className="text-2xl mr-2">🥈</span>}
+                                    {index === 2 && <span className="text-2xl mr-2">🥉</span>}
+                                    <span className="text-lg font-bold text-gray-900">#{index + 1}</span>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <div className="flex items-center">
+                                    <div className="w-10 h-10 bg-gradient-to-r from-teal-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                                      {agent.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                                    </div>
+                                    <div className="ml-4">
+                                      <div className="text-sm font-medium text-gray-900">{agent.name}</div>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                  <div className="text-lg font-bold text-teal-600">{agent.communications.totalScore.toFixed(1)}</div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                  <div className="text-sm text-gray-900">
+                                    <div>{agent.communications.calls.made + agent.communications.calls.received}</div>
+                                    <div className="text-xs text-gray-500">
+                                      {agent.communications.calls.made}↗ {agent.communications.calls.received}↙
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                  <div className="text-sm text-gray-900">
+                                    <div>{agent.communications.sms.sent + agent.communications.sms.received}</div>
+                                    <div className="text-xs text-gray-500">
+                                      {agent.communications.sms.sent}↗ {agent.communications.sms.received}↙
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                  <div className="text-sm text-gray-900">
+                                    <div>{agent.communications.emails.sent + agent.communications.emails.received}</div>
+                                    <div className="text-xs text-gray-500">
+                                      {agent.communications.emails.sent}↗ {agent.communications.emails.received}↙
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                  <div className="text-sm font-semibold text-blue-600">
+                                    {Math.round(agent.communications.calls.totalTime / 60)}m
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </Card>
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>

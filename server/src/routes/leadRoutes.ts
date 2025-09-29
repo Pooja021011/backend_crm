@@ -4,10 +4,14 @@ import { leadController } from '../controllers/leadController.js';
 import { fileController, uploader } from '../controllers/fileController.js';
 import { leadBuyerController } from '../controllers/leadBuyerController.js';
 import { communicationController } from '../controllers/communicationController.js';
+import { pipelineController } from '../controllers/pipelineController.js';
 
 const router = Router();
 
 router.use(authenticate);
+
+// Lead sources for filtering
+router.get('/sources', (req, res, next) => pipelineController.getLeadSources(req, res).catch(next));
 
 router.get('/', (req, res, next) => leadController.list(req, res).catch(next));
 router.post('/', (req, res, next) => leadController.create(req, res).catch(next));

@@ -104,6 +104,10 @@ const Inbox = () => {
   const [loadingReminders, setLoadingReminders] = useState(false);
   const [reminderCounts, setReminderCounts] = useState<any>(null);
   
+  // SLA status state
+  const [slaStatus, setSlaStatus] = useState<any>(null);
+  const [loadingSLA, setLoadingSLA] = useState(false);
+  
   // Notifications state
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
@@ -297,23 +301,43 @@ const Inbox = () => {
 
   // Handle email/task/communication/reminder click
   const handleEmailClick = async (email: any) => {
+    console.log('🖱️ Item clicked:', email);
+    console.log('📋 Item type:', email.type);
+    console.log('🏠 Lead address:', email.leadAddress);
+    
     // Handle task clicks - navigate to lead details and remove from list
-    if (email.type === 'task' && email.leadAddress) {
-      navigate(`/leads?address=${encodeURIComponent(email.leadAddress)}`);
+    if (email.type === 'task') {
+      console.log('✅ Task clicked - attempting navigation');
+      console.log('📍 Lead address:', email.leadAddress);
       
-      // Remove task from the list
-      setAssignedTasks(prevTasks => prevTasks.filter(task => task.id !== email.id));
-      
-      toast({
-        title: "Task Completed & Lead Opened",
-        description: `Opened ${email.from} details and removed task from list`,
-      });
+      if (email.leadId) {
+        const navigationUrl = `/leads?leadId=${email.leadId}`;
+        console.log('🔗 Navigation URL:', navigationUrl);
+        console.log('🆔 Lead ID:', email.leadId);
+        navigate(navigationUrl);
+        
+        // Remove task from the list
+        setAssignedTasks(prevTasks => prevTasks.filter(task => task.id !== email.id));
+        
+        toast({
+          title: "Task Completed & Lead Opened",
+          description: `Opened ${email.from} details and removed task from list`,
+        });
+      } else {
+        console.log('❌ No leadId found, navigating to leads page anyway');
+        navigate('/leads');
+        toast({
+          title: "Navigation Test",
+          description: "Navigated to leads page (no lead ID)",
+        });
+      }
       return;
     }
     
     // Handle communication clicks - navigate to lead details
-    if (email.type === 'communication' && email.leadAddress) {
-      navigate(`/leads?address=${encodeURIComponent(email.leadAddress)}`);
+    if (email.type === 'communication' && email.leadId) {
+      console.log('💬 Navigating to communication lead ID:', email.leadId);
+      navigate(`/leads?leadId=${email.leadId}`);
       
       toast({
         title: "Lead Opened",
@@ -740,30 +764,35 @@ const Inbox = () => {
   const createLeadTitle = (lead: any): string => {
     if (!lead) return 'Unknown Property';
     
-    // Try to create a descriptive title
+    // Start with address if available
     let title = '';
-    
-    // Add property type/description if available
-    if (lead.leadType === 'SELLER') {
-      title = 'Property for Sale';
-    } else if (lead.leadType === 'BUYER') {
-      title = 'Buyer Lead';
-    } else if (lead.leadType === 'VENDOR') {
-      title = 'Vendor Lead';
-    } else {
-      title = 'Property Lead';
-    }
-    
-    // Add address if available
-    if (lead.address) {
-      title += ` - ${lead.address.address1}`;
+    if (lead.address?.address1) {
+      title = lead.address.address1;
+      if (lead.address.city) {
+        title += `, ${lead.address.city}`;
+      }
     }
     
     // Add client name if available
-    if (lead.seller && lead.seller.firstName) {
-      title += ` (${lead.seller.firstName} ${lead.seller.lastName})`;
-    } else if (lead.buyer && lead.buyer.firstName) {
-      title += ` (${lead.buyer.firstName} ${lead.buyer.lastName})`;
+    if (lead.seller?.firstName) {
+      const clientName = `${lead.seller.firstName} ${lead.seller.lastName || ''}`.trim();
+      title = title ? `${title} (${clientName})` : clientName;
+    } else if (lead.buyer?.firstName) {
+      const clientName = `${lead.buyer.firstName} ${lead.buyer.lastName || ''}`.trim();
+      title = title ? `${title} (${clientName})` : clientName;
+    }
+    
+    // Fallback to lead type if no other info
+    if (!title) {
+      if (lead.leadType === 'SELLER') {
+        title = 'Seller Lead';
+      } else if (lead.leadType === 'BUYER') {
+        title = 'Buyer Lead';
+      } else if (lead.leadType === 'VENDOR') {
+        title = 'Vendor Lead';
+      } else {
+        title = 'Property Lead';
+      }
     }
     
     return title;
@@ -780,14 +809,24 @@ const Inbox = () => {
       
       if (!res.ok) {
         console.error(`Tasks API error: ${res.status} ${res.statusText}`);
+        if (res.status === 401) {
+          console.error('❌ AUTHENTICATION FAILED - User not logged in or token expired');
+          toast({
+            title: "Authentication Error",
+            description: "Please log in again to access your tasks.",
+            variant: "destructive",
+          });
+        }
         setAssignedTasks([]);
         return;
       }
       
       const json = await res.json();
       console.log('Tasks response:', json);
+      console.log('📋 RAW TASKS DATA:', json.data);
       
-      const items = (json?.data || []).map((t: any) => ({
+      if (json.data && Array.isArray(json.data)) {
+        const items = json.data.map((t: any) => ({
         id: t.id,
         from: t.lead ? createLeadTitle(t.lead) : 'Task',
         subject: t.title,
@@ -799,10 +838,20 @@ const Inbox = () => {
         starred: false,
         priority: 'normal',
         leadId: t.lead?.id,
-        leadAddress: t.lead?.address ? `${t.lead.address.address1}, ${t.lead.address.city}, ${t.lead.address.state}` : ''
-      }));
-      setAssignedTasks(items);
-      console.log('Processed tasks:', items.length);
+        leadAddress: t.lead?.address ? (
+          // Check if address1 already contains city/state
+          t.lead.address.address1.includes(t.lead.address.city) ? 
+            t.lead.address.address1 : 
+            `${t.lead.address.address1}, ${t.lead.address.city}, ${t.lead.address.state}`
+        ) : ''
+        }));
+        setAssignedTasks(items);
+        console.log('✅ Processed tasks:', items.length);
+        console.log('📋 Sample task data:', items[0]);
+      } else {
+        console.log('❌ No tasks data found or invalid format');
+        setAssignedTasks([]);
+      }
     } catch (error) {
       console.error('Error fetching tasks:', error);
       setAssignedTasks([]);
@@ -822,14 +871,24 @@ const Inbox = () => {
       
       if (!res.ok) {
         console.error(`Communications API error: ${res.status} ${res.statusText}`);
+        if (res.status === 401) {
+          console.error('❌ AUTHENTICATION FAILED - User not logged in or token expired');
+          toast({
+            title: "Authentication Error", 
+            description: "Please log in again to access communications.",
+            variant: "destructive",
+          });
+        }
         setLeadCommunications([]);
         return;
       }
       
       const json = await res.json();
       console.log('Communications response:', json);
+      console.log('💬 RAW COMMUNICATIONS DATA:', json.data);
       
-      const items = (json?.data || []).map((c: any) => ({
+      if (json.data && Array.isArray(json.data)) {
+        const items = json.data.map((c: any) => ({
         id: c.id,
         from: c.lead ? createLeadTitle(c.lead) : (c.subject || c.type),
         subject: c.subject || `${c.type} ${c.direction}`,
@@ -841,12 +900,22 @@ const Inbox = () => {
         starred: false,
         priority: 'normal',
         leadId: c.lead?.id,
-        leadAddress: c.lead?.address ? `${c.lead.address.address1}, ${c.lead.address.city}, ${c.lead.address.state}` : '',
+        leadAddress: c.lead?.address ? (
+          // Check if address1 already contains city/state
+          c.lead.address.address1.includes(c.lead.address.city) ? 
+            c.lead.address.address1 : 
+            `${c.lead.address.address1}, ${c.lead.address.city}, ${c.lead.address.state}`
+        ) : '',
         commType: c.type,
         direction: c.direction
-      }));
-      setLeadCommunications(items);
-      console.log('Processed communications:', items.length);
+        }));
+        setLeadCommunications(items);
+        console.log('✅ Processed communications:', items.length);
+        console.log('💬 Sample communication data:', items[0]);
+      } else {
+        console.log('❌ No communications data found or invalid format');
+        setLeadCommunications([]);
+      }
     } catch (error) {
       console.error('Error fetching communications:', error);
       setLeadCommunications([]);
@@ -921,6 +990,41 @@ const Inbox = () => {
     }
   };
 
+  // Fetch SLA status
+  const fetchSLAStatus = async () => {
+    setLoadingSLA(true);
+    console.log('📊 Fetching SLA status...');
+    try {
+      const accessToken = localStorage.getItem('accessToken');
+      console.log('🔑 Using token for SLA:', accessToken ? 'Token exists' : 'NO TOKEN!');
+      const res = await fetch(`${API_BASE}/reminders/sla-status`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+      
+      if (!res.ok) {
+        console.error(`SLA status API error: ${res.status} ${res.statusText}`);
+        const errorText = await res.text();
+        console.error('Error response:', errorText);
+        setSlaStatus(null);
+        return;
+      }
+      
+      const json = await res.json();
+      console.log('SLA status response:', json);
+      
+      if (json.success) {
+        setSlaStatus(json.data);
+        console.log('✅ SLA Status loaded:', json.data);
+      } else {
+        console.error('SLA status API returned success: false', json);
+        setSlaStatus(null);
+      }
+    } catch (error) {
+      console.error('Error fetching SLA status:', error);
+      setSlaStatus(null);
+    } finally {
+      setLoadingSLA(false);
+    }
+  };
+
   // Fetch notifications
   const fetchNotifications = async () => {
     setLoadingNotifications(true);
@@ -983,8 +1087,9 @@ const Inbox = () => {
     fetchCommunications();
     fetchReminders();
     fetchReminderCounts();
-    // Skip notifications for now due to backend error
-    // fetchNotifications();
+    fetchSLAStatus();
+    // Re-enable notifications - backend should be working now
+    fetchNotifications();
   }, []);
 
   // Load on tab switch
@@ -994,8 +1099,8 @@ const Inbox = () => {
     if (activeTab === 'reminders') {
       fetchReminders();
       fetchReminderCounts();
-      // Skip notifications for now due to backend error
-      // fetchNotifications(); // Also fetch notifications for reminders tab
+      // Re-enable notifications for reminders tab
+      fetchNotifications(); // Also fetch notifications for reminders tab
     }
   }, [activeTab]);
 
@@ -1087,6 +1192,65 @@ const Inbox = () => {
           </div>
         </div>
       </div>
+
+      {/* SLA Status Display */}
+      {slaStatus && (
+        <div className="bg-white border-b border-gray-200 px-6 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-2">
+                <div className={`w-3 h-3 rounded-full ${slaStatus.totalAlerts > 0 ? 'bg-red-500' : 'bg-green-500'}`} />
+                <span className="text-sm font-medium text-gray-700">SLA Status</span>
+              </div>
+              
+              <div className="flex items-center gap-4 text-xs">
+                <div className="flex items-center gap-1">
+                  <span className="text-gray-500">Total Alerts:</span>
+                  <span className={`font-medium ${slaStatus.totalAlerts > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    {slaStatus.totalAlerts}
+                  </span>
+                </div>
+                
+                <div className="flex items-center gap-1">
+                  <span className="text-gray-500">Critical:</span>
+                  <span className={`font-medium ${slaStatus.criticalAlerts > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    {slaStatus.criticalAlerts}
+                  </span>
+                </div>
+                
+                <div className="flex items-center gap-1">
+                  <span className="text-gray-500">Overdue:</span>
+                  <span className={`font-medium ${slaStatus.overdueItems > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                    {slaStatus.overdueItems}
+                  </span>
+                </div>
+                
+                <div className="flex items-center gap-1">
+                  <span className="text-gray-500">Upcoming:</span>
+                  <span className={`font-medium ${slaStatus.upcomingDeadlines > 0 ? 'text-yellow-600' : 'text-green-600'}`}>
+                    {slaStatus.upcomingDeadlines}
+                  </span>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              {loadingSLA && (
+                <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={fetchSLAStatus}
+                disabled={loadingSLA}
+                className="h-6 px-2 text-xs text-gray-500 hover:text-gray-700"
+              >
+                <RefreshCw className={`w-3 h-3 ${loadingSLA ? 'animate-spin' : ''}`} />
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filter Tabs */}
       <div className="bg-white border-b border-gray-200 px-6">
@@ -1509,7 +1673,11 @@ const Inbox = () => {
                           } ${
                             message.isGmail || message.type === 'task' || message.type === 'communication' || message.type === 'reminder' || message.type === 'notification' ? 'hover:bg-gray-50 cursor-pointer' : 'cursor-default'
                           }`}
-                          onClick={() => handleEmailClick(message)}
+                          onClick={(e) => {
+                            console.log('🖱️ DIV CLICKED - Event fired!');
+                            console.log('📄 Message:', message);
+                            handleEmailClick(message);
+                          }}
                         >
                           {/* Checkbox */}
                           <div onClick={(e) => e.stopPropagation()}>

@@ -55,8 +55,9 @@ import {
   SortDesc
 } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { useLeads, type LeadType } from "@/hooks/useLeads";
+import { ViewLeadDialog } from "@/components/ViewLeadDialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { SortableTableHeader, useSortable } from "@/components/SortableTableHeader";
 import { ImportCSVDialog } from "@/components/ImportCSVDialog";
@@ -121,6 +122,11 @@ const Leads = () => {
   const [leadStatuses, setLeadStatuses] = useState<string[]>([]);
   const [loadingFilters, setLoadingFilters] = useState(false);
   
+  // URL parameter handling for direct lead access
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [selectedLead, setSelectedLead] = useState<any>(null);
+  const [showLeadDetail, setShowLeadDetail] = useState(false);
+  
   // Role-based access control
   const userRoles = user?.roles || [];
   const isACQ = userRoles.includes('ACQ');
@@ -143,6 +149,41 @@ const Leads = () => {
     fetchLeads(); // Fetch all leads without type filter
     loadFilterData(); // Load dynamic filter options
   }, []);
+
+  // Handle leadId parameter from URL to show specific lead
+  useEffect(() => {
+    const leadIdParam = searchParams.get('leadId');
+    console.log('🌐 URL leadId parameter:', leadIdParam);
+    console.log('📊 Available leads:', leads.length);
+    
+    if (leadIdParam && leads.length > 0) {
+      console.log('🔍 Looking for lead with ID:', leadIdParam);
+      console.log('📋 All lead IDs:', leads.map(l => l.id));
+      
+      // Find lead by ID (much simpler and more reliable)
+      const matchingLead = leads.find(lead => lead.id === leadIdParam);
+      console.log(`🔎 Comparing "${leadIdParam}" with lead IDs`);
+      console.log(`🎯 Match found:`, !!matchingLead);
+      
+      if (matchingLead) {
+        console.log('✅ Found matching lead:', matchingLead);
+        setSelectedLead(matchingLead);
+        setShowLeadDetail(true);
+        
+        // Set the appropriate tab based on lead type
+        setActiveTab(matchingLead.leadType);
+        
+        // Remove the leadId parameter from URL after opening
+        setSearchParams(prev => {
+          const newParams = new URLSearchParams(prev);
+          newParams.delete('leadId');
+          return newParams;
+        });
+      } else {
+        console.log('❌ No matching lead found for ID:', leadIdParam);
+      }
+    }
+  }, [searchParams, leads, setSearchParams]);
 
   // Load dynamic filter data
   const loadFilterData = async () => {
@@ -1486,6 +1527,15 @@ const Leads = () => {
         leadType={activeTab}
         onImport={handleImportCSV}
       />
+
+      {/* View Lead Dialog - Auto-opened from URL parameter */}
+      {selectedLead && (
+        <ViewLeadDialog 
+          lead={selectedLead}
+          open={showLeadDetail}
+          onOpenChange={setShowLeadDetail}
+        />
+      )}
     </DashboardLayout>
   );
 };

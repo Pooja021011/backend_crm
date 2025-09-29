@@ -45,13 +45,14 @@ const App = () => (
                 </DashboardLayout>
               </ProtectedRoute>
             } />
-            <Route path="/dashboard" element={
+            {/* Commented out dashboard route to avoid confusion with index page */}
+            {/* <Route path="/dashboard" element={
               <ProtectedRoute>
                 <DashboardLayout>
                   <Index />
                 </DashboardLayout>
               </ProtectedRoute>
-            } />
+            } /> */}
             <Route path="/leads" element={
               <ProtectedRoute>
                 <Leads />

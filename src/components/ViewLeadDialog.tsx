@@ -519,9 +519,10 @@ export const ViewLeadDialog: React.FC<ViewLeadDialogProps> = ({
                     <Input type="datetime-local" value={closedAt} onChange={(e) => setClosedAt(e.target.value)} disabled={dealLoading} />
                   </div>
                 </div>
-                <div className="flex justify-end">
+                {/* Save Deal button hidden as requested */}
+                {/* <div className="flex justify-end">
                   <Button onClick={saveDeal} disabled={dealLoading}>Save Deal</Button>
-                </div>
+                </div> */}
               </CardContent>
             </Card>
           </TabsContent>

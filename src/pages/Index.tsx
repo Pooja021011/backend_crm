@@ -285,6 +285,7 @@ const Index = () => {
         dueDate: new Date(t.dueAt).toLocaleDateString(),
         status: t.status === 'OPEN' ? 'pending' : 'completed',
         assignedTo: t.assignedUser ? `${t.assignedUser.firstName} ${t.assignedUser.lastName}` : 'Unassigned',
+        leadId: t.lead?.id || null,
         leadAddress: t.lead?.address ? `${t.lead.address.address1}, ${t.lead.address.city}, ${t.lead.address.state}` : '',
         leadTitle: t.lead ? createLeadTitle(t.lead) : 'No Lead',
         leadName: t.lead?.seller ? `${t.lead.seller.firstName} ${t.lead.seller.lastName}` : 
@@ -318,6 +319,7 @@ const Index = () => {
         message: c.content || c.notes || 'No content',
         timestamp: new Date(c.occurredAt).toLocaleString(),
         status: c.direction === 'INBOUND' ? 'unread' : 'read',
+        leadId: c.lead?.id || null,
         leadName: c.lead?.seller ? `${c.lead.seller.firstName} ${c.lead.seller.lastName}` : 
                   c.lead?.buyer ? `${c.lead.buyer.firstName} ${c.lead.buyer.lastName}` : 'Unknown',
         leadAddress: c.lead?.address ? `${c.lead.address.address1}, ${c.lead.address.city}, ${c.lead.address.state}` : ''
@@ -349,6 +351,7 @@ const Index = () => {
         date: new Date(r.scheduledFor).toLocaleDateString(),
         time: new Date(r.scheduledFor).toLocaleTimeString(),
         status: r.status === 'PENDING' ? 'pending' : 'completed',
+        leadId: r.lead?.id || null,
         leadName: r.lead?.seller ? `${r.lead.seller.firstName} ${r.lead.seller.lastName}` : 
                   r.lead?.buyer ? `${r.lead.buyer.firstName} ${r.lead.buyer.lastName}` : 'Unknown',
         leadAddress: r.lead?.address ? `${r.lead.address.address1}, ${r.lead.address.city}, ${r.lead.address.state}` : ''
@@ -374,21 +377,30 @@ const Index = () => {
   }, []);
 
   // Action handlers
-  const handleLeadNavigation = (leadAddress: string, leadTitle?: string, taskId?: number) => {
-    // Navigate to leads page with lead address as identifier
-    navigate(`/leads?address=${encodeURIComponent(leadAddress)}`);
+  const handleLeadNavigation = (leadId: string | null, leadTitle?: string, taskId?: number) => {
+    if (!leadId) {
+      toast({
+        title: "Error",
+        description: "Lead information not available",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Navigate to leads page with leadId parameter to trigger detail popup
+    navigate(`/leads?leadId=${encodeURIComponent(leadId)}`);
     
     // If taskId is provided, remove the task from the list
     if (taskId) {
       setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
       toast({
         title: "Task Completed & Lead Opened",
-        description: `Opened ${leadTitle || leadAddress} details and removed task from list`,
+        description: `Opened ${leadTitle || 'lead'} details and removed task from list`,
       });
     } else {
       toast({
-        title: "Navigating to Lead",
-        description: `Opening details for ${leadTitle || leadAddress}`,
+        title: "Opening Lead Details",
+        description: `Opening details for ${leadTitle || 'lead'}`,
       });
     }
   };
@@ -749,7 +761,7 @@ const Index = () => {
                       <div className="flex items-center gap-4 text-xs text-gray-500">
                         <div 
                           className="flex items-center gap-1 cursor-pointer hover:text-blue-600 transition-colors"
-                          onClick={() => handleLeadNavigation(task.leadAddress, task.leadTitle, task.id)}
+                          onClick={() => handleLeadNavigation(task.leadId, task.leadTitle, task.id)}
                         >
                           <MapPin className="w-3 h-3" />
                           {task.leadTitle}
@@ -846,18 +858,15 @@ const Index = () => {
                       <div className="flex items-center gap-4 text-xs text-gray-500">
                         <div 
                           className="flex items-center gap-1 cursor-pointer hover:text-blue-600 transition-colors"
-                          onClick={() => handleLeadNavigation(comm.leadAddress, `${comm.leadName} - ${comm.leadAddress}`)}
+                          onClick={() => handleLeadNavigation(comm.leadId, `${comm.leadName} - ${comm.leadAddress}`)}
                         >
                           <User className="w-3 h-3" />
                           {comm.leadName}
+                          <ExternalLink className="w-3 h-3 ml-1" />
                         </div>
-                        <div 
-                          className="flex items-center gap-1 cursor-pointer hover:text-blue-600 transition-colors"
-                          onClick={() => handleLeadNavigation(comm.leadAddress, `${comm.leadName} - ${comm.leadAddress}`)}
-                        >
+                        <div className="flex items-center gap-1">
                           <MapPin className="w-3 h-3" />
                           {comm.leadAddress}
-                          <ExternalLink className="w-3 h-3 ml-1" />
                         </div>
                         <div className="flex items-center gap-1">
                           <Clock className="w-3 h-3" />
@@ -949,18 +958,15 @@ const Index = () => {
                       <div className="flex items-center gap-4 text-xs text-gray-500">
                         <div 
                           className="flex items-center gap-1 cursor-pointer hover:text-blue-600 transition-colors"
-                          onClick={() => handleLeadNavigation(reminder.leadAddress, `${reminder.leadName} - ${reminder.leadAddress}`)}
+                          onClick={() => handleLeadNavigation(reminder.leadId, `${reminder.leadName} - ${reminder.leadAddress}`)}
                         >
                           <User className="w-3 h-3" />
                           {reminder.leadName}
+                          <ExternalLink className="w-3 h-3 ml-1" />
                         </div>
-                        <div 
-                          className="flex items-center gap-1 cursor-pointer hover:text-blue-600 transition-colors"
-                          onClick={() => handleLeadNavigation(reminder.leadAddress, `${reminder.leadName} - ${reminder.leadAddress}`)}
-                        >
+                        <div className="flex items-center gap-1">
                           <MapPin className="w-3 h-3" />
                           {reminder.leadAddress}
-                          <ExternalLink className="w-3 h-3 ml-1" />
                         </div>
                         <div className="flex items-center gap-1">
                           <Calendar className="w-3 h-3" />

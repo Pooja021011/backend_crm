@@ -1,5 +1,6 @@
 import Telnyx from 'telnyx';
 import { logger } from '../config/logger.js';
+import { prisma } from '../config/db.js';
 import { communicationRepository } from '../repositories/communicationRepository.js';
 import { smsSettingsRepository } from '../repositories/smsSettingsRepository.js';
 
@@ -96,21 +97,76 @@ export const smsService = {
       const { payload } = data;
 
       if (payload.event_type === 'message.received') {
-        const { from, to, text } = payload;
+        const { from, to, text, id: messageId } = payload;
 
-        logger.info('Received SMS', { from, to, text });
+        logger.info('Received SMS', { from, to, text, messageId });
 
-        // Here you can implement logic to:
-        // 1. Find the lead associated with the phone number
-        // 2. Store the incoming SMS in communication history
-        // 3. Trigger notifications or auto-responses
-
-        // For now, just log the received message
-        logger.info('SMS received and processed', { from, to, text });
+        // Find user by phone number to associate the SMS
+        const userSmsSettings = await smsSettingsRepository.findByPhoneNumber(to);
+        
+        if (userSmsSettings) {
+          // Try to find lead by phone number
+          const lead = await this.findLeadByPhoneNumber(from);
+          
+          if (lead) {
+            // Store incoming SMS in communication history
+            await communicationRepository.create(lead.id, {
+              type: 'SMS',
+              direction: 'INBOUND',
+              subject: `SMS from ${from}`,
+              body: text,
+              occurredAt: new Date(),
+              createdById: userSmsSettings.userId,
+            });
+            
+            logger.info('Incoming SMS stored in communication history', { 
+              leadId: lead.id, 
+              from, 
+              userId: userSmsSettings.userId 
+            });
+          } else {
+            logger.info('No lead found for incoming SMS phone number', { from });
+          }
+        } else {
+          logger.info('No user found for SMS destination number', { to });
+        }
+      }
+      
+      // Handle delivery status updates
+      if (payload.event_type === 'message.sent' || payload.event_type === 'message.delivered' || payload.event_type === 'message.delivery_failed') {
+        logger.info('SMS delivery status update', { 
+          eventType: payload.event_type,
+          messageId: payload.id,
+          status: payload.delivery_status 
+        });
+        // TODO: Update communication record with delivery status for risk management metrics
       }
     } catch (error: any) {
       logger.error('Failed to process incoming SMS webhook', { error: error.message });
       throw error;
+    }
+  },
+
+  /**
+   * Find lead by phone number
+   */
+  async findLeadByPhoneNumber(phoneNumber: string): Promise<any> {
+    try {
+      // Search in lead phone fields
+      const lead = await prisma.lead.findFirst({
+        where: {
+          OR: [
+            { phone: phoneNumber },
+            { phone: phoneNumber.replace(/\D/g, '') }, // Try without formatting
+            { phone: phoneNumber.replace(/^\+1/, '') }, // Try without +1
+          ]
+        }
+      });
+      
+      return lead;
+    } catch (error: any) {
+      logger.error('Error finding lead by phone number', { error: error.message, phoneNumber });
+      return null;
     }
   },
 

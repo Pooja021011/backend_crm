@@ -1,5 +1,6 @@
 import Telnyx from 'telnyx';
 import { logger } from '../config/logger.js';
+import { prisma } from '../config/db.js';
 import { communicationRepository } from '../repositories/communicationRepository.js';
 import { smsSettingsRepository } from '../repositories/smsSettingsRepository.js';
 
@@ -107,23 +108,73 @@ export const callService = {
 
         logger.info('Incoming call received', { from, to, callId: call_control_id });
 
-        // Find user by phone number to log the call
+        // Find user by phone number to associate the call
         const userSmsSettings = await smsSettingsRepository.findByPhoneNumber(to);
         
         if (userSmsSettings) {
-          // You can implement auto-answer, forwarding, or other call handling logic here
-          logger.info('Call matched to user', { 
-            userId: userSmsSettings.userId, 
-            userPhone: to 
-          });
+          // Try to find lead by phone number
+          const lead = await this.findLeadByPhoneNumber(from);
+          
+          if (lead) {
+            // Store incoming call in communication history
+            await communicationRepository.create(lead.id, {
+              type: 'CALL',
+              direction: 'INBOUND',
+              subject: `Incoming call from ${from}`,
+              body: `Inbound call received from ${from}`,
+              occurredAt: new Date(),
+              createdById: userSmsSettings.userId,
+            });
+            
+            logger.info('Incoming call stored in communication history', { 
+              leadId: lead.id, 
+              from, 
+              userId: userSmsSettings.userId,
+              callId: call_control_id 
+            });
+          } else {
+            logger.info('No lead found for incoming call phone number', { from });
+          }
+        } else {
+          logger.info('No user found for call destination number', { to });
         }
-
-        // For now, just log the incoming call
-        logger.info('Incoming call processed', { from, to, callId: call_control_id });
+      }
+      
+      // Handle call status updates (answered, completed, etc.)
+      if (payload.event_type === 'call.answered' || payload.event_type === 'call.hangup') {
+        logger.info('Call status update', { 
+          eventType: payload.event_type,
+          callId: payload.call_control_id,
+          duration: payload.call_duration_secs 
+        });
+        // TODO: Update communication record with call duration for metrics
       }
     } catch (error: any) {
       logger.error('Failed to process incoming call webhook', { error: error.message });
       throw error;
+    }
+  },
+
+  /**
+   * Find lead by phone number
+   */
+  async findLeadByPhoneNumber(phoneNumber: string): Promise<any> {
+    try {
+      // Search in lead phone fields
+      const lead = await prisma.lead.findFirst({
+        where: {
+          OR: [
+            { phone: phoneNumber },
+            { phone: phoneNumber.replace(/\D/g, '') }, // Try without formatting
+            { phone: phoneNumber.replace(/^\+1/, '') }, // Try without +1
+          ]
+        }
+      });
+      
+      return lead;
+    } catch (error: any) {
+      logger.error('Error finding lead by phone number', { error: error.message, phoneNumber });
+      return null;
     }
   },
 
