@@ -102,6 +102,52 @@ const AddSellerLead = () => {
     }
   };
 
+  const validateField = (fieldName: string, value: string) => {
+    let error = '';
+    
+    switch (fieldName) {
+      case 'firstName':
+        error = validateName(value, 'First name');
+        break;
+      case 'lastName':
+        error = validateName(value, 'Last name');
+        break;
+      case 'phoneNumber':
+        error = validatePhoneNumber(value);
+        break;
+      case 'emailAddress':
+        error = validateEmail(value);
+        break;
+      case 'propertyAddress':
+        error = validateAddress(value);
+        break;
+      case 'city':
+        error = validateCity(value);
+        break;
+      case 'state':
+        error = validateState(value);
+        break;
+      case 'zipCode':
+        error = validateZipCode(value);
+        break;
+      case 'acquisitionsAgentId':
+        if (!value) error = 'Acquisitions agent is required';
+        break;
+      case 'leadSource':
+        if (!value) error = 'Lead source is required';
+        break;
+      default:
+        break;
+    }
+    
+    setErrors(prev => ({
+      ...prev,
+      [fieldName]: error
+    }));
+    
+    return error === '';
+  };
+
   const validateForm = () => {
     const hasRequiredFields = formData.firstName.trim() && 
            formData.lastName.trim() && 
