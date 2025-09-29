@@ -1,9 +1,11 @@
 // API Configuration
 export const getApiBaseUrl = (): string => {
   // Force HTTP protocol, never HTTPS
-  // Use localhost for development, remote server for production
+  // Priority: .env file -> fallback based on environment
   const isDev = import.meta.env.DEV || window.location.hostname === 'localhost';
   const defaultUrl = isDev ? 'http://localhost:4000/api/v1' : 'http://20.200.122.55:4000/api/v1';
+  
+  // Get from .env file (VITE_API_BASE_URL) or use default
   const baseUrl = import.meta.env.VITE_API_BASE_URL || defaultUrl;
   
   // Ensure URL starts with http:// (not https://)
