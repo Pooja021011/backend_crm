@@ -19,11 +19,8 @@ export default defineConfig(({ mode }) => ({
       'X-Forwarded-Proto': 'http',
       'X-Forwarded-Ssl': 'off'
     },
-    // Disable HMR over HTTPS
-    hmr: {
-      port: 8081,
-      host: '0.0.0.0'
-    }
+    // Disable HMR for server deployment
+    hmr: false
   },
   plugins: [
     react({
@@ -31,7 +28,7 @@ export default defineConfig(({ mode }) => ({
       jsxRuntime: 'automatic',
       jsxImportSource: 'react',
       // Disable fast refresh in PM2 environment to prevent issues
-      fastRefresh: process.env.PM2_HOME ? false : true
+      fastRefresh: false
     }),
     mode === 'development' && !process.env.PM2_HOME &&
     componentTagger(),
@@ -49,7 +46,7 @@ export default defineConfig(({ mode }) => ({
   // Ensure JSX works in PM2 environment
   esbuild: {
     jsx: 'automatic',
-    jsxDev: mode === 'development' && !process.env.PM2_HOME,
+    jsxDev: false,
     jsxFactory: 'React.createElement',
     jsxFragment: 'React.Fragment'
   },
