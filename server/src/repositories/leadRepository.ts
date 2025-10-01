@@ -182,11 +182,13 @@ export const leadRepository = {
 
       // Role-based lead type restrictions
       if (isACQ && !isAdmin && !isExecutive && !isManager && !isTC) {
-        // Acquisitions Agent can only see seller leads
+        // Acquisitions Agent can only see their assigned seller leads
         where.leadType = 'SELLER';
+        where.assignedUserId = userId;
       } else if (isDisp && !isAdmin && !isExecutive && !isManager && !isTC) {
-        // Dispositions Agent can only see buyer leads
+        // Dispositions Agent can only see their assigned buyer leads
         where.leadType = 'BUYER';
+        where.assignedUserId = userId;
       }
       // Admin, Executive, Manager, TC can see all lead types
     }
