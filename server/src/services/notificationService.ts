@@ -92,12 +92,7 @@ export const notificationService = {
     try {
       const notification = await prisma.notification.update({
         where: { 
-          id: notificationId,
-          OR: [
-            { targetUserId: userId },
-            // For role-based notifications, we'd need to check if user has the required role
-            // For now, allowing any user to mark as read
-          ]
+          id: notificationId
         },
         data: {
           isRead: true,

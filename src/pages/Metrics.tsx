@@ -559,7 +559,7 @@ const Metrics = () => {
 
   // Enhanced Pipeline Components
   const EnhancedPipelineFunnel: React.FC<{ selectedPeriod: string }> = ({ selectedPeriod }) => {
-    const [stages, setStages] = useState<{ name: string; count: number; color: string; conversionRate?: number }[]>([]);
+    const [stages, setStages] = useState<{ name: string; count: number; color: string; conversionRate?: number; lost?: number; lostPercent?: number }[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     
@@ -575,16 +575,23 @@ const Metrics = () => {
           const json = await res.json();
           const stageData = json?.data?.stages || [];
           
-          // Calculate conversion rates
+          // Calculate conversion rates and lost leads
           const enhancedStages = stageData.map((stage: any, index: number) => {
-            const conversionRate = index > 0 && stageData[index - 1]?.count > 0 
-              ? (stage.count / stageData[index - 1].count) * 100 
+            const prevCount = index > 0 ? stageData[index - 1]?.count : stage.count;
+            const lost = index > 0 ? prevCount - stage.count : 0;
+            const lostPercent = index > 0 && prevCount > 0 
+              ? Math.round(((lost / prevCount) * 100) * 10) / 10
+              : 0;
+            const conversionRate = index > 0 && prevCount > 0 
+              ? (stage.count / prevCount) * 100 
               : 100;
             return {
               name: stage.name,
               count: stage.count,
               color: stage.color,
-              conversionRate: Math.round(conversionRate * 10) / 10
+              conversionRate: Math.round(conversionRate * 10) / 10,
+              lost: lost,
+              lostPercent: lostPercent
             };
           });
           
@@ -623,66 +630,67 @@ const Metrics = () => {
                 <div className="flex items-end justify-between gap-3 px-2">
                   {stages.map((stage, index) => {
                     const height = (stage.count / maxCount) * 200;
-                    const widthPercent = Math.max(15, (stage.count / stages[0]?.count || 1) * 100);
+                    // Fixed bar width instead of proportional - makes it look like a bar chart
+                    const barWidth = 50; // Reduced width for narrower bars
                     
                     return (
-                      <div key={index} className="flex flex-col items-center space-y-3 min-w-[120px]">
-                        {/* Stage Name */}
-                        <Badge className={`text-white text-xs px-3 py-1 font-medium uppercase tracking-wide whitespace-nowrap ${stage.color}`}>
-                          {stage.name}
+                      <div key={index} className="flex flex-col items-center min-w-[90px]">
+                        {/* Stage Name Badge - Above bar */}
+                        <Badge className={`text-white text-[10px] px-2 py-1 font-bold uppercase tracking-wide whitespace-nowrap mb-2 ${stage.color}`}>
+                          {stage.name.toUpperCase()}
                         </Badge>
                         
-                        {/* Count */}
-                        <div className="text-2xl font-bold text-gray-900">{stage.count}</div>
+                        {/* Count - Above bar */}
+                        <div className="text-xl font-bold text-gray-900 mb-2">{stage.count}</div>
                         
-                        {/* Conversion Rate */}
-                        {index > 0 && (
-                          <div className="text-sm font-medium text-blue-600">
-                            {stage.conversionRate}% conversion
-                          </div>
-                        )}
-                        
-                        {/* Funnel Shape */}
-                        <div className="relative flex flex-col items-center">
+                        {/* Bar Shape with white circle on top */}
+                        <div className="relative flex flex-col items-center mb-2">
                           <div 
-                            className={`${stage.color || 'bg-gradient-to-b from-blue-400 to-blue-600'} relative transition-all duration-300 hover:opacity-80 shadow-md`}
+                            className={`${stage.color || 'bg-gradient-to-b from-blue-400 to-blue-600'} relative transition-all duration-300 hover:opacity-90 shadow-lg rounded-t-lg rounded-b-sm`}
                             style={{ 
-                              width: `${widthPercent}px`, 
-                              height: `${Math.max(40, height)}px`,
-                              clipPath: index === stages.length - 1 
-                                ? 'none' 
-                                : 'polygon(5% 0%, 95% 0%, 85% 100%, 15% 100%)',
-                              borderRadius: index === stages.length - 1 ? '0 0 12px 12px' : '8px 8px 0 0'
+                              width: `${barWidth}px`, 
+                              height: `${Math.max(80, height)}px`
                             }}
                           >
-                            <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-white rounded-full border-2 border-gray-300 flex items-center justify-center shadow-sm">
-                              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                            </div>
+                            {/* White circle on top of bar */}
+                            <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-white rounded-full border-2 border-gray-300 shadow-sm"></div>
                             
                             {/* Gradient overlay for better visual appeal */}
-                            <div 
-                              className="absolute inset-0 bg-gradient-to-b from-white/20 to-transparent"
-                              style={{ 
-                                clipPath: index === stages.length - 1 
-                                  ? 'none' 
-                                  : 'polygon(5% 0%, 95% 0%, 85% 100%, 15% 100%)',
-                                borderRadius: index === stages.length - 1 ? '0 0 12px 12px' : '8px 8px 0 0'
-                              }}
-                            />
+                            <div className="absolute inset-0 bg-gradient-to-b from-white/20 to-transparent rounded-t-lg rounded-b-sm" />
                           </div>
                         </div>
                         
-                        {/* Arrow to next stage */}
-                        {index < stages.length - 1 && (
-                          <div className="text-gray-400 text-xs">→</div>
+                        {/* Conversion Rate Badge - Below bar */}
+                        <div className="bg-gray-800 text-white text-[10px] font-bold px-2 py-1 rounded-full mb-1">
+                          {index === 0 ? '100%' : `${stage.conversionRate}%`}
+                        </div>
+                        
+                        {/* Lost leads section - Dynamic data (show for all stages after first) */}
+                        {index > 0 && (
+                          <>
+                            <div className="flex items-center gap-1 mb-1">
+                              <span className="text-red-500 text-[10px]">▼</span>
+                              <span className="text-[10px] text-red-600 font-semibold">{stage.lost || 0} LOST</span>
+                            </div>
+                            
+                            {/* Lost Percentage */}
+                            <div className="text-[10px] text-red-600 font-bold mb-1">
+                              {stage.lostPercent || 0}%
+                            </div>
+                          </>
                         )}
+                        
+                        {/* Stage Label - Below everything */}
+                        <div className="text-[10px] text-gray-600 text-center leading-tight max-w-[100px]">
+                          {stage.name}
+                        </div>
                       </div>
                     );
                   })}
                 </div>
               </div>
-              <div className="text-xs text-gray-500 text-center mt-4 px-4">
-                💡 Funnel shows lead progression from {stages[0]?.name} to {stages[stages.length - 1]?.name} with conversion rates
+              <div className="text-xs text-gray-500 text-center mt-6 px-4 py-2 bg-blue-50 rounded-lg">
+                💡 <strong>Tip:</strong> Scroll horizontally to view all pipeline stages. Hover over stage names to see full text. Conversion rates show % of leads moving to the next stage.
               </div>
             </div>
           )}

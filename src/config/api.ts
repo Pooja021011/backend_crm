@@ -1,6 +1,20 @@
-// API Configuration - Server IP Hardcoded
+// API Configuration - Environment variable first, then fallback to server URL
 export const getApiBaseUrl = (): string => {
-  // Hardcoded server IP - Force HTTP, never HTTPS
+  // First, try to read from environment variable (only VITE_API_URL)
+  const envApiUrl = import.meta.env.VITE_API_URL;
+  
+  if (envApiUrl) {
+    // If environment variable exists, use it
+    const apiUrl = envApiUrl.replace(/\/$/, ''); // Remove trailing slash if any
+    
+    // Check if /api/v1 is already included, if not add it
+    if (apiUrl.endsWith('/api/v1')) {
+      return apiUrl;
+    }
+    return `${apiUrl}/api/v1`;
+  }
+  
+  // Fallback to hardcoded server URL if env variable not found
   return 'http://20.200.122.55:4000/api/v1';
 };
 
