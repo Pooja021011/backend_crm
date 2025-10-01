@@ -1002,12 +1002,11 @@ export const metricsService = {
     const leaderboard = [];
 
     for (const user of acqUsers) {
-      // Get user's leads in the period
+      // Get all user's seller leads (regardless of when created)
       const userLeads = await prisma.lead.findMany({
         where: {
           assignedUserId: user.id,
-          leadType: 'SELLER',
-          createdAt: { gte: start.toDate(), lte: end.toDate() }
+          leadType: 'SELLER'
         },
         include: {
           deal: true,
@@ -1015,13 +1014,22 @@ export const metricsService = {
         }
       });
 
-      // Calculate contracts signed (leads with deals)
-      const contractsSigned = userLeads.filter(l => l.deal).length;
+      // Calculate contracts signed - deals created/updated in the period
+      const contractsSigned = userLeads.filter(l => {
+        if (!l.deal) return false;
+        const contractedAt = l.deal.contractedAt || l.deal.createdAt;
+        return contractedAt >= start.toDate() && contractedAt <= end.toDate();
+      }).length;
 
-      // Calculate projected profit
-      const projectedProfit = userLeads.reduce((sum, l) => 
-        sum + (l.deal?.netProfit || 0), 0
-      );
+      // Calculate projected profit from deals in the period
+      const projectedProfit = userLeads.reduce((sum, l) => {
+        if (!l.deal) return sum;
+        const contractedAt = l.deal.contractedAt || l.deal.createdAt;
+        if (contractedAt >= start.toDate() && contractedAt <= end.toDate()) {
+          return sum + (l.deal.netProfit || 0);
+        }
+        return sum;
+      }, 0);
 
       // Calculate leads per contract ratio
       const leadsPerContract = contractsSigned > 0 ? 
@@ -1037,7 +1045,7 @@ export const metricsService = {
       // Get communications data
       const communications = await prisma.communication.findMany({
         where: {
-          userId: user.id,
+          createdById: user.id,
           occurredAt: { gte: start.toDate(), lte: end.toDate() }
         }
       });
@@ -1145,12 +1153,11 @@ export const metricsService = {
     const leaderboard = [];
 
     for (const user of dispUsers) {
-      // Get user's buyer leads in the period
+      // Get all user's buyer leads (regardless of when created)
       const userLeads = await prisma.lead.findMany({
         where: {
           assignedUserId: user.id,
-          leadType: 'BUYER',
-          createdAt: { gte: start.toDate(), lte: end.toDate() }
+          leadType: 'BUYER'
         },
         include: {
           deal: true,
@@ -1158,13 +1165,20 @@ export const metricsService = {
         }
       });
 
-      // Calculate properties sold (leads with closed deals)
-      const propertiesSold = userLeads.filter(l => l.deal?.closedAt).length;
+      // Calculate properties sold - deals closed in the period
+      const propertiesSold = userLeads.filter(l => {
+        if (!l.deal?.closedAt) return false;
+        return l.deal.closedAt >= start.toDate() && l.deal.closedAt <= end.toDate();
+      }).length;
 
-      // Calculate projected profit
-      const projectedProfit = userLeads.reduce((sum, l) => 
-        sum + (l.deal?.netProfit || 0), 0
-      );
+      // Calculate projected profit from deals closed in the period
+      const projectedProfit = userLeads.reduce((sum, l) => {
+        if (!l.deal?.closedAt) return sum;
+        if (l.deal.closedAt >= start.toDate() && l.deal.closedAt <= end.toDate()) {
+          return sum + (l.deal.netProfit || 0);
+        }
+        return sum;
+      }, 0);
 
       // Calculate buyers added (new buyer leads created in period)
       const buyersAdded = await prisma.lead.count({
@@ -1185,7 +1199,7 @@ export const metricsService = {
       // Get communications data
       const communications = await prisma.communication.findMany({
         where: {
-          userId: user.id,
+          createdById: user.id,
           occurredAt: { gte: start.toDate(), lte: end.toDate() }
         }
       });

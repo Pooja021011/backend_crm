@@ -135,7 +135,60 @@ export const leadRepository = {
   },
 
   async update(id: string, data: any) {
-    return prisma.lead.update({ where: { id }, data, include: includeLead });
+    // Transform nested relations for proper Prisma update syntax
+    const updateData: any = { ...data };
+    
+    // Handle seller relation - use upsert to create if doesn't exist
+    if (data.seller) {
+      updateData.seller = { 
+        upsert: {
+          create: data.seller,
+          update: data.seller
+        }
+      };
+    }
+    
+    // Handle buyer relation - use upsert to create if doesn't exist
+    if (data.buyer) {
+      updateData.buyer = { 
+        upsert: {
+          create: data.buyer,
+          update: data.buyer
+        }
+      };
+    }
+    
+    // Handle vendor relation - use upsert to create if doesn't exist
+    if (data.vendor) {
+      updateData.vendor = { 
+        upsert: {
+          create: data.vendor,
+          update: data.vendor
+        }
+      };
+    }
+    
+    // Handle address relation - use upsert to create if doesn't exist
+    if (data.address) {
+      updateData.address = { 
+        upsert: {
+          create: data.address,
+          update: data.address
+        }
+      };
+    }
+    
+    // Handle buyer criteria relation - use upsert to create if doesn't exist
+    if (data.buyerCriteria) {
+      updateData.buyerCriteria = { 
+        upsert: {
+          create: data.buyerCriteria,
+          update: data.buyerCriteria
+        }
+      };
+    }
+    
+    return prisma.lead.update({ where: { id }, data: updateData, include: includeLead });
   },
 
   async findById(id: string) {
@@ -268,5 +321,13 @@ const includeLead = {
   buyerCriteria: true,
   vendor: true,
   pipelineStage: true,
+  assignedUser: {
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true
+    }
+  },
 };
 

@@ -30,7 +30,8 @@ export const leadController = {
   async list(req: Request, res: Response) {
     const q = listLeadsQuery.parse(req.query);
     const user = (req as any).user;
-    const userRoles = user?.roles?.map((r: any) => r.role?.name || r.name) || [];
+    // Roles are already strings in the JWT token, no need to map
+    const userRoles = user?.roles || [];
     const userId = user?.id;
     
     const params = {

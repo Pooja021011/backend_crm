@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useLeads } from "@/hooks/useLeads";
 import { useSettings } from "@/hooks/useSettings";
 import { useAgents } from "@/hooks/useAgents";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ValidatedInput } from "@/components/ui/validated-input";
@@ -42,6 +43,7 @@ import {
 const AddSellerLead = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user } = useAuth();
   const { createLead } = useLeads();
   const { markets, counties, leadSources, getCountiesByMarket, isLoading: settingsLoading } = useSettings();
   const { getActiveAgents, isLoading: agentsLoading } = useAgents();
@@ -51,6 +53,9 @@ const AddSellerLead = () => {
   const [selectedMarketId, setSelectedMarketId] = useState<string>("");
   const [availableCounties, setAvailableCounties] = useState<any[]>([]);
   const [pendingFiles, setPendingFiles] = useState<PendingFileItem[]>([]);
+
+  // Check if current user is an ACQ agent
+  const isACQAgent = user?.roles?.includes('ACQ');
 
   // Get active agents with ACQ role
   const acquisitionsAgents = getActiveAgents().filter(agent => 
@@ -67,14 +72,14 @@ const AddSellerLead = () => {
     }
   }, [selectedMarketId, getCountiesByMarket]);
 
-  // Form state
+  // Form state - initialize acquisitionsAgentId with current user if ACQ agent
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
     phoneNumber: "",
     emailAddress: "",
     leadSource: "",
-    acquisitionsAgentId: "",
+    acquisitionsAgentId: isACQAgent && user?.id ? user.id : "",
     propertyAddress: "",
     city: "",
     state: "",
@@ -491,7 +496,7 @@ const AddSellerLead = () => {
                     handleInputChange('acquisitionsAgentId', value);
                     validateField('acquisitionsAgentId', value);
                   }}
-                  disabled={agentsLoading}
+                  disabled={agentsLoading || isACQAgent}
                 >
                   <SelectTrigger className={cn(
                     "h-10 border-gray-300 focus:border-blue-500 focus:ring-blue-500/20",

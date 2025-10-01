@@ -30,6 +30,7 @@ import { useLeads } from "@/hooks/useLeads";
 import { useSettings } from "@/hooks/useSettings";
 import { useAgents } from "@/hooks/useAgents";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 import { 
   validateEmail, 
   validatePhoneNumber, 
@@ -62,11 +63,15 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
   const [dealContractPrice, setDealContractPrice] = useState<string>("");
   const [dealSoldPrice, setDealSoldPrice] = useState<string>("");
   const [dealNetProfit, setDealNetProfit] = useState<string>("");
+  const { user } = useAuth();
   const { updateLead } = useLeads();
   const { markets, leadSources, getCountiesByMarket, isLoading: settingsLoading } = useSettings();
   const { agents, isLoading: agentsLoading, getActiveAgents } = useAgents();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Check if current user is an ACQ agent
+  const isACQAgent = user?.roles?.includes('ACQ');
   const [selectedMarketId, setSelectedMarketId] = useState<string>("");
   const [availableCounties, setAvailableCounties] = useState<any[]>([]);
 
@@ -345,7 +350,7 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
                 <Select 
                   value={formData.assignedUserId || 'unassigned'} 
                   onValueChange={(value) => handleInputChange('assignedUserId', value === 'unassigned' ? null : value)}
-                  disabled={agentsLoading}
+                  disabled={agentsLoading || (isACQAgent && lead.leadType === 'SELLER')}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder={agentsLoading ? "Loading agents..." : "Select agent"} />
