@@ -308,14 +308,36 @@ export const leadRepository = {
           { buyer: { lastName: { contains: q, mode: 'insensitive' } } },
         ],
       },
-      include: { address: true, seller: true, buyer: true },
+      include: { address: true, seller: true, buyer: true, vendor: true },
       take,
     });
-    return leads.map((l) => ({
-      id: l.id,
-      type: l.leadType,
-      label: l.address?.address1 || [l.seller?.firstName, l.seller?.lastName, l.buyer?.firstName, l.buyer?.lastName].filter(Boolean).join(' '),
-    }));
+    return leads.map((l) => {
+      let name = '';
+      let subtitle = '';
+      let phone = '';
+      
+      if (l.leadType === 'SELLER' && l.seller) {
+        name = `${l.seller.firstName} ${l.seller.lastName}`;
+        subtitle = l.address ? `${l.address.address1}, ${l.address.city}, ${l.address.state}` : 'No address';
+        phone = l.seller.phone;
+      } else if (l.leadType === 'BUYER' && l.buyer) {
+        name = `${l.buyer.firstName} ${l.buyer.lastName}`;
+        subtitle = 'Buyer Lead';
+        phone = l.buyer.phone;
+      } else if (l.leadType === 'VENDOR' && l.vendor) {
+        name = `${l.vendor.firstName} ${l.vendor.lastName}`;
+        subtitle = l.vendor.company || 'Vendor Lead';
+        phone = l.vendor.phone;
+      }
+      
+      return {
+        id: l.id,
+        type: l.leadType,
+        name,
+        subtitle,
+        phone,
+      };
+    });
   },
 
   async delete(id: string) {

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Search, Building2, LogOut, User } from "lucide-react";
+import { Search, Building2, LogOut, User, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,14 +8,15 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
+import { API_BASE } from "@/config/api";
+import { useNavigate } from "react-router-dom";
 
 interface SearchResult {
   id: string;
-  type: 'property' | 'seller' | 'buyer';
-  title: string;
+  type: 'SELLER' | 'BUYER' | 'VENDOR';
+  name: string;
   subtitle: string;
-  address?: string;
-  phone?: string;
+  phone: string;
 }
 
 interface KPICardProps {
@@ -87,93 +88,103 @@ export const DashboardHeader = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
-  // Mock data for search suggestions
-  const mockData = {
-    properties: [
-      { id: "p1", address: "123 Oak Street, Charlotte, NC", seller: "Sarah Johnson", phone: "(555) 123-4567" },
-      { id: "p2", address: "456 Maple Avenue, Raleigh, NC", seller: "Robert Thompson", phone: "(555) 987-6543" },
-      { id: "p3", address: "789 Pine Boulevard, Winston-Salem, NC", seller: "Emily Davis", phone: "(555) 456-7890" },
-      { id: "p4", address: "321 Elm Court, Greensboro, NC", seller: "Michael Johnson", phone: "(555) 321-0987" },
-      { id: "p5", address: "567 Cedar Drive, Fayetteville, NC", seller: "Lisa Rodriguez", phone: "(555) 654-3210" }
-    ],
-    sellers: [
-      { id: "s1", name: "Sarah Johnson", phone: "(555) 123-4567", address: "123 Oak Street" },
-      { id: "s2", name: "Robert Thompson", phone: "(555) 987-6543", address: "456 Maple Avenue" },
-      { id: "s3", name: "Emily Davis", phone: "(555) 456-7890", address: "789 Pine Boulevard" },
-      { id: "s4", name: "Michael Johnson", phone: "(555) 321-0987", address: "321 Elm Court" },
-      { id: "s5", name: "Lisa Rodriguez", phone: "(555) 654-3210", address: "567 Cedar Drive" }
-    ],
-    buyers: [
-      { id: "b1", name: "Jennifer Martinez", phone: "(555) 111-2222", interestedIn: "Downtown District" },
-      { id: "b2", name: "David Chen", phone: "(555) 333-4444", interestedIn: "Riverside Area" },
-      { id: "b3", name: "Amanda Wilson", phone: "(555) 555-6666", interestedIn: "Suburban Areas" },
-      { id: "b4", name: "Carlos Rodriguez", phone: "(555) 777-8888", interestedIn: "Historic District" },
-      { id: "b5", name: "Michelle Brown", phone: "(555) 999-0000", interestedIn: "New Developments" }
-    ]
-  };
+  // Get user roles for filtering
+  const userRoles = user?.roles || [];
+  const canViewSeller = userRoles.includes('ADMIN') || userRoles.includes('EXECUTIVE') || 
+                        userRoles.includes('MANAGER') || userRoles.includes('ACQ') || 
+                        userRoles.includes('TC');
+  const canViewBuyer = userRoles.includes('ADMIN') || userRoles.includes('EXECUTIVE') || 
+                       userRoles.includes('MANAGER') || userRoles.includes('DISP') || 
+                       userRoles.includes('TC');
+  const canViewVendor = userRoles.includes('ADMIN') || userRoles.includes('EXECUTIVE') || 
+                        userRoles.includes('MANAGER');
 
-  // Search function
-  const performSearch = (query: string) => {
-    if (!query.trim()) {
+  // Debounce timer ref
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Search function that calls API
+  const performSearch = async (query: string) => {
+    // Require minimum 3 characters
+    if (!query.trim() || query.trim().length < 3) {
       setSearchResults([]);
+      setIsSearching(false);
       return;
     }
 
-    const results: SearchResult[] = [];
-    const searchTerm = query.toLowerCase();
+    setIsSearching(true);
 
-    // Search properties by address
-    mockData.properties.forEach(property => {
-      if (property.address.toLowerCase().includes(searchTerm)) {
-        results.push({
-          id: property.id,
-          type: 'property',
-          title: property.address,
-          subtitle: `Seller: ${property.seller}`,
-          address: property.address,
-          phone: property.phone
+    try {
+      const accessToken = localStorage.getItem('accessToken');
+      const response = await fetch(`${API_BASE}/search/suggestions?q=${encodeURIComponent(query.trim())}`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        
+        // Debug logging
+        console.log('🔍 Search Debug Info:');
+        console.log('User roles:', userRoles);
+        console.log('Can view - Seller:', canViewSeller, '| Buyer:', canViewBuyer, '| Vendor:', canViewVendor);
+        console.log('Raw search results from API:', data.data);
+        
+        // Filter results based on user role permissions
+        const filteredResults = (data.data || []).filter((result: SearchResult) => {
+          if (result.type === 'SELLER') return canViewSeller;
+          if (result.type === 'BUYER') return canViewBuyer;
+          if (result.type === 'VENDOR') return canViewVendor;
+          return false;
         });
+        
+        console.log('Filtered results:', filteredResults);
+        
+        setSearchResults(filteredResults.slice(0, 8)); // Limit to 8 results
+      } else {
+        console.error('Search failed:', response.statusText);
+        setSearchResults([]);
       }
-    });
-
-    // Search sellers by name or phone
-    mockData.sellers.forEach(seller => {
-      if (seller.name.toLowerCase().includes(searchTerm) || seller.phone.includes(searchTerm)) {
-        results.push({
-          id: seller.id,
-          type: 'seller',
-          title: seller.name,
-          subtitle: seller.address,
-          phone: seller.phone
-        });
-      }
-    });
-
-    // Search buyers by name or phone
-    mockData.buyers.forEach(buyer => {
-      if (buyer.name.toLowerCase().includes(searchTerm) || buyer.phone.includes(searchTerm)) {
-        results.push({
-          id: buyer.id,
-          type: 'buyer',
-          title: buyer.name,
-          subtitle: `Interested in: ${buyer.interestedIn}`,
-          phone: buyer.phone
-        });
-      }
-    });
-
-    setSearchResults(results.slice(0, 8)); // Limit to 8 results
+    } catch (error) {
+      console.error('Search error:', error);
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
   };
 
-  // Handle search input changes
+  // Handle search input changes with debouncing
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchQuery(value);
-    performSearch(value);
-    setShowDropdown(value.length > 0);
+    
+    // Clear previous timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    // Show dropdown immediately if there's text
+    setShowDropdown(value.length >= 3);
+    
+    // Only show loading if query is long enough
+    if (value.trim().length >= 3) {
+      setIsSearching(true);
+    } else {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    // Debounce the API call
+    searchTimeoutRef.current = setTimeout(() => {
+      performSearch(value);
+    }, 300); // 300ms debounce
   };
 
   // Handle clicking outside to close dropdown
@@ -188,22 +199,41 @@ export const DashboardHeader = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Cleanup debounce timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const getResultIcon = (type: string) => {
     switch (type) {
-      case 'property': return '🏠';
-      case 'seller': return '👤';
-      case 'buyer': return '🛒';
+      case 'SELLER': return '🏠';
+      case 'BUYER': return '🛒';
+      case 'VENDOR': return '🔧';
       default: return '📄';
     }
   };
 
   const getResultTypeColor = (type: string) => {
     switch (type) {
-      case 'property': return 'bg-blue-100 text-blue-700';
-      case 'seller': return 'bg-green-100 text-green-700';
-      case 'buyer': return 'bg-purple-100 text-purple-700';
+      case 'SELLER': return 'bg-green-100 text-green-700';
+      case 'BUYER': return 'bg-blue-100 text-blue-700';
+      case 'VENDOR': return 'bg-purple-100 text-purple-700';
       default: return 'bg-gray-100 text-gray-700';
     }
+  };
+
+  // Handle clicking on a search result
+  const handleResultClick = (result: SearchResult) => {
+    // Navigate to leads page with leadId parameter
+    navigate(`/leads?leadId=${result.id}`);
+    // Close dropdown and clear search
+    setShowDropdown(false);
+    setSearchQuery("");
+    setSearchResults([]);
   };
 
   return (
@@ -228,7 +258,7 @@ export const DashboardHeader = () => {
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <Input
                 type="search"
-                placeholder="Search properties, sellers, buyers..."
+                placeholder="Search by seller/buyer name or property address..."
                 value={searchQuery}
                 onChange={handleSearchChange}
                 onFocus={() => searchQuery.length > 0 && setShowDropdown(true)}
@@ -239,40 +269,48 @@ export const DashboardHeader = () => {
             {/* Search Dropdown */}
             {showDropdown && (
               <Card className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-200 shadow-xl rounded-lg overflow-hidden z-50 max-h-96 overflow-y-auto">
-                {searchResults.length > 0 ? (
+                {isSearching ? (
+                  <div className="p-6 text-center">
+                    <Loader2 className="w-8 h-8 mx-auto mb-2 animate-spin text-blue-500" />
+                    <p className="text-gray-500 text-sm">Searching...</p>
+                  </div>
+                ) : searchResults.length > 0 ? (
                   <div className="p-2">
                     {searchResults.map((result) => (
                       <div
                         key={result.id}
                         className="p-3 hover:bg-gray-50 rounded-md cursor-pointer transition-all duration-200 border-b border-gray-100 last:border-b-0"
-                        onClick={() => {
-                          setSearchQuery(result.title);
-                          setShowDropdown(false);
-                        }}
+                        onClick={() => handleResultClick(result)}
                       >
                         <div className="flex items-center gap-3">
                           <div className="text-lg">{getResultIcon(result.type)}</div>
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-1">
-                              <h4 className="font-semibold text-gray-900 text-sm">{result.title}</h4>
+                              <h4 className="font-semibold text-gray-900 text-sm">{result.name}</h4>
                               <Badge className={cn("text-xs font-medium uppercase", getResultTypeColor(result.type))}>
                                 {result.type}
                               </Badge>
                             </div>
                             <p className="text-xs text-gray-600">{result.subtitle}</p>
                             {result.phone && (
-                              <p className="text-xs text-gray-500 font-mono">{result.phone}</p>
+                              <p className="text-xs text-gray-500 font-mono mt-0.5">{result.phone}</p>
                             )}
                           </div>
                         </div>
                       </div>
                     ))}
                   </div>
-                ) : searchQuery.length > 0 ? (
+                ) : searchQuery.length >= 3 ? (
                   <div className="p-6 text-center">
                     <div className="text-2xl mb-2">🔍</div>
                     <p className="text-gray-500 text-sm">No results found for "{searchQuery}"</p>
-                    <p className="text-xs text-gray-400 mt-1">Try searching by address, name, or phone number</p>
+                    <p className="text-xs text-gray-400 mt-1">Try searching by property address, seller name, or buyer name</p>
+                  </div>
+                ) : searchQuery.length > 0 && searchQuery.length < 3 ? (
+                  <div className="p-6 text-center">
+                    <div className="text-2xl mb-2">⌨️</div>
+                    <p className="text-gray-500 text-sm">Type at least 3 characters to search</p>
+                    <p className="text-xs text-gray-400 mt-1">Search by property address, seller name, or buyer name</p>
                   </div>
                 ) : null}
               </Card>
