@@ -8,6 +8,7 @@ export const leadService = {
   update: (id: string, data: any) => leadRepository.update(id, data),
   get: (id: string) => leadRepository.findById(id),
   list: (params: any) => leadRepository.list(params),
+  delete: (id: string) => leadRepository.delete(id),
   changeStage: async (leadId: string, toStageId: string, userId?: string) => {
     const updated = await leadRepository.changeStage(leadId, toStageId, userId);
     // Auto-create/update Deal timestamps based on stage names

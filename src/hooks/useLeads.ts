@@ -26,6 +26,11 @@ export interface Buyer {
   phone: string;
   email: string;
   vip?: boolean;
+  propertiesPurchased?: number;
+  creditScore?: string;
+  preApproved?: boolean;
+  motivation?: string;
+  timeline?: string;
 }
 
 export interface Vendor {

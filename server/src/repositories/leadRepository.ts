@@ -81,6 +81,8 @@ export const leadRepository = {
       const { buyer, criteria, marketId, assignedUserId } = input;
       let { pipelineStageId } = input;
       
+      console.log('📥 Creating BUYER lead with criteria:', JSON.stringify(criteria, null, 2));
+      
       // If no pipelineStageId provided, get default stage
       if (!pipelineStageId) {
         const defaultStage = await getDefaultPipelineStage('BUYER');
@@ -91,7 +93,7 @@ export const leadRepository = {
         await validatePipelineStage(pipelineStageId);
       }
       
-      return prisma.lead.create({
+      const lead = await prisma.lead.create({
         data: {
           leadType: 'BUYER',
           marketId: marketId || null,
@@ -104,6 +106,9 @@ export const leadRepository = {
         },
         include: includeLead,
       });
+      
+      console.log('✅ Created BUYER lead with buyerCriteria:', lead.buyerCriteria);
+      return lead;
     }
     if (input.type === 'VENDOR') {
       const { vendor, marketId, assignedUserId } = input;
@@ -311,6 +316,13 @@ export const leadRepository = {
       type: l.leadType,
       label: l.address?.address1 || [l.seller?.firstName, l.seller?.lastName, l.buyer?.firstName, l.buyer?.lastName].filter(Boolean).join(' '),
     }));
+  },
+
+  async delete(id: string) {
+    // Delete the lead (cascading deletes will handle related records)
+    await prisma.lead.delete({
+      where: { id },
+    });
   },
 };
 

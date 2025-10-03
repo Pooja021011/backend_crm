@@ -4,11 +4,13 @@ import { logger } from '../config/logger.js';
 
 export const pipelineController = {
   /**
-   * Get pipeline stages for a specific pipeline
+   * Get pipeline stages for a specific pipeline (filtered by user role permissions)
    */
   async getPipelineStages(req: Request, res: Response) {
     try {
       const { pipelineKey } = req.params;
+      const user = (req as any).user;
+      const userRoles = user?.roles || [];
       
       if (!pipelineKey) {
         return res.status(400).json({
@@ -17,7 +19,7 @@ export const pipelineController = {
         });
       }
 
-      const stages = await pipelineService.getPipelineStages(pipelineKey.toUpperCase());
+      const stages = await pipelineService.getPipelineStagesForUser(pipelineKey.toUpperCase(), userRoles);
 
       res.json({
         success: true,
@@ -305,6 +307,38 @@ export const pipelineController = {
     } catch (error) {
       logger.error('Error getting lead sources:', error);
       res.status(500).json({ success: false, error: 'Failed to get lead sources' });
+    }
+  },
+
+  /**
+   * Update stage role permissions (Admin only)
+   */
+  async updateStageRolePermissions(req: Request, res: Response) {
+    try {
+      const { stageId } = req.params;
+      const { allowedRoles } = req.body; // Array of role names
+      const user = (req as any).user;
+      
+      // Check admin permission
+      if (!user?.roles?.includes('ADMIN')) {
+        return res.status(403).json({
+          success: false,
+          error: 'Admin access required'
+        });
+      }
+      
+      await pipelineService.updateStageRolePermissions(stageId, allowedRoles);
+      
+      res.json({
+        success: true,
+        message: 'Stage permissions updated successfully'
+      });
+    } catch (error: any) {
+      logger.error('Error in updateStageRolePermissions controller', { error: error.message });
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
     }
   }
 };

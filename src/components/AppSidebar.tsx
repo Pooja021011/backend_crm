@@ -58,7 +58,7 @@ export function AppSidebar() {
   const [expandedMenus, setExpandedMenus] = useState<string[]>([]); // No menus expanded by default
 
   const isCollapsed = state === "collapsed";
-  const isAdmin = user?.roles?.includes('ADMIN') || false;
+  const isAdmin = user?.roles?.some(role => ['ADMIN', 'MANAGER'].includes(role)) || false;
 
   const isActive = (path: string) => {
     if (path === "/inbox" && (currentPath === "/inbox" || currentPath === "/")) return true;

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLeads } from "@/hooks/useLeads";
 import { useSettings } from "@/hooks/useSettings";
 import { Card } from "@/components/ui/card";
@@ -33,6 +33,7 @@ import {
   validateCompanyName,
   formatPhoneNumber 
 } from "@/utils/validation";
+import { API_BASE } from "@/config/api";
 
 const AddVendorLead = () => {
   const navigate = useNavigate();
@@ -42,6 +43,8 @@ const AddVendorLead = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [pendingFiles, setPendingFiles] = useState<PendingFileItem[]>([]);
+  const [pipelineStages, setPipelineStages] = useState<any[]>([]);
+  const [loadingStages, setLoadingStages] = useState(true);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -50,6 +53,7 @@ const AddVendorLead = () => {
     phoneNumber: "",
     emailAddress: "",
     leadSource: "",
+    pipelineStageId: "",
     company: "",
     industry: "",
     markets: [] as string[]
@@ -64,6 +68,34 @@ const AddVendorLead = () => {
     "Project Manager",
     "Other"
   ];
+
+  // Load pipeline stages (ACQUISITIONS for vendors)
+  useEffect(() => {
+    const loadPipelineStages = async () => {
+      try {
+        setLoadingStages(true);
+        const response = await fetch(`${API_BASE}/pipeline/ACQUISITIONS/stages`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          setPipelineStages(data.data || []);
+        }
+      } catch (error) {
+        console.error('Error loading pipeline stages:', error);
+        toast({
+          title: "Warning",
+          description: "Could not load pipeline stages.",
+          variant: "destructive"
+        });
+      } finally {
+        setLoadingStages(false);
+      }
+    };
+    
+    loadPipelineStages();
+  }, [toast]);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({
@@ -99,15 +131,19 @@ const AddVendorLead = () => {
       // Create lead data according to API schema
       const leadData = {
         type: 'VENDOR' as const,
+        pipelineStageId: formData.pipelineStageId || undefined,
         vendor: {
           firstName: formData.firstName.trim(),
           lastName: formData.lastName.trim(),
           phone: formData.phoneNumber.trim(),
           email: formData.emailAddress.trim(),
           company: formData.company.trim(),
-          industry: formData.industry
+          industry: formData.industry,
+          marketIds: formData.markets.length > 0 ? formData.markets : undefined
         }
       };
+      
+      console.log('📤 Sending vendor lead data:', JSON.stringify(leadData, null, 2));
 
       const createdLead = await createLead(leadData);
 
@@ -186,6 +222,7 @@ const AddVendorLead = () => {
            formData.phoneNumber && 
            formData.emailAddress && 
            formData.leadSource &&
+           formData.pipelineStageId &&
            formData.company &&
            formData.industry &&
            selectedDate;
@@ -331,6 +368,32 @@ const AddVendorLead = () => {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              {/* Pipeline Stage */}
+              <div className="space-y-2">
+                <Label htmlFor="pipelineStageId" className="text-sm font-medium text-gray-700">
+                  Pipeline Stage *
+                </Label>
+                <Select 
+                  value={formData.pipelineStageId} 
+                  onValueChange={(value) => handleInputChange('pipelineStageId', value)}
+                  disabled={loadingStages}
+                >
+                  <SelectTrigger className="h-10 border-gray-300 focus:border-blue-500 focus:ring-blue-500/20">
+                    <SelectValue placeholder={loadingStages ? "Loading..." : "Select Pipeline Stage"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pipelineStages.map((stage) => (
+                      <SelectItem key={stage.id} value={stage.id}>
+                        {stage.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {pipelineStages.length === 0 && !loadingStages && (
+                  <p className="text-xs text-amber-600">⚠ No stages available for your role</p>
+                )}
               </div>
 
               {/* Date Created */}

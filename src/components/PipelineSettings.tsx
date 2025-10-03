@@ -39,6 +39,7 @@ interface PipelineStage {
   isDefault: boolean;
   requiresAction: boolean;
   attentionThresholdHours?: number;
+  rolePermissions?: Array<{ id: string; roleName: string; }>;
 }
 
 interface Pipeline {
@@ -321,6 +322,7 @@ export const PipelineSettings: React.FC<PipelineSettingsProps> = ({ userRoles })
       });
     }
   };
+
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string);

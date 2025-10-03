@@ -218,8 +218,21 @@ model PipelineStage {
   leads       Lead[]
   fromStageHistory StageHistory[] @relation("FromStage")
   toStageHistory   StageHistory[] @relation("ToStage")
+  rolePermissions StageRolePermission[]
 
   @@index([pipelineId, orderIndex])
+}
+
+model StageRolePermission {
+  id        String        @id @default(uuid())
+  stageId   String
+  stage     PipelineStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  roleName  RoleName
+  createdAt DateTime      @default(now())
+
+  @@unique([stageId, roleName])
+  @@index([stageId])
+  @@index([roleName])
 }
 
 // Leads foundation
@@ -286,7 +299,7 @@ model Lead {
 
 model LeadAddress {
   leadId   String   @id
-  lead     Lead     @relation(fields: [leadId], references: [id])
+  lead     Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
   address1 String
   city     String
   state    String
@@ -297,7 +310,7 @@ model LeadAddress {
 
 model SellerDetail {
   leadId     String @id
-  lead       Lead   @relation(fields: [leadId], references: [id])
+  lead       Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
   firstName  String
   lastName   String
   phone      String
@@ -308,7 +321,7 @@ model SellerDetail {
 
 model BuyerDetail {
   leadId              String  @id
-  lead                Lead    @relation(fields: [leadId], references: [id])
+  lead                Lead    @relation(fields: [leadId], references: [id], onDelete: Cascade)
   firstName           String
   lastName            String
   phone               String
@@ -317,11 +330,15 @@ model BuyerDetail {
   blacklisted         Boolean @default(false)
   blacklistReason     String?
   propertiesPurchased Int     @default(0)
+  creditScore         String? // Excellent, Good, Fair, Poor
+  preApproved         Boolean @default(false)
+  motivation          String? // High, Medium, Low
+  timeline            String? // Immediate, 30 Days, 60 Days, 90+ Days
 }
 
 model BuyerCriteria {
   leadId         String   @id
-  lead           Lead     @relation(fields: [leadId], references: [id])
+  lead           Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
   marketIds      String[]
   assetClassIds  String[]
   priceRangeIds  String[]
@@ -329,7 +346,7 @@ model BuyerCriteria {
 
 model VendorDetail {
   leadId     String  @id
-  lead       Lead    @relation(fields: [leadId], references: [id])
+  lead       Lead    @relation(fields: [leadId], references: [id], onDelete: Cascade)
   firstName  String
   lastName   String
   phone      String
@@ -347,7 +364,7 @@ model StageHistory {
   changedById String?
   changedAt   DateTime @default(now())
 
-  lead        Lead     @relation(fields: [leadId], references: [id])
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
   fromStage   PipelineStage? @relation("FromStage", fields: [fromStageId], references: [id])
   toStage     PipelineStage  @relation("ToStage", fields: [toStageId], references: [id])
 
@@ -357,7 +374,7 @@ model StageHistory {
 model Task {
   id           String     @id @default(uuid())
   leadId       String
-  lead         Lead       @relation(fields: [leadId], references: [id])
+  lead         Lead       @relation(fields: [leadId], references: [id], onDelete: Cascade)
   title        String
   description  String?
   dueAt        DateTime
@@ -424,7 +441,7 @@ model FileCategorization {
 model LeadFile {
   leadId String
   fileId String
-  lead   Lead @relation(fields: [leadId], references: [id])
+  lead   Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
   file   File @relation(fields: [fileId], references: [id])
 
   @@id([leadId, fileId])
@@ -434,7 +451,7 @@ model LeadFile {
 model UnderwritingScenario {
   id          String   @id @default(uuid())
   leadId      String
-  lead        Lead     @relation(fields: [leadId], references: [id])
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
   name        String
   isPrimary   Boolean  @default(false)
   inputs      Json
@@ -469,7 +486,7 @@ model LeadBuyer {
   terms     Json?
   updatedAt DateTime @default(now())
 
-  lead   Lead  @relation(fields: [leadId], references: [id])
+  lead   Lead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
   buyer  Buyer @relation(fields: [buyerId], references: [id])
 
   @@index([leadId, buyerId])
@@ -491,7 +508,7 @@ enum Direction {
 model Communication {
   id          String     @id @default(uuid())
   leadId      String
-  lead        Lead       @relation(fields: [leadId], references: [id])
+  lead        Lead       @relation(fields: [leadId], references: [id], onDelete: Cascade)
   type        CommType
   direction   Direction
   subject     String?
@@ -519,7 +536,7 @@ model CommunicationAttachment {
 model MarketingLink {
   id          String   @id @default(uuid())
   leadId      String
-  lead        Lead     @relation(fields: [leadId], references: [id])
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
   title       String
   url         String
   type        String?
@@ -532,7 +549,7 @@ model MarketingLink {
 model Deal {
   id            String   @id @default(uuid())
   leadId        String   @unique
-  lead          Lead     @relation(fields: [leadId], references: [id])
+  lead          Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   contractPrice Int?
   soldPrice     Int?
@@ -572,7 +589,7 @@ model LeadComparable {
   id           String     @id @default(uuid())
   leadId       String
   comparableId String
-  lead         Lead       @relation(fields: [leadId], references: [id])
+  lead         Lead       @relation(fields: [leadId], references: [id], onDelete: Cascade)
   comparable   Comparable @relation(fields: [comparableId], references: [id])
   addedAt      DateTime   @default(now())
 
@@ -584,7 +601,7 @@ model BuyerOffer {
   id          String   @id @default(uuid())
   leadId      String
   buyerId     String
-  lead        Lead     @relation(fields: [leadId], references: [id])
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
   buyer       Buyer    @relation(fields: [buyerId], references: [id])
   
   offerAmount Int
@@ -602,7 +619,7 @@ model BuyerOffer {
 model MarketingResource {
   id          String   @id @default(uuid())
   leadId      String
-  lead        Lead     @relation(fields: [leadId], references: [id])
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
   
   title       String
   type        String   // flyer, photo, video, listing_link, campaign_link
@@ -635,9 +652,9 @@ model Notification {
   
   // Related entities
   leadId        String?
-  lead          Lead?    @relation(fields: [leadId], references: [id])
+  lead          Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
   dealId        String?
-  deal          Deal?    @relation(fields: [dealId], references: [id])
+  deal          Deal?    @relation(fields: [dealId], references: [id], onDelete: Cascade)
   
   // Metadata
   data          Json?    // Additional data for the notification

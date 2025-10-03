@@ -35,6 +35,7 @@ const Pipeline = () => {
   const [leadSources, setLeadSources] = useState<any[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [pipelineAccess, setPipelineAccess] = useState<any>(null);
+  const [currentPipeline, setCurrentPipeline] = useState<string>('ACQUISITIONS');
   
   // API state
   const [pipelineStages, setPipelineStages] = useState<any[]>([]);
@@ -183,14 +184,23 @@ const Pipeline = () => {
   ];
 
   useEffect(() => {
-    loadPipelineAccess();
-    loadPipelineData();
-    loadLeadSources();
+    const initializePipeline = async () => {
+      const accessData = await loadPipelineAccess(); // Wait for access to load first
+      loadLeadSources();
+      // Pass the pipeline key directly to avoid state timing issues
+      if (accessData?.allowedPipelines?.[0]) {
+        loadPipelineData(accessData.allowedPipelines[0]);
+      }
+    };
+    initializePipeline();
   }, []);
 
   useEffect(() => {
-    loadPipelineData();
-  }, [transactionPipelineView, needsAttentionView, dispositionsView, selectedLeadSource]);
+    // Only load data if we have pipeline access loaded
+    if (pipelineAccess) {
+      loadPipelineData();
+    }
+  }, [transactionPipelineView, needsAttentionView, dispositionsView, selectedLeadSource, currentPipeline, pipelineAccess]);
 
   const loadPipelineAccess = async () => {
     try {
@@ -199,11 +209,23 @@ const Pipeline = () => {
       });
       if (response.ok) {
         const data = await response.json();
-        setPipelineAccess(data.data);
+        const access = data.data;
+        console.log('📊 Pipeline Access:', access);
+        setPipelineAccess(access);
+        
+        // Set the current pipeline based on user's role
+        if (access?.allowedPipelines && access.allowedPipelines.length > 0) {
+          const firstPipeline = access.allowedPipelines[0];
+          console.log('📊 Setting current pipeline to:', firstPipeline);
+          setCurrentPipeline(firstPipeline);
+        }
+        
+        return access; // Return access data for immediate use
       }
     } catch (error) {
       console.error('Failed to load pipeline access:', error);
     }
+    return null;
   };
 
   const loadLeadSources = async () => {
@@ -220,7 +242,7 @@ const Pipeline = () => {
     }
   };
 
-  const loadPipelineData = async () => {
+  const loadPipelineData = async (overridePipeline?: string) => {
     try {
       setLoading(true);
       
@@ -238,25 +260,45 @@ const Pipeline = () => {
         return;
       }
 
+      // Determine which pipeline to load based on toggles and role
+      let pipelineKey = overridePipeline || currentPipeline;
+      if (transactionPipelineView && pipelineAccess?.allowedPipelines?.includes('TRANSACTION')) {
+        pipelineKey = 'TRANSACTION';
+      } else if (dispositionsView && pipelineAccess?.allowedPipelines?.includes('DISPOSITIONS')) {
+        pipelineKey = 'DISPOSITIONS';
+      }
+
+      console.log('📊 Loading pipeline:', pipelineKey, 'for user roles:', user?.roles);
+
       // Load pipeline stages
-      const stagesResponse = await makeApiCall(`${API_BASE}/pipeline/ACQUISITIONS/stages`);
+      const stagesResponse = await makeApiCall(`${API_BASE}/pipeline/${pipelineKey}/stages`);
       if (stagesResponse.ok) {
         const stagesData = await stagesResponse.json();
+        console.log('📊 Received stages:', stagesData.data?.length || 0, 'stages');
+        console.log('📊 Stage names:', stagesData.data?.map((s: any) => s.name));
         setPipelineStages(stagesData.data || sampleStages);
       } else {
-        console.log('Failed to load stages, using sample data');
+        console.log('❌ Failed to load stages, status:', stagesResponse.status);
         setPipelineStages(sampleStages);
       }
 
       // Load pipeline leads with role-based filtering
       const filters = new URLSearchParams();
       if (needsAttentionView) filters.append('needsAttention', 'true');
-      if (!user?.roles?.includes('ADMIN') && !user?.roles?.includes('MANAGER')) {
+      
+      // Apply role-based filtering
+      if (pipelineAccess?.canViewAssignedOnly) {
+        // ACQ, DISP agents see only their assigned leads
         filters.append('assignedUserId', user?.id || '');
+      }
+      
+      // Apply lead source filter if applicable
+      if (selectedLeadSource !== 'all') {
+        filters.append('sourceId', selectedLeadSource);
       }
 
       // Try enhanced pipeline leads first
-      const leadsResponse = await makeApiCall(`${API_BASE}/pipeline/ACQUISITIONS/enhanced-leads?${filters}`);
+      const leadsResponse = await makeApiCall(`${API_BASE}/pipeline/${pipelineKey}/enhanced-leads?${filters}`);
       
       if (leadsResponse.ok) {
         const leadsData = await leadsResponse.json();
@@ -425,6 +467,31 @@ const Pipeline = () => {
     );
   }
 
+  // Show access denied if user has no pipeline access
+  if (pipelineAccess && (!pipelineAccess.allowedPipelines || pipelineAccess.allowedPipelines.length === 0)) {
+    return (
+      <Card className="p-12 text-center">
+        <AlertTriangle className="w-16 h-16 text-orange-400 mx-auto mb-4" />
+        <h3 className="text-lg font-medium text-gray-900 mb-2">
+          No Pipeline Access
+        </h3>
+        <p className="text-gray-600">
+          You don't have permission to view any pipelines. Please contact your administrator.
+        </p>
+      </Card>
+    );
+  }
+
+  // Determine which pipeline is currently being viewed
+  const getActivePipelineName = () => {
+    if (transactionPipelineView && pipelineAccess?.allowedPipelines?.includes('TRANSACTION')) {
+      return 'Transaction';
+    } else if (dispositionsView && pipelineAccess?.allowedPipelines?.includes('DISPOSITIONS')) {
+      return 'Dispositions';
+    }
+    return currentPipeline.charAt(0) + currentPipeline.slice(1).toLowerCase();
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -433,8 +500,17 @@ const Pipeline = () => {
           <h1 className="text-3xl font-bold">Pipeline</h1>
           <Badge variant="outline" className="flex items-center gap-1">
             <Workflow className="h-3 w-3" />
+            {getActivePipelineName()}
+          </Badge>
+          <Badge variant="outline" className="flex items-center gap-1">
             {leads.length} Active Leads
           </Badge>
+          {pipelineAccess?.canViewAssignedOnly && (
+            <Badge variant="secondary" className="flex items-center gap-1">
+              <Users className="h-3 w-3" />
+              My Leads Only
+            </Badge>
+          )}
         </div>
         
         <div className="flex items-center gap-4">

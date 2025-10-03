@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { ValidationResult } from '@/utils/validation';
 
 interface ValidatedInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
-  label: string;
+  label?: string;
   name: string;
   value: string;
   onValueChange: (value: string) => void;
@@ -86,10 +86,12 @@ export const ValidatedInput: React.FC<ValidatedInputProps> = ({
 
   return (
     <div className="space-y-2">
-      <Label htmlFor={name} className="text-sm font-medium text-gray-700">
-        {label}
-        {required && <span className="text-red-500 ml-1">*</span>}
-      </Label>
+      {label && (
+        <Label htmlFor={name} className="text-sm font-medium text-gray-700">
+          {label}
+          {required && <span className="text-red-500 ml-1">*</span>}
+        </Label>
+      )}
       
       <div className="relative">
         {icon && (
@@ -132,7 +134,7 @@ export const ValidatedInput: React.FC<ValidatedInputProps> = ({
       {showSuccess && !isFocused && (
         <p className="text-xs text-green-600 flex items-center gap-1">
           <CheckCircle className="h-3 w-3" />
-          Valid {label.toLowerCase()}
+          Valid {label ? label.toLowerCase() : 'input'}
         </p>
       )}
     </div>

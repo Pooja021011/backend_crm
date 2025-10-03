@@ -65,6 +65,7 @@ import { LeadActions } from "@/components/LeadActions";
 import { generateCSVTemplate } from "@/utils/csvUtils";
 import { toast } from "@/hooks/use-toast";
 import { API_BASE } from "@/config/api";
+import { useSettings } from "@/hooks/useSettings";
 
 const Leads = () => {
   const navigate = useNavigate();
@@ -74,18 +75,43 @@ const Leads = () => {
     isLoading, 
     error, 
     fetchLeads, 
+    updateLead,
     deleteLead, 
     getLeadsByType, 
     searchLeads,
     filterLeads,
     importLeadsFromCSV,
     exportLeadsToCSV,
-    sortLeads
+    sortLeads 
   } = useLeads();
+  
+  const { markets, priceRanges, assetClasses } = useSettings();
+  
+  // Helper functions to get names from IDs
+  const getMarketNames = (marketIds?: string[]) => {
+    if (!marketIds || marketIds.length === 0) return '-';
+    const names = marketIds.map(id => markets.find(m => m.id === id)?.name || id).join(', ');
+    return names || '-';
+  };
+  
+  const getPriceRangeNames = (priceRangeIds?: string[]) => {
+    if (!priceRangeIds || priceRangeIds.length === 0) return '-';
+    const names = priceRangeIds.map(id => priceRanges.find(p => p.id === id)?.label || id).join(', ');
+    return names || '-';
+  };
+  
+  const getAssetClassNames = (assetClassIds?: string[]) => {
+    if (!assetClassIds || assetClassIds.length === 0) return '-';
+    const names = assetClassIds.map(id => assetClasses.find(a => a.id === id)?.name || id).join(', ');
+    return names || '-';
+  };
   
   // Set default tab based on user role
   const getDefaultTab = (): LeadType => {
-    const userRoles = user?.roles?.map((r: any) => r.role?.name || r.name) || [];
+    const userRoles = user?.roles?.map((r: any) => {
+      if (typeof r === 'string') return r;
+      return r.role?.name || r.name;
+    }) || [];
     const isACQ = userRoles.includes('ACQ');
     const isDisp = userRoles.includes('DISP');
     const isAdmin = userRoles.includes('ADMIN');
@@ -111,13 +137,16 @@ const Leads = () => {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
+  const [pendingBulkAction, setPendingBulkAction] = useState<'delete' | 'archive' | null>(null);
+  const [isBulkProcessing, setIsBulkProcessing] = useState(false);
   const [selectedMarket, setSelectedMarket] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("");
   const [selectedPipelineStatus, setSelectedPipelineStatus] = useState("");
   const [selectedDateRange, setSelectedDateRange] = useState("");
   
   // Dynamic filter data
-  const [markets, setMarkets] = useState<any[]>([]);
+  const [filterMarkets, setFilterMarkets] = useState<any[]>([]);
   const [pipelineStages, setPipelineStages] = useState<any[]>([]);
   const [leadStatuses, setLeadStatuses] = useState<string[]>([]);
   const [loadingFilters, setLoadingFilters] = useState(false);
@@ -128,18 +157,46 @@ const Leads = () => {
   const [showLeadDetail, setShowLeadDetail] = useState(false);
   
   // Role-based access control
-  const userRoles = user?.roles || [];
-  const isACQ = userRoles.includes('ACQ');
-  const isDisp = userRoles.includes('DISP');
-  const isTC = userRoles.includes('TC');
-  const isAdmin = userRoles.includes('ADMIN');
-  const isManager = userRoles.includes('MANAGER');
-  const isExecutive = userRoles.includes('EXECUTIVE');
+  const userRoleNames = user?.roles?.map((r: any) => {
+    // Handle both string roles and object roles
+    if (typeof r === 'string') return r;
+    return r.role?.name || r.name;
+  }) || [];
+  const isACQ = userRoleNames.includes('ACQ');
+  const isDisp = userRoleNames.includes('DISP');
+  const isTC = userRoleNames.includes('TC');
+  const isAdmin = userRoleNames.includes('ADMIN');
+  const isManager = userRoleNames.includes('MANAGER');
+  const isExecutive = userRoleNames.includes('EXECUTIVE');
 
   // Role-based lead type access
   const canViewSellerLeads = isAdmin || isExecutive || isManager || isACQ || isTC;
   const canViewBuyerLeads = isAdmin || isExecutive || isManager || isDisp || isTC;
   const canViewVendorLeads = isAdmin || isExecutive || isManager;
+
+  // Ensure active tab is valid for user's role
+  useEffect(() => {
+    // If current tab is not accessible, switch to a valid one
+    if (activeTab === 'SELLER' && !canViewSellerLeads) {
+      if (canViewBuyerLeads) {
+        setActiveTab('BUYER');
+      } else if (canViewVendorLeads) {
+        setActiveTab('VENDOR');
+      }
+    } else if (activeTab === 'BUYER' && !canViewBuyerLeads) {
+      if (canViewSellerLeads) {
+        setActiveTab('SELLER');
+      } else if (canViewVendorLeads) {
+        setActiveTab('VENDOR');
+      }
+    } else if (activeTab === 'VENDOR' && !canViewVendorLeads) {
+      if (canViewSellerLeads) {
+        setActiveTab('SELLER');
+      } else if (canViewBuyerLeads) {
+        setActiveTab('BUYER');
+      }
+    }
+  }, [activeTab, canViewSellerLeads, canViewBuyerLeads, canViewVendorLeads]);
   
   // Sorting functionality
   const { sortConfig, handleSort, resetSort } = useSortable({ key: 'updatedAt', direction: 'desc' });
@@ -153,20 +210,12 @@ const Leads = () => {
   // Handle leadId parameter from URL to show specific lead
   useEffect(() => {
     const leadIdParam = searchParams.get('leadId');
-    console.log('🌐 URL leadId parameter:', leadIdParam);
-    console.log('📊 Available leads:', leads.length);
     
     if (leadIdParam && leads.length > 0) {
-      console.log('🔍 Looking for lead with ID:', leadIdParam);
-      console.log('📋 All lead IDs:', leads.map(l => l.id));
-      
-      // Find lead by ID (much simpler and more reliable)
+      // Find lead by ID
       const matchingLead = leads.find(lead => lead.id === leadIdParam);
-      console.log(`🔎 Comparing "${leadIdParam}" with lead IDs`);
-      console.log(`🎯 Match found:`, !!matchingLead);
       
       if (matchingLead) {
-        console.log('✅ Found matching lead:', matchingLead);
         setSelectedLead(matchingLead);
         setShowLeadDetail(true);
         
@@ -179,8 +228,6 @@ const Leads = () => {
           newParams.delete('leadId');
           return newParams;
         });
-      } else {
-        console.log('❌ No matching lead found for ID:', leadIdParam);
       }
     }
   }, [searchParams, leads, setSearchParams]);
@@ -195,7 +242,7 @@ const Leads = () => {
       });
       if (marketsResponse.ok) {
         const marketsData = await marketsResponse.json();
-        setMarkets(marketsData.data || []);
+        setFilterMarkets(marketsData.data || []);
       }
 
       // Fetch all pipeline stages (from all pipelines)
@@ -553,7 +600,7 @@ const Leads = () => {
   ];
 
   const getFilteredLeads = () => {
-    return getCurrentLeads();
+    return getCurrentLeads;
   };
 
   const getFilteredLeadsForTab = (type: LeadType) => {
@@ -649,17 +696,64 @@ const Leads = () => {
     );
   };
 
-  const handleBulkAction = async (action: string) => {
-    if (action === 'delete' && selectedItems.length > 0) {
-      // Delete selected leads
+  const handleBulkAction = (action: 'delete' | 'archive') => {
+    if (selectedItems.length === 0) return;
+    setPendingBulkAction(action);
+    setIsConfirmDialogOpen(true);
+  };
+
+  const confirmBulkAction = async () => {
+    if (!pendingBulkAction || selectedItems.length === 0) return;
+    
+    setIsBulkProcessing(true);
+    setIsConfirmDialogOpen(false);
+    
+    try {
+      let successCount = 0;
+      let errorCount = 0;
+
       for (const leadId of selectedItems) {
-        await deleteLead(leadId);
+        try {
+          if (pendingBulkAction === 'delete') {
+            await deleteLead(leadId);
+          } else if (pendingBulkAction === 'archive') {
+            await updateLead(leadId, { status: 'archived' } as any);
+          }
+          successCount++;
+        } catch (error) {
+          errorCount++;
+          console.error(`Failed to ${pendingBulkAction} lead ${leadId}:`, error);
+        }
       }
+
+      // Show success/error toast
+      if (successCount > 0) {
+        toast({
+          title: `${pendingBulkAction === 'delete' ? 'Deleted' : 'Archived'} ${successCount} lead${successCount > 1 ? 's' : ''}`,
+          description: errorCount > 0 ? `${errorCount} lead${errorCount > 1 ? 's' : ''} failed to ${pendingBulkAction}` : undefined,
+        });
+      }
+
+      if (errorCount > 0 && successCount === 0) {
+        toast({
+          title: `Failed to ${pendingBulkAction} leads`,
+          description: `${errorCount} lead${errorCount > 1 ? 's' : ''} could not be ${pendingBulkAction}d`,
+          variant: "destructive",
+        });
+      }
+
+      // Clear selection and refresh
       setSelectedItems([]);
-    } else if (action === 'archive') {
-      // TODO: Implement archive functionality
-      console.log(`Archiving leads:`, selectedItems);
-      setSelectedItems([]);
+      await fetchLeads();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: `Failed to ${pendingBulkAction} leads`,
+        variant: "destructive",
+      });
+    } finally {
+      setIsBulkProcessing(false);
+      setPendingBulkAction(null);
     }
   };
 
@@ -755,7 +849,7 @@ const Leads = () => {
                   disabled={loadingFilters}
                 >
                   <option value="">All Markets</option>
-                  {markets.map(market => (
+                  {filterMarkets.map(market => (
                     <option key={market.id} value={market.id}>
                       {market.name}
                     </option>
@@ -853,7 +947,7 @@ const Leads = () => {
 
         {/* Tabs */}
         <div className="bg-white border-b border-gray-200 px-6">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as LeadType)} className="w-full">
             <TabsList className="h-12 bg-transparent border-0 p-0 space-x-6">
               {canViewSellerLeads && (
                 <TabsTrigger 
@@ -929,19 +1023,39 @@ const Leads = () => {
                       variant="ghost" 
                       size="sm" 
                       onClick={() => handleBulkAction('archive')}
+                      disabled={isBulkProcessing}
                       className="text-gray-600 hover:text-gray-900"
                     >
-                      <Archive className="w-4 h-4 mr-1" />
-                      Archive ({selectedItems.length})
+                      {isBulkProcessing && pendingBulkAction === 'archive' ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                          Archiving...
+                        </>
+                      ) : (
+                        <>
+                          <Archive className="w-4 h-4 mr-1" />
+                          Archive ({selectedItems.length})
+                        </>
+                      )}
                     </Button>
                     <Button 
                       variant="ghost" 
                       size="sm" 
                       onClick={() => handleBulkAction('delete')}
+                      disabled={isBulkProcessing}
                       className="text-red-600 hover:text-red-900"
                     >
-                      <Trash2 className="w-4 h-4 mr-1" />
-                      Delete ({selectedItems.length})
+                      {isBulkProcessing && pendingBulkAction === 'delete' ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                          Deleting...
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="w-4 h-4 mr-1" />
+                          Delete ({selectedItems.length})
+                        </>
+                      )}
                     </Button>
                   </div>
                 )}
@@ -1087,14 +1201,33 @@ const Leads = () => {
                   {showFilters ? 'Hide' : 'Filter'}
                 </Button>
                 
-                {/* Add Lead Dialog */}
+                {/* Add Lead Button/Dialog */}
+                <Button 
+                  size="sm" 
+                  className="gap-2 bg-blue-600 hover:bg-blue-700"
+                  onClick={() => {
+                    // Count available lead types
+                    const availableTypes = [
+                      canViewSellerLeads && 'seller',
+                      canViewBuyerLeads && 'buyer',
+                      canViewVendorLeads && 'vendor'
+                    ].filter(Boolean);
+                    
+                    // If only one type available, navigate directly
+                    if (availableTypes.length === 1) {
+                      navigate(`/leads/add-${availableTypes[0]}`);
+                    } else {
+                      // If multiple types, show dialog
+                      setIsAddLeadOpen(true);
+                    }
+                  }}
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Lead
+                </Button>
+                
+                {/* Add Lead Type Selection Dialog (only shown if multiple types available) */}
                 <Dialog open={isAddLeadOpen} onOpenChange={setIsAddLeadOpen}>
-                  <DialogTrigger asChild>
-                    <Button size="sm" className="gap-2 bg-blue-600 hover:bg-blue-700">
-                      <Plus className="w-4 h-4" />
-                      Add Lead
-                    </Button>
-                  </DialogTrigger>
                   <DialogContent className="sm:max-w-md">
                     <DialogHeader>
                       <DialogTitle>Add New Lead</DialogTitle>
@@ -1103,45 +1236,53 @@ const Leads = () => {
                       </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
-                      <Button 
-                        className="justify-start gap-3 h-12"
-                        onClick={() => {
-                          setIsAddLeadOpen(false);
-                          navigate('/leads/add-seller');
-                        }}
-                      >
-                        <Building className="w-5 h-5" />
-                        <div className="text-left">
-                          <div className="font-medium">Seller Lead</div>
-                          <div className="text-xs opacity-80">Property owner looking to sell</div>
-                        </div>
-                      </Button>
-                      <Button 
-                        className="justify-start gap-3 h-12"
-                        onClick={() => {
-                          setIsAddLeadOpen(false);
-                          navigate('/leads/add-buyer');
-                        }}
-                      >
-                        <Users className="w-5 h-5" />
-                        <div className="text-left">
-                          <div className="font-medium">Buyer Lead</div>
-                          <div className="text-xs opacity-80">Investor looking to purchase</div>
-                        </div>
-                      </Button>
-                      <Button 
-                        className="justify-start gap-3 h-12"
-                        onClick={() => {
-                          setIsAddLeadOpen(false);
-                          navigate('/leads/add-vendor');
-                        }}
-                      >
-                        <UserCheck className="w-5 h-5" />
-                        <div className="text-left">
-                          <div className="font-medium">Vendor Lead</div>
-                          <div className="text-xs opacity-80">Service provider or contractor</div>
-                        </div>
-                      </Button>
+                      {canViewSellerLeads && (
+                        <Button 
+                          className="justify-start gap-3 h-12"
+                          onClick={() => {
+                            setIsAddLeadOpen(false);
+                            navigate('/leads/add-seller');
+                          }}
+                        >
+                          <Building className="w-5 h-5" />
+                          <div className="text-left">
+                            <div className="font-medium">Seller Lead</div>
+                            <div className="text-xs opacity-80">Property owner looking to sell</div>
+                          </div>
+                        </Button>
+                      )}
+                      
+                      {canViewBuyerLeads && (
+                        <Button 
+                          className="justify-start gap-3 h-12"
+                          onClick={() => {
+                            setIsAddLeadOpen(false);
+                            navigate('/leads/add-buyer');
+                          }}
+                        >
+                          <Users className="w-5 h-5" />
+                          <div className="text-left">
+                            <div className="font-medium">Buyer Lead</div>
+                            <div className="text-xs opacity-80">Investor looking to purchase</div>
+                          </div>
+                        </Button>
+                      )}
+                      
+                      {canViewVendorLeads && (
+                        <Button 
+                          className="justify-start gap-3 h-12"
+                          onClick={() => {
+                            setIsAddLeadOpen(false);
+                            navigate('/leads/add-vendor');
+                          }}
+                        >
+                          <UserCheck className="w-5 h-5" />
+                          <div className="text-left">
+                            <div className="font-medium">Vendor Lead</div>
+                            <div className="text-xs opacity-80">Service provider or contractor</div>
+                          </div>
+                        </Button>
+                      )}
                     </div>
                   </DialogContent>
                 </Dialog>
@@ -1242,7 +1383,7 @@ const Leads = () => {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className="text-gray-600">{lead.market?.name || 'N/A'}</TableCell>
+                        <TableCell className="text-gray-600">{lead.marketId || 'N/A'}</TableCell>
                         <TableCell className="font-medium text-gray-900">N/A</TableCell>
                         <TableCell>
                           <Badge className={`border ${getMotivationColor(lead.seller?.motivation || 'Medium')}`}>
@@ -1256,12 +1397,12 @@ const Leads = () => {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline" className={getPipelineStatusColor(lead.pipelineStage?.name || 'New Lead')}>
-                            {lead.pipelineStage?.name || 'New Lead'}
+                          <Badge variant="outline" className={getPipelineStatusColor('New Lead')}>
+                            {lead.pipelineStageId ? 'Active' : 'New Lead'}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-gray-600">
-                          {lead.assignedUser ? `${lead.assignedUser.firstName} ${lead.assignedUser.lastName}` : 'Unassigned'}
+                          {lead.assignedUserId ? 'Assigned' : 'Unassigned'}
                         </TableCell>
                         <TableCell className="text-gray-600">
                           {new Date(lead.updatedAt).toLocaleDateString()}
@@ -1317,7 +1458,7 @@ const Leads = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {activeTab === "BUYER" ? currentLeads.map((lead) => (
+                    {currentLeads.map((lead) => (
                       <TableRow key={lead.id} className="border-b border-gray-100 hover:bg-gray-50">
                         <TableCell className="sticky left-0 bg-white z-10 border-r border-gray-200">
                           <div className="flex items-center justify-center h-full">
@@ -1351,35 +1492,47 @@ const Leads = () => {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className="text-gray-600">{lead.market}</TableCell>
-                        <TableCell className="font-medium text-gray-900">{lead.priceRange}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
-                            {lead.assetClass}
-                          </Badge>
+                        <TableCell className="text-gray-600 text-xs">
+                          <span className="max-w-[200px] truncate block" title={getMarketNames(lead.buyerCriteria?.marketIds)}>
+                            {getMarketNames(lead.buyerCriteria?.marketIds)}
+                          </span>
                         </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-gray-900">{lead.propertiesPurchased}</span>
-                            {lead.propertiesPurchased > 0 && (
+                        <TableCell className="text-xs text-gray-600">
+                          <span className="max-w-[200px] truncate block" title={getPriceRangeNames(lead.buyerCriteria?.priceRangeIds)}>
+                            {getPriceRangeNames(lead.buyerCriteria?.priceRangeIds)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          <span className="max-w-[200px] truncate block" title={getAssetClassNames(lead.buyerCriteria?.assetClassIds)}>
+                            {getAssetClassNames(lead.buyerCriteria?.assetClassIds)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <span className="font-medium text-gray-900">{lead.buyer?.propertiesPurchased || 0}</span>
+                            {(lead.buyer?.propertiesPurchased || 0) > 0 && (
                               <Badge className="bg-green-100 text-green-700 text-xs">
                                 Repeat
                               </Badge>
                             )}
                           </div>
                         </TableCell>
-                        <TableCell>
-                          <Badge className={`text-xs ${
-                            lead.creditScore === 'Excellent' ? 'bg-green-100 text-green-700' :
-                            lead.creditScore === 'Good' ? 'bg-blue-100 text-blue-700' :
-                            lead.creditScore === 'Fair' ? 'bg-yellow-100 text-yellow-700' :
-                            'bg-red-100 text-red-700'
-                          }`}>
-                            {lead.creditScore}
-                          </Badge>
+                        <TableCell className="text-center">
+                          {lead.buyer?.creditScore ? (
+                            <Badge className={`text-xs ${
+                              lead.buyer.creditScore === 'Excellent' ? 'bg-green-100 text-green-700' :
+                              lead.buyer.creditScore === 'Good' ? 'bg-blue-100 text-blue-700' :
+                              lead.buyer.creditScore === 'Fair' ? 'bg-yellow-100 text-yellow-700' :
+                              'bg-red-100 text-red-700'
+                            }`}>
+                              {lead.buyer.creditScore}
+                            </Badge>
+                          ) : (
+                            <span className="text-gray-400 text-xs">-</span>
+                          )}
                         </TableCell>
-                        <TableCell>
-                          {lead.preApproved ? (
+                        <TableCell className="text-center">
+                          {lead.buyer?.preApproved ? (
                             <Badge className="bg-green-100 text-green-700 text-xs">
                               ✓ Pre-Approved
                             </Badge>
@@ -1389,14 +1542,32 @@ const Leads = () => {
                             </Badge>
                           )}
                         </TableCell>
-                        <TableCell>
-                          <Badge className={`border ${getMotivationColor(lead.motivation || '')}`}>
-                            {lead.motivation}
-                          </Badge>
+                        <TableCell className="text-center">
+                          {lead.buyer?.motivation ? (
+                            <Badge className={`border text-xs ${
+                              lead.buyer.motivation === 'High' ? 'border-red-300 bg-red-50 text-red-700' :
+                              lead.buyer.motivation === 'Medium' ? 'border-yellow-300 bg-yellow-50 text-yellow-700' :
+                              'border-gray-300 bg-gray-50 text-gray-700'
+                            }`}>
+                              {lead.buyer.motivation}
+                            </Badge>
+                          ) : (
+                            <span className="text-gray-400 text-xs">-</span>
+                          )}
                         </TableCell>
-                        <TableCell className="text-gray-600">{lead.timeline}</TableCell>
-                        <TableCell className="text-gray-600">{lead.assignedAgent}</TableCell>
-                        <TableCell className="text-gray-600">{lead.lastContact}</TableCell>
+                        <TableCell className="text-center text-xs">
+                          {lead.buyer?.timeline || <span className="text-gray-400">-</span>}
+                        </TableCell>
+                        <TableCell className="text-gray-600 text-xs">
+                          {lead.assignedUserId ? (
+                            <span className="text-gray-600">Assigned</span>
+                          ) : (
+                            <span className="text-gray-400">Unassigned</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-gray-600 text-xs">
+                          {lead.updatedAt ? new Date(lead.updatedAt).toLocaleDateString() : <span className="text-gray-400">-</span>}
+                        </TableCell>
                         <TableCell className="sticky right-0 bg-white z-10 border-l border-gray-200">
                           <LeadActions 
                             lead={lead} 
@@ -1404,7 +1575,7 @@ const Leads = () => {
                           />
                         </TableCell>
                       </TableRow>
-                    )) : []}
+                    ))}
                   </TableBody>
                 </Table>
               </div>
@@ -1481,29 +1652,27 @@ const Leads = () => {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200">
-                            {lead.industry}
+                          <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 text-xs">
+                            {lead.vendor?.industry || '-'}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-gray-600">{lead.serviceArea}</TableCell>
+                        <TableCell className="text-gray-600 text-xs">
+                          <span className="max-w-[200px] truncate block" title={getMarketNames(lead.vendor?.marketIds)}>
+                            {getMarketNames(lead.vendor?.marketIds)}
+                          </span>
+                        </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-1">
-                            {getRatingStars(lead.rating)}
+                          <div className="flex items-center gap-1 text-gray-400">
+                            N/A
                           </div>
                         </TableCell>
                         <TableCell>
-                          {lead.verified ? (
-                            <Badge className="bg-green-100 text-green-700 text-xs">
-                              ✓ Verified
-                            </Badge>
-                          ) : (
-                            <Badge className="bg-gray-100 text-gray-700 text-xs">
-                              Pending
-                            </Badge>
-                          )}
+                          <Badge className="bg-gray-100 text-gray-700 text-xs">
+                            Pending
+                          </Badge>
                         </TableCell>
-                        <TableCell className="text-gray-600">{lead.assignedAgent}</TableCell>
-                        <TableCell className="text-gray-600">{lead.lastContact}</TableCell>
+                        <TableCell className="text-gray-600">{lead.assignedUserId ? 'Assigned' : 'Unassigned'}</TableCell>
+                        <TableCell className="text-gray-600">{new Date(lead.updatedAt).toLocaleDateString()}</TableCell>
                         <TableCell className="sticky right-0 bg-white z-10 border-l border-gray-200">
                           <LeadActions 
                             lead={lead} 
@@ -1536,6 +1705,49 @@ const Leads = () => {
           onOpenChange={setShowLeadDetail}
         />
       )}
+
+      {/* Bulk Action Confirmation Dialog */}
+      <Dialog open={isConfirmDialogOpen} onOpenChange={setIsConfirmDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {pendingBulkAction === 'delete' ? 'Delete Leads' : 'Archive Leads'}
+            </DialogTitle>
+            <DialogDescription>
+              {pendingBulkAction === 'delete' 
+                ? `Are you sure you want to permanently delete ${selectedItems.length} lead${selectedItems.length > 1 ? 's' : ''}? This action cannot be undone.`
+                : `Are you sure you want to archive ${selectedItems.length} lead${selectedItems.length > 1 ? 's' : ''}? Archived leads can be restored later.`
+              }
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsConfirmDialogOpen(false);
+                setPendingBulkAction(null);
+              }}
+              disabled={isBulkProcessing}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant={pendingBulkAction === 'delete' ? 'destructive' : 'default'}
+              onClick={confirmBulkAction}
+              disabled={isBulkProcessing}
+            >
+              {isBulkProcessing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  {pendingBulkAction === 'delete' ? 'Deleting...' : 'Archiving...'}
+                </>
+              ) : (
+                pendingBulkAction === 'delete' ? 'Delete' : 'Archive'
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 };

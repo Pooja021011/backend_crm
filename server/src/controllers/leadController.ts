@@ -44,6 +44,14 @@ export const leadController = {
     res.json({ data: leads, skip: q.skip ?? 0, take: q.take ?? 20 });
   },
 
+  async delete(req: Request, res: Response) {
+    const lead = await leadService.get(req.params.id);
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
+    
+    await leadService.delete(req.params.id);
+    res.json({ success: true });
+  },
+
   async changeStage(req: Request, res: Response) {
     const body = changeStageSchema.parse(req.body);
     // Enforce special workflows based on simple rules

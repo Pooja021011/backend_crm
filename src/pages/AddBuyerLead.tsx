@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLeads } from "@/hooks/useLeads";
 import { useSettings } from "@/hooks/useSettings";
 import { useAgents } from "@/hooks/useAgents";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ValidatedInput } from "@/components/ui/validated-input";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PendingFileUploader, type PendingFileItem } from "@/components/PendingFileUploader";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -22,6 +23,7 @@ import {
   Mail, 
   Calendar as CalendarIcon,
   Users,
+  UserCheck,
   Target,
   DollarSign,
   Building,
@@ -35,6 +37,7 @@ import {
   validateName, 
   formatPhoneNumber 
 } from "@/utils/validation";
+import { API_BASE } from "@/config/api";
 
 const AddBuyerLead = () => {
   const navigate = useNavigate();
@@ -45,6 +48,8 @@ const AddBuyerLead = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [pendingFiles, setPendingFiles] = useState<PendingFileItem[]>([]);
+  const [pipelineStages, setPipelineStages] = useState<any[]>([]);
+  const [loadingStages, setLoadingStages] = useState(true);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -54,15 +59,49 @@ const AddBuyerLead = () => {
     emailAddress: "",
     leadSource: "",
     dispositionAgentId: "",
+    pipelineStageId: "",
     leadMarkets: [] as string[],
     priceRanges: [] as string[],
-    assetClasses: [] as string[]
+    assetClasses: [] as string[],
+    propertiesPurchased: "0",
+    creditScore: "",
+    preApproved: false,
+    motivation: "",
+    timeline: ""
   });
 
-  // Get active agents with DISP role
+  // Get active agents with DISP role for the dropdown
   const dispositionAgents = getActiveAgents().filter(agent => 
     agent.roles.some(role => role.role.name === 'DISP')
   );
+
+  // Load pipeline stages (DISPOSITIONS for buyer leads)
+  useEffect(() => {
+    const loadPipelineStages = async () => {
+      try {
+        setLoadingStages(true);
+        const response = await fetch(`${API_BASE}/pipeline/DISPOSITIONS/stages`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          setPipelineStages(data.data || []);
+        }
+      } catch (error) {
+        console.error('Error loading pipeline stages:', error);
+        toast({
+          title: "Warning",
+          description: "Could not load pipeline stages.",
+          variant: "destructive"
+        });
+      } finally {
+        setLoadingStages(false);
+      }
+    };
+    
+    loadPipelineStages();
+  }, [toast]);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({
@@ -96,21 +135,39 @@ const AddBuyerLead = () => {
 
     try {
       // Create lead data according to API schema
-      const leadData = {
+      const criteriaData = {
+        marketIds: formData.leadMarkets.length > 0 ? formData.leadMarkets : undefined,
+        priceRangeIds: formData.priceRanges.length > 0 ? formData.priceRanges : undefined,
+        assetClassIds: formData.assetClasses.length > 0 ? formData.assetClasses : undefined
+      };
+      
+      // Only include criteria if at least one field has data
+      const hasCriteria = criteriaData.marketIds || criteriaData.priceRangeIds || criteriaData.assetClassIds;
+      
+      const leadData: any = {
         type: 'BUYER' as const,
+        pipelineStageId: formData.pipelineStageId || undefined,
         buyer: {
           firstName: formData.firstName.trim(),
           lastName: formData.lastName.trim(),
           phone: formData.phoneNumber.trim(),
           email: formData.emailAddress.trim(),
-          vip: false // You can add VIP checkbox if needed
-        },
-        criteria: {
-          // Convert string arrays to UUIDs if you have mapping
-          // For now, we'll skip criteria since we don't have the UUID mapping
+          vip: false,
+          propertiesPurchased: parseInt(formData.propertiesPurchased) || 0,
+          creditScore: formData.creditScore || undefined,
+          preApproved: formData.preApproved,
+          motivation: formData.motivation || undefined,
+          timeline: formData.timeline || undefined
         },
         assignedUserId: formData.dispositionAgentId && formData.dispositionAgentId !== 'no-agents' ? formData.dispositionAgentId : undefined
       };
+      
+      // Only add criteria if there's data
+      if (hasCriteria) {
+        leadData.criteria = criteriaData;
+      }
+      
+      console.log('📤 Sending buyer lead data:', JSON.stringify(leadData, null, 2));
 
       const createdLead = await createLead(leadData);
 
@@ -189,6 +246,7 @@ const AddBuyerLead = () => {
            formData.phoneNumber && 
            formData.emailAddress && 
            formData.leadSource &&
+           formData.pipelineStageId &&
            selectedDate;
   };
 
@@ -252,36 +310,32 @@ const AddBuyerLead = () => {
               <h2 className="text-lg font-semibold text-gray-900">CONTACT INFO</h2>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* First Name & Last Name */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">
-                  First Name & Last Name *
-                </Label>
-                <div className="grid grid-cols-2 gap-2">
-                  <ValidatedInput
-                    label=""
-                    name="firstName"
-                    value={formData.firstName}
-                    onValueChange={(value) => handleInputChange('firstName', value)}
-                    validator={(value) => validateName(value, 'First name')}
-                    placeholder="First Name"
-                    required
-                    showValidation={true}
-                    icon={<User className="w-4 h-4" />}
-                  />
-                  <ValidatedInput
-                    label=""
-                    name="lastName"
-                    value={formData.lastName}
-                    onValueChange={(value) => handleInputChange('lastName', value)}
-                    validator={(value) => validateName(value, 'Last name')}
-                    placeholder="Last Name"
-                    required
-                    showValidation={true}
-                  />
-                </div>
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* First Name */}
+              <ValidatedInput
+                label="First Name"
+                name="firstName"
+                value={formData.firstName}
+                onValueChange={(value) => handleInputChange('firstName', value)}
+                validator={(value) => validateName(value, 'First name')}
+                placeholder="First Name"
+                required
+                showValidation={true}
+                icon={<User className="w-4 h-4" />}
+              />
+
+              {/* Last Name */}
+              <ValidatedInput
+                label="Last Name"
+                name="lastName"
+                value={formData.lastName}
+                onValueChange={(value) => handleInputChange('lastName', value)}
+                validator={(value) => validateName(value, 'Last name')}
+                placeholder="Last Name"
+                required
+                showValidation={true}
+                icon={<User className="w-4 h-4" />}
+              />
 
               {/* Phone Number */}
               <ValidatedInput
@@ -334,6 +388,32 @@ const AddBuyerLead = () => {
                 </Select>
               </div>
 
+              {/* Pipeline Stage */}
+              <div className="space-y-2">
+                <Label htmlFor="pipelineStageId" className="text-sm font-medium text-gray-700">
+                  Pipeline Stage *
+                </Label>
+                <Select 
+                  value={formData.pipelineStageId} 
+                  onValueChange={(value) => handleInputChange('pipelineStageId', value)}
+                  disabled={loadingStages}
+                >
+                  <SelectTrigger className="h-10 border-gray-300 focus:border-blue-500 focus:ring-blue-500/20">
+                    <SelectValue placeholder={loadingStages ? "Loading..." : "Select Pipeline Stage"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pipelineStages.map((stage) => (
+                      <SelectItem key={stage.id} value={stage.id}>
+                        {stage.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {pipelineStages.length === 0 && !loadingStages && (
+                  <p className="text-xs text-amber-600">⚠ No stages available for your role</p>
+                )}
+              </div>
+
               {/* Date Created */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-700">
@@ -361,18 +441,6 @@ const AddBuyerLead = () => {
                     />
                   </PopoverContent>
                 </Popover>
-              </div>
-
-              {/* Market */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">
-                  Market *
-                </Label>
-                <Select value="Primary Market" disabled>
-                  <SelectTrigger className="h-10 border-gray-300 bg-gray-50">
-                    <SelectValue placeholder="Primary Market" />
-                  </SelectTrigger>
-                </Select>
               </div>
             </div>
           </Card>
@@ -479,6 +547,116 @@ const AddBuyerLead = () => {
             </div>
           </Card>
 
+          {/* Buyer Qualification Section */}
+          <Card className="p-8 shadow-sm border border-gray-200">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-indigo-100 rounded-lg">
+                <UserCheck className="w-5 h-5 text-indigo-600" />
+              </div>
+              <h2 className="text-lg font-semibold text-gray-900">Buyer Qualification</h2>
+            </div>
+            
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Properties Purchased */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-gray-700">
+                    Properties Purchased
+                  </Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={formData.propertiesPurchased}
+                    onChange={(e) => handleInputChange('propertiesPurchased', e.target.value)}
+                    placeholder="0"
+                    className="h-10 border-gray-300"
+                  />
+                  <p className="text-xs text-gray-500">Number of properties purchased previously</p>
+                </div>
+
+                {/* Credit Score */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-gray-700">
+                    Credit Score
+                  </Label>
+                  <Select 
+                    value={formData.creditScore} 
+                    onValueChange={(value) => handleInputChange('creditScore', value)}
+                  >
+                    <SelectTrigger className="h-10 border-gray-300">
+                      <SelectValue placeholder="Select credit score range" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Excellent">Excellent (750+)</SelectItem>
+                      <SelectItem value="Good">Good (700-749)</SelectItem>
+                      <SelectItem value="Fair">Fair (650-699)</SelectItem>
+                      <SelectItem value="Poor">Poor (&lt;650)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Motivation */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-gray-700">
+                    Motivation Level
+                  </Label>
+                  <Select 
+                    value={formData.motivation} 
+                    onValueChange={(value) => handleInputChange('motivation', value)}
+                  >
+                    <SelectTrigger className="h-10 border-gray-300">
+                      <SelectValue placeholder="Select motivation level" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="High">High</SelectItem>
+                      <SelectItem value="Medium">Medium</SelectItem>
+                      <SelectItem value="Low">Low</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Timeline */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-gray-700">
+                    Timeline
+                  </Label>
+                  <Select 
+                    value={formData.timeline} 
+                    onValueChange={(value) => handleInputChange('timeline', value)}
+                  >
+                    <SelectTrigger className="h-10 border-gray-300">
+                      <SelectValue placeholder="Select purchase timeline" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Immediate">Immediate</SelectItem>
+                      <SelectItem value="30 Days">Within 30 Days</SelectItem>
+                      <SelectItem value="60 Days">Within 60 Days</SelectItem>
+                      <SelectItem value="90+ Days">90+ Days</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Pre-Approved */}
+              <div className="flex items-center space-x-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
+                <Checkbox
+                  id="preApproved"
+                  checked={formData.preApproved}
+                  onCheckedChange={(checked) => 
+                    setFormData(prev => ({ ...prev, preApproved: checked as boolean }))
+                  }
+                  className="border-gray-300"
+                />
+                <Label 
+                  htmlFor="preApproved" 
+                  className="text-sm font-medium text-gray-700 cursor-pointer flex-1"
+                >
+                  Pre-Approved for Financing
+                </Label>
+              </div>
+            </div>
+          </Card>
+
           {/* Assignment Section */}
           <Card className="p-8 shadow-sm border border-gray-200">
             <div className="flex items-center gap-3 mb-6">
@@ -505,13 +683,17 @@ const AddBuyerLead = () => {
                     {dispositionAgents.map((agent) => {
                       const initials = `${agent.firstName.charAt(0)}${agent.lastName.charAt(0)}`;
                       const fullName = `${agent.firstName} ${agent.lastName}`;
+                      const roleNames = agent.roles.map(r => r.role.name).join(', ');
                       return (
                         <SelectItem key={agent.id} value={agent.id}>
-                          <div className="flex items-center gap-2">
-                            <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
-                              <span className="text-xs font-medium text-blue-600">{initials}</span>
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-2">
+                              <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                                <span className="text-xs font-medium text-blue-600">{initials}</span>
+                              </div>
+                              <span className="font-medium">{fullName}</span>
                             </div>
-                            <span>{fullName}</span>
+                            <span className="text-xs text-gray-500 ml-8">{roleNames}</span>
                           </div>
                         </SelectItem>
                       );

@@ -12,6 +12,7 @@ import { ValidatedInput } from "@/components/ui/validated-input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -65,10 +66,12 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
   const [dealNetProfit, setDealNetProfit] = useState<string>("");
   const { user } = useAuth();
   const { updateLead } = useLeads();
-  const { markets, leadSources, getCountiesByMarket, isLoading: settingsLoading } = useSettings();
+  const { markets, leadSources, priceRanges, assetClasses, getCountiesByMarket, isLoading: settingsLoading } = useSettings();
   const { agents, isLoading: agentsLoading, getActiveAgents } = useAgents();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [pipelineStages, setPipelineStages] = useState<any[]>([]);
+  const [loadingStages, setLoadingStages] = useState(true);
   
   // Check if current user is an ACQ agent
   const isACQAgent = user?.roles?.includes('ACQ');
@@ -81,6 +84,7 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
     status: lead.status || 'NEW',
     marketId: lead.marketId || '',
     assignedUserId: lead.assignedUserId || '',
+    pipelineStageId: lead.pipelineStageId || '',
     
     // Contact fields
     firstName: '',
@@ -100,16 +104,20 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
     // Seller specific
     motivation: '',
     
-    // Buyer specific
-    minPrice: '',
-    maxPrice: '',
-    minBedrooms: '',
-    minBathrooms: '',
-    preferredAreas: '',
+    // Buyer specific - match Add form
+    leadMarkets: [] as string[],
+    priceRanges: [] as string[],
+    assetClasses: [] as string[],
+    propertiesPurchased: '0',
+    creditScore: '',
+    preApproved: false,
+    buyerMotivation: '',
+    timeline: '',
     
     // Vendor specific
     company: '',
-    serviceType: ''
+    serviceType: '',
+    vendorMarkets: [] as string[]
   });
 
   // Initialize form data when lead changes
@@ -134,25 +142,30 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
       status: lead.status || 'NEW',
       marketId: lead.marketId || '',
       assignedUserId: lead.assignedUserId || '',
+      pipelineStageId: lead.pipelineStageId || '',
       firstName: contactInfo?.firstName || '',
       lastName: contactInfo?.lastName || '',
       phone: contactInfo?.phone || '',
       email: contactInfo?.email || '',
-      notes: contactInfo?.notes || '',
+      notes: lead.seller?.notes || '', // Only sellers have notes
       address1: lead.address?.address1 || '',
-      address2: lead.address?.address2 || '',
+      address2: '', // address2 doesn't exist in schema
       city: lead.address?.city || '',
       state: lead.address?.state || '',
       zip: lead.address?.zip || '',
       countyId: lead.address?.countyId || '',
       motivation: lead.seller?.motivation || '',
-      minPrice: lead.buyerCriteria?.minPrice?.toString() || '',
-      maxPrice: lead.buyerCriteria?.maxPrice?.toString() || '',
-      minBedrooms: lead.buyerCriteria?.minBedrooms?.toString() || '',
-      minBathrooms: lead.buyerCriteria?.minBathrooms?.toString() || '',
-      preferredAreas: lead.buyerCriteria?.preferredAreas || '',
+      leadMarkets: lead.buyerCriteria?.marketIds || [],
+      priceRanges: lead.buyerCriteria?.priceRangeIds || [],
+      assetClasses: lead.buyerCriteria?.assetClassIds || [],
+      propertiesPurchased: lead.buyer?.propertiesPurchased?.toString() || '0',
+      creditScore: lead.buyer?.creditScore || '',
+      preApproved: lead.buyer?.preApproved || false,
+      buyerMotivation: lead.buyer?.motivation || '',
+      timeline: lead.buyer?.timeline || '',
       company: lead.vendor?.company || '',
-      serviceType: lead.vendor?.serviceType || ''
+      serviceType: lead.vendor?.industry || '', // vendor uses industry field
+      vendorMarkets: lead.vendor?.marketIds || []
     });
 
     if (lead.marketId) {
@@ -170,10 +183,59 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
     }
   }, [selectedMarketId, getCountiesByMarket]);
 
+  // Load pipeline stages based on lead type
+  useEffect(() => {
+    if (!lead) return;
+    
+    const loadPipelineStages = async () => {
+      try {
+        setLoadingStages(true);
+        let pipelineKey = 'ACQUISITIONS'; // Default
+        
+        if (lead.leadType === 'SELLER') {
+          pipelineKey = 'ACQUISITIONS';
+        } else if (lead.leadType === 'BUYER') {
+          pipelineKey = 'DISPOSITIONS';
+        } else if (lead.leadType === 'VENDOR') {
+          pipelineKey = 'ACQUISITIONS';
+        }
+        
+        const response = await fetch(`${API_BASE}/pipeline/${pipelineKey}/stages`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          setPipelineStages(data.data || []);
+        }
+      } catch (error) {
+        console.error('Error loading pipeline stages:', error);
+        toast({
+          title: "Warning",
+          description: "Could not load pipeline stages.",
+          variant: "destructive"
+        });
+      } finally {
+        setLoadingStages(false);
+      }
+    };
+    
+    loadPipelineStages();
+  }, [lead, toast]);
+
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
+    }));
+  };
+
+  const handleMultiSelectChange = (field: 'leadMarkets' | 'priceRanges' | 'assetClasses' | 'vendorMarkets', value: string, checked: boolean) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: checked 
+        ? [...prev[field], value]
+        : prev[field].filter((item: string) => item !== value)
     }));
   };
 
@@ -186,6 +248,7 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
         status: formData.status,
         marketId: formData.marketId || undefined,
         assignedUserId: formData.assignedUserId || undefined,
+        pipelineStageId: formData.pipelineStageId || undefined,
       };
 
       // Update type-specific data
@@ -213,16 +276,24 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
           lastName: formData.lastName.trim(),
           phone: formData.phone.trim(),
           email: formData.email.trim(),
-          notes: formData.notes.trim()
+          propertiesPurchased: parseInt(formData.propertiesPurchased) || 0,
+          creditScore: formData.creditScore || undefined,
+          preApproved: formData.preApproved,
+          motivation: formData.buyerMotivation || undefined,
+          timeline: formData.timeline || undefined
         };
         
-        updateData.buyerCriteria = {
-          minPrice: formData.minPrice ? parseInt(formData.minPrice) : undefined,
-          maxPrice: formData.maxPrice ? parseInt(formData.maxPrice) : undefined,
-          minBedrooms: formData.minBedrooms ? parseInt(formData.minBedrooms) : undefined,
-          minBathrooms: formData.minBathrooms ? parseInt(formData.minBathrooms) : undefined,
-          preferredAreas: formData.preferredAreas.trim() || undefined
+        // Update buyer criteria if any data
+        const criteriaData = {
+          marketIds: formData.leadMarkets.length > 0 ? formData.leadMarkets : undefined,
+          priceRangeIds: formData.priceRanges.length > 0 ? formData.priceRanges : undefined,
+          assetClassIds: formData.assetClasses.length > 0 ? formData.assetClasses : undefined
         };
+        
+        const hasCriteria = criteriaData.marketIds || criteriaData.priceRangeIds || criteriaData.assetClassIds;
+        if (hasCriteria) {
+          updateData.buyerCriteria = criteriaData;
+        }
       } else if (lead.leadType === 'VENDOR') {
         updateData.vendor = {
           firstName: formData.firstName.trim(),
@@ -230,8 +301,8 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
           phone: formData.phone.trim(),
           email: formData.email.trim(),
           company: formData.company.trim(),
-          serviceType: formData.serviceType,
-          notes: formData.notes.trim()
+          industry: formData.serviceType,
+          marketIds: formData.vendorMarkets.length > 0 ? formData.vendorMarkets : undefined
         };
       }
 
@@ -385,6 +456,37 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
                     )}
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Target className="w-4 h-4" />
+                  Pipeline Stage
+                </Label>
+                <Select 
+                  value={formData.pipelineStageId || 'none'} 
+                  onValueChange={(value) => handleInputChange('pipelineStageId', value === 'none' ? '' : value)}
+                  disabled={loadingStages}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={loadingStages ? "Loading stages..." : "Select pipeline stage"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pipelineStages.map((stage) => (
+                      <SelectItem key={stage.id} value={stage.id}>
+                        {stage.name}
+                      </SelectItem>
+                    ))}
+                    {pipelineStages.length === 0 && !loadingStages && (
+                      <SelectItem value="none" disabled>
+                        No stages available
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+                {pipelineStages.length === 0 && !loadingStages && (
+                  <p className="text-xs text-amber-600">⚠ No stages available for your role</p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -563,61 +665,194 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
                       Buyer Criteria
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Min Price</Label>
-                        <ValidatedInput
-                          name="minPrice"
-                          value={formData.minPrice}
-                          onValueChange={(value) => handleInputChange('minPrice', value)}
-                          placeholder="100000"
-                          type="number"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Max Price</Label>
-                        <ValidatedInput
-                          name="maxPrice"
-                          value={formData.maxPrice}
-                          onValueChange={(value) => handleInputChange('maxPrice', value)}
-                          placeholder="500000"
-                          type="number"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Min Bedrooms</Label>
-                        <ValidatedInput
-                          name="minBedrooms"
-                          value={formData.minBedrooms}
-                          onValueChange={(value) => handleInputChange('minBedrooms', value)}
-                          placeholder="3"
-                          type="number"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Min Bathrooms</Label>
-                        <ValidatedInput
-                          name="minBathrooms"
-                          value={formData.minBathrooms}
-                          onValueChange={(value) => handleInputChange('minBathrooms', value)}
-                          placeholder="2"
-                          type="number"
-                        />
+                  <CardContent className="space-y-6">
+                    {/* Lead Market */}
+                    <div className="space-y-4">
+                      <Label className="text-sm font-medium text-gray-700">
+                        Lead Market
+                      </Label>
+                      <p className="text-xs text-gray-500">Select the markets this buyer is interested in</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {markets.map((market) => (
+                          <div key={market.id} className="flex items-center space-x-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
+                            <Checkbox
+                              id={`market-${market.id}`}
+                              checked={formData.leadMarkets.includes(market.id)}
+                              onCheckedChange={(checked) => 
+                                handleMultiSelectChange('leadMarkets', market.id, checked as boolean)
+                              }
+                              className="border-gray-300"
+                              disabled={settingsLoading}
+                            />
+                            <Label 
+                              htmlFor={`market-${market.id}`} 
+                              className="text-sm font-medium text-gray-700 cursor-pointer flex-1"
+                            >
+                              {market.name}
+                            </Label>
+                          </div>
+                        ))}
                       </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <Label>Preferred Areas</Label>
-                      <Textarea
-                        value={formData.preferredAreas}
-                        onChange={(e) => handleInputChange('preferredAreas', e.target.value)}
-                        placeholder="Describe preferred neighborhoods or areas..."
-                        rows={3}
-                      />
+                    {/* Price Range */}
+                    <div className="space-y-4">
+                      <Label className="text-sm font-medium text-gray-700">
+                        Price Range
+                      </Label>
+                      <p className="text-xs text-gray-500">Select the price ranges this buyer is considering</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {priceRanges.map((range) => (
+                          <div key={range.id} className="flex items-center space-x-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
+                            <Checkbox
+                              id={`price-${range.id}`}
+                              checked={formData.priceRanges.includes(range.id)}
+                              onCheckedChange={(checked) => 
+                                handleMultiSelectChange('priceRanges', range.id, checked as boolean)
+                              }
+                              className="border-gray-300"
+                              disabled={settingsLoading}
+                            />
+                            <Label 
+                              htmlFor={`price-${range.id}`} 
+                              className="text-sm font-medium text-gray-700 cursor-pointer flex-1"
+                            >
+                              {range.label}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Asset Class */}
+                    <div className="space-y-4">
+                      <Label className="text-sm font-medium text-gray-700">
+                        Asset Class
+                      </Label>
+                      <p className="text-xs text-gray-500">Select the asset classes this buyer is interested in</p>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        {assetClasses.map((assetClass) => (
+                          <div key={assetClass.id} className="flex items-center space-x-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
+                            <Checkbox
+                              id={`asset-${assetClass.id}`}
+                              checked={formData.assetClasses.includes(assetClass.id)}
+                              onCheckedChange={(checked) => 
+                                handleMultiSelectChange('assetClasses', assetClass.id, checked as boolean)
+                              }
+                              className="border-gray-300"
+                              disabled={settingsLoading}
+                            />
+                            <Label 
+                              htmlFor={`asset-${assetClass.id}`} 
+                              className="text-sm font-medium text-gray-700 cursor-pointer flex-1"
+                            >
+                              {assetClass.name}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Buyer Qualification */}
+                    <div className="space-y-6 mt-6 pt-6 border-t border-gray-200">
+                      <h3 className="text-sm font-semibold text-gray-900">Buyer Qualification</h3>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Properties Purchased */}
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium text-gray-700">
+                            Properties Purchased
+                          </Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            value={formData.propertiesPurchased}
+                            onChange={(e) => handleInputChange('propertiesPurchased', e.target.value)}
+                            placeholder="0"
+                            className="h-10 border-gray-300"
+                          />
+                        </div>
+
+                        {/* Credit Score */}
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium text-gray-700">
+                            Credit Score
+                          </Label>
+                          <Select 
+                            value={formData.creditScore} 
+                            onValueChange={(value) => handleInputChange('creditScore', value)}
+                          >
+                            <SelectTrigger className="h-10 border-gray-300">
+                              <SelectValue placeholder="Select credit score range" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Excellent">Excellent (750+)</SelectItem>
+                              <SelectItem value="Good">Good (700-749)</SelectItem>
+                              <SelectItem value="Fair">Fair (650-699)</SelectItem>
+                              <SelectItem value="Poor">Poor (&lt;650)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Motivation */}
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium text-gray-700">
+                            Motivation Level
+                          </Label>
+                          <Select 
+                            value={formData.buyerMotivation} 
+                            onValueChange={(value) => handleInputChange('buyerMotivation', value)}
+                          >
+                            <SelectTrigger className="h-10 border-gray-300">
+                              <SelectValue placeholder="Select motivation level" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="High">High</SelectItem>
+                              <SelectItem value="Medium">Medium</SelectItem>
+                              <SelectItem value="Low">Low</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Timeline */}
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium text-gray-700">
+                            Timeline
+                          </Label>
+                          <Select 
+                            value={formData.timeline} 
+                            onValueChange={(value) => handleInputChange('timeline', value)}
+                          >
+                            <SelectTrigger className="h-10 border-gray-300">
+                              <SelectValue placeholder="Select purchase timeline" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Immediate">Immediate</SelectItem>
+                              <SelectItem value="30 Days">Within 30 Days</SelectItem>
+                              <SelectItem value="60 Days">Within 60 Days</SelectItem>
+                              <SelectItem value="90+ Days">90+ Days</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      {/* Pre-Approved */}
+                      <div className="flex items-center space-x-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
+                        <Checkbox
+                          id="edit-preApproved"
+                          checked={formData.preApproved}
+                          onCheckedChange={(checked) => 
+                            setFormData(prev => ({ ...prev, preApproved: checked as boolean }))
+                          }
+                          className="border-gray-300"
+                        />
+                        <Label 
+                          htmlFor="edit-preApproved" 
+                          className="text-sm font-medium text-gray-700 cursor-pointer flex-1"
+                        >
+                          Pre-Approved for Financing
+                        </Label>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -633,7 +868,7 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
                       Service Information
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-4">
+                  <CardContent className="space-y-6">
                     <ValidatedInput
                       label="Company"
                       name="company"
@@ -657,12 +892,40 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
                           <SelectItem value="Inspector">Inspector</SelectItem>
                           <SelectItem value="Appraiser">Appraiser</SelectItem>
                           <SelectItem value="Contractor">Contractor</SelectItem>
-                          <SelectItem value="Real Estate Agent">Real Estate Agent</SelectItem>
-                          <SelectItem value="Lender">Lender</SelectItem>
-                          <SelectItem value="Insurance Agent">Insurance Agent</SelectItem>
+                          <SelectItem value="Project Manager">Project Manager</SelectItem>
                           <SelectItem value="Other">Other</SelectItem>
                         </SelectContent>
                       </Select>
+                    </div>
+
+                    {/* Markets */}
+                    <div className="space-y-4">
+                      <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                        <MapPin className="w-4 h-4" />
+                        Market
+                      </Label>
+                      <p className="text-xs text-gray-500">Select the markets this vendor works within</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {markets.map((market) => (
+                          <div key={market.id} className="flex items-center space-x-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
+                            <Checkbox
+                              id={`vendor-market-${market.id}`}
+                              checked={formData.vendorMarkets.includes(market.id)}
+                              onCheckedChange={(checked) => 
+                                handleMultiSelectChange('vendorMarkets', market.id, checked as boolean)
+                              }
+                              className="border-gray-300"
+                              disabled={settingsLoading}
+                            />
+                            <Label 
+                              htmlFor={`vendor-market-${market.id}`} 
+                              className="text-sm font-medium text-gray-700 cursor-pointer flex-1"
+                            >
+                              {market.name}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </CardContent>
                 </Card>

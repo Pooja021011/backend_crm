@@ -330,6 +330,41 @@ export const LeadForm: React.FC<LeadFormProps> = ({ type, onSubmit, onCancel, is
               </div>
             </div>
 
+            {/* Pipeline Stage Selection */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Building2 className="w-4 h-4 text-gray-500" />
+                <h3 className="font-medium text-gray-900">Pipeline Stage</h3>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="pipelineStageId" className="text-sm font-medium">
+                  Initial Stage <span className="text-red-500">*</span>
+                </Label>
+                <Select 
+                  onValueChange={(value) => setValue('pipelineStageId', value)}
+                  disabled={loadingStages}
+                >
+                  <SelectTrigger className={getFieldClasses('pipelineStageId')}>
+                    <SelectValue placeholder={loadingStages ? "Loading stages..." : "Select pipeline stage"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pipelineStages.map((stage) => (
+                      <SelectItem key={stage.id} value={stage.id}>
+                        {stage.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.pipelineStageId && (
+                  <p className="text-xs text-red-600">{errors.pipelineStageId.message}</p>
+                )}
+                {pipelineStages.length === 0 && !loadingStages && (
+                  <p className="text-xs text-amber-600">⚠ No stages available for your role</p>
+                )}
+              </div>
+            </div>
+
             {/* Seller-specific fields */}
             {type === 'SELLER' && (
               <div className="space-y-4">

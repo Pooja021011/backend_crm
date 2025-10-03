@@ -295,6 +295,69 @@ export const pipelineService = {
   },
 
   /**
+   * Get pipeline stages filtered by user role permissions
+   */
+  async getPipelineStagesForUser(pipelineKey: string, userRoles: string[]) {
+    try {
+      const pipeline = await prisma.pipelineDefinition.findUnique({
+        where: { key: pipelineKey as any },
+        include: {
+          stages: {
+            orderBy: { orderIndex: 'asc' },
+            include: {
+              rolePermissions: true,
+              _count: {
+                select: {
+                  leads: true
+                }
+              }
+            }
+          }
+        }
+      });
+
+      if (!pipeline) {
+        throw new Error(`Pipeline with key ${pipelineKey} not found`);
+      }
+
+      // ADMIN and MANAGER can see all stages
+      if (userRoles.includes('ADMIN') || userRoles.includes('MANAGER')) {
+        return pipeline.stages.map(stage => ({
+          id: stage.id,
+          name: stage.name,
+          orderIndex: stage.orderIndex,
+          color: stage.color || 'gray',
+          leadCount: stage._count.leads
+        }));
+      }
+
+      // Filter stages based on role permissions
+      const allowedStages = pipeline.stages.filter(stage => {
+        // If no permissions set, stage is visible to all
+        if (stage.rolePermissions.length === 0) {
+          return true;
+        }
+        
+        // Check if user has any role that's allowed for this stage
+        return stage.rolePermissions.some(permission => 
+          userRoles.includes(permission.roleName)
+        );
+      });
+
+      return allowedStages.map(stage => ({
+        id: stage.id,
+        name: stage.name,
+        orderIndex: stage.orderIndex,
+        color: stage.color || 'gray',
+        leadCount: stage._count.leads
+      }));
+    } catch (error: any) {
+      logger.error('Error getting pipeline stages for user', { pipelineKey, userRoles, error: error.message });
+      throw error;
+    }
+  },
+
+  /**
    * Get all leads in a pipeline with their details
    */
   async getPipelineLeads(pipelineKey: string, filters: PipelineLeadFilters = {}) {
@@ -739,6 +802,33 @@ export const pipelineService = {
       });
     } catch (error) {
       logger.error('Error fetching lead sources:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Update stage role permissions
+   */
+  async updateStageRolePermissions(stageId: string, allowedRoles: string[]) {
+    try {
+      // First, delete all existing permissions for this stage
+      await prisma.stageRolePermission.deleteMany({
+        where: { stageId }
+      });
+
+      // Then create new permissions for the allowed roles
+      if (allowedRoles && allowedRoles.length > 0) {
+        await prisma.stageRolePermission.createMany({
+          data: allowedRoles.map(roleName => ({
+            stageId,
+            roleName: roleName as any
+          }))
+        });
+      }
+
+      logger.info('Stage role permissions updated', { stageId, allowedRoles });
+    } catch (error: any) {
+      logger.error('Error updating stage role permissions', { stageId, error: error.message });
       throw error;
     }
   }

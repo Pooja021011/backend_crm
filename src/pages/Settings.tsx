@@ -90,6 +90,9 @@ const Settings = () => {
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') || 'profile';
+  
+  // Check if user has admin or manager role
+  const isAdminOrManager = user?.roles?.some(role => ['ADMIN', 'MANAGER'].includes(role)) || false;
   const [emailSettings, setEmailSettings] = useState<EmailSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [testingImap, setTestingImap] = useState(false);
@@ -1361,7 +1364,24 @@ const Settings = () => {
           {/* Agents Tab - Only show when activeTab is 'agents' */}
           {activeTab === 'agents' && (
             <div className="space-y-8">
-              {error ? (
+              {!isAdminOrManager ? (
+                <Card>
+                  <CardContent className="flex items-center justify-center py-12">
+                    <div className="text-center max-w-md">
+                      <div className="mb-4">
+                        <Shield className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                      </div>
+                      <h3 className="text-xl font-semibold mb-2">Access Denied</h3>
+                      <p className="text-muted-foreground mb-4">
+                        You don't have the required permissions to access this page.
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Please contact your administrator if you believe this is an error.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : error ? (
                 <Card>
                   <CardContent className="flex items-center justify-center py-8">
                     <div className="text-center">
@@ -1632,14 +1652,52 @@ const Settings = () => {
           {/* Marketing Platform Settings Tab - Only show when activeTab is 'marketing-platforms' */}
           {activeTab === 'marketing-platforms' && (
             <div className="space-y-8">
-              <MarketingPlatformSettings userRoles={user?.roles || []} />
+              {!isAdminOrManager ? (
+                <Card>
+                  <CardContent className="flex items-center justify-center py-12">
+                    <div className="text-center max-w-md">
+                      <div className="mb-4">
+                        <Shield className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                      </div>
+                      <h3 className="text-xl font-semibold mb-2">Access Denied</h3>
+                      <p className="text-muted-foreground mb-4">
+                        You don't have the required permissions to access this page.
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Please contact your administrator if you believe this is an error.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <MarketingPlatformSettings userRoles={user?.roles || []} />
+              )}
             </div>
           )}
 
           {/* Pipeline Settings Tab - Only show when activeTab is 'pipeline' */}
           {activeTab === 'pipeline' && (
             <div className="space-y-8 relative" style={{ overflow: 'visible', position: 'relative' }}>
-              <PipelineSettings userRoles={user?.roles || []} />
+              {!isAdminOrManager ? (
+                <Card>
+                  <CardContent className="flex items-center justify-center py-12">
+                    <div className="text-center max-w-md">
+                      <div className="mb-4">
+                        <Shield className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                      </div>
+                      <h3 className="text-xl font-semibold mb-2">Access Denied</h3>
+                      <p className="text-muted-foreground mb-4">
+                        You don't have the required permissions to access this page.
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Please contact your administrator if you believe this is an error.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <PipelineSettings userRoles={user?.roles || []} />
+              )}
             </div>
           )}
       </div>

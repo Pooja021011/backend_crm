@@ -17,6 +17,7 @@ router.get('/', (req, res, next) => leadController.list(req, res).catch(next));
 router.post('/', (req, res, next) => leadController.create(req, res).catch(next));
 router.get('/:id', (req, res, next) => leadController.get(req, res).catch(next));
 router.patch('/:id', (req, res, next) => leadController.update(req, res).catch(next));
+router.delete('/:id', (req, res, next) => leadController.delete(req, res).catch(next));
 router.post('/:id/stage', (req, res, next) => leadController.changeStage(req, res).catch(next));
 
 // Tasks nested

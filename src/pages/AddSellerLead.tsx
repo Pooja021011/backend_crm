@@ -3,6 +3,7 @@ import { useLeads } from "@/hooks/useLeads";
 import { useSettings } from "@/hooks/useSettings";
 import { useAgents } from "@/hooks/useAgents";
 import { useAuth } from "@/contexts/AuthContext";
+import { API_BASE } from "@/config/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ValidatedInput } from "@/components/ui/validated-input";
@@ -53,11 +54,13 @@ const AddSellerLead = () => {
   const [selectedMarketId, setSelectedMarketId] = useState<string>("");
   const [availableCounties, setAvailableCounties] = useState<any[]>([]);
   const [pendingFiles, setPendingFiles] = useState<PendingFileItem[]>([]);
+  const [pipelineStages, setPipelineStages] = useState<any[]>([]);
+  const [loadingStages, setLoadingStages] = useState(true);
 
   // Check if current user is an ACQ agent
   const isACQAgent = user?.roles?.includes('ACQ');
 
-  // Get active agents with ACQ role
+  // Get active agents with ACQ role for the dropdown
   const acquisitionsAgents = getActiveAgents().filter(agent => 
     agent.roles.some(role => role.role.name === 'ACQ')
   );
@@ -80,6 +83,7 @@ const AddSellerLead = () => {
     emailAddress: "",
     leadSource: "",
     acquisitionsAgentId: isACQAgent && user?.id ? user.id : "",
+    pipelineStageId: "",
     propertyAddress: "",
     city: "",
     state: "",
@@ -89,6 +93,33 @@ const AddSellerLead = () => {
     countyId: ""
   });
 
+  // Load pipeline stages (ACQUISITIONS for seller leads)
+  useEffect(() => {
+    const loadPipelineStages = async () => {
+      try {
+        setLoadingStages(true);
+        const response = await fetch(`${API_BASE}/pipeline/ACQUISITIONS/stages`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          setPipelineStages(data.data || []);
+        }
+      } catch (error) {
+        console.error('Error loading pipeline stages:', error);
+        toast({
+          title: "Warning",
+          description: "Could not load pipeline stages.",
+          variant: "destructive"
+        });
+      } finally {
+        setLoadingStages(false);
+      }
+    };
+    
+    loadPipelineStages();
+  }, [toast]);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({
@@ -160,6 +191,7 @@ const AddSellerLead = () => {
            formData.emailAddress.trim() && 
            formData.propertyAddress.trim() &&
            formData.leadSource &&
+           formData.pipelineStageId &&
            formData.acquisitionsAgentId &&
            selectedDate;
            
@@ -200,7 +232,7 @@ const AddSellerLead = () => {
           countyId: formData.countyId || undefined
         },
         assignedUserId: formData.acquisitionsAgentId && formData.acquisitionsAgentId !== 'no-agents' ? formData.acquisitionsAgentId : undefined,
-        pipelineStageId: undefined // Will use default pipeline stage
+        pipelineStageId: formData.pipelineStageId || undefined
       };
 
       const createdLead = await createLead(leadData);
@@ -485,6 +517,32 @@ const AddSellerLead = () => {
                 </Select>
               </div>
 
+              {/* Pipeline Stage */}
+              <div className="space-y-2">
+                <Label htmlFor="pipelineStageId" className="text-sm font-medium text-gray-700">
+                  Pipeline Stage *
+                </Label>
+                <Select 
+                  value={formData.pipelineStageId} 
+                  onValueChange={(value) => handleInputChange('pipelineStageId', value)}
+                  disabled={loadingStages}
+                >
+                  <SelectTrigger className="h-10 border-gray-300 focus:border-blue-500 focus:ring-blue-500/20">
+                    <SelectValue placeholder={loadingStages ? "Loading..." : "Select Pipeline Stage"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pipelineStages.map((stage) => (
+                      <SelectItem key={stage.id} value={stage.id}>
+                        {stage.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {pipelineStages.length === 0 && !loadingStages && (
+                  <p className="text-xs text-amber-600">⚠ No stages available for your role</p>
+                )}
+              </div>
+
               {/* Acquisitions Agent */}
               <div className="space-y-2">
                 <Label htmlFor="acquisitionsAgentId" className="text-sm font-medium text-gray-700">
@@ -508,15 +566,19 @@ const AddSellerLead = () => {
                     {acquisitionsAgents.map((agent) => {
                       const initials = `${agent.firstName.charAt(0)}${agent.lastName.charAt(0)}`;
                       const fullName = `${agent.firstName} ${agent.lastName}`;
+                      const roleNames = agent.roles.map(r => r.role.name).join(', ');
                       return (
                         <SelectItem key={agent.id} value={agent.id}>
-                          <div className="flex items-center gap-2">
-                            <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
-                              <span className="text-xs font-medium text-blue-600">
-                                {initials}
-                              </span>
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-2">
+                              <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                                <span className="text-xs font-medium text-blue-600">
+                                  {initials}
+                                </span>
+                              </div>
+                              <span className="font-medium">{fullName}</span>
                             </div>
-                            {fullName}
+                            <span className="text-xs text-gray-500 ml-8">{roleNames}</span>
                           </div>
                         </SelectItem>
                       );

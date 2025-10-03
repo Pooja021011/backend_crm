@@ -37,5 +37,6 @@ router.get('/lead-sources', pipelineController.getLeadSources);
 // Admin-only routes for pipeline management
 router.post('/:pipelineKey/default-stages', pipelineController.createDefaultStages);
 router.put('/stages/:stageId', pipelineController.updatePipelineStage);
+router.put('/stages/:stageId/permissions', pipelineController.updateStageRolePermissions);
 
 export default router;

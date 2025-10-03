@@ -103,9 +103,45 @@ export const settingsRepository = {
     }),
 
   // Pipelines
-  listPipelines: () => prisma.pipelineDefinition.findMany({ where: { active: true }, include: { stages: { orderBy: { orderIndex: 'asc' } } }, orderBy: { key: 'asc' } }),
+  listPipelines: () => prisma.pipelineDefinition.findMany({ where: { active: true }, include: { stages: { include: { rolePermissions: true }, orderBy: { orderIndex: 'asc' } } }, orderBy: { key: 'asc' } }),
   findPipelineByKey: (key: string) => prisma.pipelineDefinition.findUnique({ where: { key: key as any }, include: { stages: { orderBy: { orderIndex: 'asc' } } } }),
-  createStage: (pipelineId: string, name: string, orderIndex: number, color?: string) => prisma.pipelineStage.create({ data: { pipelineId, name, orderIndex, color } }),
+  createStage: async (pipelineId: string, name: string, orderIndex: number, color?: string) => {
+    // Get the pipeline to determine which role permission to assign
+    const pipeline = await prisma.pipelineDefinition.findUnique({
+      where: { id: pipelineId },
+      select: { key: true }
+    });
+
+    // Map pipeline to role
+    const pipelineRoleMap: Record<string, string> = {
+      'ACQUISITIONS': 'ACQ',
+      'DISPOSITIONS': 'DISP',
+      'TRANSACTION': 'TC'
+    };
+
+    const roleName = pipeline ? pipelineRoleMap[pipeline.key] : undefined;
+
+    // Create stage with automatic role permission
+    const stage = await prisma.pipelineStage.create({ 
+      data: { 
+        pipelineId, 
+        name, 
+        orderIndex, 
+        color,
+        // Automatically add role permission based on pipeline
+        rolePermissions: roleName ? {
+          create: {
+            roleName: roleName as any
+          }
+        } : undefined
+      },
+      include: {
+        rolePermissions: true
+      }
+    });
+
+    return stage;
+  },
   updateStage: (id: string, data: { name?: string; orderIndex?: number; color?: string }) => prisma.pipelineStage.update({ where: { id }, data }),
   deleteStage: (id: string) => prisma.pipelineStage.delete({ where: { id } }),
   reorderStages: async (pipelineId: string, items: { id: string; orderIndex: number }[]) => {
