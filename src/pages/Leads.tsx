@@ -148,7 +148,7 @@ const Leads = () => {
   // Dynamic filter data
   const [filterMarkets, setFilterMarkets] = useState<any[]>([]);
   const [pipelineStages, setPipelineStages] = useState<any[]>([]);
-  const [leadStatuses, setLeadStatuses] = useState<string[]>([]);
+  const [leadStatuses, setLeadStatuses] = useState<Array<{id: string; name: string; color?: string}>>([]);
   const [loadingFilters, setLoadingFilters] = useState(false);
   
   // URL parameter handling for direct lead access
@@ -271,8 +271,17 @@ const Leads = () => {
       setPipelineStages(allStages);
 
       // Get unique lead statuses from current leads
-      const uniqueStatuses = [...new Set(leads.map(lead => lead.status).filter(Boolean))];
-      setLeadStatuses(uniqueStatuses);
+      const statusMap = new Map();
+      leads.forEach(lead => {
+        if (lead.leadStatus) {
+          statusMap.set(lead.leadStatus.id, {
+            id: lead.leadStatus.id,
+            name: lead.leadStatus.name,
+            color: lead.leadStatus.color
+          });
+        }
+      });
+      setLeadStatuses(Array.from(statusMap.values()));
       
     } catch (error) {
       console.error('Error loading filter data:', error);
@@ -309,7 +318,7 @@ const Leads = () => {
     
     if (selectedStatus) {
       filteredLeads = filteredLeads.filter(lead => {
-        return lead.status === selectedStatus;
+        return lead.leadStatusId === selectedStatus;
       });
     }
     
@@ -868,8 +877,8 @@ const Leads = () => {
                 >
                   <option value="">All Statuses</option>
                   {leadStatuses.map(status => (
-                    <option key={status} value={status}>
-                      {status?.replace('_', ' ') || 'Unknown'}
+                    <option key={status.id} value={status.id}>
+                      {status.name}
                     </option>
                   ))}
                 </select>
@@ -1392,9 +1401,28 @@ const Leads = () => {
                         </TableCell>
                         <TableCell className="text-gray-600">N/A</TableCell>
                         <TableCell>
-                          <Badge className={`border ${getStatusBadgeColor(lead.status || 'New')}`}>
-                            {lead.status || 'New'}
-                          </Badge>
+                          {lead.leadStatus ? (
+                            <Badge 
+                              className="border" 
+                              style={{ 
+                                backgroundColor: `${lead.leadStatus.color}20`,
+                                borderColor: lead.leadStatus.color,
+                                color: lead.leadStatus.color
+                              }}
+                            >
+                              <div className="flex items-center gap-1.5">
+                                <div 
+                                  className="w-2 h-2 rounded-full" 
+                                  style={{ backgroundColor: lead.leadStatus.color }}
+                                />
+                                {lead.leadStatus.name}
+                              </div>
+                            </Badge>
+                          ) : (
+                            <Badge className={`border ${getStatusBadgeColor(lead.status || 'New')}`}>
+                              {lead.status || 'No Status'}
+                            </Badge>
+                          )}
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline" className={getPipelineStatusColor('New Lead')}>

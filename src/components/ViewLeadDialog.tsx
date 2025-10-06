@@ -412,11 +412,28 @@ export const ViewLeadDialog: React.FC<ViewLeadDialogProps> = ({
               <Badge className={getLeadTypeColor(lead.leadType)}>
                 {lead.leadType}
               </Badge>
-              {lead.status && (
+              {lead.leadStatus ? (
+                <Badge 
+                  variant="outline" 
+                  style={{ 
+                    backgroundColor: `${lead.leadStatus.color}20`,
+                    borderColor: lead.leadStatus.color,
+                    color: lead.leadStatus.color
+                  }}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <div 
+                      className="w-2 h-2 rounded-full" 
+                      style={{ backgroundColor: lead.leadStatus.color }}
+                    />
+                    {lead.leadStatus.name}
+                  </div>
+                </Badge>
+              ) : lead.status ? (
                 <Badge variant="outline" className={getStatusColor(lead.status)}>
                   {lead.status}
                 </Badge>
-              )}
+              ) : null}
             </div>
           </div>
           <DialogDescription>
