@@ -11,6 +11,13 @@ import { cn } from "@/lib/utils";
 import { API_BASE } from "@/config/api";
 import { useNavigate } from "react-router-dom";
 
+interface KPIData {
+  contractsSigned: number;
+  contractsSold: number;
+  projectedProfit: number | null;
+  closedProfit: number | null;
+}
+
 interface SearchResult {
   id: string;
   type: 'SELLER' | 'BUYER' | 'VENDOR';
@@ -89,6 +96,13 @@ export const DashboardHeader = () => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [kpiData, setKpiData] = useState<KPIData>({
+    contractsSigned: 0,
+    contractsSold: 0,
+    projectedProfit: null,
+    closedProfit: null,
+  });
+  const [isLoadingKpis, setIsLoadingKpis] = useState(true);
   const searchRef = useRef<HTMLDivElement>(null);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -208,6 +222,56 @@ export const DashboardHeader = () => {
     };
   }, []);
 
+  // Fetch KPI data from API
+  useEffect(() => {
+    const fetchKpiData = async () => {
+      setIsLoadingKpis(true);
+      try {
+        const accessToken = localStorage.getItem('accessToken');
+        const response = await fetch(`${API_BASE}/metrics/company-kpis?timeframe=This Month`, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          setKpiData({
+            contractsSigned: result.data?.contractsSigned || 0,
+            contractsSold: result.data?.contractsSold || 0,
+            projectedProfit: result.data?.projectedProfit || null,
+            closedProfit: result.data?.closedProfit || null,
+          });
+        } else {
+          console.error('Failed to fetch KPI data:', response.statusText);
+        }
+      } catch (error) {
+        console.error('Error fetching KPI data:', error);
+      } finally {
+        setIsLoadingKpis(false);
+      }
+    };
+
+    fetchKpiData();
+    
+    // Refresh KPI data every 5 minutes
+    const intervalId = setInterval(fetchKpiData, 5 * 60 * 1000);
+    
+    return () => clearInterval(intervalId);
+  }, []);
+
+  // Format currency values
+  const formatCurrency = (value: number | null): string => {
+    if (value === null || value === undefined) return '$0';
+    if (value >= 1000000) {
+      return `$${(value / 1000000).toFixed(1)}M`;
+    } else if (value >= 1000) {
+      return `$${Math.round(value / 1000)}K`;
+    }
+    return `$${value.toLocaleString()}`;
+  };
+
   const getResultIcon = (type: string) => {
     switch (type) {
       case 'SELLER': return '🏠';
@@ -321,20 +385,17 @@ export const DashboardHeader = () => {
           <div className="flex gap-2 min-w-fit">
             <KPICard
               title="CONTRACTS SIGNED"
-              value="24"
-              trend="+12%"
+              value={isLoadingKpis ? "..." : kpiData.contractsSigned.toString()}
               color="blue"
             />
             <KPICard
               title="CONTRACTS SOLD"
-              value="18"
-              trend="+8%"
+              value={isLoadingKpis ? "..." : kpiData.contractsSold.toString()}
               color="green"
             />
             <KPICard
               title="TOTAL PROFIT"
-              value="$485K"
-              trend="+15%"
+              value={isLoadingKpis ? "..." : formatCurrency(kpiData.closedProfit)}
               color="purple"
             />
           </div>
