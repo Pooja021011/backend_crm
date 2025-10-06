@@ -33,6 +33,7 @@ model User {
   targetedNotifications Notification[] @relation("NotificationTarget")
   triggeredNotifications Notification[] @relation("NotificationTriggeredBy")
   smsSettings UserSmsSettings?
+  leadDistributionSettings LeadDistributionSettings?
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 }
@@ -125,6 +126,21 @@ model PriceRange {
   max     Int?
 }
 
+model LeadStatus {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  color       String?  @default("#6B7280")
+  orderIndex  Int      @default(0)
+  active      Boolean  @default(true)
+  isDefault   Boolean  @default(false)
+  leads       Lead[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([orderIndex])
+}
+
 model DocCategory {
   id      String  @id @default(uuid())
   name    String  @unique
@@ -189,6 +205,55 @@ model UserSmsSettings {
   updatedAt    DateTime @updatedAt
 }
 
+// Lead Distribution Settings for ACQ agents
+model LeadDistributionSettings {
+  id                      String   @id @default(uuid())
+  userId                  String   @unique
+  user                    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Whether this agent receives auto-assigned leads
+  receiveLeads            Boolean  @default(true)
+  
+  // Percentage of leads to receive (0-100)
+  // When all agents have equal distribution, this is calculated automatically
+  distributionPercentage  Int      @default(0)
+  
+  // Active status
+  isActive                Boolean  @default(true)
+  
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
+
+// Google Sheets Integration Settings
+model GoogleSheetsConfig {
+  id              String   @id @default("global")
+  
+  // Google Sheets credentials (stored as JSON)
+  credentials     Json?    // Service account credentials
+  
+  // Sheet configuration
+  spreadsheetId   String?  // The ID of the Google Sheet
+  sheetName       String?  // Name of the specific sheet/tab
+  headerRow       Int      @default(1) // Which row contains headers
+  
+  // Sync settings
+  syncEnabled     Boolean  @default(false)
+  syncInterval    Int      @default(60) // Minutes between syncs
+  lastSyncAt      DateTime?
+  lastSyncStatus  String?  // 'success', 'error', 'running'
+  lastSyncError   String?
+  
+  // Column mappings (optional - defaults to column names)
+  columnMappings  Json?
+  
+  // Stats
+  totalLeadsSynced Int     @default(0)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
 // Pipelines
 enum PipelineKey {
   ACQUISITIONS
@@ -250,7 +315,9 @@ enum TaskStatus {
 model Lead {
   id               String         @id @default(uuid())
   leadType         LeadType
-  status           String?
+  status           String?        // Legacy field for backward compatibility
+  leadStatusId     String?
+  leadStatus       LeadStatus?    @relation(fields: [leadStatusId], references: [id])
   marketId         String?
   market           Market?        @relation(fields: [marketId], references: [id])
   assignedUserId   String?
@@ -295,6 +362,7 @@ model Lead {
   @@index([leadType])
   @@index([marketId])
   @@index([pipelineStageId])
+  @@index([leadStatusId])
 }
 
 model LeadAddress {

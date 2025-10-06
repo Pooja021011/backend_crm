@@ -1,0 +1,7 @@
+// Add these dependencies to your server/package.json:
+{
+  "dependencies": {
+    "googleapis": "^128.0.0",
+    "node-cron": "^3.0.3"
+  }
+}

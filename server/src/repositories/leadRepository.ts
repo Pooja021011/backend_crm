@@ -205,6 +205,7 @@ export const leadRepository = {
     marketId?: string;
     pipelineStageId?: string;
     status?: string;
+    leadStatusId?: string;
     countyId?: string;
     createdFrom?: string;
     createdTo?: string;
@@ -225,7 +226,7 @@ export const leadRepository = {
     userRoles?: string[];
     userId?: string;
   }) {
-    const { type, marketId, pipelineStageId, status, countyId, createdFrom, createdTo, updatedFrom, updatedTo, tasksDueBefore, priceRangeIds, assetClassIds, vipBuyer, blacklistedBuyer, vendorCompany, vendorIndustry, q, sort = 'updatedAt', order = 'desc', skip = 0, take = 20, userRoles = [], userId } = params;
+    const { type, marketId, pipelineStageId, status, leadStatusId, countyId, createdFrom, createdTo, updatedFrom, updatedTo, tasksDueBefore, priceRangeIds, assetClassIds, vipBuyer, blacklistedBuyer, vendorCompany, vendorIndustry, q, sort = 'updatedAt', order = 'desc', skip = 0, take = 20, userRoles = [], userId } = params;
 
     const where: any = {};
     
@@ -255,6 +256,7 @@ export const leadRepository = {
     if (marketId) where.marketId = marketId;
     if (pipelineStageId) where.pipelineStageId = pipelineStageId;
     if (status) where.status = status;
+    if (leadStatusId) where.leadStatusId = leadStatusId;
     if (createdFrom || createdTo) where.createdAt = { gte: createdFrom ? new Date(createdFrom) : undefined, lte: createdTo ? new Date(createdTo) : undefined };
     if (updatedFrom || updatedTo) where.updatedAt = { gte: updatedFrom ? new Date(updatedFrom) : undefined, lte: updatedTo ? new Date(updatedTo) : undefined };
     if (countyId) where.address = { countyId };
@@ -355,6 +357,7 @@ const includeLead = {
   buyerCriteria: true,
   vendor: true,
   pipelineStage: true,
+  leadStatus: true,
   assignedUser: {
     select: {
       id: true,

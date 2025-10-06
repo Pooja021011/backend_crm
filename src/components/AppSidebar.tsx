@@ -12,7 +12,9 @@ import {
   ChevronDown,
   UserCog,
   Mail,
-  MessageSquare
+  MessageSquare,
+  FileSpreadsheet,
+  Tags
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -44,6 +46,9 @@ const navigationItems = [
       { title: "Email Sync", url: "/settings?tab=email", icon: Mail },
       { title: "SMS and Call", url: "/settings?tab=sms", icon: MessageSquare },
       { title: "Agents", url: "/settings?tab=agents", icon: UserCog, adminOnly: true },
+      { title: "Lead Distribution", url: "/settings?tab=lead-distribution", icon: Users, adminOnly: true },
+      { title: "Google Sheets", url: "/settings?tab=google-sheets", icon: FileSpreadsheet, adminOnly: true },
+      { title: "Lead Statuses", url: "/settings?tab=lead-statuses", icon: Tags, adminOnly: true },
       { title: "Marketing Platforms", url: "/settings?tab=marketing-platforms", icon: Building2, adminOnly: true },
       { title: "Pipeline", url: "/settings?tab=pipeline", icon: TrendingUp, adminOnly: true },
     ]

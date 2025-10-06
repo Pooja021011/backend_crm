@@ -18,6 +18,9 @@ import { buyerOfferRoutes } from './buyerOfferRoutes.js';
 import { marketingRoutes } from './marketingRoutes.js';
 import reminderRoutes from './reminderRoutes.js';
 import notificationRoutes from './notificationRoutes.js';
+import leadDistributionRoutes from './leadDistributionRoutes.js';
+import googleSheetsRoutes from './googleSheetsRoutes.js';
+import leadStatusRoutes from './leadStatusRoutes.js';
 
 const router = Router();
 
@@ -40,6 +43,9 @@ router.use('/buyer-offers', buyerOfferRoutes);
 router.use('/marketing', marketingRoutes);
 router.use('/reminders', reminderRoutes);
 router.use('/notifications', notificationRoutes);
+router.use('/lead-distribution', leadDistributionRoutes);
+router.use('/google-sheets', googleSheetsRoutes);
+router.use('/lead-statuses', leadStatusRoutes);
 
 export default router;
 

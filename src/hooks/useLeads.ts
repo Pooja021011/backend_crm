@@ -81,6 +81,16 @@ export interface Lead {
   id: string;
   leadType: LeadType; // API uses leadType, not type
   status?: string;
+  leadStatusId?: string;
+  leadStatus?: {
+    id: string;
+    name: string;
+    description?: string;
+    color?: string;
+    orderIndex: number;
+    active: boolean;
+    isDefault: boolean;
+  };
   createdAt: string;
   updatedAt: string;
   assignedUserId?: string;

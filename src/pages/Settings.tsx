@@ -66,6 +66,9 @@ import { AddAgentDialog } from "@/components/AddAgentDialog";
 import { EditAgentDialog } from "@/components/EditAgentDialog";
 import { MarketingPlatformSettings } from "@/components/MarketingPlatformSettings";
 import { PipelineSettings } from "@/components/PipelineSettings";
+import { LeadDistributionSettings } from "@/components/LeadDistributionSettings";
+import { GoogleSheetsConfig } from "@/components/GoogleSheetsConfig";
+import { LeadStatusSettings } from "@/components/LeadStatusSettings";
 import { safeDateFormat } from "@/utils/validation";
 
 type EmailSettings = {
@@ -1697,6 +1700,84 @@ const Settings = () => {
                 </Card>
               ) : (
                 <PipelineSettings userRoles={user?.roles || []} />
+              )}
+            </div>
+          )}
+
+          {/* Lead Distribution Tab - Only show when activeTab is 'lead-distribution' */}
+          {activeTab === 'lead-distribution' && (
+            <div className="space-y-8">
+              {!isAdminOrManager ? (
+                <Card>
+                  <CardContent className="flex items-center justify-center py-12">
+                    <div className="text-center max-w-md">
+                      <div className="mb-4">
+                        <Shield className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                      </div>
+                      <h3 className="text-xl font-semibold mb-2">Access Denied</h3>
+                      <p className="text-muted-foreground mb-4">
+                        You don't have the required permissions to access this page.
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Please contact your administrator if you believe this is an error.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <LeadDistributionSettings />
+              )}
+            </div>
+          )}
+
+          {/* Google Sheets Integration Tab - Only show when activeTab is 'google-sheets' */}
+          {activeTab === 'google-sheets' && (
+            <div className="space-y-8">
+              {!isAdminOrManager ? (
+                <Card>
+                  <CardContent className="flex items-center justify-center py-12">
+                    <div className="text-center max-w-md">
+                      <div className="mb-4">
+                        <Shield className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                      </div>
+                      <h3 className="text-xl font-semibold mb-2">Access Denied</h3>
+                      <p className="text-muted-foreground mb-4">
+                        You don't have the required permissions to access this page.
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Please contact your administrator if you believe this is an error.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <GoogleSheetsConfig />
+              )}
+            </div>
+          )}
+
+          {/* Lead Status Settings Tab - Only show when activeTab is 'lead-statuses' */}
+          {activeTab === 'lead-statuses' && (
+            <div className="space-y-8">
+              {!isAdminOrManager ? (
+                <Card>
+                  <CardContent className="flex items-center justify-center py-12">
+                    <div className="text-center max-w-md">
+                      <div className="mb-4">
+                        <Shield className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                      </div>
+                      <h3 className="text-xl font-semibold mb-2">Access Denied</h3>
+                      <p className="text-muted-foreground mb-4">
+                        You don't have the required permissions to access this page.
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Please contact your administrator if you believe this is an error.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <LeadStatusSettings />
               )}
             </div>
           )}

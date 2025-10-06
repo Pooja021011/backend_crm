@@ -72,6 +72,8 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [pipelineStages, setPipelineStages] = useState<any[]>([]);
   const [loadingStages, setLoadingStages] = useState(true);
+  const [leadStatuses, setLeadStatuses] = useState<any[]>([]);
+  const [loadingStatuses, setLoadingStatuses] = useState(true);
   
   // Check if current user is an ACQ agent
   const isACQAgent = user?.roles?.includes('ACQ');
@@ -82,6 +84,7 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
   const [formData, setFormData] = useState({
     // General fields
     status: lead.status || 'NEW',
+    leadStatusId: lead.leadStatusId || '',
     marketId: lead.marketId || '',
     assignedUserId: lead.assignedUserId || '',
     pipelineStageId: lead.pipelineStageId || '',
@@ -140,6 +143,7 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
     
     setFormData({
       status: lead.status || 'NEW',
+      leadStatusId: lead.leadStatusId || '',
       marketId: lead.marketId || '',
       assignedUserId: lead.assignedUserId || '',
       pipelineStageId: lead.pipelineStageId || '',
@@ -223,6 +227,29 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
     loadPipelineStages();
   }, [lead, toast]);
 
+  // Fetch lead statuses
+  useEffect(() => {
+    const loadLeadStatuses = async () => {
+      try {
+        setLoadingStatuses(true);
+        const response = await fetch(`${API_BASE}/lead-statuses?activeOnly=true`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          setLeadStatuses(data.data || []);
+        }
+      } catch (error) {
+        console.error('Error loading lead statuses:', error);
+      } finally {
+        setLoadingStatuses(false);
+      }
+    };
+    
+    loadLeadStatuses();
+  }, []);
+
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({
       ...prev,
@@ -246,6 +273,7 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
     try {
       const updateData: any = {
         status: formData.status,
+        leadStatusId: formData.leadStatusId || undefined,
         marketId: formData.marketId || undefined,
         assignedUserId: formData.assignedUserId || undefined,
         pipelineStageId: formData.pipelineStageId || undefined,
@@ -374,16 +402,30 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Status</Label>
-                  <Select value={formData.status} onValueChange={(value) => handleInputChange('status', value)}>
+                  <Label>Lead Status</Label>
+                  <Select 
+                    value={formData.leadStatusId || 'none'} 
+                    onValueChange={(value) => handleInputChange('leadStatusId', value === 'none' ? '' : value)}
+                    disabled={loadingStatuses}
+                  >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select status" />
+                      <SelectValue placeholder={loadingStatuses ? "Loading..." : "Select lead status"} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="NEW">New</SelectItem>
-                      <SelectItem value="CONTACTED">Contacted</SelectItem>
-                      <SelectItem value="QUALIFIED">Qualified</SelectItem>
-                      <SelectItem value="CLOSED">Closed</SelectItem>
+                      <SelectItem value="none">
+                        <span className="text-gray-400">No Status</span>
+                      </SelectItem>
+                      {leadStatuses.map((status) => (
+                        <SelectItem key={status.id} value={status.id}>
+                          <div className="flex items-center gap-2">
+                            <div 
+                              className="w-3 h-3 rounded-full" 
+                              style={{ backgroundColor: status.color }}
+                            />
+                            <span>{status.name}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
