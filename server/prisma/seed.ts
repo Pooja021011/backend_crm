@@ -274,6 +274,83 @@ async function upsertDocCategories() {
   }
 }
 
+async function upsertLeadStatuses() {
+  const DEFAULT_STATUSES = [
+    {
+      name: "New Lead",
+      description: "Newly acquired lead, awaiting initial contact",
+      color: "#3B82F6",
+      orderIndex: 0,
+      active: true,
+      isDefault: true,
+    },
+    {
+      name: "Contacted",
+      description: "Initial contact has been made",
+      color: "#10B981",
+      orderIndex: 1,
+      active: true,
+      isDefault: true,
+    },
+    {
+      name: "Qualified",
+      description: "Lead has been qualified and shows strong interest",
+      color: "#8B5CF6",
+      orderIndex: 2,
+      active: true,
+      isDefault: true,
+    },
+    {
+      name: "In Negotiation",
+      description: "Currently negotiating terms and conditions",
+      color: "#F59E0B",
+      orderIndex: 3,
+      active: true,
+      isDefault: false,
+    },
+    {
+      name: "Contract Sent",
+      description: "Contract has been sent to the lead",
+      color: "#06B6D4",
+      orderIndex: 4,
+      active: true,
+      isDefault: false,
+    },
+    {
+      name: "Closed Won",
+      description: "Deal successfully closed",
+      color: "#10B981",
+      orderIndex: 5,
+      active: true,
+      isDefault: true,
+    },
+    {
+      name: "Closed Lost",
+      description: "Deal was lost or lead is no longer interested",
+      color: "#EF4444",
+      orderIndex: 6,
+      active: true,
+      isDefault: false,
+    },
+    {
+      name: "On Hold",
+      description: "Lead is temporarily on hold",
+      color: "#6B7280",
+      orderIndex: 7,
+      active: true,
+      isDefault: false,
+    },
+  ];
+
+  for (const status of DEFAULT_STATUSES) {
+    await prisma.leadStatus.upsert({
+      where: { name: status.name },
+      update: {},
+      create: status,
+    });
+  }
+}
+
 async function createSampleLeads() {
   // Get the admin user
   const adminUser = await prisma.user.findFirst({
@@ -400,6 +477,7 @@ async function main() {
   await upsertAssetClasses();
   await upsertPriceRanges();
   await upsertDocCategories();
+  await upsertLeadStatuses();
   await createSampleLeads();
   console.log('Seed complete.');
 }
