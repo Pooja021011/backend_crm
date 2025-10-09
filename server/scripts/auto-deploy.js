@@ -68,8 +68,26 @@ async function autoDeploy() {
       console.log('✅ Database connected successfully');
       
       // Simple query to verify it's working
-      await prisma.user.count();
+      const userCount = await prisma.user.count();
       console.log('✅ Database queries working');
+      
+      // Step 5.5: Check if database needs seeding
+      const roleCount = await prisma.role.count();
+      const leadStatusCount = await prisma.leadStatus.count();
+      
+      if (userCount === 0 || roleCount === 0 || leadStatusCount === 0) {
+        console.log('🌱 Database needs seeding...');
+        console.log(`   - Users: ${userCount}, Roles: ${roleCount}, Lead Statuses: ${leadStatusCount}`);
+        
+        try {
+          execSync('npm run seed', { stdio: 'inherit' });
+          console.log('✅ Database seeded successfully');
+        } catch (seedError) {
+          console.log('⚠️  Seed failed, but continuing...', seedError.message);
+        }
+      } else {
+        console.log('ℹ️  Database already seeded (users, roles, and lead statuses exist)');
+      }
       
       await prisma.$disconnect();
     } catch (err) {
