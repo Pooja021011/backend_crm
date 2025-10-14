@@ -30,9 +30,10 @@ interface PipelineColumnProps {
     leadType?: string;
     status?: string;
   }>;
+  onLeadClick?: (leadId: string) => void;
 }
 
-export const PipelineColumn = ({ stage, leads }: PipelineColumnProps) => {
+export const PipelineColumn = ({ stage, leads, onLeadClick }: PipelineColumnProps) => {
   const { setNodeRef } = useDroppable({
     id: stage.id,
   });
@@ -97,6 +98,7 @@ export const PipelineColumn = ({ stage, leads }: PipelineColumnProps) => {
                 <PipelineCard 
                   key={lead.id} 
                   lead={lead}
+                  onViewDetails={onLeadClick ? () => onLeadClick(lead.id) : undefined}
                 />
               ))
             )}

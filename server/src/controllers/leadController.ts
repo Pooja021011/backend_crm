@@ -62,6 +62,11 @@ export const leadController = {
     res.json({ data: lead });
   },
 
+  async getStageHistory(req: Request, res: Response) {
+    const history = await leadService.getStageHistory(req.params.id);
+    res.json({ data: history });
+  },
+
   // Tasks
   async listTasks(req: Request, res: Response) {
     res.json({ data: await leadService.listTasks(req.params.id) });

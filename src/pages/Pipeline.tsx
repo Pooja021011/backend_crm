@@ -6,6 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { PipelineColumn } from "@/components/PipelineColumn";
 import { PipelineCard } from "@/components/PipelineCard";
+import { ViewLeadDialog } from "@/components/ViewLeadDialog";
 import { 
   TrendingUp, 
   DollarSign, 
@@ -42,6 +43,10 @@ const Pipeline = () => {
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [needsAttentionCount, setNeedsAttentionCount] = useState(0);
+  
+  // ViewLeadDialog state
+  const [selectedLead, setSelectedLead] = useState<any>(null);
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
 
   // Sample data - replace with API calls
   const sampleStages = [
@@ -458,6 +463,31 @@ const Pipeline = () => {
 
   const activeLead = activeId ? leads.find(lead => lead.id === activeId) : null;
 
+  const handleLeadClick = async (leadId: string) => {
+    try {
+      // Fetch full lead details
+      const response = await makeApiCall(`${API_BASE}/leads/${leadId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setSelectedLead(data.data);
+        setIsViewDialogOpen(true);
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to load lead details",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching lead details:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load lead details",
+        variant: "destructive"
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -643,6 +673,7 @@ const Pipeline = () => {
                   key={stage.id}
                   stage={stage}
                   leads={getLeadsForStage(stage.id)}
+                  onLeadClick={handleLeadClick}
                 />
               ))}
           </div>
@@ -653,6 +684,24 @@ const Pipeline = () => {
           )}
           </DragOverlay>
         </DndContext>
+
+      {/* View Lead Dialog */}
+      {selectedLead && (
+        <ViewLeadDialog
+          lead={selectedLead}
+          open={isViewDialogOpen}
+          onOpenChange={(open) => {
+            setIsViewDialogOpen(open);
+            if (!open) {
+              setSelectedLead(null);
+            }
+          }}
+          onUpdate={() => {
+            // Reload pipeline data after update
+            loadPipelineData();
+          }}
+        />
+      )}
 
       {/* Needs Attention Info */}
       {needsAttentionView && needsAttentionCount > 0 && (

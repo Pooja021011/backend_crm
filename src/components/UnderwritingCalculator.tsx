@@ -225,7 +225,7 @@ export const UnderwritingCalculator: React.FC<UnderwritingCalculatorProps> = ({ 
       setIsLoading(true);
       const response = await fetch(`/api/v1/underwriting/leads/${leadId}/scenarios`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         }
       });
 
@@ -260,7 +260,7 @@ export const UnderwritingCalculator: React.FC<UnderwritingCalculatorProps> = ({ 
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         },
         body: JSON.stringify(inputs)
       });
@@ -286,7 +286,7 @@ export const UnderwritingCalculator: React.FC<UnderwritingCalculatorProps> = ({ 
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         },
         body: JSON.stringify({
           name,
@@ -323,7 +323,7 @@ export const UnderwritingCalculator: React.FC<UnderwritingCalculatorProps> = ({ 
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         },
         body: JSON.stringify({ inputs })
       });
@@ -350,7 +350,7 @@ export const UnderwritingCalculator: React.FC<UnderwritingCalculatorProps> = ({ 
       const response = await fetch(`/api/v1/underwriting/scenarios/${scenarioId}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         }
       });
 
@@ -379,7 +379,7 @@ export const UnderwritingCalculator: React.FC<UnderwritingCalculatorProps> = ({ 
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         },
         body: JSON.stringify({ name: `Copy of ${scenarios.find(s => s.id === scenarioId)?.name}` })
       });
@@ -406,7 +406,7 @@ export const UnderwritingCalculator: React.FC<UnderwritingCalculatorProps> = ({ 
       const response = await fetch(`/api/v1/underwriting/scenarios/${scenarioId}/set-primary`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         }
       });
 

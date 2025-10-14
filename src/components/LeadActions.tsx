@@ -19,14 +19,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { 
   MoreHorizontal,
-  Eye,
   Edit,
   Mail,
   Trash2,
   Phone,
   MessageSquare
 } from "lucide-react";
-import { ViewLeadDialog } from "./ViewLeadDialog";
 import { EditLeadDialog } from "./EditLeadDialog";
 import { SendEmailDialog } from "./SendEmailDialog";
 import { useLeads } from "@/hooks/useLeads";
@@ -39,7 +37,6 @@ interface LeadActionsProps {
 }
 
 export const LeadActions: React.FC<LeadActionsProps> = ({ lead, onLeadUpdated }) => {
-  const [showViewDialog, setShowViewDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -103,11 +100,6 @@ export const LeadActions: React.FC<LeadActionsProps> = ({ lead, onLeadUpdated })
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
-          <DropdownMenuItem onClick={() => setShowViewDialog(true)}>
-            <Eye className="w-4 h-4 mr-2" />
-            View Details
-          </DropdownMenuItem>
-          
           <DropdownMenuItem onClick={() => setShowEditDialog(true)}>
             <Edit className="w-4 h-4 mr-2" />
             Edit Lead
@@ -145,13 +137,6 @@ export const LeadActions: React.FC<LeadActionsProps> = ({ lead, onLeadUpdated })
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-
-      {/* View Lead Dialog */}
-      <ViewLeadDialog 
-        lead={lead}
-        open={showViewDialog}
-        onOpenChange={setShowViewDialog}
-      />
 
       {/* Edit Lead Dialog */}
       <EditLeadDialog 

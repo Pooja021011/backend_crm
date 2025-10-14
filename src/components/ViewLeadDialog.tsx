@@ -27,13 +27,12 @@ import {
 import { safeDateFormat } from "@/utils/validation";
 import type { Lead } from "@/hooks/useLeads";
 import { LeadDocumentsTab } from "./LeadDocumentsTab";
-import { UnderwritingCalculator } from "./UnderwritingCalculator";
-import { CompsManager } from "./CompsManager";
-import { BuyerManagement } from "./BuyerManagement";
-import { MarketingResources } from "./MarketingResources";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
+// Hidden tabs - uncomment imports if you enable the tabs below
+// import { UnderwritingCalculator } from "./UnderwritingCalculator";
+// import { CompsManager } from "./CompsManager";
+// import { BuyerManagement } from "./BuyerManagement";
+// import { MarketingResources } from "./MarketingResources";
+// import { LeadActivityTab } from "./LeadActivityTab";
 import { API_BASE } from "@/config/api";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -65,16 +64,12 @@ export const ViewLeadDialog: React.FC<ViewLeadDialogProps> = ({
   const canAccessBuyerMgmt = isAdmin || isExecutive || isManager || isDisp || isTC;
   const canAccessMarketing = isAdmin || isExecutive || isManager || isACQ || isDisp || isTC;
 
-  // Calculate grid columns based on available tabs
+  // Only showing Details and Documents tabs
   const getTabsGridCols = () => {
-    let count = 3; // details, documents, activity always visible
-    if (canAccessUnderwriting) count++;
-    if (canAccessComps) count++;
-    if (canAccessBuyerMgmt) count++;
-    if (canAccessMarketing) count++;
-    return `grid-cols-${count}`;
+    return 'grid-cols-2';
   };
   
+  // Read-only deal information state
   const [dealLoading, setDealLoading] = React.useState(false);
   const [contractPrice, setContractPrice] = React.useState<string>("");
   const [soldPrice, setSoldPrice] = React.useState<string>("");
@@ -82,6 +77,7 @@ export const ViewLeadDialog: React.FC<ViewLeadDialogProps> = ({
   const [contractedAt, setContractedAt] = React.useState<string>("");
   const [closedAt, setClosedAt] = React.useState<string>("");
 
+  // Fetch deal information (read-only)
   React.useEffect(() => {
     if (!open) return;
     const load = async () => {
@@ -108,21 +104,6 @@ export const ViewLeadDialog: React.FC<ViewLeadDialogProps> = ({
     };
     load();
   }, [open, lead.id]);
-
-  const saveDeal = async () => {
-    const accessToken = localStorage.getItem('accessToken');
-    await fetch(`${API_BASE}/deals/${lead.id}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
-      body: JSON.stringify({
-        contractPrice: contractPrice ? Number(contractPrice) : null,
-        soldPrice: soldPrice ? Number(soldPrice) : null,
-        netProfit: netProfit ? Number(netProfit) : null,
-        contractedAt: contractedAt || null,
-        closedAt: closedAt || null,
-      })
-    });
-  };
   const getLeadTypeColor = (type: string) => {
     switch (type) {
       case 'SELLER': return 'bg-green-100 text-green-800';
@@ -445,6 +426,7 @@ export const ViewLeadDialog: React.FC<ViewLeadDialogProps> = ({
           <TabsList className={`grid w-full ${getTabsGridCols()}`}>
             <TabsTrigger value="details">Details</TabsTrigger>
             <TabsTrigger value="documents">Documents</TabsTrigger>
+            {/* Hidden tabs - uncomment to enable
             {canAccessUnderwriting && (
               <TabsTrigger value="underwriting">Underwriting</TabsTrigger>
             )}
@@ -458,6 +440,7 @@ export const ViewLeadDialog: React.FC<ViewLeadDialogProps> = ({
               <TabsTrigger value="marketing">Marketing</TabsTrigger>
             )}
             <TabsTrigger value="activity">Activity</TabsTrigger>
+            */}
           </TabsList>
 
           <TabsContent value="details" className="space-y-6 mt-6">
@@ -503,7 +486,7 @@ export const ViewLeadDialog: React.FC<ViewLeadDialogProps> = ({
             {lead.leadType === 'BUYER' && renderBuyerDetails()}
             {lead.leadType === 'VENDOR' && renderVendorDetails()}
 
-            {/* Deal Information */}
+            {/* Deal Information - READ ONLY */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -512,34 +495,56 @@ export const ViewLeadDialog: React.FC<ViewLeadDialogProps> = ({
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <Label className="text-sm">Contract Price</Label>
-                    <Input type="number" value={contractPrice} onChange={(e) => setContractPrice(e.target.value)} disabled={dealLoading} />
-                  </div>
-                  <div>
-                    <Label className="text-sm">Sold Price</Label>
-                    <Input type="number" value={soldPrice} onChange={(e) => setSoldPrice(e.target.value)} disabled={dealLoading} />
-                  </div>
-                  <div>
-                    <Label className="text-sm">Net Profit</Label>
-                    <Input type="number" value={netProfit} onChange={(e) => setNetProfit(e.target.value)} disabled={dealLoading} />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-sm">Contracted At</Label>
-                    <Input type="datetime-local" value={contractedAt} onChange={(e) => setContractedAt(e.target.value)} disabled={dealLoading} />
-                  </div>
-                  <div>
-                    <Label className="text-sm">Closed At</Label>
-                    <Input type="datetime-local" value={closedAt} onChange={(e) => setClosedAt(e.target.value)} disabled={dealLoading} />
-                  </div>
-                </div>
-                {/* Save Deal button hidden as requested */}
-                {/* <div className="flex justify-end">
-                  <Button onClick={saveDeal} disabled={dealLoading}>Save Deal</Button>
-                </div> */}
+                {dealLoading ? (
+                  <p className="text-sm text-gray-500">Loading deal information...</p>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="text-sm font-medium text-gray-600">Contract Price</label>
+                        <p className="text-gray-900 font-semibold text-lg">
+                          {contractPrice ? `$${Number(contractPrice).toLocaleString()}` : "Not set"}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-gray-600">Sold Price</label>
+                        <p className="text-gray-900 font-semibold text-lg">
+                          {soldPrice ? `$${Number(soldPrice).toLocaleString()}` : "Not set"}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-gray-600">Net Profit</label>
+                        <p className={`font-semibold text-lg ${netProfit && Number(netProfit) > 0 ? 'text-green-600' : netProfit && Number(netProfit) < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                          {netProfit ? `$${Number(netProfit).toLocaleString()}` : "Not calculated"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium text-gray-600">Contracted At</label>
+                        <p className="text-gray-900">
+                          {contractedAt ? safeDateFormat(contractedAt) : "Not contracted"}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-gray-600">Closed At</label>
+                        <p className="text-gray-900">
+                          {closedAt ? safeDateFormat(closedAt) : "Not closed"}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    {/* Profit Margin Calculation */}
+                    {soldPrice && contractPrice && Number(soldPrice) > 0 && Number(contractPrice) > 0 && (
+                      <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                        <p className="text-sm font-medium text-gray-700">Profit Margin</p>
+                        <p className="text-2xl font-bold text-blue-600">
+                          {((Number(netProfit) / Number(soldPrice)) * 100).toFixed(2)}%
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -548,6 +553,7 @@ export const ViewLeadDialog: React.FC<ViewLeadDialogProps> = ({
             <LeadDocumentsTab lead={lead} />
           </TabsContent>
 
+          {/* Hidden tabs - uncomment to enable
           {canAccessUnderwriting && (
             <TabsContent value="underwriting" className="mt-6">
               <UnderwritingCalculator leadId={lead.id} />
@@ -581,21 +587,13 @@ export const ViewLeadDialog: React.FC<ViewLeadDialogProps> = ({
           )}
 
           <TabsContent value="activity" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Clock className="w-5 h-5" />
-                  Activity Timeline
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-8 text-gray-500">
-                  <Clock className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                  <p>Activity timeline coming soon...</p>
-                </div>
-              </CardContent>
-            </Card>
+            <LeadActivityTab 
+              leadId={lead.id}
+              leadCreatedAt={lead.createdAt}
+              leadUpdatedAt={lead.updatedAt}
+            />
           </TabsContent>
+          */}
         </Tabs>
       </DialogContent>
     </Dialog>

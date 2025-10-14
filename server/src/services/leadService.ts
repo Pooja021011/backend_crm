@@ -23,6 +23,37 @@ export const leadService = {
     return updated;
   },
 
+  getStageHistory: async (leadId: string) => {
+    return await prisma.stageHistory.findMany({
+      where: { leadId },
+      include: {
+        fromStage: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        toStage: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        changedBy: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true
+          }
+        }
+      },
+      orderBy: {
+        changedAt: 'desc'
+      }
+    });
+  },
+
   listTasks: (leadId: string) => taskRepository.listByLead(leadId),
   createTask: (leadId: string, input: { title: string; description?: string; dueAt: string; assignedToId?: string; createdById?: string }) =>
     taskRepository.create(leadId, { title: input.title, description: input.description, dueAt: new Date(input.dueAt), assignedToId: input.assignedToId, createdById: input.createdById }),

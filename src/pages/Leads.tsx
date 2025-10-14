@@ -814,19 +814,9 @@ const Leads = () => {
       <div className="flex flex-col h-full bg-gray-50">
         {/* Header */}
         <div className="bg-white border-b border-gray-200 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <h1 className="text-xl font-semibold text-gray-900">Lead Management</h1>
-              <ChevronDown className="w-4 h-4 text-gray-500" />
-            </div>
-            
-            <div className="flex items-center gap-3">
-              <Button variant="ghost" size="sm" className="text-gray-600 hover:text-gray-900">
-                <MoreHorizontal className="w-4 h-4" />
-              </Button>
-              <div className="text-sm text-gray-600">Chris Harris</div>
-              <ChevronDown className="w-4 h-4 text-gray-500" />
-            </div>
+          <div className="flex items-center gap-4">
+            <h1 className="text-xl font-semibold text-gray-900">Lead Management</h1>
+            <ChevronDown className="w-4 h-4 text-gray-500" />
           </div>
         </div>
 
@@ -1014,7 +1004,7 @@ const Leads = () => {
                       if (el && el instanceof HTMLInputElement) el.indeterminate = someSelected;
                     }}
                     onCheckedChange={handleSelectAll}
-                    className="border-gray-300"
+                    className="border-gray-300 m-2.5"
                   />
                   <Button 
                     variant="ghost" 
@@ -1300,24 +1290,27 @@ const Leads = () => {
 
             {/* Seller Leads Table */}
             <TabsContent value="SELLER" className="mt-0">
-              <div className="bg-white overflow-x-auto">
+              <div className="bg-white overflow-x-auto rounded-lg shadow-sm">
                 <Table>
                   <TableHeader>
-                    <TableRow className="border-b border-gray-200">
-                      <TableHead className="w-12 sticky left-0 bg-white z-10 border-r border-gray-200">
-                        <Checkbox 
-                          checked={currentLeads.length > 0 && selectedItems.length === currentLeads.length}
-                          ref={(el) => {
-                            if (el) (el as any).indeterminate = selectedItems.length > 0 && selectedItems.length < currentLeads.length;
-                          }}
-                          onCheckedChange={() => {
-                            if (selectedItems.length === currentLeads.length) {
-                              setSelectedItems([]);
-                            } else {
-                              setSelectedItems(currentLeads.map(lead => lead.id));
-                            }
-                          }}
-                        />
+                    <TableRow className="border-b-2 border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100/50">
+                      <TableHead className="w-12 sticky left-0 bg-gradient-to-r from-gray-50 to-gray-100/50 z-10 border-l border-r border-gray-200 p-0 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                        <div className="flex items-center justify-center h-full py-4">
+                          <Checkbox 
+                            className="m-2.5"
+                            checked={currentLeads.length > 0 && selectedItems.length === currentLeads.length}
+                            ref={(el) => {
+                              if (el) (el as any).indeterminate = selectedItems.length > 0 && selectedItems.length < currentLeads.length;
+                            }}
+                            onCheckedChange={() => {
+                              if (selectedItems.length === currentLeads.length) {
+                                setSelectedItems([]);
+                              } else {
+                                setSelectedItems(currentLeads.map(lead => lead.id));
+                              }
+                            }}
+                          />
+                        </div>
                       </TableHead>
                       <SortableTableHeader sortKey="address" sortConfig={sortConfig} onSort={handleSort} className="min-w-[250px]">
                         Property Address
@@ -1346,15 +1339,26 @@ const Leads = () => {
                       <SortableTableHeader sortKey="updatedAt" sortConfig={sortConfig} onSort={handleSort} className="min-w-[120px]">
                         Last Contact
                       </SortableTableHeader>
-                      <TableHead className="w-12 sticky right-0 bg-white z-10 border-l border-gray-200"></TableHead>
+                      <TableHead className="w-12 sticky right-0 bg-gradient-to-r from-gray-50 to-gray-100/50 z-10 border-l border-r border-gray-200 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)]"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {currentLeads.map((lead) => (
-                      <TableRow key={lead.id} className="border-b border-gray-100 hover:bg-gray-50">
-                        <TableCell className="sticky left-0 bg-white z-10 border-r border-gray-200">
-                          <div className="flex items-center justify-center h-full">
+                      <TableRow 
+                        key={lead.id} 
+                        className="border-b border-gray-100 hover:bg-blue-50/30 hover:shadow-sm cursor-pointer transition-all duration-200"
+                        onClick={() => {
+                          setSelectedLead(lead);
+                          setShowLeadDetail(true);
+                        }}
+                      >
+                        <TableCell 
+                          className="sticky left-0 bg-white z-10 border-l border-r border-gray-200 p-0 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="flex items-center justify-center h-full py-4">
                             <Checkbox 
+                              className="m-2.5"
                               checked={selectedItems.includes(lead.id)}
                               onCheckedChange={() => handleSelectItem(lead.id)}
                             />
@@ -1435,7 +1439,10 @@ const Leads = () => {
                         <TableCell className="text-gray-600">
                           {new Date(lead.updatedAt).toLocaleDateString()}
                         </TableCell>
-                        <TableCell className="sticky right-0 bg-white z-10 border-l border-gray-200">
+                        <TableCell 
+                          className="sticky right-0 bg-white z-10 border-l border-r border-gray-200 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)]"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <LeadActions 
                             lead={lead} 
                             onLeadUpdated={() => fetchLeads()} 
@@ -1450,25 +1457,28 @@ const Leads = () => {
 
             {/* Buyer Leads Table */}
             <TabsContent value="BUYER" className="mt-0">
-              <div className="bg-white overflow-x-auto">
+              <div className="bg-white overflow-x-auto rounded-lg shadow-sm">
                 <Table>
                   <TableHeader>
-                    <TableRow className="border-b border-gray-200">
-                      <TableHead className="w-12 sticky left-0 bg-white z-10 border-r border-gray-200">
-                        <Checkbox 
-                          checked={getFilteredLeadsForTab("BUYER").length > 0 && selectedItems.length === getFilteredLeadsForTab("BUYER").length}
-                          ref={(el) => {
-                            if (el) (el as any).indeterminate = selectedItems.length > 0 && selectedItems.length < getFilteredLeadsForTab("BUYER").length;
-                          }}
-                          onCheckedChange={() => {
-                            const filteredLeads = getFilteredLeadsForTab("BUYER");
-                            if (selectedItems.length === filteredLeads.length) {
-                              setSelectedItems([]);
-                            } else {
-                              setSelectedItems(filteredLeads.map(lead => lead.id));
-                            }
-                          }}
-                        />
+                    <TableRow className="border-b-2 border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100/50">
+                      <TableHead className="w-12 sticky left-0 bg-gradient-to-r from-gray-50 to-gray-100/50 z-10 border-l border-r border-gray-200 p-0 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                        <div className="flex items-center justify-center h-full py-4">
+                          <Checkbox 
+                            className="m-2.5"
+                            checked={getFilteredLeadsForTab("BUYER").length > 0 && selectedItems.length === getFilteredLeadsForTab("BUYER").length}
+                            ref={(el) => {
+                              if (el) (el as any).indeterminate = selectedItems.length > 0 && selectedItems.length < getFilteredLeadsForTab("BUYER").length;
+                            }}
+                            onCheckedChange={() => {
+                              const filteredLeads = getFilteredLeadsForTab("BUYER");
+                              if (selectedItems.length === filteredLeads.length) {
+                                setSelectedItems([]);
+                              } else {
+                                setSelectedItems(filteredLeads.map(lead => lead.id));
+                              }
+                            }}
+                          />
+                        </div>
                       </TableHead>
                       <TableHead className="text-gray-600 font-medium min-w-[180px]">Lead Name</TableHead>
                       <TableHead className="text-gray-600 font-medium min-w-[200px]">Contact Info</TableHead>
@@ -1482,15 +1492,26 @@ const Leads = () => {
                       <TableHead className="text-gray-600 font-medium min-w-[120px]">Timeline</TableHead>
                       <TableHead className="text-gray-600 font-medium min-w-[140px]">Assigned Agent</TableHead>
                       <TableHead className="text-gray-600 font-medium min-w-[120px]">Last Contact</TableHead>
-                      <TableHead className="w-12 sticky right-0 bg-white z-10 border-l border-gray-200"></TableHead>
+                      <TableHead className="w-12 sticky right-0 bg-gradient-to-r from-gray-50 to-gray-100/50 z-10 border-l border-r border-gray-200 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)]"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {currentLeads.map((lead) => (
-                      <TableRow key={lead.id} className="border-b border-gray-100 hover:bg-gray-50">
-                        <TableCell className="sticky left-0 bg-white z-10 border-r border-gray-200">
-                          <div className="flex items-center justify-center h-full">
+                      <TableRow 
+                        key={lead.id} 
+                        className="border-b border-gray-100 hover:bg-green-50/30 hover:shadow-sm cursor-pointer transition-all duration-200"
+                        onClick={() => {
+                          setSelectedLead(lead);
+                          setShowLeadDetail(true);
+                        }}
+                      >
+                        <TableCell 
+                          className="sticky left-0 bg-white z-10 border-l border-r border-gray-200 p-0 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="flex items-center justify-center h-full py-4">
                             <Checkbox 
+                              className="m-2.5"
                               checked={selectedItems.includes(lead.id)}
                               onCheckedChange={() => handleSelectItem(lead.id)}
                             />
@@ -1596,7 +1617,10 @@ const Leads = () => {
                         <TableCell className="text-gray-600 text-xs">
                           {lead.updatedAt ? new Date(lead.updatedAt).toLocaleDateString() : <span className="text-gray-400">-</span>}
                         </TableCell>
-                        <TableCell className="sticky right-0 bg-white z-10 border-l border-gray-200">
+                        <TableCell 
+                          className="sticky right-0 bg-white z-10 border-l border-r border-gray-200 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)]"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <LeadActions 
                             lead={lead} 
                             onLeadUpdated={() => fetchLeads()} 
@@ -1611,25 +1635,28 @@ const Leads = () => {
 
             {/* Vendor Leads Table */}
             <TabsContent value="VENDOR" className="mt-0">
-              <div className="bg-white overflow-x-auto">
+              <div className="bg-white overflow-x-auto rounded-lg shadow-sm">
                 <Table>
                   <TableHeader>
-                    <TableRow className="border-b border-gray-200">
-                      <TableHead className="w-12 sticky left-0 bg-white z-10 border-r border-gray-200">
-                        <Checkbox 
-                          checked={getFilteredLeadsForTab("VENDOR").length > 0 && selectedItems.length === getFilteredLeadsForTab("VENDOR").length}
-                          ref={(el) => {
-                            if (el) (el as any).indeterminate = selectedItems.length > 0 && selectedItems.length < getFilteredLeadsForTab("VENDOR").length;
-                          }}
-                          onCheckedChange={() => {
-                            const filteredLeads = getFilteredLeadsForTab("VENDOR");
-                            if (selectedItems.length === filteredLeads.length) {
-                              setSelectedItems([]);
-                            } else {
-                              setSelectedItems(filteredLeads.map(lead => lead.id));
-                            }
-                          }}
-                        />
+                    <TableRow className="border-b-2 border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100/50">
+                      <TableHead className="w-12 sticky left-0 bg-gradient-to-r from-gray-50 to-gray-100/50 z-10 border-l border-r border-gray-200 p-0 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                        <div className="flex items-center justify-center h-full py-4">
+                          <Checkbox 
+                            className="m-2.5"
+                            checked={getFilteredLeadsForTab("VENDOR").length > 0 && selectedItems.length === getFilteredLeadsForTab("VENDOR").length}
+                            ref={(el) => {
+                              if (el) (el as any).indeterminate = selectedItems.length > 0 && selectedItems.length < getFilteredLeadsForTab("VENDOR").length;
+                            }}
+                            onCheckedChange={() => {
+                              const filteredLeads = getFilteredLeadsForTab("VENDOR");
+                              if (selectedItems.length === filteredLeads.length) {
+                                setSelectedItems([]);
+                              } else {
+                                setSelectedItems(filteredLeads.map(lead => lead.id));
+                              }
+                            }}
+                          />
+                        </div>
                       </TableHead>
                       <TableHead className="text-gray-600 font-medium min-w-[180px]">Lead Name</TableHead>
                       <TableHead className="text-gray-600 font-medium min-w-[200px]">Company</TableHead>
@@ -1640,15 +1667,26 @@ const Leads = () => {
                       <TableHead className="text-gray-600 font-medium min-w-[100px]">Verified</TableHead>
                       <TableHead className="text-gray-600 font-medium min-w-[140px]">Assigned Agent</TableHead>
                       <TableHead className="text-gray-600 font-medium min-w-[120px]">Last Contact</TableHead>
-                      <TableHead className="w-12 sticky right-0 bg-white z-10 border-l border-gray-200"></TableHead>
+                      <TableHead className="w-12 sticky right-0 bg-gradient-to-r from-gray-50 to-gray-100/50 z-10 border-l border-r border-gray-200 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)]"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {activeTab === "VENDOR" ? currentLeads.map((lead) => (
-                      <TableRow key={lead.id} className="border-b border-gray-100 hover:bg-gray-50">
-                        <TableCell className="sticky left-0 bg-white z-10 border-r border-gray-200">
-                          <div className="flex items-center justify-center h-full">
+                      <TableRow 
+                        key={lead.id} 
+                        className="border-b border-gray-100 hover:bg-purple-50/30 hover:shadow-sm cursor-pointer transition-all duration-200"
+                        onClick={() => {
+                          setSelectedLead(lead);
+                          setShowLeadDetail(true);
+                        }}
+                      >
+                        <TableCell 
+                          className="sticky left-0 bg-white z-10 border-l border-r border-gray-200 p-0 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="flex items-center justify-center h-full py-4">
                             <Checkbox 
+                              className="m-2.5"
                               checked={selectedItems.includes(lead.id)}
                               onCheckedChange={() => handleSelectItem(lead.id)}
                             />
@@ -1701,7 +1739,10 @@ const Leads = () => {
                         </TableCell>
                         <TableCell className="text-gray-600">{lead.assignedUserId ? 'Assigned' : 'Unassigned'}</TableCell>
                         <TableCell className="text-gray-600">{new Date(lead.updatedAt).toLocaleDateString()}</TableCell>
-                        <TableCell className="sticky right-0 bg-white z-10 border-l border-gray-200">
+                        <TableCell 
+                          className="sticky right-0 bg-white z-10 border-l border-r border-gray-200 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)]"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <LeadActions 
                             lead={lead} 
                             onLeadUpdated={() => fetchLeads()} 

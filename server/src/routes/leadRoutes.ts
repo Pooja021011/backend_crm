@@ -19,6 +19,7 @@ router.get('/:id', (req, res, next) => leadController.get(req, res).catch(next))
 router.patch('/:id', (req, res, next) => leadController.update(req, res).catch(next));
 router.delete('/:id', (req, res, next) => leadController.delete(req, res).catch(next));
 router.post('/:id/stage', (req, res, next) => leadController.changeStage(req, res).catch(next));
+router.get('/:id/stage-history', (req, res, next) => leadController.getStageHistory(req, res).catch(next));
 
 // Tasks nested
 router.get('/:id/tasks', (req, res, next) => leadController.listTasks(req, res).catch(next));

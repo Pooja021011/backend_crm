@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+// Tabs removed - simplified to show all documents
 import {
   Dialog,
   DialogContent,
@@ -30,7 +30,6 @@ import {
   Trash2, 
   MoreHorizontal,
   Search,
-  Filter,
   Calendar,
   User,
   Tag,
@@ -43,6 +42,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { FileUploader } from "./FileUploader";
+import { API_BASE } from "@/config/api";
 
 export interface DocumentFile {
   id: string;
@@ -113,7 +113,6 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
   const [filteredDocuments, setFilteredDocuments] = useState<DocumentFile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("all");
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState<DocumentFile | null>(null);
   const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState(false);
@@ -123,13 +122,9 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
     fetchDocuments();
   }, [leadId]);
 
-  // Filter documents
+  // Filter documents by search only
   useEffect(() => {
     let filtered = documents;
-
-    if (selectedCategory !== 'all') {
-      filtered = filtered.filter(doc => doc.category === selectedCategory);
-    }
 
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
@@ -141,12 +136,12 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
     }
 
     setFilteredDocuments(filtered);
-  }, [documents, selectedCategory, searchQuery]);
+  }, [documents, searchQuery]);
 
   const fetchDocuments = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(`/api/v1/files/lead/${leadId}`, {
+      const response = await fetch(`${API_BASE}/files/lead/${leadId}`, {
         credentials: 'include',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
@@ -192,7 +187,7 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
 
   const handleDownload = async (document: DocumentFile) => {
     try {
-      const response = await fetch(`/api/v1/files/download/${document.id}`, {
+      const response = await fetch(`${API_BASE}/files/download/${document.id}`, {
         credentials: 'include',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
@@ -229,7 +224,7 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
 
   const handlePreview = (document: DocumentFile) => {
     // Open preview in new tab
-    const previewUrl = `/api/v1/files/preview/${document.id}`;
+    const previewUrl = `${API_BASE}/files/preview/${document.id}`;
     window.open(previewUrl, '_blank');
   };
 
@@ -239,7 +234,7 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
     }
 
     try {
-      const response = await fetch(`/api/v1/files/${document.id}`, {
+      const response = await fetch(`${API_BASE}/files/${document.id}`, {
         method: 'DELETE',
         credentials: 'include',
         headers: {
@@ -281,17 +276,6 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
     });
   };
 
-  const getDocumentCounts = () => {
-    const counts: Record<string, number> = { all: documents.length };
-    
-    FILE_CATEGORIES.slice(1).forEach(category => {
-      counts[category.value] = documents.filter(doc => doc.category === category.value).length;
-    });
-
-    return counts;
-  };
-
-  const documentCounts = getDocumentCounts();
 
   if (isLoading) {
     return (
@@ -350,38 +334,10 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
             className="pl-10"
           />
         </div>
-        
-        <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-gray-500" />
-          <span className="text-sm text-gray-600">Filter:</span>
-        </div>
       </div>
 
-      {/* Category Tabs */}
-      <Tabs value={selectedCategory} onValueChange={setSelectedCategory}>
-        <TabsList className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-11 h-auto p-1">
-          {FILE_CATEGORIES.map((category) => {
-            const IconComponent = category.icon;
-            const count = documentCounts[category.value] || 0;
-            
-            return (
-              <TabsTrigger
-                key={category.value}
-                value={category.value}
-                className="flex flex-col items-center gap-1 p-2 text-xs"
-              >
-                <IconComponent className="w-4 h-4" />
-                <span className="truncate">{category.label.split(' ')[0]}</span>
-                <Badge variant="secondary" className="text-xs px-1 py-0">
-                  {count}
-                </Badge>
-              </TabsTrigger>
-            );
-          })}
-        </TabsList>
-
-        {/* Document Grid */}
-        <TabsContent value={selectedCategory} className="mt-6">
+      {/* Documents List */}
+      <div className="mt-6">
           {filteredDocuments.length === 0 ? (
             <Card className="p-8">
               <div className="text-center">
@@ -519,8 +475,7 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
               })}
             </div>
           )}
-        </TabsContent>
-      </Tabs>
+      </div>
 
       {/* Version History Dialog */}
       <Dialog open={isVersionHistoryOpen} onOpenChange={setIsVersionHistoryOpen}>

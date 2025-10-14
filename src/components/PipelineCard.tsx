@@ -1,13 +1,15 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
 import { 
   MapPin, 
   User, 
   Calendar, 
   Clock, 
   TrendingDown,
-  CheckCircle2
+  CheckCircle2,
+  Eye
 } from "lucide-react";
 import { differenceInDays, differenceInHours } from "date-fns";
 import { useSortable } from "@dnd-kit/sortable";
@@ -34,9 +36,10 @@ interface PipelineCardProps {
     status?: string;
   };
   isDragging?: boolean;
+  onViewDetails?: () => void;
 }
 
-export const PipelineCard = ({ lead, isDragging }: PipelineCardProps) => {
+export const PipelineCard = ({ lead, isDragging, onViewDetails }: PipelineCardProps) => {
   const {
     attributes,
     listeners,
@@ -96,12 +99,27 @@ export const PipelineCard = ({ lead, isDragging }: PipelineCardProps) => {
       }`}
     >
       <div className="space-y-2">
-        {/* Address */}
+        {/* Address with View Button */}
         <div className="flex items-start gap-2">
           <MapPin className="w-3 h-3 text-blue-500 mt-0.5 flex-shrink-0" />
-          <h3 className="font-medium text-sm text-gray-900 leading-tight">
+          <h3 className="font-medium text-sm text-gray-900 leading-tight flex-1">
             {lead.address}
           </h3>
+          {onViewDetails && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-5 w-5 p-0 hover:bg-blue-100"
+              onClick={(e) => {
+                e.stopPropagation();
+                onViewDetails();
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+            >
+              <Eye className="h-3 w-3 text-blue-600" />
+            </Button>
+          )}
         </div>
 
         {/* Seller */}

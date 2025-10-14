@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
+import { API_BASE } from "@/config/api";
 
 export interface FileUploadItem {
   id: string;
@@ -236,7 +237,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
           });
         }, 200);
 
-        const response = await fetch('/api/v1/files/upload', {
+        const response = await fetch(`${API_BASE}/files/upload`, {
           method: 'POST',
           body: formData,
           credentials: 'include',

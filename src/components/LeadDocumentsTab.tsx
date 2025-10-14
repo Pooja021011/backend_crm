@@ -1,8 +1,9 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { DocumentManager } from "./DocumentManager";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, Upload, FolderOpen } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { API_BASE } from "@/config/api";
 import type { Lead } from "@/hooks/useLeads";
 
 interface LeadDocumentsTabProps {
@@ -15,25 +16,65 @@ export const LeadDocumentsTab: React.FC<LeadDocumentsTabProps> = ({
   className
 }) => {
   const { user } = useAuth();
+  const [documentStats, setDocumentStats] = useState({
+    totalCount: 0,
+    recentCount: 0
+  });
+  const [isLoading, setIsLoading] = useState(true);
   
   // Determine user permissions based on roles
   const isAdmin = user?.roles?.includes('ADMIN') || false;
   const canEdit = isAdmin || user?.roles?.includes('MANAGER') || user?.id === lead.assignedUserId;
   const canDelete = isAdmin || user?.roles?.includes('MANAGER');
-  const canUpload = canEdit;
+
+  // Fetch document statistics
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        setIsLoading(true);
+        const accessToken = localStorage.getItem('accessToken');
+        const response = await fetch(`${API_BASE}/files/lead/${lead.id}`, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`
+          }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          const files = data.files || data.data || [];
+          
+          // Calculate stats
+          const totalCount = files.length;
+          const now = new Date();
+          const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          const recentCount = files.filter((f: any) => 
+            new Date(f.uploadedAt) >= sevenDaysAgo
+          ).length;
+          
+          setDocumentStats({ totalCount, recentCount });
+        }
+      } catch (error) {
+        console.error('Error fetching document stats:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchStats();
+  }, [lead.id]);
 
   return (
     <div className={className}>
-      {/* Header Card */}
+      {/* Stats Card */}
       <Card className="mb-6">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileText className="w-5 h-5" />
-            Documents & Files
+            Document Overview
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-blue-50 rounded-lg p-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -41,7 +82,9 @@ export const LeadDocumentsTab: React.FC<LeadDocumentsTabProps> = ({
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Total Documents</p>
-                  <p className="text-2xl font-semibold text-gray-900">--</p>
+                  <p className="text-2xl font-semibold text-gray-900">
+                    {isLoading ? '...' : documentStats.totalCount}
+                  </p>
                 </div>
               </div>
             </div>
@@ -52,44 +95,12 @@ export const LeadDocumentsTab: React.FC<LeadDocumentsTabProps> = ({
                   <Upload className="w-5 h-5 text-green-600" />
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Recent Uploads</p>
-                  <p className="text-2xl font-semibold text-gray-900">--</p>
+                  <p className="text-sm text-gray-600">Recent Uploads (7 days)</p>
+                  <p className="text-2xl font-semibold text-gray-900">
+                    {isLoading ? '...' : documentStats.recentCount}
+                  </p>
                 </div>
               </div>
-            </div>
-            
-            <div className="bg-purple-50 rounded-lg p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                  <FileText className="w-5 h-5 text-purple-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Storage Used</p>
-                  <p className="text-2xl font-semibold text-gray-900">--</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-            <h4 className="text-sm font-medium text-gray-900 mb-2">Document Categories</h4>
-            <div className="flex flex-wrap gap-2">
-              {[
-                'Purchase Agreements',
-                'Appraisal Reports', 
-                'Inspection Reports',
-                'Title Documents',
-                'Financial Documents',
-                'Property Photos',
-                'Marketing Materials'
-              ].map((category) => (
-                <span 
-                  key={category}
-                  className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-white text-gray-700 border border-gray-200"
-                >
-                  {category}
-                </span>
-              ))}
             </div>
           </div>
         </CardContent>
@@ -100,7 +111,7 @@ export const LeadDocumentsTab: React.FC<LeadDocumentsTabProps> = ({
         leadId={lead.id}
         canEdit={canEdit}
         canDelete={canDelete}
-        canUpload={canUpload}
+        canUpload={false}
       />
     </div>
   );
