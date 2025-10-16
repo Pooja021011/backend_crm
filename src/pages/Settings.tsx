@@ -760,13 +760,13 @@ const Settings = () => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto" style={{ overflow: 'visible' }}>
+    <div style={{ margin: '0', width: '100%', overflow: 'visible' }}>
       <div style={{ overflow: 'visible' }}>
           {/* Profile Tab - Only show when activeTab is 'profile' */}
           {activeTab === 'profile' && (
             <div className="space-y-8">
               {/* Profile Information Card */}
-              <Card className="bg-gradient-subtle border border-border/50 shadow-card overflow-hidden">
+              <Card className="border-0 shadow-none overflow-hidden">
                 <div className="p-8">
                   <div className="flex items-center gap-4 mb-8">
                     <div className="p-3 rounded-xl bg-primary/10 border border-primary/20">
@@ -858,7 +858,7 @@ const Settings = () => {
               </Card>
 
               {/* Password Reset Card */}
-              <Card className="bg-gradient-subtle border border-border/50 shadow-card overflow-hidden">
+              <Card className="border-0 shadow-none overflow-hidden">
                 <div className="p-8">
                   <div className="flex items-center gap-4 mb-8">
                     <div className="p-3 rounded-xl bg-primary/10 border border-primary/20">
@@ -930,7 +930,7 @@ const Settings = () => {
           {/* Email Sync Tab - Only show when activeTab is 'email' */}
           {activeTab === 'email' && (
             <div className="space-y-8">
-              <Card className="bg-gradient-subtle border border-border/50 shadow-card overflow-hidden">
+              <Card className="border-0 shadow-none overflow-hidden">
                 <div className="p-8">
                   <div className="flex items-center gap-4 mb-8">
                     <div className="p-3 rounded-xl bg-primary/10 border border-primary/20">
@@ -1164,7 +1164,7 @@ const Settings = () => {
           {/* SMS and Call Tab - Only show when activeTab is 'sms' */}
           {activeTab === 'sms' && (
             <div className="space-y-8">
-              <Card className="bg-gradient-subtle border border-border/50 shadow-card overflow-hidden">
+              <Card className="border-0 shadow-none overflow-hidden">
                 <div className="p-8">
                   <div className="flex items-center gap-4 mb-8">
                     <div className="p-3 rounded-xl bg-primary/10 border border-primary/20">

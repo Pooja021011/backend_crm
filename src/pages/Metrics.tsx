@@ -20,7 +20,7 @@ const Metrics = () => {
   // Global Filters State
   const [showFilters, setShowFilters] = useState(false);
   const [customDateRange, setCustomDateRange] = useState<{ from?: Date; to?: Date }>({});
-  const [selectedSources, setSelectedSources] = useState<string[]>([]);
+  const [selectedSource, setSelectedSource] = useState<string>('all');
   const [availableSources, setAvailableSources] = useState<string[]>([]);
   // Teams (Acq/Disp) pipeline overview
   const [acqTotal, setAcqTotal] = useState<number>(0);
@@ -119,20 +119,21 @@ const Metrics = () => {
   const [acqLeaderboardError, setAcqLeaderboardError] = useState<string | null>(null);
   const [acqLeaderboardData, setAcqLeaderboardData] = useState<{
     agents: Array<{
-      id: string;
+      userId: string;
       name: string;
       email: string;
-      rank: number;
-      score: number;
+      rank?: number;
+      totalScore: number;
       contractsSigned: number;
       projectedProfit: number;
       leadsPerContract: number;
       mishandledLeads: number;
       communications: {
-        calls: { made: number; received: number; totalTime: number };
-        sms: { sent: number; received: number };
-        emails: { sent: number; received: number };
-        totalScore: number;
+        total: number;
+        calls: number;
+        sms: number;
+        emails: number;
+        responseRate: number;
       };
     }>;
     currentUserRank?: number;
@@ -144,20 +145,21 @@ const Metrics = () => {
   const [dispLeaderboardError, setDispLeaderboardError] = useState<string | null>(null);
   const [dispLeaderboardData, setDispLeaderboardData] = useState<{
     agents: Array<{
-      id: string;
+      userId: string;
       name: string;
       email: string;
-      rank: number;
-      score: number;
+      rank?: number;
+      totalScore: number;
       propertiesSold: number;
       projectedProfit: number;
       buyersAdded: number;
       mishandledLeads: number;
       communications: {
-        calls: { made: number; received: number; totalTime: number };
-        sms: { sent: number; received: number };
-        emails: { sent: number; received: number };
-        totalScore: number;
+        total: number;
+        calls: number;
+        sms: number;
+        emails: number;
+        responseRate: number;
       };
     }>;
     currentUserRank?: number;
@@ -228,8 +230,8 @@ const Metrics = () => {
     }
     
     // Source filters
-    if (selectedSources.length > 0) {
-      filters.sources = selectedSources;
+    if (selectedSource !== 'all') {
+      filters.sources = [selectedSource];
     }
     
     // Role-based scoping
@@ -256,8 +258,14 @@ const Metrics = () => {
         });
         
         if (response.ok) {
-          const data = await response.json();
-          setAvailableSources(data.sources || []);
+          const result = await response.json();
+          // API returns array of { id, name } objects in result.data
+          const sources = result.data || [];
+          const sourceNames = sources.map((s: any) => s.name);
+          setAvailableSources(sourceNames.length > 0 ? sourceNames : ['Website', 'Referral', 'Cold Call', 'Social Media', 'Direct Mail', 'Other']);
+        } else {
+          // Fallback sources if response not ok
+          setAvailableSources(['Website', 'Referral', 'Cold Call', 'Social Media', 'Direct Mail', 'Other']);
         }
       } catch (error) {
         console.error('Error loading lead sources:', error);
@@ -1080,10 +1088,21 @@ const Metrics = () => {
         });
         const json = await res.json();
         
-        const data = json?.data || {};
+        // API returns data as an array directly
+        const agents = json?.data || [];
+        
+        // Calculate current user rank if user is an ACQ agent
+        let currentUserRank;
+        if (user?.id) {
+          const userIndex = agents.findIndex((agent: any) => agent.userId === user.id);
+          if (userIndex !== -1) {
+            currentUserRank = userIndex + 1;
+          }
+        }
+        
         setAcqLeaderboardData({
-          agents: data.agents || [],
-          currentUserRank: data.currentUserRank || undefined
+          agents: agents,
+          currentUserRank: currentUserRank
         });
       } catch (e) {
         setAcqLeaderboardError('Failed to load acquisitions leaderboard');
@@ -1125,10 +1144,21 @@ const Metrics = () => {
         });
         const json = await res.json();
         
-        const data = json?.data || {};
+        // API returns data as an array directly
+        const agents = json?.data || [];
+        
+        // Calculate current user rank if user is a DISP agent
+        let currentUserRank;
+        if (user?.id) {
+          const userIndex = agents.findIndex((agent: any) => agent.userId === user.id);
+          if (userIndex !== -1) {
+            currentUserRank = userIndex + 1;
+          }
+        }
+        
         setDispLeaderboardData({
-          agents: data.agents || [],
-          currentUserRank: data.currentUserRank || undefined
+          agents: agents,
+          currentUserRank: currentUserRank
         });
       } catch (e) {
         setDispLeaderboardError('Failed to load dispositions leaderboard');
@@ -1166,7 +1196,7 @@ const Metrics = () => {
       }
     };
     load();
-  }, [activeTab, showFilters, customDateRange, selectedSources]);
+  }, [activeTab, showFilters, customDateRange, selectedSource]);
 
   // Fetch Team pipelines on tab switch
   useEffect(() => {
@@ -1306,7 +1336,7 @@ const Metrics = () => {
   ];
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Metrics</h1>
         
@@ -1319,9 +1349,9 @@ const Metrics = () => {
           <Filter className="w-4 h-4" />
           Filters
           <ChevronDown className={`w-4 h-4 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
-          {(selectedSources.length > 0 || selectedPeriod !== 'This Month') && (
+          {(selectedSource !== 'all' || selectedPeriod !== 'This Month') && (
             <Badge variant="secondary" className="ml-1">
-              {selectedSources.length + (selectedPeriod !== 'This Month' ? 1 : 0)}
+              {(selectedSource !== 'all' ? 1 : 0) + (selectedPeriod !== 'This Month' ? 1 : 0)}
             </Badge>
           )}
         </Button>
@@ -1331,26 +1361,6 @@ const Metrics = () => {
       {showFilters && (
         <Card className="p-6 border-2 border-blue-100 bg-blue-50/30">
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold flex items-center gap-2">
-                <Filter className="w-5 h-5" />
-                Global Filters
-              </h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setSelectedPeriod('This Month');
-                  setCustomDateRange({});
-                  setSelectedSources([]);
-                }}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <X className="w-4 h-4 mr-1" />
-                Clear All
-              </Button>
-            </div>
-
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {/* Date Filters */}
               <div className="space-y-3">
@@ -1407,86 +1417,57 @@ const Metrics = () => {
                   <Target className="w-4 h-4" />
                   Lead Sources
                 </h4>
-                <div className="space-y-2 max-h-40 overflow-y-auto">
-                  {availableSources.map((source) => (
-                    <div key={source} className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        id={`source-${source}`}
-                        checked={selectedSources.includes(source)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedSources(prev => [...prev, source]);
-                          } else {
-                            setSelectedSources(prev => prev.filter(s => s !== source));
-                          }
-                        }}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <Label
-                        htmlFor={`source-${source}`}
-                        className="text-sm text-gray-700 cursor-pointer"
-                      >
+                <Select value={selectedSource} onValueChange={setSelectedSource}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select source" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Sources</SelectItem>
+                    {availableSources.map((source) => (
+                      <SelectItem key={source} value={source}>
                         {source}
-                      </Label>
-                    </div>
-                  ))}
-                </div>
-                {selectedSources.length > 0 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setSelectedSources([])}
-                    className="text-gray-500 hover:text-gray-700 text-xs"
-                  >
-                    Clear Sources
-                  </Button>
-                )}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
-              {/* Role-based Scope Info */}
+              {/* Clear All Button */}
               <div className="space-y-3">
-                <h4 className="font-medium text-gray-700 flex items-center gap-2">
-                  <Users className="w-4 h-4" />
-                  Access Scope
-                </h4>
-                <div className="p-3 bg-gray-50 rounded-md border">
-                  <div className="text-sm text-gray-600">
-                    <div className="font-medium text-gray-700 mb-1">Current Role: {user?.roles?.[0] || 'Unknown'}</div>
-                    {isAdmin || isExecutive || isManager ? (
-                      <div className="text-green-600">✓ Full company access</div>
-                    ) : isACQ ? (
-                      <div className="text-blue-600">• Acquisitions scope</div>
-                    ) : isDisp ? (
-                      <div className="text-purple-600">• Dispositions scope</div>
-                    ) : isTC ? (
-                      <div className="text-orange-600">• Transaction coordination scope</div>
-                    ) : (
-                      <div className="text-gray-600">• Limited access</div>
-                    )}
-                  </div>
-                </div>
-                
-                {/* Active Filters Summary */}
-                {(selectedSources.length > 0 || selectedPeriod !== 'This Month') && (
-                  <div className="mt-3">
-                    <div className="text-sm font-medium text-gray-700 mb-2">Active Filters:</div>
-                    <div className="flex flex-wrap gap-1">
-                      {selectedPeriod !== 'This Month' && (
-                        <Badge variant="secondary" className="text-xs">
-                          {selectedPeriod}
-                        </Badge>
-                      )}
-                      {selectedSources.map((source) => (
-                        <Badge key={source} variant="secondary" className="text-xs">
-                          {source}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                <h4 className="font-medium text-gray-700 opacity-0">Spacer</h4>
+                <Button
+                  variant="default"
+                  onClick={() => {
+                    setSelectedPeriod('This Month');
+                    setCustomDateRange({});
+                    setSelectedSource('all');
+                  }}
+                  className="h-10 px-4 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-md hover:shadow-lg transition-all duration-200"
+                >
+                  <X className="w-4 h-4 mr-2" />
+                  Clear All Filters
+                </Button>
               </div>
             </div>
+            
+            {/* Active Filters Summary */}
+            {(selectedSource !== 'all' || selectedPeriod !== 'This Month') && (
+              <div className="mt-4 pt-4 border-t">
+                <div className="text-sm font-medium text-gray-700 mb-2">Active Filters:</div>
+                <div className="flex flex-wrap gap-2">
+                  {selectedPeriod !== 'This Month' && (
+                    <Badge variant="secondary" className="text-xs">
+                      {selectedPeriod}
+                    </Badge>
+                  )}
+                  {selectedSource !== 'all' && (
+                    <Badge variant="secondary" className="text-xs">
+                      Source: {selectedSource}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </Card>
       )}
@@ -3616,15 +3597,15 @@ const Metrics = () => {
                           </thead>
                           <tbody className="bg-white divide-y divide-gray-200">
                             {acqLeaderboardData.agents.map((agent, index) => (
-                              <tr key={agent.id} className={`hover:bg-gray-50 ${
-                                user?.id === agent.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''
+                              <tr key={agent.userId} className={`hover:bg-gray-50 ${
+                                user?.id === agent.userId ? 'bg-blue-50 border-l-4 border-blue-500' : ''
                               }`}>
                                 <td className="px-6 py-4 whitespace-nowrap">
                                   <div className="flex items-center">
-                                    {agent.rank === 1 && <span className="text-2xl mr-2">🥇</span>}
-                                    {agent.rank === 2 && <span className="text-2xl mr-2">🥈</span>}
-                                    {agent.rank === 3 && <span className="text-2xl mr-2">🥉</span>}
-                                    <span className="text-lg font-bold text-gray-900">#{agent.rank}</span>
+                                    {index === 0 && <span className="text-2xl mr-2">🥇</span>}
+                                    {index === 1 && <span className="text-2xl mr-2">🥈</span>}
+                                    {index === 2 && <span className="text-2xl mr-2">🥉</span>}
+                                    <span className="text-lg font-bold text-gray-900">#{index + 1}</span>
                                   </div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
@@ -3639,18 +3620,18 @@ const Metrics = () => {
                                   </div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-lg font-bold text-blue-600">{agent.score.toFixed(1)}</div>
+                                  <div className="text-lg font-bold text-blue-600">{agent.totalScore || 0}</div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-lg font-semibold text-green-600">{agent.contractsSigned}</div>
+                                  <div className="text-lg font-semibold text-green-600">{agent.contractsSigned || 0}</div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-center">
                                   <div className="text-lg font-semibold text-orange-600">
-                                    ${new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(agent.projectedProfit)}
+                                    ${new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(agent.projectedProfit || 0)}
                                   </div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-lg font-semibold text-purple-600">{agent.leadsPerContract.toFixed(1)}</div>
+                                  <div className="text-lg font-semibold text-purple-600">{(agent.leadsPerContract || 0).toFixed(1)}</div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-center">
                                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -3685,19 +3666,19 @@ const Metrics = () => {
                             <tr>
                               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
                               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Agent</th>
-                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Comm Score</th>
+                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Total Comms</th>
                               <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Calls</th>
                               <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">SMS</th>
                               <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Emails</th>
-                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Total Time</th>
+                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Response Rate</th>
                             </tr>
                           </thead>
                           <tbody className="bg-white divide-y divide-gray-200">
                             {[...acqLeaderboardData.agents]
-                              .sort((a, b) => b.communications.totalScore - a.communications.totalScore)
+                              .sort((a, b) => (b.communications.total || 0) - (a.communications.total || 0))
                               .map((agent, index) => (
-                              <tr key={`comm-${agent.id}`} className={`hover:bg-gray-50 ${
-                                user?.id === agent.id ? 'bg-green-50 border-l-4 border-green-500' : ''
+                              <tr key={`comm-${agent.userId}`} className={`hover:bg-gray-50 ${
+                                user?.id === agent.userId ? 'bg-green-50 border-l-4 border-green-500' : ''
                               }`}>
                                 <td className="px-6 py-4 whitespace-nowrap">
                                   <div className="flex items-center">
@@ -3718,35 +3699,20 @@ const Metrics = () => {
                                   </div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-lg font-bold text-green-600">{agent.communications.totalScore.toFixed(1)}</div>
+                                  <div className="text-lg font-bold text-green-600">{agent.communications.total || 0}</div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-sm text-gray-900">
-                                    <div>{agent.communications.calls.made + agent.communications.calls.received}</div>
-                                    <div className="text-xs text-gray-500">
-                                      {agent.communications.calls.made}↗ {agent.communications.calls.received}↙
-                                    </div>
-                                  </div>
+                                  <div className="text-sm text-gray-900">{agent.communications.calls || 0}</div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-sm text-gray-900">
-                                    <div>{agent.communications.sms.sent + agent.communications.sms.received}</div>
-                                    <div className="text-xs text-gray-500">
-                                      {agent.communications.sms.sent}↗ {agent.communications.sms.received}↙
-                                    </div>
-                                  </div>
+                                  <div className="text-sm text-gray-900">{agent.communications.sms || 0}</div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-sm text-gray-900">
-                                    <div>{agent.communications.emails.sent + agent.communications.emails.received}</div>
-                                    <div className="text-xs text-gray-500">
-                                      {agent.communications.emails.sent}↗ {agent.communications.emails.received}↙
-                                    </div>
-                                  </div>
+                                  <div className="text-sm text-gray-900">{agent.communications.emails || 0}</div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-center">
                                   <div className="text-sm font-semibold text-blue-600">
-                                    {Math.round(agent.communications.calls.totalTime / 60)}m
+                                    {agent.communications.responseRate || 0}%
                                   </div>
                                 </td>
                               </tr>
@@ -3863,15 +3829,15 @@ const Metrics = () => {
                           </thead>
                           <tbody className="bg-white divide-y divide-gray-200">
                             {dispLeaderboardData.agents.map((agent, index) => (
-                              <tr key={agent.id} className={`hover:bg-gray-50 ${
-                                user?.id === agent.id ? 'bg-purple-50 border-l-4 border-purple-500' : ''
+                              <tr key={agent.userId} className={`hover:bg-gray-50 ${
+                                user?.id === agent.userId ? 'bg-purple-50 border-l-4 border-purple-500' : ''
                               }`}>
                                 <td className="px-6 py-4 whitespace-nowrap">
                                   <div className="flex items-center">
-                                    {agent.rank === 1 && <span className="text-2xl mr-2">🥇</span>}
-                                    {agent.rank === 2 && <span className="text-2xl mr-2">🥈</span>}
-                                    {agent.rank === 3 && <span className="text-2xl mr-2">🥉</span>}
-                                    <span className="text-lg font-bold text-gray-900">#{agent.rank}</span>
+                                    {index === 0 && <span className="text-2xl mr-2">🥇</span>}
+                                    {index === 1 && <span className="text-2xl mr-2">🥈</span>}
+                                    {index === 2 && <span className="text-2xl mr-2">🥉</span>}
+                                    <span className="text-lg font-bold text-gray-900">#{index + 1}</span>
                                   </div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
@@ -3886,18 +3852,18 @@ const Metrics = () => {
                                   </div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-lg font-bold text-purple-600">{agent.score.toFixed(1)}</div>
+                                  <div className="text-lg font-bold text-purple-600">{agent.totalScore || 0}</div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-lg font-semibold text-green-600">{agent.propertiesSold}</div>
+                                  <div className="text-lg font-semibold text-green-600">{agent.propertiesSold || 0}</div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-center">
                                   <div className="text-lg font-semibold text-orange-600">
-                                    ${new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(agent.projectedProfit)}
+                                    ${new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(agent.projectedProfit || 0)}
                                   </div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-lg font-semibold text-blue-600">{agent.buyersAdded}</div>
+                                  <div className="text-lg font-semibold text-blue-600">{agent.buyersAdded || 0}</div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-center">
                                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -3932,19 +3898,19 @@ const Metrics = () => {
                             <tr>
                               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
                               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Agent</th>
-                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Comm Score</th>
+                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Total Comms</th>
                               <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Calls</th>
                               <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">SMS</th>
                               <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Emails</th>
-                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Total Time</th>
+                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Response Rate</th>
                             </tr>
                           </thead>
                           <tbody className="bg-white divide-y divide-gray-200">
                             {[...dispLeaderboardData.agents]
-                              .sort((a, b) => b.communications.totalScore - a.communications.totalScore)
+                              .sort((a, b) => (b.communications.total || 0) - (a.communications.total || 0))
                               .map((agent, index) => (
-                              <tr key={`comm-${agent.id}`} className={`hover:bg-gray-50 ${
-                                user?.id === agent.id ? 'bg-teal-50 border-l-4 border-teal-500' : ''
+                              <tr key={`comm-${agent.userId}`} className={`hover:bg-gray-50 ${
+                                user?.id === agent.userId ? 'bg-teal-50 border-l-4 border-teal-500' : ''
                               }`}>
                                 <td className="px-6 py-4 whitespace-nowrap">
                                   <div className="flex items-center">
@@ -3965,35 +3931,20 @@ const Metrics = () => {
                                   </div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-lg font-bold text-teal-600">{agent.communications.totalScore.toFixed(1)}</div>
+                                  <div className="text-lg font-bold text-teal-600">{agent.communications.total || 0}</div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-sm text-gray-900">
-                                    <div>{agent.communications.calls.made + agent.communications.calls.received}</div>
-                                    <div className="text-xs text-gray-500">
-                                      {agent.communications.calls.made}↗ {agent.communications.calls.received}↙
-                                    </div>
-                                  </div>
+                                  <div className="text-sm text-gray-900">{agent.communications.calls || 0}</div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-sm text-gray-900">
-                                    <div>{agent.communications.sms.sent + agent.communications.sms.received}</div>
-                                    <div className="text-xs text-gray-500">
-                                      {agent.communications.sms.sent}↗ {agent.communications.sms.received}↙
-                                    </div>
-                                  </div>
+                                  <div className="text-sm text-gray-900">{agent.communications.sms || 0}</div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-sm text-gray-900">
-                                    <div>{agent.communications.emails.sent + agent.communications.emails.received}</div>
-                                    <div className="text-xs text-gray-500">
-                                      {agent.communications.emails.sent}↗ {agent.communications.emails.received}↙
-                                    </div>
-                                  </div>
+                                  <div className="text-sm text-gray-900">{agent.communications.emails || 0}</div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-center">
                                   <div className="text-sm font-semibold text-blue-600">
-                                    {Math.round(agent.communications.calls.totalTime / 60)}m
+                                    {agent.communications.responseRate || 0}%
                                   </div>
                                 </td>
                               </tr>

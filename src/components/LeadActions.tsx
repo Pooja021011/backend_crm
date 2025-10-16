@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -25,7 +26,6 @@ import {
   Phone,
   MessageSquare
 } from "lucide-react";
-import { EditLeadDialog } from "./EditLeadDialog";
 import { SendEmailDialog } from "./SendEmailDialog";
 import { useLeads } from "@/hooks/useLeads";
 import { useToast } from "@/hooks/use-toast";
@@ -37,7 +37,7 @@ interface LeadActionsProps {
 }
 
 export const LeadActions: React.FC<LeadActionsProps> = ({ lead, onLeadUpdated }) => {
-  const [showEditDialog, setShowEditDialog] = useState(false);
+  const navigate = useNavigate();
   const [showEmailDialog, setShowEmailDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const { deleteLead } = useLeads();
@@ -100,7 +100,7 @@ export const LeadActions: React.FC<LeadActionsProps> = ({ lead, onLeadUpdated })
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
-          <DropdownMenuItem onClick={() => setShowEditDialog(true)}>
+          <DropdownMenuItem onClick={() => navigate(`/leads/${lead.id}/edit`)}>
             <Edit className="w-4 h-4 mr-2" />
             Edit Lead
           </DropdownMenuItem>
@@ -137,17 +137,6 @@ export const LeadActions: React.FC<LeadActionsProps> = ({ lead, onLeadUpdated })
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-
-      {/* Edit Lead Dialog */}
-      <EditLeadDialog 
-        lead={lead}
-        open={showEditDialog}
-        onOpenChange={setShowEditDialog}
-        onLeadUpdated={() => {
-          onLeadUpdated?.();
-          setShowEditDialog(false);
-        }}
-      />
 
       {/* Send Email Dialog */}
       <SendEmailDialog 

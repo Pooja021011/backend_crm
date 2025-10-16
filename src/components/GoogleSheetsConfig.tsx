@@ -279,7 +279,7 @@ export const GoogleSheetsConfig = () => {
       )}
 
       {/* Configuration Card */}
-      <Card>
+      <Card className="border-0 shadow-none">
         <CardHeader>
           <CardTitle>Configuration</CardTitle>
           <CardDescription>

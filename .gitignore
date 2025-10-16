@@ -25,3 +25,5 @@ dist-ssr
 .env
 CRMOUTLINE-RealEstate_93869 (2).pdf
 LeadPage_93868.docx.pdf
+
+*.md

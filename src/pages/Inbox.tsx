@@ -53,7 +53,6 @@ import {
   Reply,
   Bell,
   ChevronDown,
-  MoreHorizontal,
   Trash2,
   RefreshCw,
   Paperclip,
@@ -311,7 +310,7 @@ const Inbox = () => {
       console.log('📍 Lead address:', email.leadAddress);
       
       if (email.leadId) {
-        const navigationUrl = `/leads?leadId=${email.leadId}`;
+        const navigationUrl = `/leads/${email.leadId}/edit`;
         console.log('🔗 Navigation URL:', navigationUrl);
         console.log('🆔 Lead ID:', email.leadId);
         navigate(navigationUrl);
@@ -337,7 +336,7 @@ const Inbox = () => {
     // Handle communication clicks - navigate to lead details
     if (email.type === 'communication' && email.leadId) {
       console.log('💬 Navigating to communication lead ID:', email.leadId);
-      navigate(`/leads?leadId=${email.leadId}`);
+      navigate(`/leads/${email.leadId}/edit`);
       
       toast({
         title: "Lead Opened",
@@ -347,8 +346,12 @@ const Inbox = () => {
     }
     
     // Handle reminder clicks - navigate to lead details and mark as completed
-    if (email.type === 'reminder' && email.leadAddress) {
-      navigate(`/leads?address=${encodeURIComponent(email.leadAddress)}`);
+    if (email.type === 'reminder') {
+      if (email.leadId) {
+        navigate(`/leads/${email.leadId}/edit`);
+      } else if (email.leadAddress) {
+        navigate(`/leads?address=${encodeURIComponent(email.leadAddress)}`);
+      }
       
       // Mark reminder as completed (remove from list)
       setReminders(prevReminders => prevReminders.filter(reminder => reminder.id !== email.id));
@@ -361,8 +364,12 @@ const Inbox = () => {
     }
     
     // Handle notification clicks - navigate to lead details and mark as read
-    if (email.type === 'notification' && email.leadAddress) {
-      navigate(`/leads?address=${encodeURIComponent(email.leadAddress)}`);
+    if (email.type === 'notification') {
+      if (email.leadId) {
+        navigate(`/leads/${email.leadId}/edit`);
+      } else if (email.leadAddress) {
+        navigate(`/leads?address=${encodeURIComponent(email.leadAddress)}`);
+      }
       
       // Mark notification as read (remove from list)
       setNotifications(prevNotifications => prevNotifications.filter(notification => notification.id !== email.id));
@@ -1177,17 +1184,6 @@ const Inbox = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <h1 className="text-xl font-semibold text-gray-900">Inbox</h1>
-            <ChevronDown className="w-4 h-4 text-gray-500" />
-          </div>
-          
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" className="text-gray-600 hover:text-gray-900">
-              <Archive className="w-4 h-4" />
-            </Button>
-            <Button variant="ghost" size="sm" className="text-gray-600 hover:text-gray-900">
-              <MoreHorizontal className="w-4 h-4" />
-            </Button>
-            <div className="text-sm text-gray-600">Chris Harris</div>
             <ChevronDown className="w-4 h-4 text-gray-500" />
           </div>
         </div>

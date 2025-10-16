@@ -261,7 +261,7 @@ export const LeadDistributionSettings = () => {
       </div>
 
       {/* Distribution Method Selection */}
-      <Card>
+      <Card className="border-0 shadow-none">
         <CardHeader>
           <CardTitle>Distribution Method</CardTitle>
           <CardDescription>
@@ -295,7 +295,7 @@ export const LeadDistributionSettings = () => {
       </Card>
 
       {/* Agents List */}
-      <Card>
+      <Card className="border-0 shadow-none">
         <CardHeader>
           <CardTitle>Acquisitions Agents</CardTitle>
           <CardDescription>

@@ -1,4 +1,5 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -7,6 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -22,7 +24,8 @@ import {
   Clock,
   Users,
   Star,
-  FileText
+  FileText,
+  Edit2
 } from "lucide-react";
 import { safeDateFormat } from "@/utils/validation";
 import type { Lead } from "@/hooks/useLeads";
@@ -48,6 +51,7 @@ export const ViewLeadDialog: React.FC<ViewLeadDialogProps> = ({
   onOpenChange,
 }) => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   
   // Role-based access control
   const userRoles = user?.roles || [];
@@ -416,6 +420,17 @@ export const ViewLeadDialog: React.FC<ViewLeadDialogProps> = ({
                 </Badge>
               ) : null}
             </div>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => {
+                onOpenChange(false);
+                navigate(`/leads/${lead.id}/edit`);
+              }}
+            >
+              <Edit2 className="w-4 h-4 mr-2" />
+              Edit Lead
+            </Button>
           </div>
           <DialogDescription>
             View complete information for this lead

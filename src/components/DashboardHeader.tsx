@@ -292,8 +292,8 @@ export const DashboardHeader = () => {
 
   // Handle clicking on a search result
   const handleResultClick = (result: SearchResult) => {
-    // Navigate to leads page with leadId parameter
-    navigate(`/leads?leadId=${result.id}`);
+    // Navigate to lead edit page
+    navigate(`/leads/${result.id}/edit`);
     // Close dropdown and clear search
     setShowDropdown(false);
     setSearchQuery("");
@@ -302,7 +302,7 @@ export const DashboardHeader = () => {
 
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
-      <div className="container mx-auto px-6 py-2">
+      <div className="py-2" style={{ paddingLeft: '32px', paddingRight: '32px' }}>
         <div className="flex items-center justify-between gap-6">
           
           {/* Company Branding - Very Compact */}

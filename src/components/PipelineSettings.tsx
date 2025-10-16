@@ -533,7 +533,7 @@ export const PipelineSettings: React.FC<PipelineSettingsProps> = ({ userRoles })
   }
 
   return (
-    <Card>
+    <Card className="border-0 shadow-none">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Workflow className="h-5 w-5" />

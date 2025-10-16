@@ -1,0 +1,1540 @@
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import {
+  Home,
+  User,
+  Phone,
+  Mail,
+  MapPin,
+  Calendar,
+  Edit2,
+  Plus,
+  X,
+  Save,
+  ArrowLeft,
+  FileText,
+  MessageSquare,
+  CheckSquare,
+  Clock,
+  Upload,
+  Download,
+  Trash,
+  DollarSign,
+  Wrench
+} from 'lucide-react';
+import { API_BASE, makeApiCall } from '@/config/api';
+import { useToast } from '@/hooks/use-toast';
+import { DashboardLayout } from '@/components/DashboardLayout';
+
+interface Contact {
+  id?: string;
+  name: string;
+  phone: string;
+  email: string;
+}
+
+interface LeadData {
+  id: string;
+  address: {
+    address1: string;
+    city: string;
+    state: string;
+    zipCode: string;
+  };
+  seller: {
+    firstName: string;
+    lastName: string;
+  };
+  leadSource?: string;
+  leadStatus?: string;
+  pipelineStageId?: string;
+  assignedUserId?: string;
+  dispositionAgentId?: string;
+  contacts: Contact[];
+  propertyType?: string;
+  sqft?: number;
+  lotSize?: string;
+  bedrooms?: number;
+  bathrooms?: number;
+  yearBuilt?: number;
+  roofType?: string;
+  roofAge?: number;
+  hvacType?: string;
+  hvacAge?: number;
+  waterHeaterAge?: number;
+  waterType?: string;
+  sewerType?: string;
+}
+
+const LeadEdit: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  
+  const [lead, setLead] = useState<LeadData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState('acquisitions');
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [agents, setAgents] = useState<any[]>([]);
+  const [pipelineStages, setPipelineStages] = useState<any[]>([]);
+  const [leadSources, setLeadSources] = useState<any[]>([]);
+  const [leadStatuses, setLeadStatuses] = useState<any[]>([]);
+  
+  // Editable fields
+  const [leadSource, setLeadSource] = useState('');
+  const [leadStatus, setLeadStatus] = useState('');
+  const [pipelineStatus, setPipelineStatus] = useState('');
+  const [acquisitionsAgent, setAcquisitionsAgent] = useState('');
+  const [dispositionsAgent, setDispositionsAgent] = useState('');
+  
+  // Property info
+  const [propertyType, setPropertyType] = useState('');
+  const [sqft, setSqft] = useState('');
+  const [lotSize, setLotSize] = useState('');
+  const [bedrooms, setBedrooms] = useState('');
+  const [bathrooms, setBathrooms] = useState('');
+  const [yearBuilt, setYearBuilt] = useState('');
+  
+  // Additional property info
+  const [roofType, setRoofType] = useState('');
+  const [roofAge, setRoofAge] = useState('');
+  const [hvacType, setHvacType] = useState('');
+  const [hvacAge, setHvacAge] = useState('');
+  const [waterHeaterAge, setWaterHeaterAge] = useState('');
+  const [waterType, setWaterType] = useState('');
+  const [sewerType, setSewerType] = useState('');
+  
+  // Notes and communications
+  const [noteText, setNoteText] = useState('');
+  const [notes, setNotes] = useState<any[]>([]);
+  const [addingNote, setAddingNote] = useState(false);
+  
+  // Lead source specific data
+  const [leadSourceData, setLeadSourceData] = useState<any>({});
+  
+  // Rehab information
+  const [rehabBudget, setRehabBudget] = useState('');
+  const [rehabItems, setRehabItems] = useState<any[]>([]);
+  
+  // Comparables
+  const [comparables, setComparables] = useState<any[]>([]);
+  
+  // Underwriting scenarios
+  const [underwritingScenarios, setUnderwritingScenarios] = useState<any[]>([]);
+  
+  // Files
+  const [files, setFiles] = useState<any[]>([]);
+  const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    loadLead();
+    loadAgents();
+    loadPipelineStages();
+    loadLeadSources();
+    loadLeadStatuses();
+    loadNotes();
+    loadLeadSourceData();
+    loadComparables();
+    loadUnderwritingScenarios();
+    loadFiles();
+  }, [id]);
+
+  const loadLead = async () => {
+    try {
+      const response = await makeApiCall(`${API_BASE}/leads/${id}`);
+      if (response.ok) {
+        const data = await response.json();
+        const leadData = data.data;
+        setLead(leadData);
+        
+        // Set editable fields
+        setLeadSource(leadData.leadSource || '');
+        setLeadStatus(leadData.leadStatus || '');
+        setPipelineStatus(leadData.pipelineStageId || '');
+        setAcquisitionsAgent(leadData.assignedUserId || '');
+        setDispositionsAgent(leadData.dispositionAgentId || '');
+        
+        // Load property info from customFields
+        const customFields = leadData.customFields || {};
+        setPropertyType(customFields.propertyType || '');
+        setSqft(customFields.sqft?.toString() || '');
+        setLotSize(customFields.lotSize || '');
+        setBedrooms(customFields.bedrooms?.toString() || '');
+        setBathrooms(customFields.bathrooms?.toString() || '');
+        setYearBuilt(customFields.yearBuilt?.toString() || '');
+        
+        // Set additional property info from customFields
+        setRoofType(customFields.roofType || '');
+        setRoofAge(customFields.roofAge?.toString() || '');
+        setHvacType(customFields.hvacType || '');
+        setHvacAge(customFields.hvacAge?.toString() || '');
+        setWaterHeaterAge(customFields.waterHeaterAge?.toString() || '');
+        setWaterType(customFields.waterType || '');
+        setSewerType(customFields.sewerType || '');
+        
+        // Load contacts from lead
+        const initialContacts = [];
+        if (leadData.seller) {
+          initialContacts.push({
+            name: `${leadData.seller.firstName} ${leadData.seller.lastName}`,
+            phone: leadData.seller.phone || '',
+            email: leadData.seller.email || ''
+          });
+        }
+        if (leadData.buyer) {
+          initialContacts.push({
+            name: `${leadData.buyer.firstName} ${leadData.buyer.lastName}`,
+            phone: leadData.buyer.phone || '',
+            email: leadData.buyer.email || ''
+          });
+        }
+        if (leadData.vendor) {
+          initialContacts.push({
+            name: `${leadData.vendor.firstName} ${leadData.vendor.lastName}`,
+            phone: leadData.vendor.phone || '',
+            email: leadData.vendor.email || ''
+          });
+        }
+        if (initialContacts.length === 0) {
+          initialContacts.push({ name: '', phone: '', email: '' });
+        }
+        setContacts(initialContacts);
+      }
+    } catch (error) {
+      console.error('Error loading lead:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load lead details',
+        variant: 'destructive'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadAgents = async () => {
+    try {
+      const response = await makeApiCall(`${API_BASE}/agents`);
+      if (response.ok) {
+        const data = await response.json();
+        setAgents(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error loading agents:', error);
+    }
+  };
+
+  const loadPipelineStages = async () => {
+    try {
+      const response = await makeApiCall(`${API_BASE}/pipeline/ACQUISITIONS/stages`);
+      if (response.ok) {
+        const data = await response.json();
+        setPipelineStages(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error loading pipeline stages:', error);
+    }
+  };
+
+  const loadLeadSources = async () => {
+    try {
+      const response = await makeApiCall(`${API_BASE}/leads/sources`);
+      if (response.ok) {
+        const data = await response.json();
+        setLeadSources(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error loading lead sources:', error);
+      // Fallback to default sources
+      setLeadSources([
+        { id: 'cold-call', name: 'Cold Call' },
+        { id: 'sms', name: 'SMS' },
+        { id: 'mailer', name: 'Mailer' },
+        { id: 'online', name: 'Online' },
+        { id: 'other', name: 'Other' }
+      ]);
+    }
+  };
+
+  const loadLeadStatuses = async () => {
+    try {
+      const response = await makeApiCall(`${API_BASE}/lead-statuses`);
+      if (response.ok) {
+        const data = await response.json();
+        setLeadStatuses(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error loading lead statuses:', error);
+      // Fallback to default statuses
+      setLeadStatuses([
+        { id: 'pipeline', name: 'Pipeline' },
+        { id: 'follow-up', name: 'Follow Up' },
+        { id: 'closed', name: 'Closed' },
+        { id: 'dead', name: 'Dead' },
+        { id: 'wrong-number', name: 'Wrong Number' }
+      ]);
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      // Prepare property details for customFields
+      const propertyDetails = {
+        propertyType: propertyType || null,
+        sqft: sqft ? parseInt(sqft) : null,
+        lotSize: lotSize || null,
+        bedrooms: bedrooms ? parseInt(bedrooms) : null,
+        bathrooms: bathrooms ? parseFloat(bathrooms) : null,
+        yearBuilt: yearBuilt ? parseInt(yearBuilt) : null,
+        roofType: roofType || null,
+        roofAge: roofAge ? parseInt(roofAge) : null,
+        hvacType: hvacType || null,
+        hvacAge: hvacAge ? parseInt(hvacAge) : null,
+        waterHeaterAge: waterHeaterAge ? parseInt(waterHeaterAge) : null,
+        waterType: waterType || null,
+        sewerType: sewerType || null
+      };
+
+      // Prepare lead updates - store property details in customFields
+      const updates: any = {
+        customFields: propertyDetails
+      };
+
+      // Only add these fields if they have values
+      if (pipelineStatus) updates.pipelineStageId = pipelineStatus;
+      if (acquisitionsAgent && acquisitionsAgent !== 'unassigned') updates.assignedUserId = acquisitionsAgent;
+      if (dispositionsAgent && dispositionsAgent !== 'unassigned') updates.dispositionAgentId = dispositionsAgent;
+      
+      // Handle lead status - check if it's an ID or name
+      if (leadStatus) {
+        const status = leadStatuses.find(s => s.id === leadStatus || s.name === leadStatus);
+        if (status) {
+          updates.leadStatusId = status.id;
+        }
+      }
+
+      const response = await makeApiCall(`${API_BASE}/leads/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+
+      if (response.ok) {
+        // Save contacts if they've been modified
+        await saveContacts();
+        
+        toast({
+          title: 'Success',
+          description: 'Lead updated successfully'
+        });
+        loadLead();
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to update lead');
+      }
+    } catch (error: any) {
+      console.error('Error saving lead:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to update lead',
+        variant: 'destructive'
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveContacts = async () => {
+    // This would need a proper API endpoint to save contacts
+    // For now, we'll log it
+    console.log('Contacts to save:', contacts);
+    // TODO: Implement contact save API call when endpoint is available
+  };
+
+  const loadNotes = async () => {
+    try {
+      const response = await makeApiCall(`${API_BASE}/leads/${id}/communications`);
+      if (response.ok) {
+        const data = await response.json();
+        // Filter for notes only (type: 'NOTE')
+        const communications = data.data || [];
+        const notesList = communications
+          .filter((c: any) => c.type === 'NOTE')
+          .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setNotes(notesList);
+      }
+    } catch (error) {
+      console.error('Error loading notes:', error);
+    }
+  };
+
+  const handleAddNote = async () => {
+    if (!noteText.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Please enter a note',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setAddingNote(true);
+    try {
+      const response = await makeApiCall(`${API_BASE}/leads/${id}/communications`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          type: 'NOTE',
+          direction: 'OUTBOUND',
+          body: noteText.trim(),
+          occurredAt: new Date().toISOString()
+        })
+      });
+
+      if (response.ok) {
+        toast({
+          title: 'Success',
+          description: 'Note added successfully'
+        });
+        setNoteText('');
+        loadNotes(); // Reload notes
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to add note');
+      }
+    } catch (error: any) {
+      console.error('Error adding note:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to add note',
+        variant: 'destructive'
+      });
+    } finally {
+      setAddingNote(false);
+    }
+  };
+
+  const addContact = () => {
+    setContacts([...contacts, { name: '', phone: '', email: '' }]);
+  };
+
+  const removeContact = (index: number) => {
+    setContacts(contacts.filter((_, i) => i !== index));
+  };
+
+  const updateContact = (index: number, field: string, value: string) => {
+    const updated = [...contacts];
+    updated[index] = { ...updated[index], [field]: value };
+    setContacts(updated);
+  };
+
+  const formatDate = (date: string) => {
+    const now = new Date();
+    const noteDate = new Date(date);
+    const diff = now.getTime() - noteDate.getTime();
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+
+    if (minutes < 1) return 'Just now';
+    if (minutes < 60) return `${minutes}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    if (days < 7) return `${days}d ago`;
+    return noteDate.toLocaleDateString();
+  };
+
+  const loadLeadSourceData = async () => {
+    try {
+      // Load lead source specific data from customFields
+      if (lead?.customFields) {
+        setLeadSourceData(lead.customFields.leadSourceData || {});
+        setRehabItems(lead.customFields.rehabItems || []);
+        setRehabBudget(lead.customFields.rehabBudget || '');
+      }
+    } catch (error) {
+      console.error('Error loading lead source data:', error);
+    }
+  };
+
+  const loadComparables = async () => {
+    try {
+      const response = await makeApiCall(`${API_BASE}/leads/${id}/comparables`);
+      if (response.ok) {
+        const data = await response.json();
+        setComparables(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error loading comparables:', error);
+    }
+  };
+
+  const loadUnderwritingScenarios = async () => {
+    try {
+      const response = await makeApiCall(`${API_BASE}/underwriting/scenarios?leadId=${id}`);
+      if (response.ok) {
+        const data = await response.json();
+        setUnderwritingScenarios(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error loading underwriting scenarios:', error);
+    }
+  };
+
+  const loadFiles = async () => {
+    try {
+      const response = await makeApiCall(`${API_BASE}/leads/${id}/files`);
+      if (response.ok) {
+        const data = await response.json();
+        setFiles(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error loading files:', error);
+    }
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await makeApiCall(`${API_BASE}/leads/${id}/files`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (response.ok) {
+        toast({
+          title: 'Success',
+          description: 'File uploaded successfully'
+        });
+        loadFiles();
+      } else {
+        throw new Error('Failed to upload file');
+      }
+    } catch (error: any) {
+      console.error('Error uploading file:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to upload file',
+        variant: 'destructive'
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-lg">Loading lead details...</div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!lead) {
+    return (
+      <DashboardLayout>
+        <div className="text-center py-12">
+          <p className="text-lg text-gray-600">Lead not found</p>
+          <Button onClick={() => navigate('/leads')} className="mt-4">
+            Back to Leads
+          </Button>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  return (
+    <DashboardLayout>
+      <div className="space-y-4">
+        {/* Header with Back Button and Save */}
+        <div className="flex items-center justify-between">
+          <Button variant="outline" onClick={() => navigate('/leads')}>
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Leads
+          </Button>
+          <Button onClick={handleSave} disabled={saving}>
+            <Save className="w-4 h-4 mr-2" />
+            {saving ? 'Saving...' : 'Save Changes'}
+          </Button>
+        </div>
+
+        {/* Top Section - Address and Owner Name */}
+        <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+          <CardContent className="p-6">
+            <div className="grid grid-cols-2 gap-6">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Home className="w-5 h-5 text-blue-600" />
+                  <Label className="text-lg font-semibold text-gray-700">Property Address</Label>
+                </div>
+                <p className="text-2xl font-bold text-gray-900">
+                  {lead.address?.address1 || 'No Address'}
+                </p>
+                <p className="text-gray-600">
+                  {lead.address?.city && lead.address?.state 
+                    ? `${lead.address.city}, ${lead.address.state} ${lead.address.zipCode || ''}`
+                    : 'Address not available'}
+                </p>
+              </div>
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <User className="w-5 h-5 text-blue-600" />
+                  <Label className="text-lg font-semibold text-gray-700">Owner Name</Label>
+                </div>
+                <p className="text-2xl font-bold text-gray-900">
+                  {lead.seller?.firstName && lead.seller?.lastName
+                    ? `${lead.seller.firstName} ${lead.seller.lastName}`
+                    : lead.buyer?.firstName && lead.buyer?.lastName
+                    ? `${lead.buyer.firstName} ${lead.buyer.lastName}`
+                    : lead.vendor?.firstName && lead.vendor?.lastName
+                    ? `${lead.vendor.firstName} ${lead.vendor.lastName}`
+                    : 'No Owner'}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Main Information Row */}
+        <Card className="border-0 shadow-sm">
+          <CardContent className="p-6">
+            <div className="grid grid-cols-5 gap-4">
+              {/* Lead Source */}
+              <div>
+                <Label className="text-sm font-medium mb-2">Lead Source</Label>
+                <Select value={leadSource} onValueChange={setLeadSource}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select source" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {leadSources.length > 0 ? (
+                      leadSources.map((source) => (
+                        <SelectItem key={source.id} value={source.name}>
+                          {source.name}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <>
+                        <SelectItem value="Cold Call">Cold Call</SelectItem>
+                        <SelectItem value="SMS">SMS</SelectItem>
+                        <SelectItem value="Mailer">Mailer</SelectItem>
+                        <SelectItem value="Online">Online</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Lead Status */}
+              <div>
+                <Label className="text-sm font-medium mb-2">Lead Status</Label>
+                <Select value={leadStatus} onValueChange={setLeadStatus}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {leadStatuses.length > 0 ? (
+                      leadStatuses.map((status) => (
+                        <SelectItem key={status.id} value={status.id}>
+                          {status.name}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <>
+                        <SelectItem value="Pipeline">Pipeline</SelectItem>
+                        <SelectItem value="Follow Up">Follow Up</SelectItem>
+                        <SelectItem value="Closed">Closed</SelectItem>
+                        <SelectItem value="Dead">Dead</SelectItem>
+                        <SelectItem value="Wrong Number">Wrong Number</SelectItem>
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Pipeline Status */}
+              <div>
+                <Label className="text-sm font-medium mb-2">Pipeline Status</Label>
+                <Select value={pipelineStatus} onValueChange={setPipelineStatus}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select stage" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pipelineStages.map((stage) => (
+                      <SelectItem key={stage.id} value={stage.id}>
+                        {stage.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Acquisitions Agent */}
+              <div>
+                <Label className="text-sm font-medium mb-2">Acquisitions Agent</Label>
+                <Select value={acquisitionsAgent || 'unassigned'} onValueChange={(value) => setAcquisitionsAgent(value === 'unassigned' ? '' : value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select agent" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unassigned">None</SelectItem>
+                    {agents.filter(a => a.roles?.includes('ACQ')).map((agent) => (
+                      <SelectItem key={agent.id} value={agent.id}>
+                        {agent.firstName} {agent.lastName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Dispositions Agent */}
+              <div>
+                <Label className="text-sm font-medium mb-2">Dispositions Agent</Label>
+                <Select value={dispositionsAgent || 'unassigned'} onValueChange={(value) => setDispositionsAgent(value === 'unassigned' ? '' : value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select agent" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unassigned">None</SelectItem>
+                    {agents.filter(a => a.roles?.includes('DISP')).map((agent) => (
+                      <SelectItem key={agent.id} value={agent.id}>
+                        {agent.firstName} {agent.lastName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Contact Information */}
+        <Card className="border-0 shadow-sm">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <User className="w-5 h-5" />
+                Owner Contact Information
+              </CardTitle>
+              <Button size="sm" onClick={addContact}>
+                <Plus className="w-4 h-4 mr-2" />
+                Add Contact
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {contacts.map((contact, index) => (
+              <div key={index} className="flex items-start gap-4 p-4 border rounded-lg">
+                <div className="flex-1 grid grid-cols-3 gap-4">
+                  <div>
+                    <Label className="text-sm mb-2">Name</Label>
+                    <Input
+                      value={contact.name}
+                      onChange={(e) => updateContact(index, 'name', e.target.value)}
+                      placeholder="Contact name"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-sm mb-2 flex items-center gap-2">
+                      Phone
+                      {contact.phone && (
+                        <a 
+                          href={`tel:${contact.phone.replace(/\D/g, '')}`}
+                          className="text-blue-600 hover:text-blue-800 text-xs"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          (click to call)
+                        </a>
+                      )}
+                    </Label>
+                    <Input
+                      value={contact.phone}
+                      onChange={(e) => updateContact(index, 'phone', e.target.value)}
+                      placeholder="Phone number"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-sm mb-2 flex items-center gap-2">
+                      Email
+                      {contact.email && (
+                        <a 
+                          href={`mailto:${contact.email}`}
+                          className="text-blue-600 hover:text-blue-800 text-xs"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          (click to email)
+                        </a>
+                      )}
+                    </Label>
+                    <Input
+                      value={contact.email}
+                      onChange={(e) => updateContact(index, 'email', e.target.value)}
+                      placeholder="Email address"
+                      type="email"
+                    />
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => removeContact(index)}
+                  className="mt-6"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        {/* Property Information */}
+        <Card className="border-0 shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Home className="w-5 h-5" />
+              Property Information
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 gap-4 mb-4">
+              <div>
+                <Label className="text-sm mb-2">Property Type</Label>
+                <Select value={propertyType} onValueChange={setPropertyType}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Single Family">Single Family</SelectItem>
+                    <SelectItem value="Multi Family">Multi Family</SelectItem>
+                    <SelectItem value="Land">Land</SelectItem>
+                    <SelectItem value="Commercial">Commercial</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-sm mb-2">SqFt</Label>
+                <Input
+                  type="number"
+                  value={sqft}
+                  onChange={(e) => setSqft(e.target.value)}
+                  placeholder="Square feet"
+                />
+              </div>
+              <div>
+                <Label className="text-sm mb-2">Lot Size</Label>
+                <Input
+                  value={lotSize}
+                  onChange={(e) => setLotSize(e.target.value)}
+                  placeholder="e.g., 0.25 acres"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <Label className="text-sm mb-2">Bedrooms</Label>
+                <Input
+                  type="number"
+                  value={bedrooms}
+                  onChange={(e) => setBedrooms(e.target.value)}
+                  placeholder="Number of bedrooms"
+                />
+              </div>
+              <div>
+                <Label className="text-sm mb-2">Bathrooms</Label>
+                <Input
+                  type="number"
+                  step="0.5"
+                  value={bathrooms}
+                  onChange={(e) => setBathrooms(e.target.value)}
+                  placeholder="Number of bathrooms"
+                />
+              </div>
+              <div>
+                <Label className="text-sm mb-2">Year Built</Label>
+                <Input
+                  type="number"
+                  value={yearBuilt}
+                  onChange={(e) => setYearBuilt(e.target.value)}
+                  placeholder="Year built"
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Tabs Section */}
+        <div className="grid grid-cols-12 gap-4">
+          {/* Left side - Tabs (8 columns) */}
+          <div className="col-span-8">
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="acquisitions">Acquisitions</TabsTrigger>
+                <TabsTrigger value="transactions">Transactions</TabsTrigger>
+                <TabsTrigger value="dispositions">Dispositions</TabsTrigger>
+                <TabsTrigger value="files">Files</TabsTrigger>
+              </TabsList>
+
+              {/* Acquisitions Tab */}
+              <TabsContent value="acquisitions" className="space-y-4">
+                {/* Lead Creation Section */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Lead Creation</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-sm font-medium mb-2">Lead Source</Label>
+                          <Badge variant="outline" className="text-sm">{leadSource || 'Not specified'}</Badge>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium mb-2">Created Date</Label>
+                          <p className="text-sm text-gray-700">{lead?.createdAt ? new Date(lead.createdAt).toLocaleDateString() : 'N/A'}</p>
+                        </div>
+                      </div>
+
+                      {leadSource === 'Cold Call' && (
+                        <div className="space-y-3 p-4 bg-gray-50 rounded-lg">
+                          <h4 className="font-semibold text-sm">Cold Call Details</h4>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <Label className="text-xs text-gray-600">Condition</Label>
+                              <p className="text-sm">{leadSourceData.condition || 'Not specified'}</p>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-gray-600">Motivation</Label>
+                              <p className="text-sm">{leadSourceData.motivation || 'Not specified'}</p>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-gray-600">Timeline</Label>
+                              <p className="text-sm">{leadSourceData.timeline || 'Not specified'}</p>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-gray-600">Asking Price</Label>
+                              <p className="text-sm">{leadSourceData.askingPrice ? `$${parseInt(leadSourceData.askingPrice).toLocaleString()}` : 'Not specified'}</p>
+                            </div>
+                          </div>
+                          {leadSourceData.callRecording && (
+                            <div>
+                              <Label className="text-xs text-gray-600">Call Recording</Label>
+                              <a href={leadSourceData.callRecording} className="text-blue-600 hover:underline text-sm" target="_blank" rel="noopener noreferrer">
+                                Listen to recording
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {leadSource === 'SMS' && (
+                        <div className="space-y-3 p-4 bg-gray-50 rounded-lg">
+                          <h4 className="font-semibold text-sm">SMS Conversation</h4>
+                          {leadSourceData.smsMessages && leadSourceData.smsMessages.length > 0 ? (
+                            <div className="space-y-2">
+                              {leadSourceData.smsMessages.map((msg: any, idx: number) => (
+                                <div key={idx} className={`p-2 rounded ${msg.direction === 'inbound' ? 'bg-blue-100 ml-8' : 'bg-white mr-8'}`}>
+                                  <p className="text-sm">{msg.text}</p>
+                                  <span className="text-xs text-gray-500">{new Date(msg.timestamp).toLocaleString()}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-gray-600">No SMS messages available</p>
+                          )}
+                        </div>
+                      )}
+
+                      {leadSource === 'Online' && (
+                        <div className="space-y-3 p-4 bg-gray-50 rounded-lg">
+                          <h4 className="font-semibold text-sm">Online Form Submission</h4>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <Label className="text-xs text-gray-600">Reason for Selling</Label>
+                              <p className="text-sm">{leadSourceData.reasonForSelling || 'Not specified'}</p>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-gray-600">Timeline</Label>
+                              <p className="text-sm">{leadSourceData.timeline || 'Not specified'}</p>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-gray-600">Asking Price</Label>
+                              <p className="text-sm">{leadSourceData.askingPrice ? `$${parseInt(leadSourceData.askingPrice).toLocaleString()}` : 'Not specified'}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {leadSource === 'Mailer' && (
+                        <div className="space-y-3 p-4 bg-gray-50 rounded-lg">
+                          <h4 className="font-semibold text-sm">Mailer Campaign</h4>
+                          {leadSourceData.mailerImage ? (
+                            <div>
+                              <img src={leadSourceData.mailerImage} alt="Mailer" className="max-w-full h-auto rounded border" />
+                              <p className="text-sm text-gray-600 mt-2">Offer Price: {leadSourceData.offerPrice ? `$${parseInt(leadSourceData.offerPrice).toLocaleString()}` : 'N/A'}</p>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-gray-600">No mailer image available</p>
+                          )}
+                        </div>
+                      )}
+
+                      {leadSource === 'Other' && (
+                        <div className="space-y-3 p-4 bg-gray-50 rounded-lg">
+                          <h4 className="font-semibold text-sm">Lead Origin</h4>
+                          <p className="text-sm">{leadSourceData.description || 'No description provided'}</p>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Additional Property Information */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Additional Property Information</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-sm mb-2">Roof Type</Label>
+                        <Input
+                          value={roofType}
+                          onChange={(e) => setRoofType(e.target.value)}
+                          placeholder="e.g., Asphalt Shingles"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-sm mb-2">Roof Age (years)</Label>
+                        <Input
+                          type="number"
+                          value={roofAge}
+                          onChange={(e) => setRoofAge(e.target.value)}
+                          placeholder="Age in years"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-sm mb-2">HVAC Type</Label>
+                        <Input
+                          value={hvacType}
+                          onChange={(e) => setHvacType(e.target.value)}
+                          placeholder="e.g., Central Air"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-sm mb-2">HVAC Age (years)</Label>
+                        <Input
+                          type="number"
+                          value={hvacAge}
+                          onChange={(e) => setHvacAge(e.target.value)}
+                          placeholder="Age in years"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-sm mb-2">Water Heater Age (years)</Label>
+                        <Input
+                          type="number"
+                          value={waterHeaterAge}
+                          onChange={(e) => setWaterHeaterAge(e.target.value)}
+                          placeholder="Age in years"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-sm mb-2">Water Type</Label>
+                        <Input
+                          value={waterType}
+                          onChange={(e) => setWaterType(e.target.value)}
+                          placeholder="e.g., City Water"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-sm mb-2">Sewer Type</Label>
+                        <Input
+                          value={sewerType}
+                          onChange={(e) => setSewerType(e.target.value)}
+                          placeholder="e.g., Public Sewer"
+                        />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Rehab Information */}
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2">
+                        <Wrench className="w-5 h-5" />
+                        Rehab Information
+                      </CardTitle>
+                      <div className="flex items-center gap-2">
+                        <DollarSign className="w-4 h-4 text-gray-600" />
+                        <span className="text-sm font-semibold">
+                          Total Budget: ${rehabBudget ? parseInt(rehabBudget).toLocaleString() : '0'}
+                        </span>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div>
+                        <Label className="text-sm mb-2">Total Rehab Budget</Label>
+                        <Input
+                          type="number"
+                          value={rehabBudget}
+                          onChange={(e) => setRehabBudget(e.target.value)}
+                          placeholder="Enter total budget"
+                          className="max-w-xs"
+                        />
+                      </div>
+
+                      {rehabItems.length > 0 ? (
+                        <div className="space-y-2">
+                          <Label className="text-sm font-semibold">Rehab Items</Label>
+                          {rehabItems.map((item: any, idx: number) => (
+                            <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                              <div className="flex-1">
+                                <p className="text-sm font-medium">{item.name}</p>
+                                <p className="text-xs text-gray-600">{item.description}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm font-semibold">${parseInt(item.cost || 0).toLocaleString()}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 bg-gray-50 rounded-lg">
+                          <Wrench className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                          <p className="text-sm text-gray-600">No rehab items added yet</p>
+                          <p className="text-xs text-gray-500 mt-1">Add items to track renovation costs</p>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Comp Information */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Comparable Properties</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {comparables.length > 0 ? (
+                      <div className="space-y-3">
+                        {comparables.map((comp: any) => (
+                          <div key={comp.id} className="p-4 border rounded-lg hover:shadow-md transition-shadow">
+                            <div className="flex justify-between items-start mb-2">
+                              <div>
+                                <h4 className="font-semibold text-sm">{comp.comparable?.address}</h4>
+                                <p className="text-xs text-gray-600">{comp.comparable?.city}, {comp.comparable?.state} {comp.comparable?.zip}</p>
+                              </div>
+                              <Badge variant="outline">${(comp.comparable?.salePrice || 0).toLocaleString()}</Badge>
+                            </div>
+                            <div className="grid grid-cols-4 gap-2 text-xs">
+                              <div>
+                                <span className="text-gray-600">Beds:</span> {comp.comparable?.beds || 'N/A'}
+                              </div>
+                              <div>
+                                <span className="text-gray-600">Baths:</span> {comp.comparable?.baths || 'N/A'}
+                              </div>
+                              <div>
+                                <span className="text-gray-600">SqFt:</span> {comp.comparable?.sqft?.toLocaleString() || 'N/A'}
+                              </div>
+                              <div>
+                                <span className="text-gray-600">Year:</span> {comp.comparable?.yearBuilt || 'N/A'}
+                              </div>
+                            </div>
+                            {comp.comparable?.dateSold && (
+                              <p className="text-xs text-gray-500 mt-2">
+                                Sold: {new Date(comp.comparable.dateSold).toLocaleDateString()}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 bg-gray-50 rounded-lg">
+                        <Home className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                        <p className="text-sm text-gray-600">No comparable properties found</p>
+                        <p className="text-xs text-gray-500 mt-1">Add comps to help with valuation</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Underwriting Information */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Underwriting Information</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {underwritingScenarios.length > 0 ? (
+                      <div className="space-y-3">
+                        {underwritingScenarios.map((scenario: any) => (
+                          <div key={scenario.id} className="p-4 border rounded-lg">
+                            <div className="flex items-center justify-between mb-3">
+                              <h4 className="font-semibold text-sm flex items-center gap-2">
+                                {scenario.name}
+                                {scenario.isPrimary && <Badge variant="default" className="text-xs">Primary</Badge>}
+                              </h4>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4 text-sm">
+                              <div>
+                                <Label className="text-xs text-gray-600">Purchase Price</Label>
+                                <p className="font-medium">${(scenario.inputs?.purchasePrice || 0).toLocaleString()}</p>
+                              </div>
+                              <div>
+                                <Label className="text-xs text-gray-600">ARV</Label>
+                                <p className="font-medium">${(scenario.inputs?.arv || 0).toLocaleString()}</p>
+                              </div>
+                              <div>
+                                <Label className="text-xs text-gray-600">Rehab Cost</Label>
+                                <p className="font-medium">${(scenario.inputs?.rehabCost || 0).toLocaleString()}</p>
+                              </div>
+                              <div>
+                                <Label className="text-xs text-gray-600">Est. Profit</Label>
+                                <p className="font-medium text-green-600">${(scenario.outputs?.estimatedProfit || 0).toLocaleString()}</p>
+                              </div>
+                              <div>
+                                <Label className="text-xs text-gray-600">ROI</Label>
+                                <p className="font-medium">{(scenario.outputs?.roi || 0).toFixed(2)}%</p>
+                              </div>
+                              <div>
+                                <Label className="text-xs text-gray-600">Cash on Cash</Label>
+                                <p className="font-medium">{(scenario.outputs?.cashOnCash || 0).toFixed(2)}%</p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 bg-gray-50 rounded-lg">
+                        <DollarSign className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                        <p className="text-sm text-gray-600">No underwriting scenarios created</p>
+                        <p className="text-xs text-gray-500 mt-1">Create scenarios to analyze deal profitability</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* Transactions Tab */}
+              <TabsContent value="transactions">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Transaction Details</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {lead?.deal ? (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label className="text-sm text-gray-600">Deal Status</Label>
+                            <p className="font-medium">{lead.deal.status || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <Label className="text-sm text-gray-600">Deal Type</Label>
+                            <p className="font-medium">{lead.deal.type || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <Label className="text-sm text-gray-600">Purchase Price</Label>
+                            <p className="font-medium">${(lead.deal.purchasePrice || 0).toLocaleString()}</p>
+                          </div>
+                          <div>
+                            <Label className="text-sm text-gray-600">Sale Price</Label>
+                            <p className="font-medium">${(lead.deal.salePrice || 0).toLocaleString()}</p>
+                          </div>
+                          <div>
+                            <Label className="text-sm text-gray-600">Closing Date</Label>
+                            <p className="font-medium">{lead.deal.closingDate ? new Date(lead.deal.closingDate).toLocaleDateString() : 'Not set'}</p>
+                          </div>
+                          <div>
+                            <Label className="text-sm text-gray-600">Profit</Label>
+                            <p className="font-medium text-green-600">${((lead.deal.salePrice || 0) - (lead.deal.purchasePrice || 0)).toLocaleString()}</p>
+                          </div>
+                        </div>
+
+                        {lead.deal.notes && (
+                          <div>
+                            <Label className="text-sm text-gray-600">Transaction Notes</Label>
+                            <p className="text-sm mt-1 p-3 bg-gray-50 rounded">{lead.deal.notes}</p>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-center py-12 bg-gray-50 rounded-lg">
+                        <FileText className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                        <p className="text-sm text-gray-600 font-medium">No transaction created yet</p>
+                        <p className="text-xs text-gray-500 mt-1">Transaction details will appear here when a deal is created</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* Dispositions Tab */}
+              <TabsContent value="dispositions">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Disposition Details</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {lead?.buyerOffers && lead.buyerOffers.length > 0 ? (
+                      <div className="space-y-4">
+                        {lead.buyerOffers.map((offer: any) => (
+                          <div key={offer.id} className="p-4 border rounded-lg">
+                            <div className="flex items-center justify-between mb-3">
+                              <div>
+                                <h4 className="font-semibold">{offer.buyer?.firstName} {offer.buyer?.lastName}</h4>
+                                <p className="text-xs text-gray-600">{offer.buyer?.email}</p>
+                              </div>
+                              <Badge className={
+                                offer.status === 'ACCEPTED' ? 'bg-green-100 text-green-800' :
+                                offer.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-gray-100 text-gray-800'
+                              }>
+                                {offer.status}
+                              </Badge>
+                            </div>
+                            <div className="grid grid-cols-3 gap-3 text-sm">
+                              <div>
+                                <Label className="text-xs text-gray-600">Offer Amount</Label>
+                                <p className="font-medium">${(offer.offerAmount || 0).toLocaleString()}</p>
+                              </div>
+                              <div>
+                                <Label className="text-xs text-gray-600">EMD</Label>
+                                <p className="font-medium">${(offer.emd || 0).toLocaleString()}</p>
+                              </div>
+                              <div>
+                                <Label className="text-xs text-gray-600">Close Days</Label>
+                                <p className="font-medium">{offer.closeDays || 'N/A'} days</p>
+                              </div>
+                            </div>
+                            {offer.notes && (
+                              <p className="text-xs text-gray-600 mt-2 p-2 bg-gray-50 rounded">{offer.notes}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-12 bg-gray-50 rounded-lg">
+                        <User className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                        <p className="text-sm text-gray-600 font-medium">No buyer offers yet</p>
+                        <p className="text-xs text-gray-500 mt-1">Buyer offers will appear here when submitted</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* Files Tab */}
+              <TabsContent value="files">
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle>Documents & Files</CardTitle>
+                      <Button size="sm" disabled={uploading}>
+                        <Upload className="w-4 h-4 mr-2" />
+                        <label htmlFor="file-upload" className="cursor-pointer">
+                          {uploading ? 'Uploading...' : 'Upload File'}
+                        </label>
+                        <input
+                          id="file-upload"
+                          type="file"
+                          className="hidden"
+                          onChange={handleFileUpload}
+                          disabled={uploading}
+                        />
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {files.length > 0 ? (
+                      <div className="space-y-2">
+                        {files.map((file: any) => (
+                          <div key={file.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors">
+                            <div className="flex items-center gap-3 flex-1">
+                              <FileText className="w-5 h-5 text-blue-600" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">{file.file?.name || 'Unnamed file'}</p>
+                                <div className="flex items-center gap-3 text-xs text-gray-500">
+                                  <span>{(file.file?.size / 1024).toFixed(2)} KB</span>
+                                  <span>•</span>
+                                  <span>{file.file?.uploadedAt ? new Date(file.file.uploadedAt).toLocaleDateString() : 'Unknown date'}</span>
+                                  {file.file?.uploadedBy && (
+                                    <>
+                                      <span>•</span>
+                                      <span>by {file.file.uploadedBy.firstName} {file.file.uploadedBy.lastName}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {file.file?.path && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => window.open(`${API_BASE}${file.file.path}`, '_blank')}
+                                >
+                                  <Download className="w-4 h-4" />
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                onClick={async () => {
+                                  if (confirm('Are you sure you want to delete this file?')) {
+                                    try {
+                                      await makeApiCall(`${API_BASE}/files/${file.fileId}`, { method: 'DELETE' });
+                                      toast({ title: 'Success', description: 'File deleted successfully' });
+                                      loadFiles();
+                                    } catch (error) {
+                                      toast({ title: 'Error', description: 'Failed to delete file', variant: 'destructive' });
+                                    }
+                                  }
+                                }}
+                              >
+                                <Trash className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-12 bg-gray-50 rounded-lg">
+                        <Upload className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                        <p className="text-sm text-gray-600 font-medium">No files uploaded yet</p>
+                        <p className="text-xs text-gray-500 mt-1">Upload documents related to this lead</p>
+                        <Button size="sm" className="mt-4" disabled={uploading}>
+                          <label htmlFor="file-upload-empty" className="cursor-pointer flex items-center gap-2">
+                            <Upload className="w-4 h-4" />
+                            {uploading ? 'Uploading...' : 'Upload Your First File'}
+                          </label>
+                          <input
+                            id="file-upload-empty"
+                            type="file"
+                            className="hidden"
+                            onChange={handleFileUpload}
+                            disabled={uploading}
+                          />
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          </div>
+
+          {/* Right side - Communication Section (4 columns) */}
+          <div className="col-span-4">
+            <Card className="sticky top-4">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5" />
+                  Communications
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Tasks Section */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <CheckSquare className="w-4 h-4" />
+                    <h4 className="font-semibold text-sm">Upcoming Tasks</h4>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <p className="text-sm text-gray-700">No upcoming tasks</p>
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Communication Timeline */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Clock className="w-4 h-4" />
+                    <h4 className="font-semibold text-sm">Activity Timeline</h4>
+                  </div>
+                  <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                    {notes.length > 0 ? (
+                      notes.map((note) => (
+                        <div key={note.id} className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <FileText className="w-4 h-4 text-blue-600" />
+                              <span className="text-xs font-semibold text-gray-700">
+                                {note.user?.firstName} {note.user?.lastName}
+                              </span>
+                            </div>
+                            <span className="text-xs text-gray-500" title={new Date(note.createdAt).toLocaleString()}>
+                              {formatDate(note.createdAt)}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-700 whitespace-pre-wrap">{note.body}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-sm text-gray-600 text-center py-8">
+                        <FileText className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                        No communications yet
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Add Note */}
+                <div>
+                  <Label className="text-sm font-semibold mb-2">Add Note</Label>
+                  <Textarea
+                    value={noteText}
+                    onChange={(e) => setNoteText(e.target.value)}
+                    placeholder="Write a note..."
+                    className="min-h-[100px]"
+                    disabled={addingNote}
+                  />
+                  <Button 
+                    className="w-full mt-2" 
+                    size="sm"
+                    onClick={handleAddNote}
+                    disabled={addingNote || !noteText.trim()}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    {addingNote ? 'Adding...' : 'Add Note'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    </DashboardLayout>
+  );
+};
+
+export default LeadEdit;
+

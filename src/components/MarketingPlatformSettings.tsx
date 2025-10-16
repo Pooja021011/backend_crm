@@ -259,7 +259,7 @@ export const MarketingPlatformSettings: React.FC<MarketingPlatformSettingsProps>
   }
 
   return (
-    <Card>
+    <Card className="border-0 shadow-none">
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
           <div className="flex items-center gap-2">

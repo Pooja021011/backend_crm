@@ -284,7 +284,7 @@ export const LeadStatusSettings = () => {
   }
 
   return (
-    <Card>
+    <Card className="border-0 shadow-none">
       <CardHeader>
         <CardTitle>Lead Statuses</CardTitle>
         <CardDescription>

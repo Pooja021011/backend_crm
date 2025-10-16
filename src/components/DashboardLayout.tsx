@@ -16,7 +16,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           <DashboardHeader />
           
           <main className="flex-1 overflow-auto p-6">
-            <div className="space-y-6" style={{ maxWidth: '90rem', padding: '0px', margin: '0px' }}>
+            <div className="space-y-6" style={{ width: '100rem', padding: '0px', margin: '0px' }}>
               <div className="bg-white/90 backdrop-blur-sm rounded-lg p-6 shadow-soft border border-white/20">
                 {children}
               </div>

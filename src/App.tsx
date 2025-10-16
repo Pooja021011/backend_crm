@@ -19,6 +19,7 @@ import AddSellerLead from "./pages/AddSellerLead";
 import AddBuyerLead from "./pages/AddBuyerLead";
 import AddVendorLead from "./pages/AddVendorLead";
 import Agents from "./pages/Agents";
+import LeadEdit from "./pages/LeadEdit";
 
 const queryClient = new QueryClient();
 
@@ -58,6 +59,11 @@ const App = () => (
                 <Leads />
               </ProtectedRoute>
             } />
+            <Route path="/leads/:id/edit" element={
+              <ProtectedRoute>
+                <LeadEdit />
+              </ProtectedRoute>
+            } />
             <Route path="/pipeline" element={
               <ProtectedRoute>
                 <DashboardLayout>
@@ -73,7 +79,7 @@ const App = () => (
               </ProtectedRoute>
             } />
             <Route path="/settings" element={
-              <ProtectedRoute requiredRoles={['ADMIN', 'MANAGER']}>
+              <ProtectedRoute>
                 <DashboardLayout>
                   <Settings />
                 </DashboardLayout>

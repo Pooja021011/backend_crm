@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { PipelineColumn } from "@/components/PipelineColumn";
@@ -14,8 +13,6 @@ import {
   FileText,
   AlertTriangle,
   Workflow,
-  Filter,
-  Plus,
   Loader2
 } from "lucide-react";
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCenter } from "@dnd-kit/core";
@@ -598,16 +595,6 @@ const Pipeline = () => {
               </Label>
             </div>
           )}
-          
-          <Button variant="outline" size="sm">
-            <Filter className="h-4 w-4 mr-2" />
-            Filter
-          </Button>
-          
-          <Button size="sm">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Lead
-          </Button>
         </div>
       </div>
 
