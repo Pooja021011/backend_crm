@@ -28,12 +28,15 @@ import {
   Upload,
   Download,
   Trash,
+  Trash2,
   DollarSign,
   Wrench
 } from 'lucide-react';
 import { API_BASE, makeApiCall } from '@/config/api';
 import { useToast } from '@/hooks/use-toast';
 import { DashboardLayout } from '@/components/DashboardLayout';
+import { CompsManager } from '@/components/CompsManager';
+import { UnderwritingCalculator } from '@/components/UnderwritingCalculator';
 
 interface Contact {
   id?: string;
@@ -143,7 +146,6 @@ const LeadEdit: React.FC = () => {
     loadLeadSources();
     loadLeadStatuses();
     loadNotes();
-    loadLeadSourceData();
     loadComparables();
     loadUnderwritingScenarios();
     loadFiles();
@@ -155,11 +157,29 @@ const LeadEdit: React.FC = () => {
       if (response.ok) {
         const data = await response.json();
         const leadData = data.data;
+        console.log('Loaded lead data:', leadData);
         setLead(leadData);
         
         // Set editable fields
-        setLeadSource(leadData.leadSource || '');
-        setLeadStatus(leadData.leadStatus || '');
+        // Lead source dropdown uses name as value
+        if (leadData.leadSource) {
+          const sourceName = leadData.leadSource.name || leadData.leadSource;
+          console.log('Setting lead source:', sourceName);
+          setLeadSource(sourceName);
+        } else {
+          setLeadSource('');
+        }
+        
+        // Lead status dropdown uses id as value
+        if (leadData.leadStatus) {
+          const statusId = leadData.leadStatus.id || leadData.leadStatusId || '';
+          console.log('Setting lead status:', statusId);
+          setLeadStatus(statusId);
+        } else {
+          setLeadStatus('');
+        }
+        
+        console.log('Setting pipeline status:', leadData.pipelineStageId);
         setPipelineStatus(leadData.pipelineStageId || '');
         setAcquisitionsAgent(leadData.assignedUserId || '');
         setDispositionsAgent(leadData.dispositionAgentId || '');
@@ -181,6 +201,11 @@ const LeadEdit: React.FC = () => {
         setWaterHeaterAge(customFields.waterHeaterAge?.toString() || '');
         setWaterType(customFields.waterType || '');
         setSewerType(customFields.sewerType || '');
+        
+        // Load rehab information from customFields
+        setRehabBudget(customFields.rehabBudget?.toString() || '');
+        setRehabItems(customFields.rehabItems || []);
+        setLeadSourceData(customFields.leadSourceData || {});
         
         // Load contacts from lead
         const initialContacts = [];
@@ -303,8 +328,13 @@ const LeadEdit: React.FC = () => {
         hvacAge: hvacAge ? parseInt(hvacAge) : null,
         waterHeaterAge: waterHeaterAge ? parseInt(waterHeaterAge) : null,
         waterType: waterType || null,
-        sewerType: sewerType || null
+        sewerType: sewerType || null,
+        rehabBudget: rehabBudget ? parseInt(rehabBudget) : null,
+        rehabItems: rehabItems || [],
+        leadSourceData: leadSourceData || {}
       };
+
+      console.log('Saving customFields:', propertyDetails);
 
       // Prepare lead updates - store property details in customFields
       const updates: any = {
@@ -316,6 +346,14 @@ const LeadEdit: React.FC = () => {
       if (acquisitionsAgent && acquisitionsAgent !== 'unassigned') updates.assignedUserId = acquisitionsAgent;
       if (dispositionsAgent && dispositionsAgent !== 'unassigned') updates.dispositionAgentId = dispositionsAgent;
       
+      // Handle lead source
+      if (leadSource) {
+        const source = leadSources.find(s => s.name === leadSource || s.id === leadSource);
+        if (source) {
+          updates.leadSourceId = source.id;
+        }
+      }
+      
       // Handle lead status - check if it's an ID or name
       if (leadStatus) {
         const status = leadStatuses.find(s => s.id === leadStatus || s.name === leadStatus);
@@ -324,6 +362,8 @@ const LeadEdit: React.FC = () => {
         }
       }
 
+      console.log('Sending updates:', updates);
+      
       const response = await makeApiCall(`${API_BASE}/leads/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -338,7 +378,9 @@ const LeadEdit: React.FC = () => {
           title: 'Success',
           description: 'Lead updated successfully'
         });
-        loadLead();
+        
+        // Reload lead data to reflect changes
+        await loadLead();
       } else {
         const errorData = await response.json();
         throw new Error(errorData.message || 'Failed to update lead');
@@ -469,7 +511,7 @@ const LeadEdit: React.FC = () => {
 
   const loadComparables = async () => {
     try {
-      const response = await makeApiCall(`${API_BASE}/leads/${id}/comparables`);
+      const response = await makeApiCall(`${API_BASE}/comps/leads/${id}/comparables`);
       if (response.ok) {
         const data = await response.json();
         setComparables(data.data || []);
@@ -481,7 +523,7 @@ const LeadEdit: React.FC = () => {
 
   const loadUnderwritingScenarios = async () => {
     try {
-      const response = await makeApiCall(`${API_BASE}/underwriting/scenarios?leadId=${id}`);
+      const response = await makeApiCall(`${API_BASE}/underwriting/leads/${id}/scenarios`);
       if (response.ok) {
         const data = await response.json();
         setUnderwritingScenarios(data.data || []);
@@ -697,7 +739,10 @@ const LeadEdit: React.FC = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="unassigned">None</SelectItem>
-                    {agents.filter(a => a.roles?.includes('ACQ')).map((agent) => (
+                    {agents.filter(a => {
+                      const roles = Array.isArray(a.roles) ? a.roles : [];
+                      return roles.includes('ACQ') || roles.some((r: any) => r.role?.name === 'ACQ' || r.name === 'ACQ');
+                    }).map((agent) => (
                       <SelectItem key={agent.id} value={agent.id}>
                         {agent.firstName} {agent.lastName}
                       </SelectItem>
@@ -715,7 +760,10 @@ const LeadEdit: React.FC = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="unassigned">None</SelectItem>
-                    {agents.filter(a => a.roles?.includes('DISP')).map((agent) => (
+                    {agents.filter(a => {
+                      const roles = Array.isArray(a.roles) ? a.roles : [];
+                      return roles.includes('DISP') || roles.some((r: any) => r.role?.name === 'DISP' || r.name === 'DISP');
+                    }).map((agent) => (
                       <SelectItem key={agent.id} value={agent.id}>
                         {agent.firstName} {agent.lastName}
                       </SelectItem>
@@ -1106,135 +1154,86 @@ const LeadEdit: React.FC = () => {
                         />
                       </div>
 
-                      {rehabItems.length > 0 ? (
-                        <div className="space-y-2">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
                           <Label className="text-sm font-semibold">Rehab Items</Label>
-                          {rehabItems.map((item: any, idx: number) => (
-                            <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                              <div className="flex-1">
-                                <p className="text-sm font-medium">{item.name}</p>
-                                <p className="text-xs text-gray-600">{item.description}</p>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              const name = prompt('Item name (e.g., Roof Repair):');
+                              if (!name) return;
+                              const cost = prompt('Cost ($):');
+                              if (!cost) return;
+                              const description = prompt('Description (optional):') || '';
+                              
+                              setRehabItems([...rehabItems, { name, cost: parseInt(cost), description }]);
+                            }}
+                          >
+                            <Plus className="w-4 h-4 mr-1" />
+                            Add Item
+                          </Button>
+                        </div>
+
+                        {rehabItems.length > 0 ? (
+                          <div className="space-y-2">
+                            {rehabItems.map((item: any, idx: number) => (
+                              <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg group">
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium">{item.name}</p>
+                                  {item.description && <p className="text-xs text-gray-600">{item.description}</p>}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm font-semibold">${parseInt(item.cost || 0).toLocaleString()}</p>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                    onClick={() => {
+                                      setRehabItems(rehabItems.filter((_, i) => i !== idx));
+                                    }}
+                                  >
+                                    <Trash2 className="w-4 h-4 text-red-500" />
+                                  </Button>
+                                </div>
                               </div>
-                              <div className="text-right">
-                                <p className="text-sm font-semibold">${parseInt(item.cost || 0).toLocaleString()}</p>
+                            ))}
+                            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                              <div className="flex items-center justify-between">
+                                <p className="text-sm font-semibold text-blue-900">Total Items Cost:</p>
+                                <p className="text-lg font-bold text-blue-900">
+                                  ${rehabItems.reduce((sum, item) => sum + (parseInt(item.cost) || 0), 0).toLocaleString()}
+                                </p>
                               </div>
                             </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-center py-8 bg-gray-50 rounded-lg">
-                          <Wrench className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                          <p className="text-sm text-gray-600">No rehab items added yet</p>
-                          <p className="text-xs text-gray-500 mt-1">Add items to track renovation costs</p>
-                        </div>
-                      )}
+                          </div>
+                        ) : (
+                          <div className="text-center py-8 bg-gray-50 rounded-lg">
+                            <Wrench className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                            <p className="text-sm text-gray-600">No rehab items added yet</p>
+                            <p className="text-xs text-gray-500 mt-1">Click "Add Item" to track renovation costs</p>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
 
                 {/* Comp Information */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Comparable Properties</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {comparables.length > 0 ? (
-                      <div className="space-y-3">
-                        {comparables.map((comp: any) => (
-                          <div key={comp.id} className="p-4 border rounded-lg hover:shadow-md transition-shadow">
-                            <div className="flex justify-between items-start mb-2">
-                              <div>
-                                <h4 className="font-semibold text-sm">{comp.comparable?.address}</h4>
-                                <p className="text-xs text-gray-600">{comp.comparable?.city}, {comp.comparable?.state} {comp.comparable?.zip}</p>
-                              </div>
-                              <Badge variant="outline">${(comp.comparable?.salePrice || 0).toLocaleString()}</Badge>
-                            </div>
-                            <div className="grid grid-cols-4 gap-2 text-xs">
-                              <div>
-                                <span className="text-gray-600">Beds:</span> {comp.comparable?.beds || 'N/A'}
-                              </div>
-                              <div>
-                                <span className="text-gray-600">Baths:</span> {comp.comparable?.baths || 'N/A'}
-                              </div>
-                              <div>
-                                <span className="text-gray-600">SqFt:</span> {comp.comparable?.sqft?.toLocaleString() || 'N/A'}
-                              </div>
-                              <div>
-                                <span className="text-gray-600">Year:</span> {comp.comparable?.yearBuilt || 'N/A'}
-                              </div>
-                            </div>
-                            {comp.comparable?.dateSold && (
-                              <p className="text-xs text-gray-500 mt-2">
-                                Sold: {new Date(comp.comparable.dateSold).toLocaleDateString()}
-                              </p>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-8 bg-gray-50 rounded-lg">
-                        <Home className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                        <p className="text-sm text-gray-600">No comparable properties found</p>
-                        <p className="text-xs text-gray-500 mt-1">Add comps to help with valuation</p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                <CompsManager 
+                  leadId={id!} 
+                  leadAddress={lead?.address ? {
+                    address1: lead.address.address1,
+                    city: lead.address.city,
+                    state: lead.address.state,
+                    zip: lead.address.zip
+                  } : undefined}
+                />
 
                 {/* Underwriting Information */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Underwriting Information</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {underwritingScenarios.length > 0 ? (
-                      <div className="space-y-3">
-                        {underwritingScenarios.map((scenario: any) => (
-                          <div key={scenario.id} className="p-4 border rounded-lg">
-                            <div className="flex items-center justify-between mb-3">
-                              <h4 className="font-semibold text-sm flex items-center gap-2">
-                                {scenario.name}
-                                {scenario.isPrimary && <Badge variant="default" className="text-xs">Primary</Badge>}
-                              </h4>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4 text-sm">
-                              <div>
-                                <Label className="text-xs text-gray-600">Purchase Price</Label>
-                                <p className="font-medium">${(scenario.inputs?.purchasePrice || 0).toLocaleString()}</p>
-                              </div>
-                              <div>
-                                <Label className="text-xs text-gray-600">ARV</Label>
-                                <p className="font-medium">${(scenario.inputs?.arv || 0).toLocaleString()}</p>
-                              </div>
-                              <div>
-                                <Label className="text-xs text-gray-600">Rehab Cost</Label>
-                                <p className="font-medium">${(scenario.inputs?.rehabCost || 0).toLocaleString()}</p>
-                              </div>
-                              <div>
-                                <Label className="text-xs text-gray-600">Est. Profit</Label>
-                                <p className="font-medium text-green-600">${(scenario.outputs?.estimatedProfit || 0).toLocaleString()}</p>
-                              </div>
-                              <div>
-                                <Label className="text-xs text-gray-600">ROI</Label>
-                                <p className="font-medium">{(scenario.outputs?.roi || 0).toFixed(2)}%</p>
-                              </div>
-                              <div>
-                                <Label className="text-xs text-gray-600">Cash on Cash</Label>
-                                <p className="font-medium">{(scenario.outputs?.cashOnCash || 0).toFixed(2)}%</p>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-8 bg-gray-50 rounded-lg">
-                        <DollarSign className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                        <p className="text-sm text-gray-600">No underwriting scenarios created</p>
-                        <p className="text-xs text-gray-500 mt-1">Create scenarios to analyze deal profitability</p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                <UnderwritingCalculator leadId={id!} />
               </TabsContent>
 
               {/* Transactions Tab */}

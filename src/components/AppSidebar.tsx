@@ -98,7 +98,7 @@ export function AppSidebar() {
 
   const getSubNavClassName = (url: string) =>
     cn(
-      "w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground rounded-lg group text-sm pl-8",
+      "w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground rounded-lg group text-sm pl-0 h-auto py-2",
       isSubItemActive(url) 
         ? "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 hover:text-sidebar-primary-foreground shadow-sm" 
         : ""
@@ -108,7 +108,7 @@ export function AppSidebar() {
     <Sidebar
       className={cn(
         "border-r border-sidebar-border bg-sidebar",
-        isCollapsed ? "w-16" : "w-64"
+        isCollapsed ? "w-16" : "w-56"
       )}
       collapsible="icon"
     >
@@ -190,7 +190,7 @@ export function AppSidebar() {
                                   className={getSubNavClassName(subItem.url)}
                                 >
                                   <subItem.icon className="w-4 h-4 flex-shrink-0" />
-                                  <span className="ml-3 font-medium text-sm">{subItem.title}</span>
+                                  <span className="ml-2 font-medium text-sm whitespace-normal leading-tight">{subItem.title}</span>
                                 </NavLink>
                               </SidebarMenuButton>
                             ))}

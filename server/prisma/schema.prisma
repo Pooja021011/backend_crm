@@ -111,6 +111,7 @@ model LeadSource {
   id      String  @id @default(uuid())
   name    String  @unique
   active  Boolean @default(true)
+  leads   Lead[]
 }
 
 model AssetClass {
@@ -337,6 +338,7 @@ model Lead {
   needsAttention   Boolean        @default(false)
   attentionReason  String?        // Why it needs attention
   leadSourceId     String?        // Reference to lead source for filtering
+  leadSource       LeadSource?    @relation(fields: [leadSourceId], references: [id])
   
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt

@@ -358,6 +358,7 @@ const includeLead = {
   vendor: true,
   pipelineStage: true,
   leadStatus: true,
+  leadSource: true,
   assignedUser: {
     select: {
       id: true,

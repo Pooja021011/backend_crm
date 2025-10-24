@@ -11,6 +11,7 @@ import { Textarea } from './ui/textarea';
 import { Switch } from './ui/switch';
 import { Calculator, Plus, Copy, Trash2, FileText, TrendingUp, Download } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
+import { API_BASE, makeApiCall } from '../config/api';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -223,11 +224,7 @@ export const UnderwritingCalculator: React.FC<UnderwritingCalculatorProps> = ({ 
   const loadScenarios = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(`/api/v1/underwriting/leads/${leadId}/scenarios`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-        }
-      });
+      const response = await makeApiCall(`${API_BASE}/underwriting/leads/${leadId}/scenarios`);
 
       if (response.ok) {
         const data = await response.json();
@@ -256,12 +253,8 @@ export const UnderwritingCalculator: React.FC<UnderwritingCalculatorProps> = ({ 
   const calculateScenario = async () => {
     try {
       setIsCalculating(true);
-      const response = await fetch('/api/v1/underwriting/calculate', {
+      const response = await makeApiCall(`${API_BASE}/underwriting/calculate`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-        },
         body: JSON.stringify(inputs)
       });
 
@@ -282,12 +275,8 @@ export const UnderwritingCalculator: React.FC<UnderwritingCalculatorProps> = ({ 
 
   const saveScenario = async (name: string, isPrimary: boolean = false) => {
     try {
-      const response = await fetch(`/api/v1/underwriting/leads/${leadId}/scenarios`, {
+      const response = await makeApiCall(`${API_BASE}/underwriting/leads/${leadId}/scenarios`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-        },
         body: JSON.stringify({
           name,
           isPrimary,
@@ -319,12 +308,8 @@ export const UnderwritingCalculator: React.FC<UnderwritingCalculatorProps> = ({ 
     if (!selectedScenario) return;
 
     try {
-      const response = await fetch(`/api/v1/underwriting/scenarios/${selectedScenario}`, {
+      const response = await makeApiCall(`${API_BASE}/underwriting/scenarios/${selectedScenario}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-        },
         body: JSON.stringify({ inputs })
       });
 
@@ -347,11 +332,8 @@ export const UnderwritingCalculator: React.FC<UnderwritingCalculatorProps> = ({ 
 
   const deleteScenario = async (scenarioId: string) => {
     try {
-      const response = await fetch(`/api/v1/underwriting/scenarios/${scenarioId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-        }
+      const response = await makeApiCall(`${API_BASE}/underwriting/scenarios/${scenarioId}`, {
+        method: 'DELETE'
       });
 
       if (response.ok) {
@@ -375,12 +357,8 @@ export const UnderwritingCalculator: React.FC<UnderwritingCalculatorProps> = ({ 
 
   const duplicateScenario = async (scenarioId: string) => {
     try {
-      const response = await fetch(`/api/v1/underwriting/scenarios/${scenarioId}/duplicate`, {
+      const response = await makeApiCall(`${API_BASE}/underwriting/scenarios/${scenarioId}/duplicate`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-        },
         body: JSON.stringify({ name: `Copy of ${scenarios.find(s => s.id === scenarioId)?.name}` })
       });
 
@@ -403,11 +381,8 @@ export const UnderwritingCalculator: React.FC<UnderwritingCalculatorProps> = ({ 
 
   const setPrimary = async (scenarioId: string) => {
     try {
-      const response = await fetch(`/api/v1/underwriting/scenarios/${scenarioId}/set-primary`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-        }
+      const response = await makeApiCall(`${API_BASE}/underwriting/scenarios/${scenarioId}/set-primary`, {
+        method: 'PUT'
       });
 
       if (response.ok) {

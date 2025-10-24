@@ -391,8 +391,8 @@ export const ViewLeadDialog: React.FC<ViewLeadDialogProps> = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-6xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between pr-8">
+            <div className="flex items-center gap-3 flex-wrap">
               <DialogTitle className="text-xl">Lead Details</DialogTitle>
               <Badge className={getLeadTypeColor(lead.leadType)}>
                 {lead.leadType}

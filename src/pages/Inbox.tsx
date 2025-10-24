@@ -1175,7 +1175,7 @@ const Inbox = () => {
   const someSelected = selectedItems.length > 0 && selectedItems.length < filteredMessages.length;
 
   return (
-    <div className="flex flex-col h-full bg-gray-50">
+    <div className="flex flex-col h-full bg-gray-50 max-w-full overflow-hidden">
       {/* Add CSS styles for email content */}
       <style dangerouslySetInnerHTML={{ __html: emailContentStyles }} />
       

@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Home, Plus, Search, TrendingUp, Calendar, MapPin, Trash2, ExternalLink } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
+import { API_BASE, makeApiCall } from '../config/api';
 
 interface Comparable {
   id: string;
@@ -140,11 +141,7 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
   const loadLeadComps = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(`/api/v1/comps/leads/${leadId}/comparables`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      const response = await makeApiCall(`${API_BASE}/comps/leads/${leadId}/comparables`);
 
       if (response.ok) {
         const data = await response.json();
@@ -168,11 +165,7 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
 
   const loadAnalysis = async () => {
     try {
-      const response = await fetch(`/api/v1/comps/leads/${leadId}/analysis`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      const response = await makeApiCall(`${API_BASE}/comps/leads/${leadId}/analysis`);
 
       if (response.ok) {
         const data = await response.json();
@@ -194,11 +187,7 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
         }
       });
 
-      const response = await fetch(`/api/v1/comps/search?${params}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      const response = await makeApiCall(`${API_BASE}/comps/search?${params}`);
 
       if (response.ok) {
         const data = await response.json();
@@ -233,11 +222,7 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
         zip: leadAddress.zip
       });
 
-      const response = await fetch(`/api/v1/comps/leads/${leadId}/suggestions?${params}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      const response = await makeApiCall(`${API_BASE}/comps/leads/${leadId}/suggestions?${params}`);
 
       if (response.ok) {
         const data = await response.json();
@@ -261,11 +246,8 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
 
   const addCompToLead = async (comparableId: string) => {
     try {
-      const response = await fetch(`/api/v1/comps/leads/${leadId}/comparables/${comparableId}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
+      const response = await makeApiCall(`${API_BASE}/comps/leads/${leadId}/comparables/${comparableId}`, {
+        method: 'POST'
       });
 
       if (response.ok) {
@@ -286,11 +268,8 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
 
   const removeCompFromLead = async (comparableId: string) => {
     try {
-      const response = await fetch(`/api/v1/comps/leads/${leadId}/comparables/${comparableId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
+      const response = await makeApiCall(`${API_BASE}/comps/leads/${leadId}/comparables/${comparableId}`, {
+        method: 'DELETE'
       });
 
       if (response.ok) {
@@ -322,12 +301,8 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
         dateSold: newComp.dateSold ? new Date(newComp.dateSold).toISOString() : undefined
       };
 
-      const response = await fetch('/api/v1/comps/create', {
+      const response = await makeApiCall(`${API_BASE}/comps/create`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
         body: JSON.stringify(compData)
       });
 
@@ -347,6 +322,10 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
           salePrice: '',
           dom: '',
           dateSold: ''
+        });
+        toast({
+          title: "Success",
+          description: "Comparable property created successfully"
         });
       }
     } catch (error) {
@@ -383,10 +362,6 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
             Comparable Properties
           </div>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={getSuggestedComps} disabled={isSearching}>
-              <Search className="h-4 w-4 mr-1" />
-              {isSearching ? 'Searching...' : 'Get Suggestions'}
-            </Button>
             <Dialog open={showAddCompDialog} onOpenChange={setShowAddCompDialog}>
               <DialogTrigger asChild>
                 <Button size="sm">
@@ -437,6 +412,8 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
                     <Input
                       id="beds"
                       type="number"
+                      min="0"
+                      max="50"
                       value={newComp.beds}
                       onChange={(e) => setNewComp(prev => ({ ...prev, beds: e.target.value }))}
                     />
@@ -446,6 +423,8 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
                     <Input
                       id="baths"
                       type="number"
+                      min="0"
+                      max="50"
                       step="0.5"
                       value={newComp.baths}
                       onChange={(e) => setNewComp(prev => ({ ...prev, baths: e.target.value }))}
@@ -456,6 +435,8 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
                     <Input
                       id="sqft"
                       type="number"
+                      min="1"
+                      max="1000000"
                       value={newComp.sqft}
                       onChange={(e) => setNewComp(prev => ({ ...prev, sqft: e.target.value }))}
                     />
@@ -465,6 +446,9 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
                     <Input
                       id="year-built"
                       type="number"
+                      min="1800"
+                      max={new Date().getFullYear()}
+                      placeholder={`1800-${new Date().getFullYear()}`}
                       value={newComp.yearBuilt}
                       onChange={(e) => setNewComp(prev => ({ ...prev, yearBuilt: e.target.value }))}
                     />
@@ -474,6 +458,8 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
                     <Input
                       id="sale-price"
                       type="number"
+                      min="0"
+                      max="100000000"
                       value={newComp.salePrice}
                       onChange={(e) => setNewComp(prev => ({ ...prev, salePrice: e.target.value }))}
                     />
@@ -483,6 +469,8 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
                     <Input
                       id="dom"
                       type="number"
+                      min="0"
+                      max="10000"
                       value={newComp.dom}
                       onChange={(e) => setNewComp(prev => ({ ...prev, dom: e.target.value }))}
                     />
@@ -520,7 +508,7 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
           <TabsContent value="comparables" className="space-y-4">
             {leadComps.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                No comparables added yet. Use "Get Suggestions" or "Add Comp" to get started.
+                No comparables added yet. Use "Add Comp" to get started.
               </div>
             ) : (
               <div className="overflow-x-auto">
