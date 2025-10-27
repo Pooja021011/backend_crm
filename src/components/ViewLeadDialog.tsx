@@ -33,7 +33,7 @@ import { LeadDocumentsTab } from "./LeadDocumentsTab";
 // Hidden tabs - uncomment imports if you enable the tabs below
 // import { UnderwritingCalculator } from "./UnderwritingCalculator";
 // import { CompsManager } from "./CompsManager";
-// import { BuyerManagement } from "./BuyerManagement";
+import { BuyerManagement } from "./BuyerManagement";
 // import { MarketingResources } from "./MarketingResources";
 // import { LeadActivityTab } from "./LeadActivityTab";
 import { API_BASE } from "@/config/api";

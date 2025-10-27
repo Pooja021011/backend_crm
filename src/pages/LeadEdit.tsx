@@ -138,6 +138,32 @@ const LeadEdit: React.FC = () => {
   // Files
   const [files, setFiles] = useState<any[]>([]);
   const [uploading, setUploading] = useState(false);
+  
+  // Transaction/Deal fields
+  const [deal, setDeal] = useState<any>(null);
+  const [editingDeal, setEditingDeal] = useState(false);
+  const [contractPrice, setContractPrice] = useState('');
+  const [soldPrice, setSoldPrice] = useState('');
+  const [netProfit, setNetProfit] = useState('');
+  const [contractedAt, setContractedAt] = useState('');
+  const [closedAt, setClosedAt] = useState('');
+  
+  // Buyer Offers fields
+  const [buyerOffers, setBuyerOffers] = useState<any[]>([]);
+  const [buyers, setBuyers] = useState<any[]>([]);
+  const [creatingOffer, setCreatingOffer] = useState(false);
+  const [creatingBuyer, setCreatingBuyer] = useState(false);
+  const [selectedBuyer, setSelectedBuyer] = useState('');
+  const [offerAmount, setOfferAmount] = useState('');
+  const [offerStatus, setOfferStatus] = useState('PENDING');
+  const [offerNotes, setOfferNotes] = useState('');
+  
+  // New buyer form
+  const [newBuyerFirstName, setNewBuyerFirstName] = useState('');
+  const [newBuyerLastName, setNewBuyerLastName] = useState('');
+  const [newBuyerEmail, setNewBuyerEmail] = useState('');
+  const [newBuyerPhone, setNewBuyerPhone] = useState('');
+  const [newBuyerSegmentation, setNewBuyerSegmentation] = useState('');
 
   useEffect(() => {
     loadLead();
@@ -149,6 +175,9 @@ const LeadEdit: React.FC = () => {
     loadComparables();
     loadUnderwritingScenarios();
     loadFiles();
+    loadDeal();
+    loadBuyerOffers();
+    loadBuyers();
   }, [id]);
 
   const loadLead = async () => {
@@ -542,6 +571,254 @@ const LeadEdit: React.FC = () => {
       }
     } catch (error) {
       console.error('Error loading files:', error);
+    }
+  };
+
+  const loadDeal = async () => {
+    try {
+      const response = await makeApiCall(`${API_BASE}/deals/${id}`);
+      if (response.ok) {
+        const data = await response.json();
+        const dealData = data.data;
+        if (dealData) {
+          setDeal(dealData);
+          setContractPrice(dealData.contractPrice?.toString() || '');
+          setSoldPrice(dealData.soldPrice?.toString() || '');
+          setNetProfit(dealData.netProfit?.toString() || '');
+          setContractedAt(dealData.contractedAt ? new Date(dealData.contractedAt).toISOString().split('T')[0] : '');
+          setClosedAt(dealData.closedAt ? new Date(dealData.closedAt).toISOString().split('T')[0] : '');
+        }
+      }
+    } catch (error) {
+      console.error('Error loading deal:', error);
+    }
+  };
+
+  const saveDeal = async () => {
+    try {
+      const dealData = {
+        contractPrice: contractPrice ? parseFloat(contractPrice) : null,
+        soldPrice: soldPrice ? parseFloat(soldPrice) : null,
+        netProfit: netProfit ? parseFloat(netProfit) : null,
+        contractedAt: contractedAt || null,
+        closedAt: closedAt || null
+      };
+
+      const response = await makeApiCall(`${API_BASE}/deals/${id}`, {
+        method: 'POST',
+        body: JSON.stringify(dealData)
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setDeal(data.data);
+        setEditingDeal(false);
+        toast({
+          title: "Success",
+          description: "Transaction details saved successfully"
+        });
+      } else {
+        throw new Error('Failed to save deal');
+      }
+    } catch (error) {
+      console.error('Error saving deal:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save transaction details",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const cancelDealEdit = () => {
+    if (deal) {
+      setContractPrice(deal.contractPrice?.toString() || '');
+      setSoldPrice(deal.soldPrice?.toString() || '');
+      setNetProfit(deal.netProfit?.toString() || '');
+      setContractedAt(deal.contractedAt ? new Date(deal.contractedAt).toISOString().split('T')[0] : '');
+      setClosedAt(deal.closedAt ? new Date(deal.closedAt).toISOString().split('T')[0] : '');
+    } else {
+      setContractPrice('');
+      setSoldPrice('');
+      setNetProfit('');
+      setContractedAt('');
+      setClosedAt('');
+    }
+    setEditingDeal(false);
+  };
+
+  const loadBuyerOffers = async () => {
+    try {
+      const response = await makeApiCall(`${API_BASE}/buyer-offers/leads/${id}/offers`);
+      if (response.ok) {
+        const data = await response.json();
+        setBuyerOffers(data || []);
+      }
+    } catch (error) {
+      console.error('Error loading buyer offers:', error);
+    }
+  };
+
+  const loadBuyers = async () => {
+    try {
+      const response = await makeApiCall(`${API_BASE}/buyers`);
+      if (response.ok) {
+        const data = await response.json();
+        setBuyers(data.data || data || []);
+      }
+    } catch (error) {
+      console.error('Error loading buyers:', error);
+    }
+  };
+
+  const createBuyerOffer = async () => {
+    try {
+      if (!selectedBuyer || !offerAmount) {
+        toast({
+          title: "Error",
+          description: "Please select a buyer and enter an offer amount",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const offerData = {
+        buyerId: selectedBuyer,
+        offerAmount: parseFloat(offerAmount),
+        status: offerStatus,
+        notes: offerNotes || null
+      };
+
+      const response = await makeApiCall(`${API_BASE}/buyer-offers/leads/${id}/offers`, {
+        method: 'POST',
+        body: JSON.stringify(offerData)
+      });
+
+      if (response.ok) {
+        await loadBuyerOffers();
+        setCreatingOffer(false);
+        setSelectedBuyer('');
+        setOfferAmount('');
+        setOfferStatus('PENDING');
+        setOfferNotes('');
+        toast({
+          title: "Success",
+          description: "Buyer offer created successfully"
+        });
+      } else {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create offer');
+      }
+    } catch (error) {
+      console.error('Error creating buyer offer:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to create buyer offer",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const updateOfferStatus = async (offerId: string, newStatus: string) => {
+    try {
+      const endpoint = newStatus === 'ACCEPTED' 
+        ? `${API_BASE}/buyer-offers/offers/${offerId}/accept`
+        : newStatus === 'REJECTED'
+        ? `${API_BASE}/buyer-offers/offers/${offerId}/reject`
+        : `${API_BASE}/buyer-offers/offers/${offerId}`;
+
+      const response = await makeApiCall(endpoint, {
+        method: 'PUT',
+        body: JSON.stringify({ status: newStatus })
+      });
+
+      if (response.ok) {
+        await loadBuyerOffers();
+        toast({
+          title: "Success",
+          description: `Offer ${newStatus.toLowerCase()} successfully`
+        });
+      }
+    } catch (error) {
+      console.error('Error updating offer status:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update offer status",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const deleteOffer = async (offerId: string) => {
+    try {
+      const response = await makeApiCall(`${API_BASE}/buyer-offers/offers/${offerId}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        await loadBuyerOffers();
+        toast({
+          title: "Success",
+          description: "Offer deleted successfully"
+        });
+      }
+    } catch (error) {
+      console.error('Error deleting offer:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete offer",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const createNewBuyer = async () => {
+    try {
+      if (!newBuyerFirstName || !newBuyerLastName || !newBuyerEmail || !newBuyerPhone) {
+        toast({
+          title: "Error",
+          description: "All buyer fields are required",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const buyerData = {
+        firstName: newBuyerFirstName,
+        lastName: newBuyerLastName,
+        email: newBuyerEmail,
+        phone: newBuyerPhone,
+        segmentation: newBuyerSegmentation || null
+      };
+
+      const response = await makeApiCall(`${API_BASE}/buyers`, {
+        method: 'POST',
+        body: JSON.stringify(buyerData)
+      });
+
+      if (response.ok) {
+        await loadBuyers();
+        setCreatingBuyer(false);
+        setNewBuyerFirstName('');
+        setNewBuyerLastName('');
+        setNewBuyerEmail('');
+        setNewBuyerPhone('');
+        setNewBuyerSegmentation('');
+        toast({
+          title: "Success",
+          description: "Buyer created successfully"
+        });
+      } else {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create buyer');
+      }
+    } catch (error) {
+      console.error('Error creating buyer:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to create buyer",
+        variant: "destructive"
+      });
     }
   };
 
@@ -1239,51 +1516,121 @@ const LeadEdit: React.FC = () => {
               {/* Transactions Tab */}
               <TabsContent value="transactions">
                 <Card>
-                  <CardHeader>
+                  <CardHeader className="flex flex-row items-center justify-between">
                     <CardTitle>Transaction Details</CardTitle>
+                    {!editingDeal && (
+                      <Button
+                        size="sm"
+                        onClick={() => setEditingDeal(true)}
+                      >
+                        <Edit2 className="w-4 h-4 mr-2" />
+                        {deal ? 'Edit Transaction' : 'Create Transaction'}
+                      </Button>
+                    )}
                   </CardHeader>
                   <CardContent>
-                    {lead?.deal ? (
+                    {editingDeal ? (
                       <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
                           <div>
-                            <Label className="text-sm text-gray-600">Deal Status</Label>
-                            <p className="font-medium">{lead.deal.status || 'N/A'}</p>
+                            <Label>Contract Price</Label>
+                            <Input
+                              type="number"
+                              placeholder="Enter contract price"
+                              value={contractPrice}
+                              onChange={(e) => setContractPrice(e.target.value)}
+                              min="0"
+                              step="1000"
+                            />
                           </div>
                           <div>
-                            <Label className="text-sm text-gray-600">Deal Type</Label>
-                            <p className="font-medium">{lead.deal.type || 'N/A'}</p>
+                            <Label>Sold Price</Label>
+                            <Input
+                              type="number"
+                              placeholder="Enter sold price"
+                              value={soldPrice}
+                              onChange={(e) => setSoldPrice(e.target.value)}
+                              min="0"
+                              step="1000"
+                            />
                           </div>
                           <div>
-                            <Label className="text-sm text-gray-600">Purchase Price</Label>
-                            <p className="font-medium">${(lead.deal.purchasePrice || 0).toLocaleString()}</p>
+                            <Label>Net Profit</Label>
+                            <Input
+                              type="number"
+                              placeholder="Enter net profit"
+                              value={netProfit}
+                              onChange={(e) => setNetProfit(e.target.value)}
+                              step="1000"
+                            />
                           </div>
                           <div>
-                            <Label className="text-sm text-gray-600">Sale Price</Label>
-                            <p className="font-medium">${(lead.deal.salePrice || 0).toLocaleString()}</p>
+                            <Label>Contracted Date</Label>
+                            <Input
+                              type="date"
+                              value={contractedAt}
+                              onChange={(e) => setContractedAt(e.target.value)}
+                            />
                           </div>
                           <div>
-                            <Label className="text-sm text-gray-600">Closing Date</Label>
-                            <p className="font-medium">{lead.deal.closingDate ? new Date(lead.deal.closingDate).toLocaleDateString() : 'Not set'}</p>
-                          </div>
-                          <div>
-                            <Label className="text-sm text-gray-600">Profit</Label>
-                            <p className="font-medium text-green-600">${((lead.deal.salePrice || 0) - (lead.deal.purchasePrice || 0)).toLocaleString()}</p>
+                            <Label>Closed Date</Label>
+                            <Input
+                              type="date"
+                              value={closedAt}
+                              onChange={(e) => setClosedAt(e.target.value)}
+                            />
                           </div>
                         </div>
-
-                        {lead.deal.notes && (
+                        
+                        <div className="flex gap-2 justify-end pt-4">
+                          <Button
+                            variant="outline"
+                            onClick={cancelDealEdit}
+                          >
+                            Cancel
+                          </Button>
+                          <Button onClick={saveDeal}>
+                            <Save className="w-4 h-4 mr-2" />
+                            Save Transaction
+                          </Button>
+                        </div>
+                      </div>
+                    ) : deal ? (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
                           <div>
-                            <Label className="text-sm text-gray-600">Transaction Notes</Label>
-                            <p className="text-sm mt-1 p-3 bg-gray-50 rounded">{lead.deal.notes}</p>
+                            <Label className="text-sm text-gray-600">Contract Price</Label>
+                            <p className="font-medium">${(deal.contractPrice || 0).toLocaleString()}</p>
                           </div>
-                        )}
+                          <div>
+                            <Label className="text-sm text-gray-600">Sold Price</Label>
+                            <p className="font-medium">${(deal.soldPrice || 0).toLocaleString()}</p>
+                          </div>
+                          <div>
+                            <Label className="text-sm text-gray-600">Net Profit</Label>
+                            <p className={`font-medium ${(deal.netProfit || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              ${(deal.netProfit || 0).toLocaleString()}
+                            </p>
+                          </div>
+                          <div>
+                            <Label className="text-sm text-gray-600">Contracted Date</Label>
+                            <p className="font-medium">
+                              {deal.contractedAt ? new Date(deal.contractedAt).toLocaleDateString() : 'Not set'}
+                            </p>
+                          </div>
+                          <div>
+                            <Label className="text-sm text-gray-600">Closed Date</Label>
+                            <p className="font-medium">
+                              {deal.closedAt ? new Date(deal.closedAt).toLocaleDateString() : 'Not set'}
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     ) : (
                       <div className="text-center py-12 bg-gray-50 rounded-lg">
-                        <FileText className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                        <DollarSign className="w-12 h-12 mx-auto mb-3 text-gray-400" />
                         <p className="text-sm text-gray-600 font-medium">No transaction created yet</p>
-                        <p className="text-xs text-gray-500 mt-1">Transaction details will appear here when a deal is created</p>
+                        <p className="text-xs text-gray-500 mt-1">Click "Create Transaction" to add deal details</p>
                       </div>
                     )}
                   </CardContent>
@@ -1293,44 +1640,254 @@ const LeadEdit: React.FC = () => {
               {/* Dispositions Tab */}
               <TabsContent value="dispositions">
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Disposition Details</CardTitle>
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <CardTitle>Buyer Offers</CardTitle>
+                    <div className="flex gap-2">
+                      {!creatingOffer && !creatingBuyer && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setCreatingBuyer(true)}
+                          >
+                            <User className="w-4 h-4 mr-2" />
+                            New Buyer
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => setCreatingOffer(true)}
+                          >
+                            <Plus className="w-4 h-4 mr-2" />
+                            Add Offer
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </CardHeader>
                   <CardContent>
-                    {lead?.buyerOffers && lead.buyerOffers.length > 0 ? (
+                    {creatingBuyer && (
+                      <div className="mb-6 p-4 border rounded-lg bg-blue-50">
+                        <h4 className="font-semibold mb-4">Create New Buyer</h4>
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label>First Name *</Label>
+                              <Input
+                                placeholder="John"
+                                value={newBuyerFirstName}
+                                onChange={(e) => setNewBuyerFirstName(e.target.value)}
+                              />
+                            </div>
+                            <div>
+                              <Label>Last Name *</Label>
+                              <Input
+                                placeholder="Doe"
+                                value={newBuyerLastName}
+                                onChange={(e) => setNewBuyerLastName(e.target.value)}
+                              />
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label>Email *</Label>
+                              <Input
+                                type="email"
+                                placeholder="john@example.com"
+                                value={newBuyerEmail}
+                                onChange={(e) => setNewBuyerEmail(e.target.value)}
+                              />
+                            </div>
+                            <div>
+                              <Label>Phone *</Label>
+                              <Input
+                                type="tel"
+                                placeholder="(555) 123-4567"
+                                value={newBuyerPhone}
+                                onChange={(e) => setNewBuyerPhone(e.target.value)}
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <Label>Segmentation</Label>
+                            <Select value={newBuyerSegmentation} onValueChange={setNewBuyerSegmentation}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select segmentation (optional)" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="hot">Hot</SelectItem>
+                                <SelectItem value="warm">Warm</SelectItem>
+                                <SelectItem value="cold">Cold</SelectItem>
+                                <SelectItem value="vip">VIP</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="flex gap-2 justify-end">
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                setCreatingBuyer(false);
+                                setNewBuyerFirstName('');
+                                setNewBuyerLastName('');
+                                setNewBuyerEmail('');
+                                setNewBuyerPhone('');
+                                setNewBuyerSegmentation('');
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                            <Button onClick={createNewBuyer}>
+                              <Save className="w-4 h-4 mr-2" />
+                              Create Buyer
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {creatingOffer && (
+                      <div className="mb-6 p-4 border rounded-lg bg-gray-50">
+                        <h4 className="font-semibold mb-4">Create New Offer</h4>
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label>Buyer</Label>
+                              <Select value={selectedBuyer} onValueChange={setSelectedBuyer}>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select buyer" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {buyers.map((buyer) => (
+                                    <SelectItem key={buyer.id} value={buyer.id}>
+                                      {buyer.firstName} {buyer.lastName}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <Label>Offer Amount</Label>
+                              <Input
+                                type="number"
+                                placeholder="Enter offer amount"
+                                value={offerAmount}
+                                onChange={(e) => setOfferAmount(e.target.value)}
+                                min="0"
+                                step="1000"
+                              />
+                            </div>
+                            <div>
+                              <Label>Status</Label>
+                              <Select value={offerStatus} onValueChange={setOfferStatus}>
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="PENDING">Pending</SelectItem>
+                                  <SelectItem value="ACCEPTED">Accepted</SelectItem>
+                                  <SelectItem value="REJECTED">Rejected</SelectItem>
+                                  <SelectItem value="COUNTERED">Countered</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                          <div>
+                            <Label>Notes</Label>
+                            <Textarea
+                              placeholder="Add any notes about this offer..."
+                              value={offerNotes}
+                              onChange={(e) => setOfferNotes(e.target.value)}
+                              rows={3}
+                            />
+                          </div>
+                          <div className="flex gap-2 justify-end">
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                setCreatingOffer(false);
+                                setSelectedBuyer('');
+                                setOfferAmount('');
+                                setOfferStatus('PENDING');
+                                setOfferNotes('');
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                            <Button onClick={createBuyerOffer}>
+                              <Save className="w-4 h-4 mr-2" />
+                              Create Offer
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {buyerOffers.length > 0 ? (
                       <div className="space-y-4">
-                        {lead.buyerOffers.map((offer: any) => (
-                          <div key={offer.id} className="p-4 border rounded-lg">
+                        {buyerOffers.map((offer: any) => (
+                          <div key={offer.id} className="p-4 border rounded-lg hover:shadow-md transition-shadow">
                             <div className="flex items-center justify-between mb-3">
                               <div>
                                 <h4 className="font-semibold">{offer.buyer?.firstName} {offer.buyer?.lastName}</h4>
                                 <p className="text-xs text-gray-600">{offer.buyer?.email}</p>
                               </div>
-                              <Badge className={
-                                offer.status === 'ACCEPTED' ? 'bg-green-100 text-green-800' :
-                                offer.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-gray-100 text-gray-800'
-                              }>
-                                {offer.status}
-                              </Badge>
+                              <div className="flex items-center gap-2">
+                                <Badge className={
+                                  offer.status === 'ACCEPTED' ? 'bg-green-100 text-green-800' :
+                                  offer.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                                  offer.status === 'REJECTED' ? 'bg-red-100 text-red-800' :
+                                  'bg-blue-100 text-blue-800'
+                                }>
+                                  {offer.status}
+                                </Badge>
+                              </div>
                             </div>
-                            <div className="grid grid-cols-3 gap-3 text-sm">
+                            <div className="grid grid-cols-3 gap-3 text-sm mb-3">
                               <div>
                                 <Label className="text-xs text-gray-600">Offer Amount</Label>
-                                <p className="font-medium">${(offer.offerAmount || 0).toLocaleString()}</p>
+                                <p className="font-medium text-lg">${(offer.offerAmount || 0).toLocaleString()}</p>
                               </div>
                               <div>
-                                <Label className="text-xs text-gray-600">EMD</Label>
-                                <p className="font-medium">${(offer.emd || 0).toLocaleString()}</p>
+                                <Label className="text-xs text-gray-600">Created</Label>
+                                <p className="font-medium">{new Date(offer.createdAt).toLocaleDateString()}</p>
                               </div>
                               <div>
-                                <Label className="text-xs text-gray-600">Close Days</Label>
-                                <p className="font-medium">{offer.closeDays || 'N/A'} days</p>
+                                <Label className="text-xs text-gray-600">Updated</Label>
+                                <p className="font-medium">{new Date(offer.updatedAt).toLocaleDateString()}</p>
                               </div>
                             </div>
                             {offer.notes && (
-                              <p className="text-xs text-gray-600 mt-2 p-2 bg-gray-50 rounded">{offer.notes}</p>
+                              <p className="text-xs text-gray-600 mb-3 p-2 bg-gray-50 rounded">{offer.notes}</p>
                             )}
+                            <div className="flex gap-2 justify-end pt-2 border-t">
+                              {offer.status === 'PENDING' && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-green-600 hover:text-green-700"
+                                    onClick={() => updateOfferStatus(offer.id, 'ACCEPTED')}
+                                  >
+                                    Accept
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-red-600 hover:text-red-700"
+                                    onClick={() => updateOfferStatus(offer.id, 'REJECTED')}
+                                  >
+                                    Reject
+                                  </Button>
+                                </>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-red-600 hover:text-red-700"
+                                onClick={() => deleteOffer(offer.id)}
+                              >
+                                <Trash className="w-4 h-4" />
+                              </Button>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -1338,7 +1895,7 @@ const LeadEdit: React.FC = () => {
                       <div className="text-center py-12 bg-gray-50 rounded-lg">
                         <User className="w-12 h-12 mx-auto mb-3 text-gray-400" />
                         <p className="text-sm text-gray-600 font-medium">No buyer offers yet</p>
-                        <p className="text-xs text-gray-500 mt-1">Buyer offers will appear here when submitted</p>
+                        <p className="text-xs text-gray-500 mt-1">Click "Add Offer" to create a buyer offer</p>
                       </div>
                     )}
                   </CardContent>

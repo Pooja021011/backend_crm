@@ -1,6 +1,9 @@
 import { prisma } from '../config/db.js';
 
 export const buyerRepository = {
+  findAll: () => prisma.buyer.findMany({ orderBy: { createdAt: 'desc' } }),
+  create: (data: { firstName: string; lastName: string; phone: string; email: string; segmentation?: string; criteria?: any }) => 
+    prisma.buyer.create({ data }),
   listForLead: (leadId: string) => prisma.leadBuyer.findMany({ where: { leadId }, include: { buyer: true } }),
   linkBuyer: async (leadId: string, data: { buyerId?: string; buyerNew?: { firstName: string; lastName: string; phone: string; email: string; segmentation?: string } }) => {
     let buyerId = data.buyerId;

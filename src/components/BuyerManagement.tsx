@@ -9,8 +9,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Textarea } from './ui/textarea';
-import { Users, Plus, DollarSign, MessageSquare, CheckCircle, XCircle, Clock, TrendingUp } from 'lucide-react';
+import { Users, Plus, DollarSign, MessageSquare, CheckCircle, XCircle, Clock, TrendingUp, UserPlus } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
+import { API_BASE, makeApiCall } from '../config/api';
 
 interface Buyer {
   id: string;
@@ -62,7 +63,17 @@ export const BuyerManagement: React.FC<BuyerManagementProps> = ({ leadId }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [showNewOfferDialog, setShowNewOfferDialog] = useState(false);
   const [showNegotiateDialog, setShowNegotiateDialog] = useState(false);
+  const [showNewBuyerDialog, setShowNewBuyerDialog] = useState(false);
   const [selectedOffer, setSelectedOffer] = useState<BuyerOffer | null>(null);
+  
+  // New buyer form
+  const [newBuyer, setNewBuyer] = useState({
+    firstName: '',
+    lastName: '',
+    phone: '',
+    email: '',
+    segmentation: ''
+  });
   
   // New offer form
   const [newOffer, setNewOffer] = useState({
@@ -102,11 +113,7 @@ export const BuyerManagement: React.FC<BuyerManagementProps> = ({ leadId }) => {
   const loadOffers = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(`/api/v1/buyer-offers/leads/${leadId}/offers`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      const response = await makeApiCall(`${API_BASE}/buyer-offers/leads/${leadId}/offers`);
 
       if (response.ok) {
         const data = await response.json();
@@ -125,36 +132,20 @@ export const BuyerManagement: React.FC<BuyerManagementProps> = ({ leadId }) => {
 
   const loadBuyers = async () => {
     try {
-      // This would typically load from a buyers endpoint
-      // For now, we'll extract unique buyers from offers
-      const response = await fetch(`/api/v1/buyer-offers/leads/${leadId}/offers`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      const response = await makeApiCall(`${API_BASE}/buyers`);
 
       if (response.ok) {
         const data = await response.json();
-        const uniqueBuyers = data.reduce((acc: Buyer[], offer: BuyerOffer) => {
-          if (!acc.find(b => b.id === offer.buyer.id)) {
-            acc.push(offer.buyer);
-          }
-          return acc;
-        }, []);
-        setBuyers(uniqueBuyers);
+        setBuyers(data.data || data || []);
       }
     } catch (error) {
-      // Handle error silently for now
+      console.error('Error loading buyers:', error);
     }
   };
 
   const loadStats = async () => {
     try {
-      const response = await fetch(`/api/v1/buyer-offers/leads/${leadId}/offers/stats`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      const response = await makeApiCall(`${API_BASE}/buyer-offers/leads/${leadId}/offers/stats`);
 
       if (response.ok) {
         const data = await response.json();
@@ -162,6 +153,49 @@ export const BuyerManagement: React.FC<BuyerManagementProps> = ({ leadId }) => {
       }
     } catch (error) {
       // Handle error silently
+    }
+  };
+
+  const createBuyer = async () => {
+    if (!newBuyer.firstName || !newBuyer.lastName || !newBuyer.email || !newBuyer.phone) {
+      toast({
+        title: "Error",
+        description: "All fields are required",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const response = await makeApiCall(`${API_BASE}/buyers`, {
+        method: 'POST',
+        body: JSON.stringify(newBuyer)
+      });
+
+      if (response.ok) {
+        await loadBuyers();
+        setShowNewBuyerDialog(false);
+        setNewBuyer({
+          firstName: '',
+          lastName: '',
+          phone: '',
+          email: '',
+          segmentation: ''
+        });
+        toast({
+          title: "Success",
+          description: "Buyer created successfully"
+        });
+      } else {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create buyer');
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to create buyer",
+        variant: "destructive"
+      });
     }
   };
 
@@ -191,12 +225,8 @@ export const BuyerManagement: React.FC<BuyerManagementProps> = ({ leadId }) => {
         notes: newOffer.notes || undefined
       };
 
-      const response = await fetch(`/api/v1/buyer-offers/leads/${leadId}/offers`, {
+      const response = await makeApiCall(`${API_BASE}/buyer-offers/leads/${leadId}/offers`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
         body: JSON.stringify(offerData)
       });
 
@@ -240,12 +270,8 @@ export const BuyerManagement: React.FC<BuyerManagementProps> = ({ leadId }) => {
         notes: negotiation.notes
       };
 
-      const response = await fetch(`/api/v1/buyer-offers/offers/${selectedOffer.id}/negotiate`, {
+      const response = await makeApiCall(`${API_BASE}/buyer-offers/offers/${selectedOffer.id}/negotiate`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
         body: JSON.stringify(negotiationData)
       });
 
@@ -282,12 +308,8 @@ export const BuyerManagement: React.FC<BuyerManagementProps> = ({ leadId }) => {
 
   const acceptOffer = async (offerId: string) => {
     try {
-      const response = await fetch(`/api/v1/buyer-offers/offers/${offerId}/accept`, {
+      const response = await makeApiCall(`${API_BASE}/buyer-offers/offers/${offerId}/accept`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
         body: JSON.stringify({ notes: 'Offer accepted' })
       });
 
@@ -310,12 +332,8 @@ export const BuyerManagement: React.FC<BuyerManagementProps> = ({ leadId }) => {
 
   const rejectOffer = async (offerId: string, reason?: string) => {
     try {
-      const response = await fetch(`/api/v1/buyer-offers/offers/${offerId}/reject`, {
+      const response = await makeApiCall(`${API_BASE}/buyer-offers/offers/${offerId}/reject`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
         body: JSON.stringify({ reason })
       });
 
@@ -383,13 +401,91 @@ export const BuyerManagement: React.FC<BuyerManagementProps> = ({ leadId }) => {
             <Users className="h-5 w-5" />
             Buyer Management
           </div>
-          <Dialog open={showNewOfferDialog} onOpenChange={setShowNewOfferDialog}>
-            <DialogTrigger asChild>
-              <Button size="sm">
-                <Plus className="h-4 w-4 mr-1" />
-                New Offer
-              </Button>
-            </DialogTrigger>
+          <div className="flex gap-2">
+            <Dialog open={showNewBuyerDialog} onOpenChange={setShowNewBuyerDialog}>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="outline">
+                  <UserPlus className="h-4 w-4 mr-1" />
+                  New Buyer
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Create New Buyer</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="buyer-first-name">First Name *</Label>
+                      <Input
+                        id="buyer-first-name"
+                        value={newBuyer.firstName}
+                        onChange={(e) => setNewBuyer(prev => ({ ...prev, firstName: e.target.value }))}
+                        placeholder="John"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="buyer-last-name">Last Name *</Label>
+                      <Input
+                        id="buyer-last-name"
+                        value={newBuyer.lastName}
+                        onChange={(e) => setNewBuyer(prev => ({ ...prev, lastName: e.target.value }))}
+                        placeholder="Doe"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="buyer-email">Email *</Label>
+                    <Input
+                      id="buyer-email"
+                      type="email"
+                      value={newBuyer.email}
+                      onChange={(e) => setNewBuyer(prev => ({ ...prev, email: e.target.value }))}
+                      placeholder="john@example.com"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="buyer-phone">Phone *</Label>
+                    <Input
+                      id="buyer-phone"
+                      type="tel"
+                      value={newBuyer.phone}
+                      onChange={(e) => setNewBuyer(prev => ({ ...prev, phone: e.target.value }))}
+                      placeholder="(555) 123-4567"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="buyer-segmentation">Segmentation</Label>
+                    <Select value={newBuyer.segmentation} onValueChange={(value) => setNewBuyer(prev => ({ ...prev, segmentation: value }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select segmentation" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="hot">Hot</SelectItem>
+                        <SelectItem value="warm">Warm</SelectItem>
+                        <SelectItem value="cold">Cold</SelectItem>
+                        <SelectItem value="vip">VIP</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex justify-end gap-2 mt-4">
+                    <Button variant="outline" onClick={() => setShowNewBuyerDialog(false)}>
+                      Cancel
+                    </Button>
+                    <Button onClick={createBuyer}>
+                      Create Buyer
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+            <Dialog open={showNewOfferDialog} onOpenChange={setShowNewOfferDialog}>
+              <DialogTrigger asChild>
+                <Button size="sm">
+                  <Plus className="h-4 w-4 mr-1" />
+                  New Offer
+                </Button>
+              </DialogTrigger>
             <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle>Create New Offer</DialogTitle>

@@ -21,6 +21,7 @@ import notificationRoutes from './notificationRoutes.js';
 import leadDistributionRoutes from './leadDistributionRoutes.js';
 import googleSheetsRoutes from './googleSheetsRoutes.js';
 import leadStatusRoutes from './leadStatusRoutes.js';
+import buyerRoutes from './buyerRoutes.js';
 
 const router = Router();
 
@@ -39,6 +40,7 @@ router.use('/calls', callRoutes);
 router.use('/pipeline', pipelineRoutes);
 router.use('/underwriting', underwritingRoutes);
 router.use('/comps', compsRoutes);
+router.use('/buyers', buyerRoutes);
 router.use('/buyer-offers', buyerOfferRoutes);
 router.use('/marketing', marketingRoutes);
 router.use('/reminders', reminderRoutes);
