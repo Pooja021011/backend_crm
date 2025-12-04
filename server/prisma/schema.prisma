@@ -34,6 +34,7 @@ model User {
   triggeredNotifications Notification[] @relation("NotificationTriggeredBy")
   smsSettings UserSmsSettings?
   leadDistributionSettings LeadDistributionSettings?
+  priceHistoryChanges PriceHistory[] @relation("PriceChangedByUser")
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 }
@@ -360,6 +361,7 @@ model Lead {
   buyerOffers      BuyerOffer[]
   marketingResources MarketingResource[]
   notifications    Notification[]
+  priceHistory     PriceHistory[]
 
   @@index([leadType])
   @@index([marketId])
@@ -755,5 +757,24 @@ model MarketingPlatform {
   updatedAt     DateTime @updatedAt
 
   @@index([type, isActive])
+}
+
+// Price History Tracking
+model PriceHistory {
+  id          String   @id @default(uuid())
+  leadId      String
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  
+  fieldName   String   // e.g., "estimatedValue", "contractPrice", "rehabBudget", "askingPrice", "offerAmount", "soldPrice", "netProfit"
+  oldValue    Int?
+  newValue    Int
+  changedById String?
+  changedBy   User?    @relation("PriceChangedByUser", fields: [changedById], references: [id])
+  note        String?
+  
+  createdAt   DateTime @default(now())
+  
+  @@index([leadId, fieldName])
+  @@index([leadId, createdAt])
 }
 

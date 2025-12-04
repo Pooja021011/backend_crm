@@ -37,6 +37,7 @@ import { useToast } from '@/hooks/use-toast';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { CompsManager } from '@/components/CompsManager';
 import { UnderwritingCalculator } from '@/components/UnderwritingCalculator';
+import { LeadTimeline } from '@/components/LeadTimeline';
 
 interface Contact {
   id?: string;
@@ -124,6 +125,13 @@ const LeadEdit: React.FC = () => {
   
   // Lead source specific data
   const [leadSourceData, setLeadSourceData] = useState<any>({});
+  
+  // Valuation fields
+  const [estimatedValue, setEstimatedValue] = useState('');
+  const [askingPrice, setAskingPrice] = useState('');
+  
+  // Appointment tracking
+  const [appointmentDate, setAppointmentDate] = useState('');
   
   // Rehab information
   const [rehabBudget, setRehabBudget] = useState('');
@@ -230,6 +238,13 @@ const LeadEdit: React.FC = () => {
         setWaterHeaterAge(customFields.waterHeaterAge?.toString() || '');
         setWaterType(customFields.waterType || '');
         setSewerType(customFields.sewerType || '');
+        
+        // Load valuation from customFields
+        setEstimatedValue(customFields.estimatedValue?.toString() || '');
+        setAskingPrice(customFields.askingPrice?.toString() || '');
+        
+        // Load appointment date
+        setAppointmentDate(customFields.appointmentDate || '');
         
         // Load rehab information from customFields
         setRehabBudget(customFields.rehabBudget?.toString() || '');
@@ -358,6 +373,9 @@ const LeadEdit: React.FC = () => {
         waterHeaterAge: waterHeaterAge ? parseInt(waterHeaterAge) : null,
         waterType: waterType || null,
         sewerType: sewerType || null,
+        estimatedValue: estimatedValue ? parseInt(estimatedValue) : null,
+        askingPrice: askingPrice ? parseInt(askingPrice) : null,
+        appointmentDate: appointmentDate || null,
         rehabBudget: rehabBudget ? parseInt(rehabBudget) : null,
         rehabItems: rehabItems || [],
         leadSourceData: leadSourceData || {}
@@ -400,6 +418,20 @@ const LeadEdit: React.FC = () => {
       });
 
       if (response.ok) {
+        // Track price changes for valuation and rehab budget
+        const oldEstimatedValue = lead?.customFields?.estimatedValue || null;
+        const newEstimatedValue = estimatedValue ? parseInt(estimatedValue) : null;
+        const oldAskingPrice = lead?.customFields?.askingPrice || null;
+        const newAskingPrice = askingPrice ? parseInt(askingPrice) : null;
+        const oldRehabBudget = lead?.customFields?.rehabBudget || null;
+        const newRehabBudget = rehabBudget ? parseInt(rehabBudget) : null;
+        
+        await trackPriceChanges([
+          { fieldName: 'estimatedValue', oldValue: oldEstimatedValue, newValue: newEstimatedValue },
+          { fieldName: 'askingPrice', oldValue: oldAskingPrice, newValue: newAskingPrice },
+          { fieldName: 'rehabBudget', oldValue: oldRehabBudget, newValue: newRehabBudget }
+        ]);
+
         // Save contacts if they've been modified
         await saveContacts();
         
@@ -431,6 +463,22 @@ const LeadEdit: React.FC = () => {
     // For now, we'll log it
     console.log('Contacts to save:', contacts);
     // TODO: Implement contact save API call when endpoint is available
+  };
+
+  // Helper function to track price changes
+  const trackPriceChanges = async (changes: Array<{ fieldName: string; oldValue: number | null; newValue: number | null }>) => {
+    const validChanges = changes.filter(c => c.newValue !== null && c.newValue !== c.oldValue);
+    if (validChanges.length === 0) return;
+
+    try {
+      await makeApiCall(`${API_BASE}/leads/${id}/price-history/track-batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ changes: validChanges })
+      });
+    } catch (error) {
+      console.error('Error tracking price changes:', error);
+    }
   };
 
   const loadNotes = async () => {
@@ -596,6 +644,11 @@ const LeadEdit: React.FC = () => {
 
   const saveDeal = async () => {
     try {
+      // Store old values for price tracking
+      const oldContractPrice = deal?.contractPrice || null;
+      const oldSoldPrice = deal?.soldPrice || null;
+      const oldNetProfit = deal?.netProfit || null;
+
       const dealData = {
         contractPrice: contractPrice ? parseFloat(contractPrice) : null,
         soldPrice: soldPrice ? parseFloat(soldPrice) : null,
@@ -611,6 +664,14 @@ const LeadEdit: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json();
+        
+        // Track price changes
+        await trackPriceChanges([
+          { fieldName: 'contractPrice', oldValue: oldContractPrice, newValue: dealData.contractPrice },
+          { fieldName: 'soldPrice', oldValue: oldSoldPrice, newValue: dealData.soldPrice },
+          { fieldName: 'netProfit', oldValue: oldNetProfit, newValue: dealData.netProfit }
+        ]);
+
         setDeal(data.data);
         setEditingDeal(false);
         toast({
@@ -861,7 +922,7 @@ const LeadEdit: React.FC = () => {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-64">
-          <div className="text-lg">Loading lead details...</div>
+          <div className="text-lg text-slate-600">Loading lead details...</div>
         </div>
       </DashboardLayout>
     );
@@ -871,7 +932,7 @@ const LeadEdit: React.FC = () => {
     return (
       <DashboardLayout>
         <div className="text-center py-12">
-          <p className="text-lg text-gray-600">Lead not found</p>
+          <p className="text-lg text-slate-600">Lead not found</p>
           <Button onClick={() => navigate('/leads')} className="mt-4">
             Back to Leads
           </Button>
@@ -896,18 +957,18 @@ const LeadEdit: React.FC = () => {
         </div>
 
         {/* Top Section - Address and Owner Name */}
-        <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+        <Card className="border border-slate-200 shadow-sm">
           <CardContent className="p-6">
             <div className="grid grid-cols-2 gap-6">
               <div>
                 <div className="flex items-center gap-2 mb-2">
-                  <Home className="w-5 h-5 text-blue-600" />
-                  <Label className="text-lg font-semibold text-gray-700">Property Address</Label>
+                  <Home className="w-5 h-5 text-slate-600" />
+                  <Label className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Property Address</Label>
                 </div>
-                <p className="text-2xl font-bold text-gray-900">
+                <p className="text-2xl font-bold text-slate-900">
                   {lead.address?.address1 || 'No Address'}
                 </p>
-                <p className="text-gray-600">
+                <p className="text-slate-500">
                   {lead.address?.city && lead.address?.state 
                     ? `${lead.address.city}, ${lead.address.state} ${lead.address.zipCode || ''}`
                     : 'Address not available'}
@@ -915,10 +976,10 @@ const LeadEdit: React.FC = () => {
               </div>
               <div>
                 <div className="flex items-center gap-2 mb-2">
-                  <User className="w-5 h-5 text-blue-600" />
-                  <Label className="text-lg font-semibold text-gray-700">Owner Name</Label>
+                  <User className="w-5 h-5 text-slate-600" />
+                  <Label className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Owner Name</Label>
                 </div>
-                <p className="text-2xl font-bold text-gray-900">
+                <p className="text-2xl font-bold text-slate-900">
                   {lead.seller?.firstName && lead.seller?.lastName
                     ? `${lead.seller.firstName} ${lead.seller.lastName}`
                     : lead.buyer?.firstName && lead.buyer?.lastName
@@ -933,12 +994,15 @@ const LeadEdit: React.FC = () => {
         </Card>
 
         {/* Main Information Row */}
-        <Card className="border-0 shadow-sm">
-          <CardContent className="p-6">
+        <Card className="border border-slate-200 shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold text-slate-700">Lead Information</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
             <div className="grid grid-cols-5 gap-4">
               {/* Lead Source */}
               <div>
-                <Label className="text-sm font-medium mb-2">Lead Source</Label>
+                <Label className="text-sm font-medium text-slate-600 mb-2">Lead Source</Label>
                 <Select value={leadSource} onValueChange={setLeadSource}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select source" />
@@ -965,7 +1029,7 @@ const LeadEdit: React.FC = () => {
 
               {/* Lead Status */}
               <div>
-                <Label className="text-sm font-medium mb-2">Lead Status</Label>
+                <Label className="text-sm font-medium text-slate-600 mb-2">Lead Status</Label>
                 <Select value={leadStatus} onValueChange={setLeadStatus}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select status" />
@@ -992,7 +1056,7 @@ const LeadEdit: React.FC = () => {
 
               {/* Pipeline Status */}
               <div>
-                <Label className="text-sm font-medium mb-2">Pipeline Status</Label>
+                <Label className="text-sm font-medium text-slate-600 mb-2">Pipeline Status</Label>
                 <Select value={pipelineStatus} onValueChange={setPipelineStatus}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select stage" />
@@ -1009,7 +1073,7 @@ const LeadEdit: React.FC = () => {
 
               {/* Acquisitions Agent */}
               <div>
-                <Label className="text-sm font-medium mb-2">Acquisitions Agent</Label>
+                <Label className="text-sm font-medium text-slate-600 mb-2">Acquisitions Agent</Label>
                 <Select value={acquisitionsAgent || 'unassigned'} onValueChange={(value) => setAcquisitionsAgent(value === 'unassigned' ? '' : value)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select agent" />
@@ -1030,7 +1094,7 @@ const LeadEdit: React.FC = () => {
 
               {/* Dispositions Agent */}
               <div>
-                <Label className="text-sm font-medium mb-2">Dispositions Agent</Label>
+                <Label className="text-sm font-medium text-slate-600 mb-2">Dispositions Agent</Label>
                 <Select value={dispositionsAgent || 'unassigned'} onValueChange={(value) => setDispositionsAgent(value === 'unassigned' ? '' : value)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select agent" />
@@ -1053,11 +1117,11 @@ const LeadEdit: React.FC = () => {
         </Card>
 
         {/* Contact Information */}
-        <Card className="border-0 shadow-sm">
+        <Card className="border border-slate-200 shadow-sm">
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <User className="w-5 h-5" />
+              <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-700">
+                <User className="w-5 h-5 text-slate-600" />
                 Owner Contact Information
               </CardTitle>
               <Button size="sm" onClick={addContact}>
@@ -1068,10 +1132,10 @@ const LeadEdit: React.FC = () => {
           </CardHeader>
           <CardContent className="space-y-4">
             {contacts.map((contact, index) => (
-              <div key={index} className="flex items-start gap-4 p-4 border rounded-lg">
+              <div key={index} className="flex items-start gap-4 p-4 border border-slate-200 rounded-lg bg-slate-50">
                 <div className="flex-1 grid grid-cols-3 gap-4">
                   <div>
-                    <Label className="text-sm mb-2">Name</Label>
+                    <Label className="text-sm font-medium text-slate-600 mb-2">Name</Label>
                     <Input
                       value={contact.name}
                       onChange={(e) => updateContact(index, 'name', e.target.value)}
@@ -1079,12 +1143,12 @@ const LeadEdit: React.FC = () => {
                     />
                   </div>
                   <div>
-                    <Label className="text-sm mb-2 flex items-center gap-2">
+                    <Label className="text-sm font-medium text-slate-600 mb-2 flex items-center gap-2">
                       Phone
                       {contact.phone && (
                         <a 
                           href={`tel:${contact.phone.replace(/\D/g, '')}`}
-                          className="text-blue-600 hover:text-blue-800 text-xs"
+                          className="text-emerald-600 hover:text-emerald-700 text-xs"
                           onClick={(e) => e.stopPropagation()}
                         >
                           (click to call)
@@ -1098,12 +1162,12 @@ const LeadEdit: React.FC = () => {
                     />
                   </div>
                   <div>
-                    <Label className="text-sm mb-2 flex items-center gap-2">
+                    <Label className="text-sm font-medium text-slate-600 mb-2 flex items-center gap-2">
                       Email
                       {contact.email && (
                         <a 
                           href={`mailto:${contact.email}`}
-                          className="text-blue-600 hover:text-blue-800 text-xs"
+                          className="text-emerald-600 hover:text-emerald-700 text-xs"
                           onClick={(e) => e.stopPropagation()}
                         >
                           (click to email)
@@ -1131,18 +1195,91 @@ const LeadEdit: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* Property Information */}
-        <Card className="border-0 shadow-sm">
+        {/* Lead Timeline Section */}
+        <LeadTimeline
+          leadId={id!}
+          leadCreatedAt={lead.createdAt}
+          deal={deal}
+          customFields={{
+            ...lead.customFields,
+            estimatedValue: estimatedValue ? parseInt(estimatedValue) : lead.customFields?.estimatedValue,
+            askingPrice: askingPrice ? parseInt(askingPrice) : lead.customFields?.askingPrice,
+            appointmentDate: appointmentDate || lead.customFields?.appointmentDate,
+            rehabBudget: rehabBudget ? parseInt(rehabBudget) : lead.customFields?.rehabBudget,
+          }}
+          onRefresh={() => {
+            loadLead();
+            loadDeal();
+          }}
+        />
+
+        {/* Valuation Section */}
+        <Card className="border border-slate-200 shadow-sm">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Home className="w-5 h-5" />
+            <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-700">
+              <DollarSign className="w-5 h-5 text-slate-600" />
+              Property Valuation & Schedule
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <Label className="text-sm font-medium text-slate-600 mb-2">Est. Value (ARV)</Label>
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    type="number"
+                    value={estimatedValue}
+                    onChange={(e) => setEstimatedValue(e.target.value)}
+                    placeholder="Enter estimated value"
+                    className="pl-9"
+                  />
+                </div>
+                <p className="text-xs text-slate-500 mt-1">After Repair Value</p>
+              </div>
+              <div>
+                <Label className="text-sm font-medium text-slate-600 mb-2">Asking Price</Label>
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    type="number"
+                    value={askingPrice}
+                    onChange={(e) => setAskingPrice(e.target.value)}
+                    placeholder="Enter asking price"
+                    className="pl-9"
+                  />
+                </div>
+                <p className="text-xs text-slate-500 mt-1">Seller's asking price</p>
+              </div>
+              <div>
+                <Label className="text-sm font-medium text-slate-600 mb-2">Appointment Date</Label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    type="date"
+                    value={appointmentDate}
+                    onChange={(e) => setAppointmentDate(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+                <p className="text-xs text-slate-500 mt-1">Scheduled appointment</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Property Information */}
+        <Card className="border border-slate-200 shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-700">
+              <Home className="w-5 h-5 text-slate-600" />
               Property Information
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-3 gap-4 mb-4">
               <div>
-                <Label className="text-sm mb-2">Property Type</Label>
+                <Label className="text-sm font-medium text-slate-600 mb-2">Property Type</Label>
                 <Select value={propertyType} onValueChange={setPropertyType}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select type" />
@@ -1156,7 +1293,7 @@ const LeadEdit: React.FC = () => {
                 </Select>
               </div>
               <div>
-                <Label className="text-sm mb-2">SqFt</Label>
+                <Label className="text-sm font-medium text-slate-600 mb-2">SqFt</Label>
                 <Input
                   type="number"
                   value={sqft}
@@ -1165,7 +1302,7 @@ const LeadEdit: React.FC = () => {
                 />
               </div>
               <div>
-                <Label className="text-sm mb-2">Lot Size</Label>
+                <Label className="text-sm font-medium text-slate-600 mb-2">Lot Size</Label>
                 <Input
                   value={lotSize}
                   onChange={(e) => setLotSize(e.target.value)}
@@ -1175,7 +1312,7 @@ const LeadEdit: React.FC = () => {
             </div>
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <Label className="text-sm mb-2">Bedrooms</Label>
+                <Label className="text-sm font-medium text-slate-600 mb-2">Bedrooms</Label>
                 <Input
                   type="number"
                   value={bedrooms}
@@ -1184,7 +1321,7 @@ const LeadEdit: React.FC = () => {
                 />
               </div>
               <div>
-                <Label className="text-sm mb-2">Bathrooms</Label>
+                <Label className="text-sm font-medium text-slate-600 mb-2">Bathrooms</Label>
                 <Input
                   type="number"
                   step="0.5"
@@ -1194,7 +1331,7 @@ const LeadEdit: React.FC = () => {
                 />
               </div>
               <div>
-                <Label className="text-sm mb-2">Year Built</Label>
+                <Label className="text-sm font-medium text-slate-600 mb-2">Year Built</Label>
                 <Input
                   type="number"
                   value={yearBuilt}
@@ -1221,48 +1358,48 @@ const LeadEdit: React.FC = () => {
               {/* Acquisitions Tab */}
               <TabsContent value="acquisitions" className="space-y-4">
                 {/* Lead Creation Section */}
-                <Card>
+                <Card className="border border-slate-200">
                   <CardHeader>
-                    <CardTitle>Lead Creation</CardTitle>
+                    <CardTitle className="text-base font-semibold text-slate-700">Lead Creation</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <Label className="text-sm font-medium mb-2">Lead Source</Label>
+                          <Label className="text-sm font-medium text-slate-600 mb-2">Lead Source</Label>
                           <Badge variant="outline" className="text-sm">{leadSource || 'Not specified'}</Badge>
                         </div>
                         <div>
-                          <Label className="text-sm font-medium mb-2">Created Date</Label>
-                          <p className="text-sm text-gray-700">{lead?.createdAt ? new Date(lead.createdAt).toLocaleDateString() : 'N/A'}</p>
+                          <Label className="text-sm font-medium text-slate-600 mb-2">Created Date</Label>
+                          <p className="text-sm text-slate-700">{lead?.createdAt ? new Date(lead.createdAt).toLocaleDateString() : 'N/A'}</p>
                         </div>
                       </div>
 
                       {leadSource === 'Cold Call' && (
-                        <div className="space-y-3 p-4 bg-gray-50 rounded-lg">
-                          <h4 className="font-semibold text-sm">Cold Call Details</h4>
+                        <div className="space-y-3 p-4 bg-slate-50 rounded-lg border border-slate-100">
+                          <h4 className="font-semibold text-sm text-slate-700">Cold Call Details</h4>
                           <div className="grid grid-cols-2 gap-3">
                             <div>
-                              <Label className="text-xs text-gray-600">Condition</Label>
-                              <p className="text-sm">{leadSourceData.condition || 'Not specified'}</p>
+                              <Label className="text-xs text-slate-600">Condition</Label>
+                              <p className="text-sm text-slate-900">{leadSourceData.condition || 'Not specified'}</p>
                             </div>
                             <div>
-                              <Label className="text-xs text-gray-600">Motivation</Label>
-                              <p className="text-sm">{leadSourceData.motivation || 'Not specified'}</p>
+                              <Label className="text-xs text-slate-600">Motivation</Label>
+                              <p className="text-sm text-slate-900">{leadSourceData.motivation || 'Not specified'}</p>
                             </div>
                             <div>
-                              <Label className="text-xs text-gray-600">Timeline</Label>
-                              <p className="text-sm">{leadSourceData.timeline || 'Not specified'}</p>
+                              <Label className="text-xs text-slate-600">Timeline</Label>
+                              <p className="text-sm text-slate-900">{leadSourceData.timeline || 'Not specified'}</p>
                             </div>
                             <div>
-                              <Label className="text-xs text-gray-600">Asking Price</Label>
-                              <p className="text-sm">{leadSourceData.askingPrice ? `$${parseInt(leadSourceData.askingPrice).toLocaleString()}` : 'Not specified'}</p>
+                              <Label className="text-xs text-slate-600">Asking Price</Label>
+                              <p className="text-sm text-slate-900">{leadSourceData.askingPrice ? `$${parseInt(leadSourceData.askingPrice).toLocaleString()}` : 'Not specified'}</p>
                             </div>
                           </div>
                           {leadSourceData.callRecording && (
                             <div>
-                              <Label className="text-xs text-gray-600">Call Recording</Label>
-                              <a href={leadSourceData.callRecording} className="text-blue-600 hover:underline text-sm" target="_blank" rel="noopener noreferrer">
+                              <Label className="text-xs text-slate-600">Call Recording</Label>
+                              <a href={leadSourceData.callRecording} className="text-emerald-600 hover:underline text-sm" target="_blank" rel="noopener noreferrer">
                                 Listen to recording
                               </a>
                             </div>
@@ -1271,61 +1408,61 @@ const LeadEdit: React.FC = () => {
                       )}
 
                       {leadSource === 'SMS' && (
-                        <div className="space-y-3 p-4 bg-gray-50 rounded-lg">
-                          <h4 className="font-semibold text-sm">SMS Conversation</h4>
+                        <div className="space-y-3 p-4 bg-slate-50 rounded-lg border border-slate-100">
+                          <h4 className="font-semibold text-sm text-slate-700">SMS Conversation</h4>
                           {leadSourceData.smsMessages && leadSourceData.smsMessages.length > 0 ? (
                             <div className="space-y-2">
                               {leadSourceData.smsMessages.map((msg: any, idx: number) => (
-                                <div key={idx} className={`p-2 rounded ${msg.direction === 'inbound' ? 'bg-blue-100 ml-8' : 'bg-white mr-8'}`}>
-                                  <p className="text-sm">{msg.text}</p>
-                                  <span className="text-xs text-gray-500">{new Date(msg.timestamp).toLocaleString()}</span>
+                                <div key={idx} className={`p-2 rounded ${msg.direction === 'inbound' ? 'bg-slate-200 ml-8' : 'bg-white mr-8 border border-slate-200'}`}>
+                                  <p className="text-sm text-slate-900">{msg.text}</p>
+                                  <span className="text-xs text-slate-500">{new Date(msg.timestamp).toLocaleString()}</span>
                                 </div>
                               ))}
                             </div>
                           ) : (
-                            <p className="text-sm text-gray-600">No SMS messages available</p>
+                            <p className="text-sm text-slate-600">No SMS messages available</p>
                           )}
                         </div>
                       )}
 
                       {leadSource === 'Online' && (
-                        <div className="space-y-3 p-4 bg-gray-50 rounded-lg">
-                          <h4 className="font-semibold text-sm">Online Form Submission</h4>
+                        <div className="space-y-3 p-4 bg-slate-50 rounded-lg border border-slate-100">
+                          <h4 className="font-semibold text-sm text-slate-700">Online Form Submission</h4>
                           <div className="grid grid-cols-2 gap-3">
                             <div>
-                              <Label className="text-xs text-gray-600">Reason for Selling</Label>
-                              <p className="text-sm">{leadSourceData.reasonForSelling || 'Not specified'}</p>
+                              <Label className="text-xs text-slate-600">Reason for Selling</Label>
+                              <p className="text-sm text-slate-900">{leadSourceData.reasonForSelling || 'Not specified'}</p>
                             </div>
                             <div>
-                              <Label className="text-xs text-gray-600">Timeline</Label>
-                              <p className="text-sm">{leadSourceData.timeline || 'Not specified'}</p>
+                              <Label className="text-xs text-slate-600">Timeline</Label>
+                              <p className="text-sm text-slate-900">{leadSourceData.timeline || 'Not specified'}</p>
                             </div>
                             <div>
-                              <Label className="text-xs text-gray-600">Asking Price</Label>
-                              <p className="text-sm">{leadSourceData.askingPrice ? `$${parseInt(leadSourceData.askingPrice).toLocaleString()}` : 'Not specified'}</p>
+                              <Label className="text-xs text-slate-600">Asking Price</Label>
+                              <p className="text-sm text-slate-900">{leadSourceData.askingPrice ? `$${parseInt(leadSourceData.askingPrice).toLocaleString()}` : 'Not specified'}</p>
                             </div>
                           </div>
                         </div>
                       )}
 
                       {leadSource === 'Mailer' && (
-                        <div className="space-y-3 p-4 bg-gray-50 rounded-lg">
-                          <h4 className="font-semibold text-sm">Mailer Campaign</h4>
+                        <div className="space-y-3 p-4 bg-slate-50 rounded-lg border border-slate-100">
+                          <h4 className="font-semibold text-sm text-slate-700">Mailer Campaign</h4>
                           {leadSourceData.mailerImage ? (
                             <div>
-                              <img src={leadSourceData.mailerImage} alt="Mailer" className="max-w-full h-auto rounded border" />
-                              <p className="text-sm text-gray-600 mt-2">Offer Price: {leadSourceData.offerPrice ? `$${parseInt(leadSourceData.offerPrice).toLocaleString()}` : 'N/A'}</p>
+                              <img src={leadSourceData.mailerImage} alt="Mailer" className="max-w-full h-auto rounded border border-slate-200" />
+                              <p className="text-sm text-slate-600 mt-2">Offer Price: {leadSourceData.offerPrice ? `$${parseInt(leadSourceData.offerPrice).toLocaleString()}` : 'N/A'}</p>
                             </div>
                           ) : (
-                            <p className="text-sm text-gray-600">No mailer image available</p>
+                            <p className="text-sm text-slate-600">No mailer image available</p>
                           )}
                         </div>
                       )}
 
                       {leadSource === 'Other' && (
-                        <div className="space-y-3 p-4 bg-gray-50 rounded-lg">
-                          <h4 className="font-semibold text-sm">Lead Origin</h4>
-                          <p className="text-sm">{leadSourceData.description || 'No description provided'}</p>
+                        <div className="space-y-3 p-4 bg-slate-50 rounded-lg border border-slate-100">
+                          <h4 className="font-semibold text-sm text-slate-700">Lead Origin</h4>
+                          <p className="text-sm text-slate-900">{leadSourceData.description || 'No description provided'}</p>
                         </div>
                       )}
                     </div>
@@ -1333,14 +1470,14 @@ const LeadEdit: React.FC = () => {
                 </Card>
 
                 {/* Additional Property Information */}
-                <Card>
+                <Card className="border border-slate-200">
                   <CardHeader>
-                    <CardTitle>Additional Property Information</CardTitle>
+                    <CardTitle className="text-base font-semibold text-slate-700">Additional Property Information</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <Label className="text-sm mb-2">Roof Type</Label>
+                        <Label className="text-sm font-medium text-slate-600 mb-2">Roof Type</Label>
                         <Input
                           value={roofType}
                           onChange={(e) => setRoofType(e.target.value)}
@@ -1348,7 +1485,7 @@ const LeadEdit: React.FC = () => {
                         />
                       </div>
                       <div>
-                        <Label className="text-sm mb-2">Roof Age (years)</Label>
+                        <Label className="text-sm font-medium text-slate-600 mb-2">Roof Age (years)</Label>
                         <Input
                           type="number"
                           value={roofAge}
@@ -1357,7 +1494,7 @@ const LeadEdit: React.FC = () => {
                         />
                       </div>
                       <div>
-                        <Label className="text-sm mb-2">HVAC Type</Label>
+                        <Label className="text-sm font-medium text-slate-600 mb-2">HVAC Type</Label>
                         <Input
                           value={hvacType}
                           onChange={(e) => setHvacType(e.target.value)}
@@ -1365,7 +1502,7 @@ const LeadEdit: React.FC = () => {
                         />
                       </div>
                       <div>
-                        <Label className="text-sm mb-2">HVAC Age (years)</Label>
+                        <Label className="text-sm font-medium text-slate-600 mb-2">HVAC Age (years)</Label>
                         <Input
                           type="number"
                           value={hvacAge}
@@ -1374,7 +1511,7 @@ const LeadEdit: React.FC = () => {
                         />
                       </div>
                       <div>
-                        <Label className="text-sm mb-2">Water Heater Age (years)</Label>
+                        <Label className="text-sm font-medium text-slate-600 mb-2">Water Heater Age (years)</Label>
                         <Input
                           type="number"
                           value={waterHeaterAge}
@@ -1383,7 +1520,7 @@ const LeadEdit: React.FC = () => {
                         />
                       </div>
                       <div>
-                        <Label className="text-sm mb-2">Water Type</Label>
+                        <Label className="text-sm font-medium text-slate-600 mb-2">Water Type</Label>
                         <Input
                           value={waterType}
                           onChange={(e) => setWaterType(e.target.value)}
@@ -1391,7 +1528,7 @@ const LeadEdit: React.FC = () => {
                         />
                       </div>
                       <div>
-                        <Label className="text-sm mb-2">Sewer Type</Label>
+                        <Label className="text-sm font-medium text-slate-600 mb-2">Sewer Type</Label>
                         <Input
                           value={sewerType}
                           onChange={(e) => setSewerType(e.target.value)}
@@ -1403,16 +1540,16 @@ const LeadEdit: React.FC = () => {
                 </Card>
 
                 {/* Rehab Information */}
-                <Card>
+                <Card className="border border-slate-200">
                   <CardHeader>
                     <div className="flex items-center justify-between">
-                      <CardTitle className="flex items-center gap-2">
-                        <Wrench className="w-5 h-5" />
+                      <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-700">
+                        <Wrench className="w-5 h-5 text-slate-600" />
                         Rehab Information
                       </CardTitle>
                       <div className="flex items-center gap-2">
-                        <DollarSign className="w-4 h-4 text-gray-600" />
-                        <span className="text-sm font-semibold">
+                        <DollarSign className="w-4 h-4 text-slate-600" />
+                        <span className="text-sm font-semibold text-slate-700">
                           Total Budget: ${rehabBudget ? parseInt(rehabBudget).toLocaleString() : '0'}
                         </span>
                       </div>
@@ -1421,7 +1558,7 @@ const LeadEdit: React.FC = () => {
                   <CardContent>
                     <div className="space-y-4">
                       <div>
-                        <Label className="text-sm mb-2">Total Rehab Budget</Label>
+                        <Label className="text-sm font-medium text-slate-600 mb-2">Total Rehab Budget</Label>
                         <Input
                           type="number"
                           value={rehabBudget}
@@ -1433,7 +1570,7 @@ const LeadEdit: React.FC = () => {
 
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                          <Label className="text-sm font-semibold">Rehab Items</Label>
+                          <Label className="text-sm font-semibold text-slate-700">Rehab Items</Label>
                           <Button
                             type="button"
                             size="sm"
@@ -1445,7 +1582,12 @@ const LeadEdit: React.FC = () => {
                               if (!cost) return;
                               const description = prompt('Description (optional):') || '';
                               
-                              setRehabItems([...rehabItems, { name, cost: parseInt(cost), description }]);
+                              const newItems = [...rehabItems, { name, cost: parseInt(cost), description }];
+                              setRehabItems(newItems);
+                              // Add item cost to existing budget
+                              const currentBudget = parseInt(rehabBudget) || 0;
+                              const itemCost = parseInt(cost) || 0;
+                              setRehabBudget((currentBudget + itemCost).toString());
                             }}
                           >
                             <Plus className="w-4 h-4 mr-1" />
@@ -1456,20 +1598,26 @@ const LeadEdit: React.FC = () => {
                         {rehabItems.length > 0 ? (
                           <div className="space-y-2">
                             {rehabItems.map((item: any, idx: number) => (
-                              <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg group">
+                              <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100 group">
                                 <div className="flex-1">
-                                  <p className="text-sm font-medium">{item.name}</p>
-                                  {item.description && <p className="text-xs text-gray-600">{item.description}</p>}
+                                  <p className="text-sm font-medium text-slate-900">{item.name}</p>
+                                  {item.description && <p className="text-xs text-slate-600">{item.description}</p>}
                                 </div>
                                 <div className="flex items-center gap-2">
-                                  <p className="text-sm font-semibold">${parseInt(item.cost || 0).toLocaleString()}</p>
+                                  <p className="text-sm font-semibold text-slate-900">${parseInt(item.cost || 0).toLocaleString()}</p>
                                   <Button
                                     type="button"
                                     size="sm"
                                     variant="ghost"
                                     className="opacity-0 group-hover:opacity-100 transition-opacity"
                                     onClick={() => {
-                                      setRehabItems(rehabItems.filter((_, i) => i !== idx));
+                                      const deletedItemCost = parseInt(item.cost) || 0;
+                                      const newItems = rehabItems.filter((_, i) => i !== idx);
+                                      setRehabItems(newItems);
+                                      // Subtract deleted item cost from budget
+                                      const currentBudget = parseInt(rehabBudget) || 0;
+                                      const newBudget = Math.max(0, currentBudget - deletedItemCost);
+                                      setRehabBudget(newBudget.toString());
                                     }}
                                   >
                                     <Trash2 className="w-4 h-4 text-red-500" />
@@ -1477,20 +1625,20 @@ const LeadEdit: React.FC = () => {
                                 </div>
                               </div>
                             ))}
-                            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                            <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200">
                               <div className="flex items-center justify-between">
-                                <p className="text-sm font-semibold text-blue-900">Total Items Cost:</p>
-                                <p className="text-lg font-bold text-blue-900">
+                                <p className="text-sm font-semibold text-emerald-900">Total Items Cost:</p>
+                                <p className="text-lg font-bold text-emerald-900">
                                   ${rehabItems.reduce((sum, item) => sum + (parseInt(item.cost) || 0), 0).toLocaleString()}
                                 </p>
                               </div>
                             </div>
                           </div>
                         ) : (
-                          <div className="text-center py-8 bg-gray-50 rounded-lg">
-                            <Wrench className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                            <p className="text-sm text-gray-600">No rehab items added yet</p>
-                            <p className="text-xs text-gray-500 mt-1">Click "Add Item" to track renovation costs</p>
+                          <div className="text-center py-8 bg-slate-50 rounded-lg border border-slate-100">
+                            <Wrench className="w-8 h-8 mx-auto mb-2 text-slate-400" />
+                            <p className="text-sm text-slate-600">No rehab items added yet</p>
+                            <p className="text-xs text-slate-500 mt-1">Click "Add Item" to track renovation costs</p>
                           </div>
                         )}
                       </div>
@@ -1515,9 +1663,9 @@ const LeadEdit: React.FC = () => {
 
               {/* Transactions Tab */}
               <TabsContent value="transactions">
-                <Card>
+                <Card className="border border-slate-200">
                   <CardHeader className="flex flex-row items-center justify-between">
-                    <CardTitle>Transaction Details</CardTitle>
+                    <CardTitle className="text-base font-semibold text-slate-700">Transaction Details</CardTitle>
                     {!editingDeal && (
                       <Button
                         size="sm"
@@ -1533,7 +1681,7 @@ const LeadEdit: React.FC = () => {
                       <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
                           <div>
-                            <Label>Contract Price</Label>
+                            <Label className="text-sm font-medium text-slate-600">Contract Price</Label>
                             <Input
                               type="number"
                               placeholder="Enter contract price"
@@ -1544,7 +1692,7 @@ const LeadEdit: React.FC = () => {
                             />
                           </div>
                           <div>
-                            <Label>Sold Price</Label>
+                            <Label className="text-sm font-medium text-slate-600">Sold Price</Label>
                             <Input
                               type="number"
                               placeholder="Enter sold price"
@@ -1555,7 +1703,7 @@ const LeadEdit: React.FC = () => {
                             />
                           </div>
                           <div>
-                            <Label>Net Profit</Label>
+                            <Label className="text-sm font-medium text-slate-600">Net Profit</Label>
                             <Input
                               type="number"
                               placeholder="Enter net profit"
@@ -1565,7 +1713,7 @@ const LeadEdit: React.FC = () => {
                             />
                           </div>
                           <div>
-                            <Label>Contracted Date</Label>
+                            <Label className="text-sm font-medium text-slate-600">Contracted Date</Label>
                             <Input
                               type="date"
                               value={contractedAt}
@@ -1573,7 +1721,7 @@ const LeadEdit: React.FC = () => {
                             />
                           </div>
                           <div>
-                            <Label>Closed Date</Label>
+                            <Label className="text-sm font-medium text-slate-600">Closed Date</Label>
                             <Input
                               type="date"
                               value={closedAt}
@@ -1599,38 +1747,38 @@ const LeadEdit: React.FC = () => {
                       <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
                           <div>
-                            <Label className="text-sm text-gray-600">Contract Price</Label>
-                            <p className="font-medium">${(deal.contractPrice || 0).toLocaleString()}</p>
+                            <Label className="text-sm text-slate-600">Contract Price</Label>
+                            <p className="font-medium text-slate-900">${(deal.contractPrice || 0).toLocaleString()}</p>
                           </div>
                           <div>
-                            <Label className="text-sm text-gray-600">Sold Price</Label>
-                            <p className="font-medium">${(deal.soldPrice || 0).toLocaleString()}</p>
+                            <Label className="text-sm text-slate-600">Sold Price</Label>
+                            <p className="font-medium text-slate-900">${(deal.soldPrice || 0).toLocaleString()}</p>
                           </div>
                           <div>
-                            <Label className="text-sm text-gray-600">Net Profit</Label>
-                            <p className={`font-medium ${(deal.netProfit || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            <Label className="text-sm text-slate-600">Net Profit</Label>
+                            <p className={`font-medium ${(deal.netProfit || 0) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                               ${(deal.netProfit || 0).toLocaleString()}
                             </p>
                           </div>
                           <div>
-                            <Label className="text-sm text-gray-600">Contracted Date</Label>
-                            <p className="font-medium">
+                            <Label className="text-sm text-slate-600">Contracted Date</Label>
+                            <p className="font-medium text-slate-900">
                               {deal.contractedAt ? new Date(deal.contractedAt).toLocaleDateString() : 'Not set'}
                             </p>
                           </div>
                           <div>
-                            <Label className="text-sm text-gray-600">Closed Date</Label>
-                            <p className="font-medium">
+                            <Label className="text-sm text-slate-600">Closed Date</Label>
+                            <p className="font-medium text-slate-900">
                               {deal.closedAt ? new Date(deal.closedAt).toLocaleDateString() : 'Not set'}
                             </p>
                           </div>
                         </div>
                       </div>
                     ) : (
-                      <div className="text-center py-12 bg-gray-50 rounded-lg">
-                        <DollarSign className="w-12 h-12 mx-auto mb-3 text-gray-400" />
-                        <p className="text-sm text-gray-600 font-medium">No transaction created yet</p>
-                        <p className="text-xs text-gray-500 mt-1">Click "Create Transaction" to add deal details</p>
+                      <div className="text-center py-12 bg-slate-50 rounded-lg border border-slate-100">
+                        <DollarSign className="w-12 h-12 mx-auto mb-3 text-slate-400" />
+                        <p className="text-sm text-slate-600 font-medium">No transaction created yet</p>
+                        <p className="text-xs text-slate-500 mt-1">Click "Create Transaction" to add deal details</p>
                       </div>
                     )}
                   </CardContent>
@@ -1639,9 +1787,9 @@ const LeadEdit: React.FC = () => {
 
               {/* Dispositions Tab */}
               <TabsContent value="dispositions">
-                <Card>
+                <Card className="border border-slate-200">
                   <CardHeader className="flex flex-row items-center justify-between">
-                    <CardTitle>Buyer Offers</CardTitle>
+                    <CardTitle className="text-base font-semibold text-slate-700">Buyer Offers</CardTitle>
                     <div className="flex gap-2">
                       {!creatingOffer && !creatingBuyer && (
                         <>
@@ -1666,12 +1814,12 @@ const LeadEdit: React.FC = () => {
                   </CardHeader>
                   <CardContent>
                     {creatingBuyer && (
-                      <div className="mb-6 p-4 border rounded-lg bg-blue-50">
-                        <h4 className="font-semibold mb-4">Create New Buyer</h4>
+                      <div className="mb-6 p-4 border border-slate-200 rounded-lg bg-slate-50">
+                        <h4 className="font-semibold mb-4 text-slate-700">Create New Buyer</h4>
                         <div className="space-y-4">
                           <div className="grid grid-cols-2 gap-4">
                             <div>
-                              <Label>First Name *</Label>
+                              <Label className="text-sm font-medium text-slate-600">First Name *</Label>
                               <Input
                                 placeholder="John"
                                 value={newBuyerFirstName}
@@ -1679,7 +1827,7 @@ const LeadEdit: React.FC = () => {
                               />
                             </div>
                             <div>
-                              <Label>Last Name *</Label>
+                              <Label className="text-sm font-medium text-slate-600">Last Name *</Label>
                               <Input
                                 placeholder="Doe"
                                 value={newBuyerLastName}
@@ -1689,7 +1837,7 @@ const LeadEdit: React.FC = () => {
                           </div>
                           <div className="grid grid-cols-2 gap-4">
                             <div>
-                              <Label>Email *</Label>
+                              <Label className="text-sm font-medium text-slate-600">Email *</Label>
                               <Input
                                 type="email"
                                 placeholder="john@example.com"
@@ -1698,7 +1846,7 @@ const LeadEdit: React.FC = () => {
                               />
                             </div>
                             <div>
-                              <Label>Phone *</Label>
+                              <Label className="text-sm font-medium text-slate-600">Phone *</Label>
                               <Input
                                 type="tel"
                                 placeholder="(555) 123-4567"
@@ -1708,7 +1856,7 @@ const LeadEdit: React.FC = () => {
                             </div>
                           </div>
                           <div>
-                            <Label>Segmentation</Label>
+                            <Label className="text-sm font-medium text-slate-600">Segmentation</Label>
                             <Select value={newBuyerSegmentation} onValueChange={setNewBuyerSegmentation}>
                               <SelectTrigger>
                                 <SelectValue placeholder="Select segmentation (optional)" />
@@ -1745,12 +1893,12 @@ const LeadEdit: React.FC = () => {
                     )}
 
                     {creatingOffer && (
-                      <div className="mb-6 p-4 border rounded-lg bg-gray-50">
-                        <h4 className="font-semibold mb-4">Create New Offer</h4>
+                      <div className="mb-6 p-4 border border-slate-200 rounded-lg bg-slate-50">
+                        <h4 className="font-semibold mb-4 text-slate-700">Create New Offer</h4>
                         <div className="space-y-4">
                           <div className="grid grid-cols-2 gap-4">
                             <div>
-                              <Label>Buyer</Label>
+                              <Label className="text-sm font-medium text-slate-600">Buyer</Label>
                               <Select value={selectedBuyer} onValueChange={setSelectedBuyer}>
                                 <SelectTrigger>
                                   <SelectValue placeholder="Select buyer" />
@@ -1765,7 +1913,7 @@ const LeadEdit: React.FC = () => {
                               </Select>
                             </div>
                             <div>
-                              <Label>Offer Amount</Label>
+                              <Label className="text-sm font-medium text-slate-600">Offer Amount</Label>
                               <Input
                                 type="number"
                                 placeholder="Enter offer amount"
@@ -1776,7 +1924,7 @@ const LeadEdit: React.FC = () => {
                               />
                             </div>
                             <div>
-                              <Label>Status</Label>
+                              <Label className="text-sm font-medium text-slate-600">Status</Label>
                               <Select value={offerStatus} onValueChange={setOfferStatus}>
                                 <SelectTrigger>
                                   <SelectValue />
@@ -1791,7 +1939,7 @@ const LeadEdit: React.FC = () => {
                             </div>
                           </div>
                           <div>
-                            <Label>Notes</Label>
+                            <Label className="text-sm font-medium text-slate-600">Notes</Label>
                             <Textarea
                               placeholder="Add any notes about this offer..."
                               value={offerNotes}
@@ -1824,18 +1972,18 @@ const LeadEdit: React.FC = () => {
                     {buyerOffers.length > 0 ? (
                       <div className="space-y-4">
                         {buyerOffers.map((offer: any) => (
-                          <div key={offer.id} className="p-4 border rounded-lg hover:shadow-md transition-shadow">
+                          <div key={offer.id} className="p-4 border border-slate-200 rounded-lg hover:shadow-md transition-shadow">
                             <div className="flex items-center justify-between mb-3">
                               <div>
-                                <h4 className="font-semibold">{offer.buyer?.firstName} {offer.buyer?.lastName}</h4>
-                                <p className="text-xs text-gray-600">{offer.buyer?.email}</p>
+                                <h4 className="font-semibold text-slate-900">{offer.buyer?.firstName} {offer.buyer?.lastName}</h4>
+                                <p className="text-xs text-slate-600">{offer.buyer?.email}</p>
                               </div>
                               <div className="flex items-center gap-2">
                                 <Badge className={
-                                  offer.status === 'ACCEPTED' ? 'bg-green-100 text-green-800' :
-                                  offer.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                                  offer.status === 'ACCEPTED' ? 'bg-emerald-100 text-emerald-800' :
+                                  offer.status === 'PENDING' ? 'bg-amber-100 text-amber-800' :
                                   offer.status === 'REJECTED' ? 'bg-red-100 text-red-800' :
-                                  'bg-blue-100 text-blue-800'
+                                  'bg-slate-100 text-slate-800'
                                 }>
                                   {offer.status}
                                 </Badge>
@@ -1843,28 +1991,28 @@ const LeadEdit: React.FC = () => {
                             </div>
                             <div className="grid grid-cols-3 gap-3 text-sm mb-3">
                               <div>
-                                <Label className="text-xs text-gray-600">Offer Amount</Label>
-                                <p className="font-medium text-lg">${(offer.offerAmount || 0).toLocaleString()}</p>
+                                <Label className="text-xs text-slate-600">Offer Amount</Label>
+                                <p className="font-medium text-lg text-slate-900">${(offer.offerAmount || 0).toLocaleString()}</p>
                               </div>
                               <div>
-                                <Label className="text-xs text-gray-600">Created</Label>
-                                <p className="font-medium">{new Date(offer.createdAt).toLocaleDateString()}</p>
+                                <Label className="text-xs text-slate-600">Created</Label>
+                                <p className="font-medium text-slate-900">{new Date(offer.createdAt).toLocaleDateString()}</p>
                               </div>
                               <div>
-                                <Label className="text-xs text-gray-600">Updated</Label>
-                                <p className="font-medium">{new Date(offer.updatedAt).toLocaleDateString()}</p>
+                                <Label className="text-xs text-slate-600">Updated</Label>
+                                <p className="font-medium text-slate-900">{new Date(offer.updatedAt).toLocaleDateString()}</p>
                               </div>
                             </div>
                             {offer.notes && (
-                              <p className="text-xs text-gray-600 mb-3 p-2 bg-gray-50 rounded">{offer.notes}</p>
+                              <p className="text-xs text-slate-600 mb-3 p-2 bg-slate-50 rounded border border-slate-100">{offer.notes}</p>
                             )}
-                            <div className="flex gap-2 justify-end pt-2 border-t">
+                            <div className="flex gap-2 justify-end pt-2 border-t border-slate-200">
                               {offer.status === 'PENDING' && (
                                 <>
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    className="text-green-600 hover:text-green-700"
+                                    className="text-emerald-600 hover:text-emerald-700"
                                     onClick={() => updateOfferStatus(offer.id, 'ACCEPTED')}
                                   >
                                     Accept
@@ -1892,10 +2040,10 @@ const LeadEdit: React.FC = () => {
                         ))}
                       </div>
                     ) : (
-                      <div className="text-center py-12 bg-gray-50 rounded-lg">
-                        <User className="w-12 h-12 mx-auto mb-3 text-gray-400" />
-                        <p className="text-sm text-gray-600 font-medium">No buyer offers yet</p>
-                        <p className="text-xs text-gray-500 mt-1">Click "Add Offer" to create a buyer offer</p>
+                      <div className="text-center py-12 bg-slate-50 rounded-lg border border-slate-100">
+                        <User className="w-12 h-12 mx-auto mb-3 text-slate-400" />
+                        <p className="text-sm text-slate-600 font-medium">No buyer offers yet</p>
+                        <p className="text-xs text-slate-500 mt-1">Click "Add Offer" to create a buyer offer</p>
                       </div>
                     )}
                   </CardContent>
@@ -1904,10 +2052,10 @@ const LeadEdit: React.FC = () => {
 
               {/* Files Tab */}
               <TabsContent value="files">
-                <Card>
+                <Card className="border border-slate-200">
                   <CardHeader>
                     <div className="flex items-center justify-between">
-                      <CardTitle>Documents & Files</CardTitle>
+                      <CardTitle className="text-base font-semibold text-slate-700">Documents & Files</CardTitle>
                       <Button size="sm" disabled={uploading}>
                         <Upload className="w-4 h-4 mr-2" />
                         <label htmlFor="file-upload" className="cursor-pointer">
@@ -1927,12 +2075,12 @@ const LeadEdit: React.FC = () => {
                     {files.length > 0 ? (
                       <div className="space-y-2">
                         {files.map((file: any) => (
-                          <div key={file.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors">
+                          <div key={file.id} className="flex items-center justify-between p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
                             <div className="flex items-center gap-3 flex-1">
-                              <FileText className="w-5 h-5 text-blue-600" />
+                              <FileText className="w-5 h-5 text-slate-600" />
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium truncate">{file.file?.name || 'Unnamed file'}</p>
-                                <div className="flex items-center gap-3 text-xs text-gray-500">
+                                <p className="text-sm font-medium text-slate-900 truncate">{file.file?.name || 'Unnamed file'}</p>
+                                <div className="flex items-center gap-3 text-xs text-slate-500">
                                   <span>{(file.file?.size / 1024).toFixed(2)} KB</span>
                                   <span>•</span>
                                   <span>{file.file?.uploadedAt ? new Date(file.file.uploadedAt).toLocaleDateString() : 'Unknown date'}</span>
@@ -1978,10 +2126,10 @@ const LeadEdit: React.FC = () => {
                         ))}
                       </div>
                     ) : (
-                      <div className="text-center py-12 bg-gray-50 rounded-lg">
-                        <Upload className="w-12 h-12 mx-auto mb-3 text-gray-400" />
-                        <p className="text-sm text-gray-600 font-medium">No files uploaded yet</p>
-                        <p className="text-xs text-gray-500 mt-1">Upload documents related to this lead</p>
+                      <div className="text-center py-12 bg-slate-50 rounded-lg border border-slate-100">
+                        <Upload className="w-12 h-12 mx-auto mb-3 text-slate-400" />
+                        <p className="text-sm text-slate-600 font-medium">No files uploaded yet</p>
+                        <p className="text-xs text-slate-500 mt-1">Upload documents related to this lead</p>
                         <Button size="sm" className="mt-4" disabled={uploading}>
                           <label htmlFor="file-upload-empty" className="cursor-pointer flex items-center gap-2">
                             <Upload className="w-4 h-4" />
@@ -2005,10 +2153,10 @@ const LeadEdit: React.FC = () => {
 
           {/* Right side - Communication Section (4 columns) */}
           <div className="col-span-4">
-            <Card className="sticky top-4">
+            <Card className="sticky top-4 border border-slate-200">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MessageSquare className="w-5 h-5" />
+                <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-700">
+                  <MessageSquare className="w-5 h-5 text-slate-600" />
                   Communications
                 </CardTitle>
               </CardHeader>
@@ -2016,12 +2164,12 @@ const LeadEdit: React.FC = () => {
                 {/* Tasks Section */}
                 <div>
                   <div className="flex items-center gap-2 mb-3">
-                    <CheckSquare className="w-4 h-4" />
-                    <h4 className="font-semibold text-sm">Upcoming Tasks</h4>
+                    <CheckSquare className="w-4 h-4 text-slate-600" />
+                    <h4 className="font-semibold text-sm text-slate-700">Upcoming Tasks</h4>
                   </div>
                   <div className="space-y-2">
-                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                      <p className="text-sm text-gray-700">No upcoming tasks</p>
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                      <p className="text-sm text-slate-600">No upcoming tasks</p>
                     </div>
                   </div>
                 </div>
@@ -2031,30 +2179,30 @@ const LeadEdit: React.FC = () => {
                 {/* Communication Timeline */}
                 <div>
                   <div className="flex items-center gap-2 mb-3">
-                    <Clock className="w-4 h-4" />
-                    <h4 className="font-semibold text-sm">Activity Timeline</h4>
+                    <Clock className="w-4 h-4 text-slate-600" />
+                    <h4 className="font-semibold text-sm text-slate-700">Activity Timeline</h4>
                   </div>
                   <div className="space-y-3 max-h-[500px] overflow-y-auto">
                     {notes.length > 0 ? (
                       notes.map((note) => (
-                        <div key={note.id} className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                        <div key={note.id} className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
                           <div className="flex items-start justify-between mb-2">
                             <div className="flex items-center gap-2">
-                              <FileText className="w-4 h-4 text-blue-600" />
-                              <span className="text-xs font-semibold text-gray-700">
+                              <FileText className="w-4 h-4 text-slate-600" />
+                              <span className="text-xs font-semibold text-slate-700">
                                 {note.user?.firstName} {note.user?.lastName}
                               </span>
                             </div>
-                            <span className="text-xs text-gray-500" title={new Date(note.createdAt).toLocaleString()}>
+                            <span className="text-xs text-slate-500" title={new Date(note.createdAt).toLocaleString()}>
                               {formatDate(note.createdAt)}
                             </span>
                           </div>
-                          <p className="text-sm text-gray-700 whitespace-pre-wrap">{note.body}</p>
+                          <p className="text-sm text-slate-700 whitespace-pre-wrap">{note.body}</p>
                         </div>
                       ))
                     ) : (
-                      <div className="text-sm text-gray-600 text-center py-8">
-                        <FileText className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                      <div className="text-sm text-slate-600 text-center py-8">
+                        <FileText className="w-8 h-8 mx-auto mb-2 text-slate-400" />
                         No communications yet
                       </div>
                     )}
@@ -2065,7 +2213,7 @@ const LeadEdit: React.FC = () => {
 
                 {/* Add Note */}
                 <div>
-                  <Label className="text-sm font-semibold mb-2">Add Note</Label>
+                  <Label className="text-sm font-semibold text-slate-700 mb-2">Add Note</Label>
                   <Textarea
                     value={noteText}
                     onChange={(e) => setNoteText(e.target.value)}

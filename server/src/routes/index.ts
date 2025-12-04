@@ -22,6 +22,7 @@ import leadDistributionRoutes from './leadDistributionRoutes.js';
 import googleSheetsRoutes from './googleSheetsRoutes.js';
 import leadStatusRoutes from './leadStatusRoutes.js';
 import buyerRoutes from './buyerRoutes.js';
+import priceHistoryRoutes from './priceHistoryRoutes.js';
 
 const router = Router();
 
@@ -48,6 +49,7 @@ router.use('/notifications', notificationRoutes);
 router.use('/lead-distribution', leadDistributionRoutes);
 router.use('/google-sheets', googleSheetsRoutes);
 router.use('/lead-statuses', leadStatusRoutes);
+router.use('/', priceHistoryRoutes);
 
 export default router;
 
