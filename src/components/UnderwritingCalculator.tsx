@@ -162,11 +162,11 @@ export const UnderwritingCalculator: React.FC<UnderwritingCalculatorProps> = ({ 
       pdf.setFontSize(11);
       pdf.setFont("helvetica", "normal");
       const outputData = [
-        ['Total Investment:', formatCurrency(outputs.totalCosts)],
-        ['Gross Profit:', formatCurrency(outputs.profit)],
-        ['Return on Investment (ROI):', `${outputs.roi.toFixed(2)}%`],
-        ['Cash-on-Cash Return:', `${outputs.cashOnCash.toFixed(2)}%`],
-        ['Profit Margin:', `${outputs.profitMargin.toFixed(2)}%`]
+        ['Total Investment:', formatCurrency(Number(outputs?.totalCosts ?? 0))],
+        ['Gross Profit:', formatCurrency(Number(outputs?.profit ?? 0))],
+        ['Return on Investment (ROI):', `${Number(outputs?.roi ?? 0).toFixed(2)}%`],
+        ['Cash-on-Cash Return:', `${Number(outputs?.cashOnCash ?? 0).toFixed(2)}%`],
+        ['Profit Margin:', `${Number(outputs?.profitMargin ?? 0).toFixed(2)}%`]
       ];
 
       outputData.forEach(([label, value]) => {
@@ -184,14 +184,16 @@ export const UnderwritingCalculator: React.FC<UnderwritingCalculatorProps> = ({ 
 
       pdf.setFontSize(10);
       pdf.setFont("helvetica", "normal");
-      const profitColor = outputs.profit > 0 ? [0, 150, 0] : [200, 0, 0];
+      const profit = Number(outputs?.profit ?? 0);
+      const profitColor = profit > 0 ? [0, 150, 0] : [200, 0, 0];
       pdf.setTextColor(...profitColor);
-      pdf.text(`Expected Profit: ${formatCurrency(outputs.profit)}`, margin, yPosition);
+      pdf.text(`Expected Profit: ${formatCurrency(profit)}`, margin, yPosition);
       yPosition += 8;
 
       pdf.setTextColor(0, 0, 0);
-      const roiAssessment = outputs.roi > 20 ? 'Excellent' : outputs.roi > 15 ? 'Good' : outputs.roi > 10 ? 'Fair' : 'Poor';
-      pdf.text(`ROI Assessment: ${roiAssessment} (${outputs.roi.toFixed(2)}%)`, margin, yPosition);
+      const roi = Number(outputs?.roi ?? 0);
+      const roiAssessment = roi > 20 ? 'Excellent' : roi > 15 ? 'Good' : roi > 10 ? 'Fair' : 'Poor';
+      pdf.text(`ROI Assessment: ${roiAssessment} (${roi.toFixed(2)}%)`, margin, yPosition);
 
       // Save the PDF
       const fileName = `underwriting-${scenario.name.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.pdf`;
@@ -440,48 +442,24 @@ export const UnderwritingCalculator: React.FC<UnderwritingCalculatorProps> = ({ 
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Calculator className="h-5 w-5" />
+    <Card className="border border-slate-200">
+      <CardHeader className="p-3 pb-0">
+        <CardTitle className="flex items-center justify-between text-sm">
+          <div className="flex items-center gap-1.5">
+            <Calculator className="h-4 w-4" />
             Underwriting Calculator
           </div>
-          <div className="flex items-center gap-2">
-            {selectedScenario && (
-              <Button size="sm" variant="outline" onClick={exportToPDF}>
-                <Download className="h-4 w-4 mr-1" />
-                Export PDF
-              </Button>
-            )}
+          <div className="flex items-center gap-1">
+            {selectedScenario && (<Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={exportToPDF}><Download className="h-3 w-3 mr-0.5" />PDF</Button>)}
             <Dialog open={showNewScenarioDialog} onOpenChange={setShowNewScenarioDialog}>
-              <DialogTrigger asChild>
-                <Button size="sm" variant="outline">
-                  <Plus className="h-4 w-4 mr-1" />
-                  New Scenario
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Create New Scenario</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="scenario-name">Scenario Name</Label>
-                    <Input
-                      id="scenario-name"
-                      value={newScenarioName}
-                      onChange={(e) => setNewScenarioName(e.target.value)}
-                      placeholder="e.g. Conservative Estimate"
-                    />
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button variant="outline" onClick={() => setShowNewScenarioDialog(false)}>
-                      Cancel
-                    </Button>
-                    <Button onClick={handleCreateNewScenario}>
-                      Create
-                    </Button>
+              <DialogTrigger asChild><Button size="sm" variant="ghost" className="h-6 text-xs px-2"><Plus className="h-3 w-3 mr-0.5" />New Scenario</Button></DialogTrigger>
+              <DialogContent className="max-w-sm">
+                <DialogHeader><DialogTitle className="text-sm">New Scenario</DialogTitle></DialogHeader>
+                <div className="space-y-2">
+                  <Input value={newScenarioName} onChange={(e) => setNewScenarioName(e.target.value)} placeholder="Scenario name" className="h-7 text-xs" />
+                  <div className="flex justify-end gap-1">
+                    <Button variant="outline" size="sm" className="h-6 text-xs" onClick={() => setShowNewScenarioDialog(false)}>Cancel</Button>
+                    <Button size="sm" className="h-6 text-xs" onClick={handleCreateNewScenario}>Create</Button>
                   </div>
                 </div>
               </DialogContent>
@@ -489,227 +467,65 @@ export const UnderwritingCalculator: React.FC<UnderwritingCalculatorProps> = ({ 
           </div>
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-3 pt-0">
         <Tabs defaultValue="calculator" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="calculator">Calculator</TabsTrigger>
-            <TabsTrigger value="scenarios">Scenarios ({scenarios.length})</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2 h-7">
+            <TabsTrigger value="calculator" className="text-xs py-1">Calculator</TabsTrigger>
+            <TabsTrigger value="scenarios" className="text-xs py-1">Scenarios ({scenarios.length})</TabsTrigger>
           </TabsList>
           
-          <TabsContent value="calculator" className="space-y-6">
+          <TabsContent value="calculator" className="space-y-2 mt-2">
             {scenarios.length > 0 && (
-              <div>
-                <Label htmlFor="scenario-select">Current Scenario</Label>
-                <Select value={selectedScenario || ''} onValueChange={setSelectedScenario}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a scenario" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {scenarios.map(scenario => (
-                      <SelectItem key={scenario.id} value={scenario.id}>
-                        {scenario.name} {scenario.isPrimary && <Badge variant="secondary" className="ml-2">Primary</Badge>}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <Select value={selectedScenario || ''} onValueChange={setSelectedScenario}>
+                <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Select scenario" /></SelectTrigger>
+                <SelectContent>{scenarios.map(scenario => (<SelectItem key={scenario.id} value={scenario.id}>{scenario.name} {scenario.isPrimary && '★'}</SelectItem>))}</SelectContent>
+              </Select>
             )}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Inputs</h3>
-                
-                <div className="space-y-3">
-                  <div>
-                    <Label htmlFor="purchase-price">Purchase Price</Label>
-                    <Input
-                      id="purchase-price"
-                      type="number"
-                      value={inputs.purchasePrice || ''}
-                      onChange={(e) => handleInputChange('purchasePrice', e.target.value)}
-                      placeholder="0"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="repair-costs">Repair Costs</Label>
-                    <Input
-                      id="repair-costs"
-                      type="number"
-                      value={inputs.repairCosts || ''}
-                      onChange={(e) => handleInputChange('repairCosts', e.target.value)}
-                      placeholder="0"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="arv">After Repair Value (ARV)</Label>
-                    <Input
-                      id="arv"
-                      type="number"
-                      value={inputs.arv || ''}
-                      onChange={(e) => handleInputChange('arv', e.target.value)}
-                      placeholder="0"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="holding-costs">Holding Costs</Label>
-                    <Input
-                      id="holding-costs"
-                      type="number"
-                      value={inputs.holdingCosts || ''}
-                      onChange={(e) => handleInputChange('holdingCosts', e.target.value)}
-                      placeholder="0"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="closing-costs">Closing Costs</Label>
-                    <Input
-                      id="closing-costs"
-                      type="number"
-                      value={inputs.closingCosts || ''}
-                      onChange={(e) => handleInputChange('closingCosts', e.target.value)}
-                      placeholder="0"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="realtor-fees">Realtor Fees</Label>
-                    <Input
-                      id="realtor-fees"
-                      type="number"
-                      value={inputs.realtorFees || ''}
-                      onChange={(e) => handleInputChange('realtorFees', e.target.value)}
-                      placeholder="0"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="other-costs">Other Costs</Label>
-                    <Input
-                      id="other-costs"
-                      type="number"
-                      value={inputs.otherCosts || ''}
-                      onChange={(e) => handleInputChange('otherCosts', e.target.value)}
-                      placeholder="0"
-                    />
-                  </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <div className="flex items-center gap-1 mb-1"><span className="text-xs font-medium text-slate-600">Inputs</span></div>
+                <div className="space-y-1">
+                  <div><Label className="text-[10px] text-slate-500">Purchase Price</Label><Input type="number" value={inputs.purchasePrice || ''} onChange={(e) => handleInputChange('purchasePrice', e.target.value)} placeholder="0" className="h-6 text-xs" /></div>
+                  <div><Label className="text-[10px] text-slate-500">Repair Costs</Label><Input type="number" value={inputs.repairCosts || ''} onChange={(e) => handleInputChange('repairCosts', e.target.value)} placeholder="0" className="h-6 text-xs" /></div>
+                  <div><Label className="text-[10px] text-slate-500">ARV</Label><Input type="number" value={inputs.arv || ''} onChange={(e) => handleInputChange('arv', e.target.value)} placeholder="0" className="h-6 text-xs" /></div>
+                  <div><Label className="text-[10px] text-slate-500">Holding Costs</Label><Input type="number" value={inputs.holdingCosts || ''} onChange={(e) => handleInputChange('holdingCosts', e.target.value)} placeholder="0" className="h-6 text-xs" /></div>
+                  <div><Label className="text-[10px] text-slate-500">Closing Costs</Label><Input type="number" value={inputs.closingCosts || ''} onChange={(e) => handleInputChange('closingCosts', e.target.value)} placeholder="0" className="h-6 text-xs" /></div>
+                  <div><Label className="text-[10px] text-slate-500">Realtor Fees</Label><Input type="number" value={inputs.realtorFees || ''} onChange={(e) => handleInputChange('realtorFees', e.target.value)} placeholder="0" className="h-6 text-xs" /></div>
+                  <div><Label className="text-[10px] text-slate-500">Other Costs</Label><Input type="number" value={inputs.otherCosts || ''} onChange={(e) => handleInputChange('otherCosts', e.target.value)} placeholder="0" className="h-6 text-xs" /></div>
                 </div>
-
-                <Button 
-                  onClick={calculateScenario} 
-                  disabled={isCalculating}
-                  className="w-full"
-                >
-                  <TrendingUp className="h-4 w-4 mr-2" />
-                  {isCalculating ? 'Calculating...' : 'Calculate'}
-                </Button>
+                <Button onClick={calculateScenario} disabled={isCalculating} className="w-full h-7 text-xs mt-2"><TrendingUp className="h-3 w-3 mr-1" />{isCalculating ? '...' : 'Calculate'}</Button>
               </div>
-
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Results</h3>
-                
-                <div className="space-y-3">
-                  <div className="p-3 bg-muted rounded-lg">
-                    <div className="text-sm text-muted-foreground">Total Costs</div>
-                    <div className="text-xl font-semibold">${outputs.totalCosts.toLocaleString()}</div>
-                  </div>
-
-                  <div className={`p-3 rounded-lg ${outputs.profit >= 0 ? 'bg-green-50 text-green-900' : 'bg-red-50 text-red-900'}`}>
-                    <div className="text-sm opacity-80">Profit</div>
-                    <div className="text-xl font-semibold">${outputs.profit.toLocaleString()}</div>
-                  </div>
-
-                  <div className="p-3 bg-muted rounded-lg">
-                    <div className="text-sm text-muted-foreground">ROI</div>
-                    <div className="text-xl font-semibold">{outputs.roi.toFixed(2)}%</div>
-                  </div>
-
-                  <div className="p-3 bg-muted rounded-lg">
-                    <div className="text-sm text-muted-foreground">Cash on Cash</div>
-                    <div className="text-xl font-semibold">{outputs.cashOnCash.toFixed(2)}%</div>
-                  </div>
-
-                  <div className="p-3 bg-muted rounded-lg">
-                    <div className="text-sm text-muted-foreground">Profit Margin</div>
-                    <div className="text-xl font-semibold">{outputs.profitMargin.toFixed(2)}%</div>
-                  </div>
+              <div>
+                <div className="flex items-center gap-1 mb-1"><span className="text-xs font-medium text-slate-600">Results</span></div>
+                <div className="space-y-1">
+                  <div className="p-1.5 bg-muted rounded"><div className="text-[10px] text-muted-foreground">Total Costs</div><div className="text-sm font-semibold">${Number(outputs?.totalCosts ?? 0).toLocaleString()}</div></div>
+                  <div className={`p-1.5 rounded ${Number(outputs?.profit ?? 0) >= 0 ? 'bg-green-50 text-green-900' : 'bg-red-50 text-red-900'}`}><div className="text-[10px] opacity-80">Profit</div><div className="text-sm font-semibold">${Number(outputs?.profit ?? 0).toLocaleString()}</div></div>
+                  <div className="p-1.5 bg-muted rounded"><div className="text-[10px] text-muted-foreground">ROI</div><div className="text-sm font-semibold">{Number(outputs?.roi ?? 0).toFixed(2)}%</div></div>
+                  <div className="p-1.5 bg-muted rounded"><div className="text-[10px] text-muted-foreground">Cash on Cash</div><div className="text-sm font-semibold">{Number(outputs?.cashOnCash ?? 0).toFixed(2)}%</div></div>
+                  <div className="p-1.5 bg-muted rounded"><div className="text-[10px] text-muted-foreground">Profit Margin</div><div className="text-sm font-semibold">{Number(outputs?.profitMargin ?? 0).toFixed(2)}%</div></div>
                 </div>
-
-                <div className="flex flex-col gap-2">
-                  {selectedScenario ? (
-                    <Button onClick={updateScenario} variant="outline" className="w-full">
-                      Update Scenario
-                    </Button>
-                  ) : (
-                    <Button onClick={() => setShowNewScenarioDialog(true)} className="w-full">
-                      Save as New Scenario
-                    </Button>
-                  )}
-                </div>
+                {selectedScenario ? (<Button onClick={updateScenario} variant="outline" className="w-full h-7 text-xs mt-2">Update</Button>) : (<Button onClick={() => setShowNewScenarioDialog(true)} className="w-full h-7 text-xs mt-2">Save</Button>)}
               </div>
             </div>
           </TabsContent>
 
-          <TabsContent value="scenarios" className="space-y-4">
-            {scenarios.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                No scenarios saved yet. Create your first scenario using the calculator.
-              </div>
-            ) : (
-              <div className="space-y-3">
+          <TabsContent value="scenarios" className="mt-2">
+            {scenarios.length === 0 ? (<div className="text-center py-3 text-[10px] text-muted-foreground">No scenarios yet</div>) : (
+              <div className="space-y-1 max-h-48 overflow-y-auto">
                 {scenarios.map(scenario => (
-                  <Card key={scenario.id}>
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div>
-                            <div className="font-medium flex items-center gap-2">
-                              {scenario.name}
-                              {scenario.isPrimary && <Badge variant="secondary">Primary</Badge>}
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                              Created {new Date(scenario.createdAt).toLocaleDateString()}
-                              {scenario.createdBy && ` by ${scenario.createdBy.firstName} ${scenario.createdBy.lastName}`}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <div className="text-right mr-4">
-                            <div className="text-sm text-muted-foreground">Profit</div>
-                            <div className={`font-semibold ${scenario.outputs.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                              ${scenario.outputs.profit.toLocaleString()}
-                            </div>
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => duplicateScenario(scenario.id)}
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                          {!scenario.isPrimary && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => setPrimary(scenario.id)}
-                            >
-                              Set Primary
-                            </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => deleteScenario(scenario.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                  <div key={scenario.id} className="flex items-center justify-between p-1.5 border rounded bg-slate-50 text-[10px]">
+                    <div>
+                      <span className="font-medium">{scenario.name}</span>
+                      {scenario.isPrimary && <Badge variant="secondary" className="ml-1 text-[9px] px-1 py-0">Primary</Badge>}
+                      <div className="text-slate-400">{new Date(scenario.createdAt).toLocaleDateString()}</div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className={`font-semibold ${Number(scenario.outputs?.profit ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>${Number(scenario.outputs?.profit ?? 0).toLocaleString()}</span>
+                      <Button size="sm" variant="ghost" className="h-5 w-5 p-0" onClick={() => duplicateScenario(scenario.id)}><Copy className="h-2.5 w-2.5" /></Button>
+                      {!scenario.isPrimary && <Button size="sm" variant="ghost" className="h-5 text-[9px] px-1" onClick={() => setPrimary(scenario.id)}>★</Button>}
+                      <Button size="sm" variant="ghost" className="h-5 w-5 p-0" onClick={() => deleteScenario(scenario.id)}><Trash2 className="h-2.5 w-2.5" /></Button>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}

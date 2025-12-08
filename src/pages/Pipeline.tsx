@@ -7,17 +7,14 @@ import { PipelineColumn } from "@/components/PipelineColumn";
 import { PipelineCard } from "@/components/PipelineCard";
 import { ViewLeadDialog } from "@/components/ViewLeadDialog";
 import { 
-  TrendingUp, 
-  DollarSign, 
   Users, 
-  FileText,
   AlertTriangle,
   Workflow,
   Loader2
 } from "lucide-react";
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCenter } from "@dnd-kit/core";
 import { snapCenterToCursor } from "@dnd-kit/modifiers";
-import { differenceInHours, isToday, addDays, isSameMonth } from "date-fns";
+import { differenceInHours, isToday, addDays } from "date-fns";
 import { API_BASE, makeApiCall } from "@/config/api";
 import { safeDate } from "@/utils/validation";
 import { useToast } from "@/hooks/use-toast";
@@ -520,11 +517,11 @@ const Pipeline = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-full overflow-hidden">
+    <div className="space-y-3 max-w-full overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap">
-        <div className="flex items-center gap-4">
-          <h1 className="text-3xl font-bold">Pipeline</h1>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold">Pipeline</h1>
           <Badge variant="outline" className="flex items-center gap-1">
             <Workflow className="h-3 w-3" />
             {getActivePipelineName()}
@@ -598,55 +595,6 @@ const Pipeline = () => {
         </div>
       </div>
 
-      {/* Pipeline Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="p-4">
-          <div className="flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-blue-500" />
-            <span className="text-sm font-medium">New Leads</span>
-          </div>
-          <div className="text-2xl font-bold mt-1">
-            {pipelineStages.length > 0 ? getLeadsForStage(pipelineStages[0].id).length : 0}
-          </div>
-        </Card>
-        
-        <Card className="p-4">
-          <div className="flex items-center gap-2">
-            <DollarSign className="h-4 w-4 text-green-500" />
-            <span className="text-sm font-medium">Under Contract</span>
-          </div>
-          <div className="text-2xl font-bold mt-1">
-            {pipelineStages.find(s => s.name.toLowerCase().includes('contract')) ? 
-              getLeadsForStage(pipelineStages.find(s => s.name.toLowerCase().includes('contract'))!.id).length : 0}
-          </div>
-        </Card>
-        
-        <Card className="p-4">
-          <div className="flex items-center gap-2">
-            <Users className="h-4 w-4 text-purple-500" />
-            <span className="text-sm font-medium">This Month</span>
-          </div>
-          <div className="text-2xl font-bold mt-1">
-            {leads.filter(lead => {
-              const createdDate = safeDate(lead.dateCreated);
-              const today = new Date();
-              return isSameMonth(createdDate, today);
-            }).length}
-          </div>
-        </Card>
-        
-        <Card className="p-4">
-          <div className="flex items-center gap-2">
-            <FileText className="h-4 w-4 text-orange-500" />
-            <span className="text-sm font-medium">Completed</span>
-          </div>
-          <div className="text-2xl font-bold mt-1">
-            {pipelineStages.length > 0 ? getLeadsForStage(pipelineStages[pipelineStages.length - 1].id).length : 0}
-          </div>
-        </Card>
-      </div>
-
-
       {/* Drag and Drop Pipeline */}
         <DndContext
           collisionDetection={closestCenter}
@@ -654,7 +602,7 @@ const Pipeline = () => {
           onDragEnd={handleDragEnd}
         modifiers={[snapCenterToCursor]}
         >
-        <div className="flex gap-6 overflow-x-auto pb-4 min-h-[600px]">
+        <div className="flex gap-2 overflow-x-auto pb-2 h-[calc(100vh-220px)]">
           {pipelineStages.map(stage => (
                 <PipelineColumn
                   key={stage.id}

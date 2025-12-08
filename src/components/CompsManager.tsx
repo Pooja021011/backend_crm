@@ -354,205 +354,77 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Home className="h-5 w-5" />
+    <Card className="border border-slate-200">
+      <CardHeader className="p-3 pb-0">
+        <CardTitle className="flex items-center justify-between text-sm">
+          <div className="flex items-center gap-1.5">
+            <Home className="h-4 w-4" />
             Comparable Properties
           </div>
-          <div className="flex items-center gap-2">
-            <Dialog open={showAddCompDialog} onOpenChange={setShowAddCompDialog}>
-              <DialogTrigger asChild>
-                <Button size="sm">
-                  <Plus className="h-4 w-4 mr-1" />
-                  Add Comp
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl">
-                <DialogHeader>
-                  <DialogTitle>Add New Comparable</DialogTitle>
-                </DialogHeader>
-                <div className="grid grid-cols-2 gap-4 max-h-96 overflow-y-auto">
-                  <div>
-                    <Label htmlFor="address">Address</Label>
-                    <Input
-                      id="address"
-                      value={newComp.address}
-                      onChange={(e) => setNewComp(prev => ({ ...prev, address: e.target.value }))}
-                      placeholder="123 Main St"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="city">City</Label>
-                    <Input
-                      id="city"
-                      value={newComp.city}
-                      onChange={(e) => setNewComp(prev => ({ ...prev, city: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="state">State</Label>
-                    <Input
-                      id="state"
-                      value={newComp.state}
-                      onChange={(e) => setNewComp(prev => ({ ...prev, state: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="zip">ZIP</Label>
-                    <Input
-                      id="zip"
-                      value={newComp.zip}
-                      onChange={(e) => setNewComp(prev => ({ ...prev, zip: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="beds">Beds</Label>
-                    <Input
-                      id="beds"
-                      type="number"
-                      min="0"
-                      max="50"
-                      value={newComp.beds}
-                      onChange={(e) => setNewComp(prev => ({ ...prev, beds: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="baths">Baths</Label>
-                    <Input
-                      id="baths"
-                      type="number"
-                      min="0"
-                      max="50"
-                      step="0.5"
-                      value={newComp.baths}
-                      onChange={(e) => setNewComp(prev => ({ ...prev, baths: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="sqft">Square Feet</Label>
-                    <Input
-                      id="sqft"
-                      type="number"
-                      min="1"
-                      max="1000000"
-                      value={newComp.sqft}
-                      onChange={(e) => setNewComp(prev => ({ ...prev, sqft: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="year-built">Year Built</Label>
-                    <Input
-                      id="year-built"
-                      type="number"
-                      min="1800"
-                      max={new Date().getFullYear()}
-                      placeholder={`1800-${new Date().getFullYear()}`}
-                      value={newComp.yearBuilt}
-                      onChange={(e) => setNewComp(prev => ({ ...prev, yearBuilt: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="sale-price">Sale Price</Label>
-                    <Input
-                      id="sale-price"
-                      type="number"
-                      min="0"
-                      max="100000000"
-                      value={newComp.salePrice}
-                      onChange={(e) => setNewComp(prev => ({ ...prev, salePrice: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="dom">Days on Market</Label>
-                    <Input
-                      id="dom"
-                      type="number"
-                      min="0"
-                      max="10000"
-                      value={newComp.dom}
-                      onChange={(e) => setNewComp(prev => ({ ...prev, dom: e.target.value }))}
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <Label htmlFor="date-sold">Date Sold</Label>
-                    <Input
-                      id="date-sold"
-                      type="date"
-                      value={newComp.dateSold}
-                      onChange={(e) => setNewComp(prev => ({ ...prev, dateSold: e.target.value }))}
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-end gap-2 mt-4">
-                  <Button variant="outline" onClick={() => setShowAddCompDialog(false)}>
-                    Cancel
-                  </Button>
-                  <Button onClick={createComparable}>
-                    Add Comparable
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
+          <Dialog open={showAddCompDialog} onOpenChange={setShowAddCompDialog}>
+            <DialogTrigger asChild><Button size="sm" variant="ghost" className="h-6 text-xs px-2"><Plus className="h-3 w-3 mr-0.5" />Add</Button></DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader><DialogTitle className="text-sm">Add Comparable</DialogTitle></DialogHeader>
+              <div className="grid grid-cols-4 gap-1 max-h-64 overflow-y-auto">
+                <div className="col-span-2"><Label className="text-[10px]">Address</Label><Input value={newComp.address} onChange={(e) => setNewComp(prev => ({ ...prev, address: e.target.value }))} placeholder="123 Main St" className="h-6 text-xs" /></div>
+                <div><Label className="text-[10px]">City</Label><Input value={newComp.city} onChange={(e) => setNewComp(prev => ({ ...prev, city: e.target.value }))} className="h-6 text-xs" /></div>
+                <div><Label className="text-[10px]">State</Label><Input value={newComp.state} onChange={(e) => setNewComp(prev => ({ ...prev, state: e.target.value }))} className="h-6 text-xs" /></div>
+                <div><Label className="text-[10px]">ZIP</Label><Input value={newComp.zip} onChange={(e) => setNewComp(prev => ({ ...prev, zip: e.target.value }))} className="h-6 text-xs" /></div>
+                <div><Label className="text-[10px]">Beds</Label><Input type="number" value={newComp.beds} onChange={(e) => setNewComp(prev => ({ ...prev, beds: e.target.value }))} className="h-6 text-xs" /></div>
+                <div><Label className="text-[10px]">Baths</Label><Input type="number" step="0.5" value={newComp.baths} onChange={(e) => setNewComp(prev => ({ ...prev, baths: e.target.value }))} className="h-6 text-xs" /></div>
+                <div><Label className="text-[10px]">SqFt</Label><Input type="number" value={newComp.sqft} onChange={(e) => setNewComp(prev => ({ ...prev, sqft: e.target.value }))} className="h-6 text-xs" /></div>
+                <div><Label className="text-[10px]">Year</Label><Input type="number" value={newComp.yearBuilt} onChange={(e) => setNewComp(prev => ({ ...prev, yearBuilt: e.target.value }))} className="h-6 text-xs" /></div>
+                <div><Label className="text-[10px]">Price</Label><Input type="number" value={newComp.salePrice} onChange={(e) => setNewComp(prev => ({ ...prev, salePrice: e.target.value }))} className="h-6 text-xs" /></div>
+                <div><Label className="text-[10px]">DOM</Label><Input type="number" value={newComp.dom} onChange={(e) => setNewComp(prev => ({ ...prev, dom: e.target.value }))} className="h-6 text-xs" /></div>
+                <div className="col-span-2"><Label className="text-[10px]">Date Sold</Label><Input type="date" value={newComp.dateSold} onChange={(e) => setNewComp(prev => ({ ...prev, dateSold: e.target.value }))} className="h-6 text-xs" /></div>
+              </div>
+              <div className="flex justify-end gap-1 mt-2">
+                <Button variant="outline" size="sm" className="h-6 text-xs" onClick={() => setShowAddCompDialog(false)}>Cancel</Button>
+                <Button size="sm" className="h-6 text-xs" onClick={createComparable}>Add</Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-3 pt-2">
         <Tabs defaultValue="comparables" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="comparables">Comparables ({leadComps.length})</TabsTrigger>
-            <TabsTrigger value="analysis">Analysis</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2 h-7">
+            <TabsTrigger value="comparables" className="text-xs py-1">Comps ({leadComps.length})</TabsTrigger>
+            <TabsTrigger value="analysis" className="text-xs py-1">Analysis</TabsTrigger>
           </TabsList>
           
-          <TabsContent value="comparables" className="space-y-4">
+          <TabsContent value="comparables" className="mt-2">
             {leadComps.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                No comparables added yet. Use "Add Comp" to get started.
-              </div>
+              <div className="text-center py-3 text-[10px] text-muted-foreground">No comps yet</div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto max-h-40">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>Address</TableHead>
-                      <TableHead>Beds/Baths</TableHead>
-                      <TableHead>Sq Ft</TableHead>
-                      <TableHead>Sale Price</TableHead>
-                      <TableHead>Price/Sq Ft</TableHead>
-                      <TableHead>DOM</TableHead>
-                      <TableHead>Date Sold</TableHead>
-                      <TableHead>Actions</TableHead>
+                    <TableRow className="text-[10px]">
+                      <TableHead className="py-1 px-1">Address</TableHead>
+                      <TableHead className="py-1 px-1">Beds/Baths</TableHead>
+                      <TableHead className="py-1 px-1">Sq Ft</TableHead>
+                      <TableHead className="py-1 px-1">Sale Price</TableHead>
+                      <TableHead className="py-1 px-1">Price/Sq Ft</TableHead>
+                      <TableHead className="py-1 px-1">DOM</TableHead>
+                      <TableHead className="py-1 px-1">Date Sold</TableHead>
+                      <TableHead className="py-1 px-1"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {leadComps.map(({ id, comparable }) => (
-                      <TableRow key={id}>
-                        <TableCell>
-                          <div>
-                            <div className="font-medium">{comparable.address}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {comparable.city}, {comparable.state} {comparable.zip}
-                            </div>
-                          </div>
+                      <TableRow key={id} className="text-[10px]">
+                        <TableCell className="py-1 px-1">
+                          <div className="font-medium">{comparable.address}</div>
+                          <div className="text-slate-400">{comparable.city}, {comparable.state}</div>
                         </TableCell>
-                        <TableCell>
-                          {comparable.beds || 'N/A'} / {comparable.baths || 'N/A'}
-                        </TableCell>
-                        <TableCell>{comparable.sqft?.toLocaleString() || 'N/A'}</TableCell>
-                        <TableCell>{formatCurrency(comparable.salePrice)}</TableCell>
-                        <TableCell>{formatCurrency(comparable.pricePerSqft)}</TableCell>
-                        <TableCell>{comparable.dom || 'N/A'}</TableCell>
-                        <TableCell>{formatDate(comparable.dateSold)}</TableCell>
-                        <TableCell>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => removeCompFromLead(comparable.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
+                        <TableCell className="py-1 px-1">{comparable.beds || '-'}/{comparable.baths || '-'}</TableCell>
+                        <TableCell className="py-1 px-1">{comparable.sqft?.toLocaleString() || '-'}</TableCell>
+                        <TableCell className="py-1 px-1">{formatCurrency(comparable.salePrice)}</TableCell>
+                        <TableCell className="py-1 px-1">{formatCurrency(comparable.pricePerSqft)}</TableCell>
+                        <TableCell className="py-1 px-1">{comparable.dom || '-'}</TableCell>
+                        <TableCell className="py-1 px-1">{formatDate(comparable.dateSold)}</TableCell>
+                        <TableCell className="py-1 px-1"><Button size="sm" variant="ghost" className="h-4 w-4 p-0" onClick={() => removeCompFromLead(comparable.id)}><Trash2 className="h-2.5 w-2.5" /></Button></TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -561,72 +433,18 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
             )}
           </TabsContent>
 
-          <TabsContent value="analysis" className="space-y-4">
+          <TabsContent value="analysis" className="mt-2">
             {!analysis ? (
-              <div className="text-center py-8 text-muted-foreground">
-                Add at least one comparable with sale price to see analysis.
-              </div>
+              <div className="text-center py-3 text-[10px] text-muted-foreground">Add comps to see analysis</div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="text-sm text-muted-foreground">Average Price</div>
-                    <div className="text-2xl font-semibold">{formatCurrency(analysis.averagePrice)}</div>
-                  </CardContent>
-                </Card>
-                
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="text-sm text-muted-foreground">Median Price</div>
-                    <div className="text-2xl font-semibold">{formatCurrency(analysis.medianPrice)}</div>
-                  </CardContent>
-                </Card>
-                
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="text-sm text-muted-foreground">Avg Price/Sq Ft</div>
-                    <div className="text-2xl font-semibold">{formatCurrency(analysis.pricePerSqftAverage)}</div>
-                  </CardContent>
-                </Card>
-                
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="text-sm text-muted-foreground">Avg DOM</div>
-                    <div className="text-2xl font-semibold">{analysis.averageDom} days</div>
-                  </CardContent>
-                </Card>
-                
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="text-sm text-muted-foreground">Price Range</div>
-                    <div className="text-lg font-semibold">
-                      {formatCurrency(analysis.priceRange.min)} - {formatCurrency(analysis.priceRange.max)}
-                    </div>
-                  </CardContent>
-                </Card>
-                
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="text-sm text-muted-foreground">Size Range</div>
-                    <div className="text-lg font-semibold">
-                      {analysis.sqftRange.min.toLocaleString()} - {analysis.sqftRange.max.toLocaleString()} sq ft
-                    </div>
-                  </CardContent>
-                </Card>
-                
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="text-sm text-muted-foreground">Total Comps</div>
-                    <div className="text-2xl font-semibold">{analysis.totalComps}</div>
-                  </CardContent>
-                </Card>
-                
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="text-sm text-muted-foreground">Median Price/Sq Ft</div>
-                    <div className="text-2xl font-semibold">{formatCurrency(analysis.pricePerSqftMedian)}</div>
-                  </CardContent>
-                </Card>
+              <div className="grid grid-cols-4 gap-1">
+                <div className="p-1.5 bg-muted rounded"><div className="text-[9px] text-muted-foreground">Avg Price</div><div className="text-xs font-semibold">{formatCurrency(analysis.averagePrice)}</div></div>
+                <div className="p-1.5 bg-muted rounded"><div className="text-[9px] text-muted-foreground">Median</div><div className="text-xs font-semibold">{formatCurrency(analysis.medianPrice)}</div></div>
+                <div className="p-1.5 bg-muted rounded"><div className="text-[9px] text-muted-foreground">$/SqFt</div><div className="text-xs font-semibold">{formatCurrency(analysis.pricePerSqftAverage)}</div></div>
+                <div className="p-1.5 bg-muted rounded"><div className="text-[9px] text-muted-foreground">Avg DOM</div><div className="text-xs font-semibold">{analysis.averageDom}d</div></div>
+                <div className="p-1.5 bg-muted rounded col-span-2"><div className="text-[9px] text-muted-foreground">Price Range</div><div className="text-xs font-semibold">{formatCurrency(analysis.priceRange.min)} - {formatCurrency(analysis.priceRange.max)}</div></div>
+                <div className="p-1.5 bg-muted rounded"><div className="text-[9px] text-muted-foreground">Comps</div><div className="text-xs font-semibold">{analysis.totalComps}</div></div>
+                <div className="p-1.5 bg-muted rounded"><div className="text-[9px] text-muted-foreground">Med $/SqFt</div><div className="text-xs font-semibold">{formatCurrency(analysis.pricePerSqftMedian)}</div></div>
               </div>
             )}
           </TabsContent>

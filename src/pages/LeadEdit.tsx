@@ -943,257 +943,114 @@ const LeadEdit: React.FC = () => {
 
   return (
     <DashboardLayout>
-      <div className="space-y-4">
+      <div className="space-y-2">
         {/* Header with Back Button and Save */}
         <div className="flex items-center justify-between">
-          <Button variant="outline" onClick={() => navigate('/leads')}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Leads
+          <Button variant="outline" size="sm" onClick={() => navigate('/leads')}>
+            <ArrowLeft className="w-3 h-3 mr-1" />
+            Back
           </Button>
-          <Button onClick={handleSave} disabled={saving}>
-            <Save className="w-4 h-4 mr-2" />
-            {saving ? 'Saving...' : 'Save Changes'}
+          <Button size="sm" onClick={handleSave} disabled={saving}>
+            <Save className="w-3 h-3 mr-1" />
+            {saving ? 'Saving...' : 'Save'}
           </Button>
         </div>
 
-        {/* Top Section - Address and Owner Name */}
-        <Card className="border border-slate-200 shadow-sm">
-          <CardContent className="p-6">
-            <div className="grid grid-cols-2 gap-6">
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <Home className="w-5 h-5 text-slate-600" />
-                  <Label className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Property Address</Label>
-                </div>
-                <p className="text-2xl font-bold text-slate-900">
-                  {lead.address?.address1 || 'No Address'}
-                </p>
-                <p className="text-slate-500">
-                  {lead.address?.city && lead.address?.state 
-                    ? `${lead.address.city}, ${lead.address.state} ${lead.address.zipCode || ''}`
-                    : 'Address not available'}
-                </p>
+        {/* Top Section - Address, Owner, and Lead Info Combined */}
+        <div className="border border-slate-200 rounded-lg bg-white p-3">
+          <div className="grid grid-cols-12 gap-4 items-center">
+            {/* Address */}
+            <div className="col-span-3">
+              <div className="flex items-center gap-1 mb-0.5">
+                <Home className="w-3 h-3 text-slate-500" />
+                <span className="text-[10px] text-slate-500 uppercase">Address</span>
               </div>
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <User className="w-5 h-5 text-slate-600" />
-                  <Label className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Owner Name</Label>
-                </div>
-                <p className="text-2xl font-bold text-slate-900">
-                  {lead.seller?.firstName && lead.seller?.lastName
-                    ? `${lead.seller.firstName} ${lead.seller.lastName}`
-                    : lead.buyer?.firstName && lead.buyer?.lastName
-                    ? `${lead.buyer.firstName} ${lead.buyer.lastName}`
-                    : lead.vendor?.firstName && lead.vendor?.lastName
-                    ? `${lead.vendor.firstName} ${lead.vendor.lastName}`
-                    : 'No Owner'}
-                </p>
-              </div>
+              <p className="text-sm font-semibold text-slate-900 truncate">{lead.address?.address1 || 'No Address'}</p>
+              <p className="text-[10px] text-slate-500">{lead.address?.city && lead.address?.state ? `${lead.address.city}, ${lead.address.state} ${lead.address.zipCode || ''}` : ''}</p>
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Main Information Row */}
-        <Card className="border border-slate-200 shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold text-slate-700">Lead Information</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="grid grid-cols-5 gap-4">
-              {/* Lead Source */}
-              <div>
-                <Label className="text-sm font-medium text-slate-600 mb-2">Lead Source</Label>
-                <Select value={leadSource} onValueChange={setLeadSource}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select source" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {leadSources.length > 0 ? (
-                      leadSources.map((source) => (
-                        <SelectItem key={source.id} value={source.name}>
-                          {source.name}
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <>
-                        <SelectItem value="Cold Call">Cold Call</SelectItem>
-                        <SelectItem value="SMS">SMS</SelectItem>
-                        <SelectItem value="Mailer">Mailer</SelectItem>
-                        <SelectItem value="Online">Online</SelectItem>
-                        <SelectItem value="Other">Other</SelectItem>
-                      </>
-                    )}
-                  </SelectContent>
-                </Select>
+            {/* Owner */}
+            <div className="col-span-2">
+              <div className="flex items-center gap-1 mb-0.5">
+                <User className="w-3 h-3 text-slate-500" />
+                <span className="text-[10px] text-slate-500 uppercase">Owner</span>
               </div>
-
-              {/* Lead Status */}
-              <div>
-                <Label className="text-sm font-medium text-slate-600 mb-2">Lead Status</Label>
-                <Select value={leadStatus} onValueChange={setLeadStatus}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {leadStatuses.length > 0 ? (
-                      leadStatuses.map((status) => (
-                        <SelectItem key={status.id} value={status.id}>
-                          {status.name}
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <>
-                        <SelectItem value="Pipeline">Pipeline</SelectItem>
-                        <SelectItem value="Follow Up">Follow Up</SelectItem>
-                        <SelectItem value="Closed">Closed</SelectItem>
-                        <SelectItem value="Dead">Dead</SelectItem>
-                        <SelectItem value="Wrong Number">Wrong Number</SelectItem>
-                      </>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Pipeline Status */}
-              <div>
-                <Label className="text-sm font-medium text-slate-600 mb-2">Pipeline Status</Label>
-                <Select value={pipelineStatus} onValueChange={setPipelineStatus}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select stage" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {pipelineStages.map((stage) => (
-                      <SelectItem key={stage.id} value={stage.id}>
-                        {stage.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Acquisitions Agent */}
-              <div>
-                <Label className="text-sm font-medium text-slate-600 mb-2">Acquisitions Agent</Label>
+              <p className="text-sm font-semibold text-slate-900 truncate">
+                {lead.seller?.firstName && lead.seller?.lastName ? `${lead.seller.firstName} ${lead.seller.lastName}` : lead.buyer?.firstName && lead.buyer?.lastName ? `${lead.buyer.firstName} ${lead.buyer.lastName}` : lead.vendor?.firstName && lead.vendor?.lastName ? `${lead.vendor.firstName} ${lead.vendor.lastName}` : 'No Owner'}
+              </p>
+            </div>
+            {/* Lead Source */}
+            <div className="col-span-1">
+              <Label className="text-[10px] text-slate-500">Source</Label>
+              <Select value={leadSource} onValueChange={setLeadSource}>
+                <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Source" /></SelectTrigger>
+                <SelectContent>
+                  {leadSources.length > 0 ? leadSources.map((source) => (<SelectItem key={source.id} value={source.name}>{source.name}</SelectItem>)) : (<><SelectItem value="Cold Call">Cold Call</SelectItem><SelectItem value="SMS">SMS</SelectItem><SelectItem value="Mailer">Mailer</SelectItem><SelectItem value="Online">Online</SelectItem><SelectItem value="Other">Other</SelectItem></>)}
+                </SelectContent>
+              </Select>
+            </div>
+            {/* Lead Status */}
+            <div className="col-span-2">
+              <Label className="text-[10px] text-slate-500">Status</Label>
+              <Select value={leadStatus} onValueChange={setLeadStatus}>
+                <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
+                <SelectContent>
+                  {leadStatuses.length > 0 ? leadStatuses.map((status) => (<SelectItem key={status.id} value={status.id}>{status.name}</SelectItem>)) : (<><SelectItem value="Pipeline">Pipeline</SelectItem><SelectItem value="Follow Up">Follow Up</SelectItem><SelectItem value="Closed">Closed</SelectItem><SelectItem value="Dead">Dead</SelectItem></>)}
+                </SelectContent>
+              </Select>
+            </div>
+            {/* Pipeline Status */}
+            <div className="col-span-2">
+              <Label className="text-[10px] text-slate-500">Pipeline</Label>
+              <Select value={pipelineStatus} onValueChange={setPipelineStatus}>
+                <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Stage" /></SelectTrigger>
+                <SelectContent>{pipelineStages.map((stage) => (<SelectItem key={stage.id} value={stage.id}>{stage.name}</SelectItem>))}</SelectContent>
+              </Select>
+            </div>
+            {/* Agents */}
+            <div className="col-span-2">
+              <Label className="text-[10px] text-slate-500">ACQ / DISP Agent</Label>
+              <div className="flex gap-1">
                 <Select value={acquisitionsAgent || 'unassigned'} onValueChange={(value) => setAcquisitionsAgent(value === 'unassigned' ? '' : value)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select agent" />
-                  </SelectTrigger>
+                  <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="ACQ" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="unassigned">None</SelectItem>
-                    {agents.filter(a => {
-                      const roles = Array.isArray(a.roles) ? a.roles : [];
-                      return roles.includes('ACQ') || roles.some((r: any) => r.role?.name === 'ACQ' || r.name === 'ACQ');
-                    }).map((agent) => (
-                      <SelectItem key={agent.id} value={agent.id}>
-                        {agent.firstName} {agent.lastName}
-                      </SelectItem>
-                    ))}
+                    {agents.filter(a => { const roles = Array.isArray(a.roles) ? a.roles : []; return roles.includes('ACQ') || roles.some((r: any) => r.role?.name === 'ACQ' || r.name === 'ACQ'); }).map((agent) => (<SelectItem key={agent.id} value={agent.id}>{agent.firstName}</SelectItem>))}
                   </SelectContent>
                 </Select>
-              </div>
-
-              {/* Dispositions Agent */}
-              <div>
-                <Label className="text-sm font-medium text-slate-600 mb-2">Dispositions Agent</Label>
                 <Select value={dispositionsAgent || 'unassigned'} onValueChange={(value) => setDispositionsAgent(value === 'unassigned' ? '' : value)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select agent" />
-                  </SelectTrigger>
+                  <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="DISP" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="unassigned">None</SelectItem>
-                    {agents.filter(a => {
-                      const roles = Array.isArray(a.roles) ? a.roles : [];
-                      return roles.includes('DISP') || roles.some((r: any) => r.role?.name === 'DISP' || r.name === 'DISP');
-                    }).map((agent) => (
-                      <SelectItem key={agent.id} value={agent.id}>
-                        {agent.firstName} {agent.lastName}
-                      </SelectItem>
-                    ))}
+                    {agents.filter(a => { const roles = Array.isArray(a.roles) ? a.roles : []; return roles.includes('DISP') || roles.some((r: any) => r.role?.name === 'DISP' || r.name === 'DISP'); }).map((agent) => (<SelectItem key={agent.id} value={agent.id}>{agent.firstName}</SelectItem>))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        {/* Contact Information */}
-        <Card className="border border-slate-200 shadow-sm">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-700">
-                <User className="w-5 h-5 text-slate-600" />
-                Owner Contact Information
-              </CardTitle>
-              <Button size="sm" onClick={addContact}>
-                <Plus className="w-4 h-4 mr-2" />
-                Add Contact
-              </Button>
+        {/* Contact Information - Compact */}
+        <div className="border border-slate-200 rounded-lg bg-white p-2">
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-1">
+              <Phone className="w-3 h-3 text-slate-500" />
+              <span className="text-xs font-medium text-slate-600">Contacts</span>
             </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
+            <Button size="sm" variant="ghost" className="h-5 text-[10px] px-2" onClick={addContact}><Plus className="w-2.5 h-2.5 mr-0.5" />Add</Button>
+          </div>
+          <div className="space-y-1">
             {contacts.map((contact, index) => (
-              <div key={index} className="flex items-start gap-4 p-4 border border-slate-200 rounded-lg bg-slate-50">
-                <div className="flex-1 grid grid-cols-3 gap-4">
-                  <div>
-                    <Label className="text-sm font-medium text-slate-600 mb-2">Name</Label>
-                    <Input
-                      value={contact.name}
-                      onChange={(e) => updateContact(index, 'name', e.target.value)}
-                      placeholder="Contact name"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium text-slate-600 mb-2 flex items-center gap-2">
-                      Phone
-                      {contact.phone && (
-                        <a 
-                          href={`tel:${contact.phone.replace(/\D/g, '')}`}
-                          className="text-emerald-600 hover:text-emerald-700 text-xs"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          (click to call)
-                        </a>
-                      )}
-                    </Label>
-                    <Input
-                      value={contact.phone}
-                      onChange={(e) => updateContact(index, 'phone', e.target.value)}
-                      placeholder="Phone number"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium text-slate-600 mb-2 flex items-center gap-2">
-                      Email
-                      {contact.email && (
-                        <a 
-                          href={`mailto:${contact.email}`}
-                          className="text-emerald-600 hover:text-emerald-700 text-xs"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          (click to email)
-                        </a>
-                      )}
-                    </Label>
-                    <Input
-                      value={contact.email}
-                      onChange={(e) => updateContact(index, 'email', e.target.value)}
-                      placeholder="Email address"
-                      type="email"
-                    />
-                  </div>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => removeContact(index)}
-                  className="mt-6"
-                >
-                  <X className="w-4 h-4" />
-                </Button>
+              <div key={index} className="flex items-center gap-2 p-1.5 bg-slate-50 rounded border border-slate-100">
+                <Input value={contact.name} onChange={(e) => updateContact(index, 'name', e.target.value)} placeholder="Name" className="h-6 text-xs flex-1" />
+                <Input value={contact.phone} onChange={(e) => updateContact(index, 'phone', e.target.value)} placeholder="Phone" className="h-6 text-xs flex-1" />
+                <Input value={contact.email} onChange={(e) => updateContact(index, 'email', e.target.value)} placeholder="Email" type="email" className="h-6 text-xs flex-1" />
+                {contact.phone && <a href={`tel:${contact.phone.replace(/\D/g, '')}`} className="text-emerald-600 hover:text-emerald-700"><Phone className="w-3 h-3" /></a>}
+                {contact.email && <a href={`mailto:${contact.email}`} className="text-emerald-600 hover:text-emerald-700"><Mail className="w-3 h-3" /></a>}
+                <Button variant="ghost" size="sm" onClick={() => removeContact(index)} className="h-5 w-5 p-0"><X className="w-3 h-3" /></Button>
               </div>
             ))}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {/* Lead Timeline Section */}
         <LeadTimeline
@@ -1213,77 +1070,47 @@ const LeadEdit: React.FC = () => {
           }}
         />
 
-        {/* Valuation Section */}
-        <Card className="border border-slate-200 shadow-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-700">
-              <DollarSign className="w-5 h-5 text-slate-600" />
-              Property Valuation & Schedule
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-3 gap-4">
+        {/* Valuation & Property Info - Combined Compact Section */}
+        <div className="grid grid-cols-2 gap-3">
+          {/* Valuation Section */}
+          <div className="border border-slate-200 rounded-lg bg-white p-3">
+            <div className="flex items-center gap-1.5 mb-2">
+              <DollarSign className="w-3.5 h-3.5 text-slate-500" />
+              <span className="text-xs font-medium text-slate-600">Valuation & Schedule</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
               <div>
-                <Label className="text-sm font-medium text-slate-600 mb-2">Est. Value (ARV)</Label>
+                <Label className="text-[10px] text-slate-500">Est. Value (ARV)</Label>
                 <div className="relative">
-                  <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input
-                    type="number"
-                    value={estimatedValue}
-                    onChange={(e) => setEstimatedValue(e.target.value)}
-                    placeholder="Enter estimated value"
-                    className="pl-9"
-                  />
+                  <DollarSign className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-slate-400" />
+                  <Input type="number" value={estimatedValue} onChange={(e) => setEstimatedValue(e.target.value)} placeholder="ARV" className="h-7 text-xs pl-6" />
                 </div>
-                <p className="text-xs text-slate-500 mt-1">After Repair Value</p>
               </div>
               <div>
-                <Label className="text-sm font-medium text-slate-600 mb-2">Asking Price</Label>
+                <Label className="text-[10px] text-slate-500">Asking Price</Label>
                 <div className="relative">
-                  <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input
-                    type="number"
-                    value={askingPrice}
-                    onChange={(e) => setAskingPrice(e.target.value)}
-                    placeholder="Enter asking price"
-                    className="pl-9"
-                  />
+                  <DollarSign className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-slate-400" />
+                  <Input type="number" value={askingPrice} onChange={(e) => setAskingPrice(e.target.value)} placeholder="Price" className="h-7 text-xs pl-6" />
                 </div>
-                <p className="text-xs text-slate-500 mt-1">Seller's asking price</p>
               </div>
               <div>
-                <Label className="text-sm font-medium text-slate-600 mb-2">Appointment Date</Label>
-                <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input
-                    type="date"
-                    value={appointmentDate}
-                    onChange={(e) => setAppointmentDate(e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
-                <p className="text-xs text-slate-500 mt-1">Scheduled appointment</p>
+                <Label className="text-[10px] text-slate-500">Appointment</Label>
+                <Input type="date" value={appointmentDate} onChange={(e) => setAppointmentDate(e.target.value)} className="h-7 text-xs" />
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
 
-        {/* Property Information */}
-        <Card className="border border-slate-200 shadow-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-700">
-              <Home className="w-5 h-5 text-slate-600" />
-              Property Information
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-3 gap-4 mb-4">
+          {/* Property Information */}
+          <div className="border border-slate-200 rounded-lg bg-white p-3">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Home className="w-3.5 h-3.5 text-slate-500" />
+              <span className="text-xs font-medium text-slate-600">Property Information</span>
+            </div>
+            <div className="grid grid-cols-6 gap-2">
               <div>
-                <Label className="text-sm font-medium text-slate-600 mb-2">Property Type</Label>
+                <Label className="text-[10px] text-slate-500">Type</Label>
                 <Select value={propertyType} onValueChange={setPropertyType}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
+                  <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Type" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Single Family">Single Family</SelectItem>
                     <SelectItem value="Multi Family">Multi Family</SelectItem>
@@ -1293,358 +1120,119 @@ const LeadEdit: React.FC = () => {
                 </Select>
               </div>
               <div>
-                <Label className="text-sm font-medium text-slate-600 mb-2">SqFt</Label>
-                <Input
-                  type="number"
-                  value={sqft}
-                  onChange={(e) => setSqft(e.target.value)}
-                  placeholder="Square feet"
-                />
+                <Label className="text-[10px] text-slate-500">SqFt</Label>
+                <Input type="number" value={sqft} onChange={(e) => setSqft(e.target.value)} placeholder="SqFt" className="h-7 text-xs" />
               </div>
               <div>
-                <Label className="text-sm font-medium text-slate-600 mb-2">Lot Size</Label>
-                <Input
-                  value={lotSize}
-                  onChange={(e) => setLotSize(e.target.value)}
-                  placeholder="e.g., 0.25 acres"
-                />
+                <Label className="text-[10px] text-slate-500">Lot</Label>
+                <Input value={lotSize} onChange={(e) => setLotSize(e.target.value)} placeholder="Acres" className="h-7 text-xs" />
+              </div>
+              <div>
+                <Label className="text-[10px] text-slate-500">Beds</Label>
+                <Input type="number" value={bedrooms} onChange={(e) => setBedrooms(e.target.value)} placeholder="Beds" className="h-7 text-xs" />
+              </div>
+              <div>
+                <Label className="text-[10px] text-slate-500">Baths</Label>
+                <Input type="number" step="0.5" value={bathrooms} onChange={(e) => setBathrooms(e.target.value)} placeholder="Baths" className="h-7 text-xs" />
+              </div>
+              <div>
+                <Label className="text-[10px] text-slate-500">Year</Label>
+                <Input type="number" value={yearBuilt} onChange={(e) => setYearBuilt(e.target.value)} placeholder="Year" className="h-7 text-xs" />
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <Label className="text-sm font-medium text-slate-600 mb-2">Bedrooms</Label>
-                <Input
-                  type="number"
-                  value={bedrooms}
-                  onChange={(e) => setBedrooms(e.target.value)}
-                  placeholder="Number of bedrooms"
-                />
-              </div>
-              <div>
-                <Label className="text-sm font-medium text-slate-600 mb-2">Bathrooms</Label>
-                <Input
-                  type="number"
-                  step="0.5"
-                  value={bathrooms}
-                  onChange={(e) => setBathrooms(e.target.value)}
-                  placeholder="Number of bathrooms"
-                />
-              </div>
-              <div>
-                <Label className="text-sm font-medium text-slate-600 mb-2">Year Built</Label>
-                <Input
-                  type="number"
-                  value={yearBuilt}
-                  onChange={(e) => setYearBuilt(e.target.value)}
-                  placeholder="Year built"
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {/* Tabs Section */}
-        <div className="grid grid-cols-12 gap-4">
+        <div className="grid grid-cols-12 gap-2">
           {/* Left side - Tabs (8 columns) */}
           <div className="col-span-8">
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="acquisitions">Acquisitions</TabsTrigger>
-                <TabsTrigger value="transactions">Transactions</TabsTrigger>
-                <TabsTrigger value="dispositions">Dispositions</TabsTrigger>
-                <TabsTrigger value="files">Files</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-4 h-7">
+                <TabsTrigger value="acquisitions" className="text-xs py-1">Acquisitions</TabsTrigger>
+                <TabsTrigger value="transactions" className="text-xs py-1">Transactions</TabsTrigger>
+                <TabsTrigger value="dispositions" className="text-xs py-1">Dispositions</TabsTrigger>
+                <TabsTrigger value="files" className="text-xs py-1">Files</TabsTrigger>
               </TabsList>
 
               {/* Acquisitions Tab */}
-              <TabsContent value="acquisitions" className="space-y-4">
-                {/* Lead Creation Section */}
-                <Card className="border border-slate-200">
-                  <CardHeader>
-                    <CardTitle className="text-base font-semibold text-slate-700">Lead Creation</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label className="text-sm font-medium text-slate-600 mb-2">Lead Source</Label>
-                          <Badge variant="outline" className="text-sm">{leadSource || 'Not specified'}</Badge>
-                        </div>
-                        <div>
-                          <Label className="text-sm font-medium text-slate-600 mb-2">Created Date</Label>
-                          <p className="text-sm text-slate-700">{lead?.createdAt ? new Date(lead.createdAt).toLocaleDateString() : 'N/A'}</p>
-                        </div>
-                      </div>
-
-                      {leadSource === 'Cold Call' && (
-                        <div className="space-y-3 p-4 bg-slate-50 rounded-lg border border-slate-100">
-                          <h4 className="font-semibold text-sm text-slate-700">Cold Call Details</h4>
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <Label className="text-xs text-slate-600">Condition</Label>
-                              <p className="text-sm text-slate-900">{leadSourceData.condition || 'Not specified'}</p>
-                            </div>
-                            <div>
-                              <Label className="text-xs text-slate-600">Motivation</Label>
-                              <p className="text-sm text-slate-900">{leadSourceData.motivation || 'Not specified'}</p>
-                            </div>
-                            <div>
-                              <Label className="text-xs text-slate-600">Timeline</Label>
-                              <p className="text-sm text-slate-900">{leadSourceData.timeline || 'Not specified'}</p>
-                            </div>
-                            <div>
-                              <Label className="text-xs text-slate-600">Asking Price</Label>
-                              <p className="text-sm text-slate-900">{leadSourceData.askingPrice ? `$${parseInt(leadSourceData.askingPrice).toLocaleString()}` : 'Not specified'}</p>
-                            </div>
-                          </div>
-                          {leadSourceData.callRecording && (
-                            <div>
-                              <Label className="text-xs text-slate-600">Call Recording</Label>
-                              <a href={leadSourceData.callRecording} className="text-emerald-600 hover:underline text-sm" target="_blank" rel="noopener noreferrer">
-                                Listen to recording
-                              </a>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {leadSource === 'SMS' && (
-                        <div className="space-y-3 p-4 bg-slate-50 rounded-lg border border-slate-100">
-                          <h4 className="font-semibold text-sm text-slate-700">SMS Conversation</h4>
-                          {leadSourceData.smsMessages && leadSourceData.smsMessages.length > 0 ? (
-                            <div className="space-y-2">
-                              {leadSourceData.smsMessages.map((msg: any, idx: number) => (
-                                <div key={idx} className={`p-2 rounded ${msg.direction === 'inbound' ? 'bg-slate-200 ml-8' : 'bg-white mr-8 border border-slate-200'}`}>
-                                  <p className="text-sm text-slate-900">{msg.text}</p>
-                                  <span className="text-xs text-slate-500">{new Date(msg.timestamp).toLocaleString()}</span>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-sm text-slate-600">No SMS messages available</p>
-                          )}
-                        </div>
-                      )}
-
-                      {leadSource === 'Online' && (
-                        <div className="space-y-3 p-4 bg-slate-50 rounded-lg border border-slate-100">
-                          <h4 className="font-semibold text-sm text-slate-700">Online Form Submission</h4>
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <Label className="text-xs text-slate-600">Reason for Selling</Label>
-                              <p className="text-sm text-slate-900">{leadSourceData.reasonForSelling || 'Not specified'}</p>
-                            </div>
-                            <div>
-                              <Label className="text-xs text-slate-600">Timeline</Label>
-                              <p className="text-sm text-slate-900">{leadSourceData.timeline || 'Not specified'}</p>
-                            </div>
-                            <div>
-                              <Label className="text-xs text-slate-600">Asking Price</Label>
-                              <p className="text-sm text-slate-900">{leadSourceData.askingPrice ? `$${parseInt(leadSourceData.askingPrice).toLocaleString()}` : 'Not specified'}</p>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {leadSource === 'Mailer' && (
-                        <div className="space-y-3 p-4 bg-slate-50 rounded-lg border border-slate-100">
-                          <h4 className="font-semibold text-sm text-slate-700">Mailer Campaign</h4>
-                          {leadSourceData.mailerImage ? (
-                            <div>
-                              <img src={leadSourceData.mailerImage} alt="Mailer" className="max-w-full h-auto rounded border border-slate-200" />
-                              <p className="text-sm text-slate-600 mt-2">Offer Price: {leadSourceData.offerPrice ? `$${parseInt(leadSourceData.offerPrice).toLocaleString()}` : 'N/A'}</p>
-                            </div>
-                          ) : (
-                            <p className="text-sm text-slate-600">No mailer image available</p>
-                          )}
-                        </div>
-                      )}
-
-                      {leadSource === 'Other' && (
-                        <div className="space-y-3 p-4 bg-slate-50 rounded-lg border border-slate-100">
-                          <h4 className="font-semibold text-sm text-slate-700">Lead Origin</h4>
-                          <p className="text-sm text-slate-900">{leadSourceData.description || 'No description provided'}</p>
-                        </div>
-                      )}
+              <TabsContent value="acquisitions" className="space-y-2 mt-2">
+                {/* Lead Creation Section - Compact */}
+                <div className="border border-slate-200 rounded-lg bg-white p-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium text-slate-600">Lead Source: <Badge variant="outline" className="text-[10px] ml-1">{leadSource || 'N/A'}</Badge></span>
+                    <span className="text-[10px] text-slate-500">Created: {lead?.createdAt ? new Date(lead.createdAt).toLocaleDateString() : 'N/A'}</span>
+                  </div>
+                  {leadSource === 'Cold Call' && (
+                    <div className="grid grid-cols-4 gap-2 p-1.5 bg-slate-50 rounded text-[10px]">
+                      <div><span className="text-slate-500">Condition:</span> <span className="text-slate-800">{leadSourceData.condition || 'N/A'}</span></div>
+                      <div><span className="text-slate-500">Motivation:</span> <span className="text-slate-800">{leadSourceData.motivation || 'N/A'}</span></div>
+                      <div><span className="text-slate-500">Timeline:</span> <span className="text-slate-800">{leadSourceData.timeline || 'N/A'}</span></div>
+                      <div><span className="text-slate-500">Asking:</span> <span className="text-slate-800">{leadSourceData.askingPrice ? `$${parseInt(leadSourceData.askingPrice).toLocaleString()}` : 'N/A'}</span></div>
                     </div>
-                  </CardContent>
-                </Card>
-
-                {/* Additional Property Information */}
-                <Card className="border border-slate-200">
-                  <CardHeader>
-                    <CardTitle className="text-base font-semibold text-slate-700">Additional Property Information</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label className="text-sm font-medium text-slate-600 mb-2">Roof Type</Label>
-                        <Input
-                          value={roofType}
-                          onChange={(e) => setRoofType(e.target.value)}
-                          placeholder="e.g., Asphalt Shingles"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-sm font-medium text-slate-600 mb-2">Roof Age (years)</Label>
-                        <Input
-                          type="number"
-                          value={roofAge}
-                          onChange={(e) => setRoofAge(e.target.value)}
-                          placeholder="Age in years"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-sm font-medium text-slate-600 mb-2">HVAC Type</Label>
-                        <Input
-                          value={hvacType}
-                          onChange={(e) => setHvacType(e.target.value)}
-                          placeholder="e.g., Central Air"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-sm font-medium text-slate-600 mb-2">HVAC Age (years)</Label>
-                        <Input
-                          type="number"
-                          value={hvacAge}
-                          onChange={(e) => setHvacAge(e.target.value)}
-                          placeholder="Age in years"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-sm font-medium text-slate-600 mb-2">Water Heater Age (years)</Label>
-                        <Input
-                          type="number"
-                          value={waterHeaterAge}
-                          onChange={(e) => setWaterHeaterAge(e.target.value)}
-                          placeholder="Age in years"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-sm font-medium text-slate-600 mb-2">Water Type</Label>
-                        <Input
-                          value={waterType}
-                          onChange={(e) => setWaterType(e.target.value)}
-                          placeholder="e.g., City Water"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-sm font-medium text-slate-600 mb-2">Sewer Type</Label>
-                        <Input
-                          value={sewerType}
-                          onChange={(e) => setSewerType(e.target.value)}
-                          placeholder="e.g., Public Sewer"
-                        />
-                      </div>
+                  )}
+                  {leadSource === 'SMS' && leadSourceData.smsMessages?.length > 0 && (
+                    <div className="max-h-20 overflow-y-auto p-1.5 bg-slate-50 rounded space-y-1">
+                      {leadSourceData.smsMessages.map((msg: any, idx: number) => (
+                        <div key={idx} className={`p-1 rounded text-[10px] ${msg.direction === 'inbound' ? 'bg-slate-200 ml-4' : 'bg-white mr-4 border'}`}>
+                          <p className="text-slate-900">{msg.text}</p>
+                        </div>
+                      ))}
                     </div>
-                  </CardContent>
-                </Card>
+                  )}
+                </div>
 
-                {/* Rehab Information */}
-                <Card className="border border-slate-200">
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-700">
-                        <Wrench className="w-5 h-5 text-slate-600" />
-                        Rehab Information
-                      </CardTitle>
-                      <div className="flex items-center gap-2">
-                        <DollarSign className="w-4 h-4 text-slate-600" />
-                        <span className="text-sm font-semibold text-slate-700">
-                          Total Budget: ${rehabBudget ? parseInt(rehabBudget).toLocaleString() : '0'}
-                        </span>
-                      </div>
+                {/* Additional Property Info - Compact */}
+                <div className="border border-slate-200 rounded-lg bg-white p-2">
+                  <span className="text-xs font-medium text-slate-600 block mb-1">Additional Property Info</span>
+                  <div className="grid grid-cols-7 gap-1">
+                    <div><Label className="text-[10px] text-slate-500">Roof</Label><Input value={roofType} onChange={(e) => setRoofType(e.target.value)} placeholder="Type" className="h-6 text-xs" /></div>
+                    <div><Label className="text-[10px] text-slate-500">Roof Age</Label><Input type="number" value={roofAge} onChange={(e) => setRoofAge(e.target.value)} placeholder="Yrs" className="h-6 text-xs" /></div>
+                    <div><Label className="text-[10px] text-slate-500">HVAC</Label><Input value={hvacType} onChange={(e) => setHvacType(e.target.value)} placeholder="Type" className="h-6 text-xs" /></div>
+                    <div><Label className="text-[10px] text-slate-500">HVAC Age</Label><Input type="number" value={hvacAge} onChange={(e) => setHvacAge(e.target.value)} placeholder="Yrs" className="h-6 text-xs" /></div>
+                    <div><Label className="text-[10px] text-slate-500">WH Age</Label><Input type="number" value={waterHeaterAge} onChange={(e) => setWaterHeaterAge(e.target.value)} placeholder="Yrs" className="h-6 text-xs" /></div>
+                    <div><Label className="text-[10px] text-slate-500">Water</Label><Input value={waterType} onChange={(e) => setWaterType(e.target.value)} placeholder="Type" className="h-6 text-xs" /></div>
+                    <div><Label className="text-[10px] text-slate-500">Sewer</Label><Input value={sewerType} onChange={(e) => setSewerType(e.target.value)} placeholder="Type" className="h-6 text-xs" /></div>
+                  </div>
+                </div>
+
+                {/* Rehab Information - Compact */}
+                <div className="border border-slate-200 rounded-lg bg-white p-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-1">
+                      <Wrench className="w-3 h-3 text-slate-500" />
+                      <span className="text-xs font-medium text-slate-600">Rehab</span>
+                      <span className="text-xs text-emerald-600 font-semibold ml-2">${rehabBudget ? parseInt(rehabBudget).toLocaleString() : '0'}</span>
                     </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div>
-                        <Label className="text-sm font-medium text-slate-600 mb-2">Total Rehab Budget</Label>
-                        <Input
-                          type="number"
-                          value={rehabBudget}
-                          onChange={(e) => setRehabBudget(e.target.value)}
-                          placeholder="Enter total budget"
-                          className="max-w-xs"
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-sm font-semibold text-slate-700">Rehab Items</Label>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              const name = prompt('Item name (e.g., Roof Repair):');
-                              if (!name) return;
-                              const cost = prompt('Cost ($):');
-                              if (!cost) return;
-                              const description = prompt('Description (optional):') || '';
-                              
-                              const newItems = [...rehabItems, { name, cost: parseInt(cost), description }];
+                    <div className="flex items-center gap-1">
+                      <Input type="number" value={rehabBudget} onChange={(e) => setRehabBudget(e.target.value)} placeholder="Budget" className="h-6 text-xs w-24" />
+                      <Button type="button" size="sm" variant="ghost" className="h-5 text-[10px] px-1" onClick={() => {
+                        const name = prompt('Item name:'); if (!name) return;
+                        const cost = prompt('Cost ($):'); if (!cost) return;
+                        const newItems = [...rehabItems, { name, cost: parseInt(cost), description: '' }];
+                        setRehabItems(newItems);
+                        setRehabBudget(((parseInt(rehabBudget) || 0) + (parseInt(cost) || 0)).toString());
+                      }}><Plus className="w-2.5 h-2.5" /></Button>
+                    </div>
+                  </div>
+                  {rehabItems.length > 0 && (
+                    <div className="space-y-0.5 max-h-24 overflow-y-auto">
+                      {rehabItems.map((item: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between p-1 bg-slate-50 rounded text-[10px] group">
+                          <span className="text-slate-800">{item.name}</span>
+                          <div className="flex items-center gap-1">
+                            <span className="font-medium">${parseInt(item.cost || 0).toLocaleString()}</span>
+                            <Button type="button" size="sm" variant="ghost" className="h-4 w-4 p-0 opacity-0 group-hover:opacity-100" onClick={() => {
+                              const newItems = rehabItems.filter((_, i) => i !== idx);
                               setRehabItems(newItems);
-                              // Add item cost to existing budget
-                              const currentBudget = parseInt(rehabBudget) || 0;
-                              const itemCost = parseInt(cost) || 0;
-                              setRehabBudget((currentBudget + itemCost).toString());
-                            }}
-                          >
-                            <Plus className="w-4 h-4 mr-1" />
-                            Add Item
-                          </Button>
+                              setRehabBudget(Math.max(0, (parseInt(rehabBudget) || 0) - (parseInt(item.cost) || 0)).toString());
+                            }}><X className="w-2.5 h-2.5 text-red-500" /></Button>
+                          </div>
                         </div>
-
-                        {rehabItems.length > 0 ? (
-                          <div className="space-y-2">
-                            {rehabItems.map((item: any, idx: number) => (
-                              <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100 group">
-                                <div className="flex-1">
-                                  <p className="text-sm font-medium text-slate-900">{item.name}</p>
-                                  {item.description && <p className="text-xs text-slate-600">{item.description}</p>}
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <p className="text-sm font-semibold text-slate-900">${parseInt(item.cost || 0).toLocaleString()}</p>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity"
-                                    onClick={() => {
-                                      const deletedItemCost = parseInt(item.cost) || 0;
-                                      const newItems = rehabItems.filter((_, i) => i !== idx);
-                                      setRehabItems(newItems);
-                                      // Subtract deleted item cost from budget
-                                      const currentBudget = parseInt(rehabBudget) || 0;
-                                      const newBudget = Math.max(0, currentBudget - deletedItemCost);
-                                      setRehabBudget(newBudget.toString());
-                                    }}
-                                  >
-                                    <Trash2 className="w-4 h-4 text-red-500" />
-                                  </Button>
-                                </div>
-                              </div>
-                            ))}
-                            <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200">
-                              <div className="flex items-center justify-between">
-                                <p className="text-sm font-semibold text-emerald-900">Total Items Cost:</p>
-                                <p className="text-lg font-bold text-emerald-900">
-                                  ${rehabItems.reduce((sum, item) => sum + (parseInt(item.cost) || 0), 0).toLocaleString()}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="text-center py-8 bg-slate-50 rounded-lg border border-slate-100">
-                            <Wrench className="w-8 h-8 mx-auto mb-2 text-slate-400" />
-                            <p className="text-sm text-slate-600">No rehab items added yet</p>
-                            <p className="text-xs text-slate-500 mt-1">Click "Add Item" to track renovation costs</p>
-                          </div>
-                        )}
-                      </div>
+                      ))}
                     </div>
-                  </CardContent>
-                </Card>
+                  )}
+                </div>
 
                 {/* Comp Information */}
                 <CompsManager 
@@ -1662,577 +1250,195 @@ const LeadEdit: React.FC = () => {
               </TabsContent>
 
               {/* Transactions Tab */}
-              <TabsContent value="transactions">
-                <Card className="border border-slate-200">
-                  <CardHeader className="flex flex-row items-center justify-between">
-                    <CardTitle className="text-base font-semibold text-slate-700">Transaction Details</CardTitle>
-                    {!editingDeal && (
-                      <Button
-                        size="sm"
-                        onClick={() => setEditingDeal(true)}
-                      >
-                        <Edit2 className="w-4 h-4 mr-2" />
-                        {deal ? 'Edit Transaction' : 'Create Transaction'}
-                      </Button>
-                    )}
-                  </CardHeader>
-                  <CardContent>
-                    {editingDeal ? (
-                      <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <Label className="text-sm font-medium text-slate-600">Contract Price</Label>
-                            <Input
-                              type="number"
-                              placeholder="Enter contract price"
-                              value={contractPrice}
-                              onChange={(e) => setContractPrice(e.target.value)}
-                              min="0"
-                              step="1000"
-                            />
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium text-slate-600">Sold Price</Label>
-                            <Input
-                              type="number"
-                              placeholder="Enter sold price"
-                              value={soldPrice}
-                              onChange={(e) => setSoldPrice(e.target.value)}
-                              min="0"
-                              step="1000"
-                            />
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium text-slate-600">Net Profit</Label>
-                            <Input
-                              type="number"
-                              placeholder="Enter net profit"
-                              value={netProfit}
-                              onChange={(e) => setNetProfit(e.target.value)}
-                              step="1000"
-                            />
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium text-slate-600">Contracted Date</Label>
-                            <Input
-                              type="date"
-                              value={contractedAt}
-                              onChange={(e) => setContractedAt(e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium text-slate-600">Closed Date</Label>
-                            <Input
-                              type="date"
-                              value={closedAt}
-                              onChange={(e) => setClosedAt(e.target.value)}
-                            />
-                          </div>
-                        </div>
-                        
-                        <div className="flex gap-2 justify-end pt-4">
-                          <Button
-                            variant="outline"
-                            onClick={cancelDealEdit}
-                          >
-                            Cancel
-                          </Button>
-                          <Button onClick={saveDeal}>
-                            <Save className="w-4 h-4 mr-2" />
-                            Save Transaction
+              <TabsContent value="transactions" className="mt-2">
+                <div className="border border-slate-200 rounded-lg bg-white p-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium text-slate-600">Transaction Details</span>
+                    {!editingDeal && <Button size="sm" variant="ghost" className="h-5 text-[10px] px-2" onClick={() => setEditingDeal(true)}><Edit2 className="w-2.5 h-2.5 mr-0.5" />{deal ? 'Edit' : 'Create'}</Button>}
+                  </div>
+                  {editingDeal ? (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-5 gap-2">
+                        <div><Label className="text-[10px] text-slate-500">Contract Price</Label><Input type="number" value={contractPrice} onChange={(e) => setContractPrice(e.target.value)} placeholder="$" className="h-6 text-xs" /></div>
+                        <div><Label className="text-[10px] text-slate-500">Sold Price</Label><Input type="number" value={soldPrice} onChange={(e) => setSoldPrice(e.target.value)} placeholder="$" className="h-6 text-xs" /></div>
+                        <div><Label className="text-[10px] text-slate-500">Net Profit</Label><Input type="number" value={netProfit} onChange={(e) => setNetProfit(e.target.value)} placeholder="$" className="h-6 text-xs" /></div>
+                        <div><Label className="text-[10px] text-slate-500">Contracted</Label><Input type="date" value={contractedAt} onChange={(e) => setContractedAt(e.target.value)} className="h-6 text-xs" /></div>
+                        <div><Label className="text-[10px] text-slate-500">Closed</Label><Input type="date" value={closedAt} onChange={(e) => setClosedAt(e.target.value)} className="h-6 text-xs" /></div>
+                      </div>
+                      <div className="flex gap-1 justify-end">
+                        <Button variant="outline" size="sm" className="h-6 text-xs px-2" onClick={cancelDealEdit}>Cancel</Button>
+                        <Button size="sm" className="h-6 text-xs px-2" onClick={saveDeal}><Save className="w-2.5 h-2.5 mr-0.5" />Save
                           </Button>
                         </div>
                       </div>
                     ) : deal ? (
-                      <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <Label className="text-sm text-slate-600">Contract Price</Label>
-                            <p className="font-medium text-slate-900">${(deal.contractPrice || 0).toLocaleString()}</p>
-                          </div>
-                          <div>
-                            <Label className="text-sm text-slate-600">Sold Price</Label>
-                            <p className="font-medium text-slate-900">${(deal.soldPrice || 0).toLocaleString()}</p>
-                          </div>
-                          <div>
-                            <Label className="text-sm text-slate-600">Net Profit</Label>
-                            <p className={`font-medium ${(deal.netProfit || 0) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                              ${(deal.netProfit || 0).toLocaleString()}
-                            </p>
-                          </div>
-                          <div>
-                            <Label className="text-sm text-slate-600">Contracted Date</Label>
-                            <p className="font-medium text-slate-900">
-                              {deal.contractedAt ? new Date(deal.contractedAt).toLocaleDateString() : 'Not set'}
-                            </p>
-                          </div>
-                          <div>
-                            <Label className="text-sm text-slate-600">Closed Date</Label>
-                            <p className="font-medium text-slate-900">
-                              {deal.closedAt ? new Date(deal.closedAt).toLocaleDateString() : 'Not set'}
-                            </p>
-                          </div>
-                        </div>
+                      <div className="grid grid-cols-5 gap-2 text-[10px]">
+                        <div><span className="text-slate-500">Contract:</span> <span className="font-medium">${(deal.contractPrice || 0).toLocaleString()}</span></div>
+                        <div><span className="text-slate-500">Sold:</span> <span className="font-medium">${(deal.soldPrice || 0).toLocaleString()}</span></div>
+                        <div><span className="text-slate-500">Profit:</span> <span className={`font-medium ${(deal.netProfit || 0) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>${(deal.netProfit || 0).toLocaleString()}</span></div>
+                        <div><span className="text-slate-500">Contract:</span> <span className="font-medium">{deal.contractedAt ? new Date(deal.contractedAt).toLocaleDateString() : 'N/A'}</span></div>
+                        <div><span className="text-slate-500">Closed:</span> <span className="font-medium">{deal.closedAt ? new Date(deal.closedAt).toLocaleDateString() : 'N/A'}</span></div>
                       </div>
                     ) : (
-                      <div className="text-center py-12 bg-slate-50 rounded-lg border border-slate-100">
-                        <DollarSign className="w-12 h-12 mx-auto mb-3 text-slate-400" />
-                        <p className="text-sm text-slate-600 font-medium">No transaction created yet</p>
-                        <p className="text-xs text-slate-500 mt-1">Click "Create Transaction" to add deal details</p>
-                      </div>
+                      <div className="text-center py-3 bg-slate-50 rounded text-[10px] text-slate-500">No transaction yet</div>
                     )}
-                  </CardContent>
-                </Card>
+                </div>
               </TabsContent>
 
               {/* Dispositions Tab */}
-              <TabsContent value="dispositions">
-                <Card className="border border-slate-200">
-                  <CardHeader className="flex flex-row items-center justify-between">
-                    <CardTitle className="text-base font-semibold text-slate-700">Buyer Offers</CardTitle>
-                    <div className="flex gap-2">
-                      {!creatingOffer && !creatingBuyer && (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setCreatingBuyer(true)}
-                          >
-                            <User className="w-4 h-4 mr-2" />
-                            New Buyer
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => setCreatingOffer(true)}
-                          >
-                            <Plus className="w-4 h-4 mr-2" />
-                            Add Offer
-                          </Button>
-                        </>
-                      )}
+              <TabsContent value="dispositions" className="mt-2">
+                <div className="border border-slate-200 rounded-lg bg-white p-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium text-slate-600">Buyer Offers</span>
+                    {!creatingOffer && !creatingBuyer && (
+                      <div className="flex gap-1">
+                        <Button size="sm" variant="ghost" className="h-5 text-[10px] px-1" onClick={() => setCreatingBuyer(true)}><User className="w-2.5 h-2.5 mr-0.5" />Buyer</Button>
+                        <Button size="sm" variant="ghost" className="h-5 text-[10px] px-1" onClick={() => setCreatingOffer(true)}><Plus className="w-2.5 h-2.5 mr-0.5" />Offer</Button>
+                      </div>
+                    )}
+                  </div>
+                  {creatingBuyer && (
+                    <div className="mb-2 p-2 border border-slate-200 rounded bg-slate-50">
+                      <div className="grid grid-cols-5 gap-1 mb-1">
+                        <Input placeholder="First" value={newBuyerFirstName} onChange={(e) => setNewBuyerFirstName(e.target.value)} className="h-6 text-xs" />
+                        <Input placeholder="Last" value={newBuyerLastName} onChange={(e) => setNewBuyerLastName(e.target.value)} className="h-6 text-xs" />
+                        <Input type="email" placeholder="Email" value={newBuyerEmail} onChange={(e) => setNewBuyerEmail(e.target.value)} className="h-6 text-xs" />
+                        <Input type="tel" placeholder="Phone" value={newBuyerPhone} onChange={(e) => setNewBuyerPhone(e.target.value)} className="h-6 text-xs" />
+                        <Select value={newBuyerSegmentation} onValueChange={setNewBuyerSegmentation}>
+                          <SelectTrigger className="h-6 text-xs"><SelectValue placeholder="Seg" /></SelectTrigger>
+                          <SelectContent><SelectItem value="hot">Hot</SelectItem><SelectItem value="warm">Warm</SelectItem><SelectItem value="cold">Cold</SelectItem><SelectItem value="vip">VIP</SelectItem></SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex gap-1 justify-end">
+                        <Button variant="outline" size="sm" className="h-5 text-[10px] px-2" onClick={() => { setCreatingBuyer(false); setNewBuyerFirstName(''); setNewBuyerLastName(''); setNewBuyerEmail(''); setNewBuyerPhone(''); setNewBuyerSegmentation(''); }}>Cancel</Button>
+                        <Button size="sm" className="h-5 text-[10px] px-2" onClick={createNewBuyer}>Create</Button>
+                      </div>
                     </div>
-                  </CardHeader>
-                  <CardContent>
-                    {creatingBuyer && (
-                      <div className="mb-6 p-4 border border-slate-200 rounded-lg bg-slate-50">
-                        <h4 className="font-semibold mb-4 text-slate-700">Create New Buyer</h4>
-                        <div className="space-y-4">
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <Label className="text-sm font-medium text-slate-600">First Name *</Label>
-                              <Input
-                                placeholder="John"
-                                value={newBuyerFirstName}
-                                onChange={(e) => setNewBuyerFirstName(e.target.value)}
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-sm font-medium text-slate-600">Last Name *</Label>
-                              <Input
-                                placeholder="Doe"
-                                value={newBuyerLastName}
-                                onChange={(e) => setNewBuyerLastName(e.target.value)}
-                              />
-                            </div>
+                  )}
+                  {creatingOffer && (
+                    <div className="mb-2 p-2 border border-slate-200 rounded bg-slate-50">
+                      <div className="grid grid-cols-4 gap-1 mb-1">
+                        <Select value={selectedBuyer} onValueChange={setSelectedBuyer}>
+                          <SelectTrigger className="h-6 text-xs"><SelectValue placeholder="Buyer" /></SelectTrigger>
+                          <SelectContent>{buyers.map((buyer) => (<SelectItem key={buyer.id} value={buyer.id}>{buyer.firstName} {buyer.lastName}</SelectItem>))}</SelectContent>
+                        </Select>
+                        <Input type="number" placeholder="Amount" value={offerAmount} onChange={(e) => setOfferAmount(e.target.value)} className="h-6 text-xs" />
+                        <Select value={offerStatus} onValueChange={setOfferStatus}>
+                          <SelectTrigger className="h-6 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent><SelectItem value="PENDING">Pending</SelectItem><SelectItem value="ACCEPTED">Accepted</SelectItem><SelectItem value="REJECTED">Rejected</SelectItem><SelectItem value="COUNTERED">Countered</SelectItem></SelectContent>
+                        </Select>
+                        <Input placeholder="Notes" value={offerNotes} onChange={(e) => setOfferNotes(e.target.value)} className="h-6 text-xs" />
+                      </div>
+                      <div className="flex gap-1 justify-end">
+                        <Button variant="outline" size="sm" className="h-5 text-[10px] px-2" onClick={() => { setCreatingOffer(false); setSelectedBuyer(''); setOfferAmount(''); setOfferStatus('PENDING'); setOfferNotes(''); }}>Cancel</Button>
+                        <Button size="sm" className="h-5 text-[10px] px-2" onClick={createBuyerOffer}>Create</Button>
+                      </div>
+                    </div>
+                  )}
+                  {buyerOffers.length > 0 ? (
+                    <div className="space-y-1 max-h-40 overflow-y-auto">
+                      {buyerOffers.map((offer: any) => (
+                        <div key={offer.id} className="flex items-center justify-between p-1.5 border border-slate-100 rounded bg-slate-50 text-[10px]">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{offer.buyer?.firstName} {offer.buyer?.lastName}</span>
+                            <span className="font-semibold text-emerald-600">${(offer.offerAmount || 0).toLocaleString()}</span>
+                            <Badge className={`text-[9px] px-1 py-0 ${offer.status === 'ACCEPTED' ? 'bg-emerald-100 text-emerald-800' : offer.status === 'PENDING' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'}`}>{offer.status}</Badge>
                           </div>
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <Label className="text-sm font-medium text-slate-600">Email *</Label>
-                              <Input
-                                type="email"
-                                placeholder="john@example.com"
-                                value={newBuyerEmail}
-                                onChange={(e) => setNewBuyerEmail(e.target.value)}
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-sm font-medium text-slate-600">Phone *</Label>
-                              <Input
-                                type="tel"
-                                placeholder="(555) 123-4567"
-                                value={newBuyerPhone}
-                                onChange={(e) => setNewBuyerPhone(e.target.value)}
-                              />
-                            </div>
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium text-slate-600">Segmentation</Label>
-                            <Select value={newBuyerSegmentation} onValueChange={setNewBuyerSegmentation}>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select segmentation (optional)" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="hot">Hot</SelectItem>
-                                <SelectItem value="warm">Warm</SelectItem>
-                                <SelectItem value="cold">Cold</SelectItem>
-                                <SelectItem value="vip">VIP</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="flex gap-2 justify-end">
-                            <Button
-                              variant="outline"
-                              onClick={() => {
-                                setCreatingBuyer(false);
-                                setNewBuyerFirstName('');
-                                setNewBuyerLastName('');
-                                setNewBuyerEmail('');
-                                setNewBuyerPhone('');
-                                setNewBuyerSegmentation('');
-                              }}
-                            >
-                              Cancel
-                            </Button>
-                            <Button onClick={createNewBuyer}>
-                              <Save className="w-4 h-4 mr-2" />
-                              Create Buyer
-                            </Button>
+                          <div className="flex gap-0.5">
+                            {offer.status === 'PENDING' && (<><Button size="sm" variant="ghost" className="h-4 px-1 text-[9px] text-emerald-600" onClick={() => updateOfferStatus(offer.id, 'ACCEPTED')}>✓</Button><Button size="sm" variant="ghost" className="h-4 px-1 text-[9px] text-red-600" onClick={() => updateOfferStatus(offer.id, 'REJECTED')}>✗</Button></>)}
+                            <Button size="sm" variant="ghost" className="h-4 w-4 p-0" onClick={() => deleteOffer(offer.id)}><Trash className="w-2.5 h-2.5 text-red-500" /></Button>
                           </div>
                         </div>
-                      </div>
-                    )}
-
-                    {creatingOffer && (
-                      <div className="mb-6 p-4 border border-slate-200 rounded-lg bg-slate-50">
-                        <h4 className="font-semibold mb-4 text-slate-700">Create New Offer</h4>
-                        <div className="space-y-4">
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <Label className="text-sm font-medium text-slate-600">Buyer</Label>
-                              <Select value={selectedBuyer} onValueChange={setSelectedBuyer}>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select buyer" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {buyers.map((buyer) => (
-                                    <SelectItem key={buyer.id} value={buyer.id}>
-                                      {buyer.firstName} {buyer.lastName}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div>
-                              <Label className="text-sm font-medium text-slate-600">Offer Amount</Label>
-                              <Input
-                                type="number"
-                                placeholder="Enter offer amount"
-                                value={offerAmount}
-                                onChange={(e) => setOfferAmount(e.target.value)}
-                                min="0"
-                                step="1000"
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-sm font-medium text-slate-600">Status</Label>
-                              <Select value={offerStatus} onValueChange={setOfferStatus}>
-                                <SelectTrigger>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="PENDING">Pending</SelectItem>
-                                  <SelectItem value="ACCEPTED">Accepted</SelectItem>
-                                  <SelectItem value="REJECTED">Rejected</SelectItem>
-                                  <SelectItem value="COUNTERED">Countered</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium text-slate-600">Notes</Label>
-                            <Textarea
-                              placeholder="Add any notes about this offer..."
-                              value={offerNotes}
-                              onChange={(e) => setOfferNotes(e.target.value)}
-                              rows={3}
-                            />
-                          </div>
-                          <div className="flex gap-2 justify-end">
-                            <Button
-                              variant="outline"
-                              onClick={() => {
-                                setCreatingOffer(false);
-                                setSelectedBuyer('');
-                                setOfferAmount('');
-                                setOfferStatus('PENDING');
-                                setOfferNotes('');
-                              }}
-                            >
-                              Cancel
-                            </Button>
-                            <Button onClick={createBuyerOffer}>
-                              <Save className="w-4 h-4 mr-2" />
-                              Create Offer
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {buyerOffers.length > 0 ? (
-                      <div className="space-y-4">
-                        {buyerOffers.map((offer: any) => (
-                          <div key={offer.id} className="p-4 border border-slate-200 rounded-lg hover:shadow-md transition-shadow">
-                            <div className="flex items-center justify-between mb-3">
-                              <div>
-                                <h4 className="font-semibold text-slate-900">{offer.buyer?.firstName} {offer.buyer?.lastName}</h4>
-                                <p className="text-xs text-slate-600">{offer.buyer?.email}</p>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Badge className={
-                                  offer.status === 'ACCEPTED' ? 'bg-emerald-100 text-emerald-800' :
-                                  offer.status === 'PENDING' ? 'bg-amber-100 text-amber-800' :
-                                  offer.status === 'REJECTED' ? 'bg-red-100 text-red-800' :
-                                  'bg-slate-100 text-slate-800'
-                                }>
-                                  {offer.status}
-                                </Badge>
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-3 gap-3 text-sm mb-3">
-                              <div>
-                                <Label className="text-xs text-slate-600">Offer Amount</Label>
-                                <p className="font-medium text-lg text-slate-900">${(offer.offerAmount || 0).toLocaleString()}</p>
-                              </div>
-                              <div>
-                                <Label className="text-xs text-slate-600">Created</Label>
-                                <p className="font-medium text-slate-900">{new Date(offer.createdAt).toLocaleDateString()}</p>
-                              </div>
-                              <div>
-                                <Label className="text-xs text-slate-600">Updated</Label>
-                                <p className="font-medium text-slate-900">{new Date(offer.updatedAt).toLocaleDateString()}</p>
-                              </div>
-                            </div>
-                            {offer.notes && (
-                              <p className="text-xs text-slate-600 mb-3 p-2 bg-slate-50 rounded border border-slate-100">{offer.notes}</p>
-                            )}
-                            <div className="flex gap-2 justify-end pt-2 border-t border-slate-200">
-                              {offer.status === 'PENDING' && (
-                                <>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="text-emerald-600 hover:text-emerald-700"
-                                    onClick={() => updateOfferStatus(offer.id, 'ACCEPTED')}
-                                  >
-                                    Accept
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="text-red-600 hover:text-red-700"
-                                    onClick={() => updateOfferStatus(offer.id, 'REJECTED')}
-                                  >
-                                    Reject
-                                  </Button>
-                                </>
-                              )}
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="text-red-600 hover:text-red-700"
-                                onClick={() => deleteOffer(offer.id)}
-                              >
-                                <Trash className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-12 bg-slate-50 rounded-lg border border-slate-100">
-                        <User className="w-12 h-12 mx-auto mb-3 text-slate-400" />
-                        <p className="text-sm text-slate-600 font-medium">No buyer offers yet</p>
-                        <p className="text-xs text-slate-500 mt-1">Click "Add Offer" to create a buyer offer</p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                      ))}
+                    </div>
+                  ) : (<div className="text-center py-2 bg-slate-50 rounded text-[10px] text-slate-500">No offers yet</div>)}
+                </div>
               </TabsContent>
 
               {/* Files Tab */}
-              <TabsContent value="files">
-                <Card className="border border-slate-200">
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-base font-semibold text-slate-700">Documents & Files</CardTitle>
-                      <Button size="sm" disabled={uploading}>
-                        <Upload className="w-4 h-4 mr-2" />
-                        <label htmlFor="file-upload" className="cursor-pointer">
-                          {uploading ? 'Uploading...' : 'Upload File'}
-                        </label>
-                        <input
-                          id="file-upload"
-                          type="file"
-                          className="hidden"
-                          onChange={handleFileUpload}
-                          disabled={uploading}
-                        />
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    {files.length > 0 ? (
-                      <div className="space-y-2">
-                        {files.map((file: any) => (
-                          <div key={file.id} className="flex items-center justify-between p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
-                            <div className="flex items-center gap-3 flex-1">
-                              <FileText className="w-5 h-5 text-slate-600" />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-slate-900 truncate">{file.file?.name || 'Unnamed file'}</p>
-                                <div className="flex items-center gap-3 text-xs text-slate-500">
-                                  <span>{(file.file?.size / 1024).toFixed(2)} KB</span>
-                                  <span>•</span>
-                                  <span>{file.file?.uploadedAt ? new Date(file.file.uploadedAt).toLocaleDateString() : 'Unknown date'}</span>
-                                  {file.file?.uploadedBy && (
-                                    <>
-                                      <span>•</span>
-                                      <span>by {file.file.uploadedBy.firstName} {file.file.uploadedBy.lastName}</span>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {file.file?.path && (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => window.open(`${API_BASE}${file.file.path}`, '_blank')}
-                                >
-                                  <Download className="w-4 h-4" />
-                                </Button>
-                              )}
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                onClick={async () => {
-                                  if (confirm('Are you sure you want to delete this file?')) {
-                                    try {
-                                      await makeApiCall(`${API_BASE}/files/${file.fileId}`, { method: 'DELETE' });
-                                      toast({ title: 'Success', description: 'File deleted successfully' });
-                                      loadFiles();
-                                    } catch (error) {
-                                      toast({ title: 'Error', description: 'Failed to delete file', variant: 'destructive' });
-                                    }
-                                  }
-                                }}
-                              >
-                                <Trash className="w-4 h-4" />
-                              </Button>
-                            </div>
+              <TabsContent value="files" className="mt-2">
+                <div className="border border-slate-200 rounded-lg bg-white p-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium text-slate-600">Files</span>
+                    <Button size="sm" variant="ghost" className="h-5 text-[10px] px-1" disabled={uploading}>
+                      <Upload className="w-2.5 h-2.5 mr-0.5" />
+                      <label htmlFor="file-upload" className="cursor-pointer">{uploading ? '...' : 'Upload'}</label>
+                      <input id="file-upload" type="file" className="hidden" onChange={handleFileUpload} disabled={uploading} />
+                    </Button>
+                  </div>
+                  {files.length > 0 ? (
+                    <div className="space-y-0.5 max-h-32 overflow-y-auto">
+                      {files.map((file: any) => (
+                        <div key={file.id} className="flex items-center justify-between p-1 border border-slate-100 rounded bg-slate-50 text-[10px]">
+                          <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                            <FileText className="w-3 h-3 text-slate-500" />
+                            <span className="truncate">{file.file?.name || 'File'}</span>
+                            <span className="text-slate-400">{(file.file?.size / 1024).toFixed(0)}KB</span>
                           </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-12 bg-slate-50 rounded-lg border border-slate-100">
-                        <Upload className="w-12 h-12 mx-auto mb-3 text-slate-400" />
-                        <p className="text-sm text-slate-600 font-medium">No files uploaded yet</p>
-                        <p className="text-xs text-slate-500 mt-1">Upload documents related to this lead</p>
-                        <Button size="sm" className="mt-4" disabled={uploading}>
-                          <label htmlFor="file-upload-empty" className="cursor-pointer flex items-center gap-2">
-                            <Upload className="w-4 h-4" />
-                            {uploading ? 'Uploading...' : 'Upload Your First File'}
-                          </label>
-                          <input
-                            id="file-upload-empty"
-                            type="file"
-                            className="hidden"
-                            onChange={handleFileUpload}
-                            disabled={uploading}
-                          />
-                        </Button>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                          <div className="flex gap-0.5">
+                            {file.file?.path && (<Button size="sm" variant="ghost" className="h-4 w-4 p-0" onClick={() => window.open(`${API_BASE}${file.file.path}`, '_blank')}><Download className="w-2.5 h-2.5" /></Button>)}
+                            <Button size="sm" variant="ghost" className="h-4 w-4 p-0" onClick={async () => {
+                              if (confirm('Delete file?')) {
+                                try {
+                                  await makeApiCall(`${API_BASE}/files/${file.fileId}`, { method: 'DELETE' });
+                                  toast({ title: 'Success', description: 'File deleted' });
+                                  loadFiles();
+                                } catch (error) {
+                                  toast({ title: 'Error', description: 'Failed', variant: 'destructive' });
+                                }
+                              }
+                            }}><Trash className="w-2.5 h-2.5 text-red-500" /></Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (<div className="text-center py-2 bg-slate-50 rounded text-[10px] text-slate-500">No files yet</div>)}
+                </div>
               </TabsContent>
             </Tabs>
           </div>
 
           {/* Right side - Communication Section (4 columns) */}
           <div className="col-span-4">
-            <Card className="sticky top-4 border border-slate-200">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-700">
-                  <MessageSquare className="w-5 h-5 text-slate-600" />
-                  Communications
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Tasks Section */}
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <CheckSquare className="w-4 h-4 text-slate-600" />
-                    <h4 className="font-semibold text-sm text-slate-700">Upcoming Tasks</h4>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
-                      <p className="text-sm text-slate-600">No upcoming tasks</p>
-                    </div>
-                  </div>
+            <div className="sticky top-2 border border-slate-200 rounded-lg bg-white p-2">
+              <div className="flex items-center gap-1 mb-2">
+                <MessageSquare className="w-3 h-3 text-slate-500" />
+                <span className="text-xs font-medium text-slate-600">Communications</span>
+              </div>
+              {/* Tasks */}
+              <div className="mb-2">
+                <div className="flex items-center gap-1 mb-1">
+                  <CheckSquare className="w-2.5 h-2.5 text-slate-500" />
+                  <span className="text-[10px] font-medium text-slate-600">Tasks</span>
                 </div>
-
-                <Separator />
-
-                {/* Communication Timeline */}
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <Clock className="w-4 h-4 text-slate-600" />
-                    <h4 className="font-semibold text-sm text-slate-700">Activity Timeline</h4>
-                  </div>
-                  <div className="space-y-3 max-h-[500px] overflow-y-auto">
-                    {notes.length > 0 ? (
-                      notes.map((note) => (
-                        <div key={note.id} className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
-                          <div className="flex items-start justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <FileText className="w-4 h-4 text-slate-600" />
-                              <span className="text-xs font-semibold text-slate-700">
-                                {note.user?.firstName} {note.user?.lastName}
-                              </span>
-                            </div>
-                            <span className="text-xs text-slate-500" title={new Date(note.createdAt).toLocaleString()}>
-                              {formatDate(note.createdAt)}
-                            </span>
-                          </div>
-                          <p className="text-sm text-slate-700 whitespace-pre-wrap">{note.body}</p>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-sm text-slate-600 text-center py-8">
-                        <FileText className="w-8 h-8 mx-auto mb-2 text-slate-400" />
-                        No communications yet
+                <div className="p-1.5 bg-slate-50 rounded text-[10px] text-slate-500">No tasks</div>
+              </div>
+              {/* Timeline */}
+              <div className="mb-2">
+                <div className="flex items-center gap-1 mb-1">
+                  <Clock className="w-2.5 h-2.5 text-slate-500" />
+                  <span className="text-[10px] font-medium text-slate-600">Activity</span>
+                </div>
+                <div className="space-y-1 max-h-32 overflow-y-auto">
+                  {notes.length > 0 ? notes.map((note) => (
+                    <div key={note.id} className="p-1.5 bg-slate-50 rounded text-[10px]">
+                      <div className="flex justify-between mb-0.5">
+                        <span className="font-medium text-slate-700">{note.user?.firstName}</span>
+                        <span className="text-slate-400">{formatDate(note.createdAt)}</span>
                       </div>
-                    )}
-                  </div>
+                      <p className="text-slate-600 line-clamp-2">{note.body}</p>
+                    </div>
+                  )) : (<div className="text-[10px] text-slate-500 text-center py-2">No activity</div>)}
                 </div>
-
-                <Separator />
-
-                {/* Add Note */}
-                <div>
-                  <Label className="text-sm font-semibold text-slate-700 mb-2">Add Note</Label>
-                  <Textarea
-                    value={noteText}
-                    onChange={(e) => setNoteText(e.target.value)}
-                    placeholder="Write a note..."
-                    className="min-h-[100px]"
-                    disabled={addingNote}
-                  />
-                  <Button 
-                    className="w-full mt-2" 
-                    size="sm"
-                    onClick={handleAddNote}
-                    disabled={addingNote || !noteText.trim()}
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    {addingNote ? 'Adding...' : 'Add Note'}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+              </div>
+              {/* Add Note */}
+              <div>
+                <Textarea value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Add note..." className="min-h-[50px] text-xs" disabled={addingNote} />
+                <Button className="w-full mt-1 h-6 text-xs" size="sm" onClick={handleAddNote} disabled={addingNote || !noteText.trim()}>
+                  <Plus className="w-2.5 h-2.5 mr-0.5" />{addingNote ? '...' : 'Add'}
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

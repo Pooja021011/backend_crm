@@ -580,11 +580,12 @@ export const pipelineService = {
         };
       }
 
-      // Update the lead's pipeline stage
+      // Update the lead's pipeline stage and stageEnteredAt
       const updatedLead = await prisma.lead.update({
         where: { id: leadId },
         data: {
           pipelineStageId: stageId,
+          stageEnteredAt: new Date(),
           updatedAt: new Date()
         },
         include: {
@@ -592,16 +593,18 @@ export const pipelineService = {
         }
       });
 
-      // Create stage history record
-      await prisma.stageHistory.create({
-        data: {
-          leadId: leadId,
-          fromStageId: currentLead.pipelineStageId,
-          toStageId: stageId,
-          changedById: userId,
-          changedAt: new Date()
-        }
-      });
+      // Create stage history record only if we have a fromStageId (skip if lead was never in a stage)
+      if (currentLead.pipelineStageId) {
+        await prisma.stageHistory.create({
+          data: {
+            leadId: leadId,
+            fromStageId: currentLead.pipelineStageId,
+            toStageId: stageId,
+            changedById: userId,
+            changedAt: new Date()
+          }
+        });
+      }
 
       logger.info('Lead moved to new stage', { 
         leadId, 

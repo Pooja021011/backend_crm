@@ -90,26 +90,26 @@ export const PipelineCard = ({ lead, isDragging, onViewDetails }: PipelineCardPr
       style={style}
       {...attributes}
       {...listeners}
-      className={`p-3 mb-3 border border-gray-200 bg-white shadow-sm hover:shadow-lg hover:border-blue-300 transition-all duration-200 cursor-grab active:cursor-grabbing rounded-lg ${
-        isSortableDragging ? 'opacity-50 scale-95 rotate-2' : ''
+      className={`p-2 mb-1.5 border border-gray-200 bg-white shadow-sm hover:shadow-md hover:border-blue-300 transition-all duration-150 cursor-grab active:cursor-grabbing rounded ${
+        isSortableDragging ? 'opacity-50 scale-95 rotate-1' : ''
       } ${
-        isDragging ? 'rotate-6 scale-110 shadow-2xl border-blue-400' : ''
+        isDragging ? 'rotate-3 scale-105 shadow-xl border-blue-400' : ''
       } ${
         lead.status === 'urgent' ? 'border-red-300 bg-red-50' : ''
       }`}
     >
-      <div className="space-y-2">
+      <div className="space-y-1">
         {/* Address with View Button */}
-        <div className="flex items-start gap-2">
+        <div className="flex items-start gap-1">
           <MapPin className="w-3 h-3 text-blue-500 mt-0.5 flex-shrink-0" />
-          <h3 className="font-medium text-sm text-gray-900 leading-tight flex-1">
+          <h3 className="font-medium text-[13px] text-gray-900 leading-tight flex-1 line-clamp-1">
             {lead.address}
           </h3>
           {onViewDetails && (
             <Button
               variant="ghost"
               size="sm"
-              className="h-5 w-5 p-0 hover:bg-blue-100"
+              className="h-4 w-4 p-0 hover:bg-blue-100"
               onClick={(e) => {
                 e.stopPropagation();
                 onViewDetails();
@@ -123,68 +123,46 @@ export const PipelineCard = ({ lead, isDragging, onViewDetails }: PipelineCardPr
         </div>
 
         {/* Seller */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <User className="w-3 h-3 text-green-500 flex-shrink-0" />
-          <span className="text-xs text-gray-700 flex-1">{lead.sellerName}</span>
-          <Badge className="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full">
+          <span className="text-[12px] text-gray-600 flex-1 truncate">{lead.sellerName}</span>
+          <Badge className="bg-green-100 text-green-700 text-[11px] px-1.5 py-0 rounded">
             Seller
           </Badge>
         </div>
 
-        {/* Buyer (if exists) */}
-        {lead.buyerName && (
-          <div className="flex items-center gap-2">
-            <User className="w-3 h-3 text-purple-500 flex-shrink-0" />
-            <span className="text-xs text-gray-700 flex-1">{lead.buyerName}</span>
-            <Badge className="bg-purple-100 text-purple-700 text-xs px-2 py-0.5 rounded-full">
-              Buyer
-            </Badge>
+        {/* Date & Stage Info */}
+        <div className="flex items-center justify-between text-[11px] text-gray-500 pt-0.5 border-t border-gray-100">
+          <div className="flex items-center gap-0.5">
+            <Calendar className="w-2.5 h-2.5" />
+            <span>{safeDateFormat(lead.dateCreated, 'MMM dd')}</span>
           </div>
-        )}
-
-        {/* Date Info Row */}
-        <div className="flex items-center justify-between text-xs text-gray-600 pt-1 border-t border-gray-100">
-          <div className="flex items-center gap-1">
-            <Calendar className="w-3 h-3" />
-            <span>Created</span>
-            <span className="font-medium">{safeDateFormat(lead.dateCreated, 'MMM dd')}</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <Clock className="w-3 h-3" />
-            <span>In Stage</span>
-            <span className="font-medium">{getTimeInStatus()}</span>
+          <div className="flex items-center gap-0.5">
+            <Clock className="w-2.5 h-2.5" />
+            <span>{getTimeInStatus()}</span>
           </div>
         </div>
 
-        {/* Status Checkboxes Row */}
-        <div className="flex items-center justify-between pt-2">
-          <div className="flex items-center gap-1">
+        {/* Status Indicators */}
+        <div className="flex items-center gap-2 pt-0.5">
+          <div className="flex items-center gap-0.5">
             <Checkbox 
               checked={lead.priceReduction} 
               className="h-3 w-3 data-[state=checked]:bg-yellow-500 data-[state=checked]:border-yellow-500"
               disabled
             />
-            <div className="flex items-center gap-1">
-              <TrendingDown className="w-3 h-3 text-yellow-600" />
-              <span className="text-xs text-yellow-700 font-medium">Price Cut</span>
-              {lead.priceReduction && getPriceReductionAmount() && (
-                <span className="text-xs text-yellow-800 font-bold">
-                  -${getPriceReductionAmount()?.toLocaleString()}
-                </span>
-              )}
-            </div>
+            <TrendingDown className="w-2.5 h-2.5 text-yellow-600" />
+            <span className="text-[11px] text-yellow-700">Price Cut</span>
           </div>
           
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5">
             <Checkbox 
               checked={lead.clearToClose} 
               className="h-3 w-3 data-[state=checked]:bg-green-500 data-[state=checked]:border-green-500"
               disabled
             />
-            <div className="flex items-center gap-1">
-              <CheckCircle2 className="w-3 h-3 text-green-600" />
-              <span className="text-xs text-green-700 font-medium">Clear to Close</span>
-            </div>
+            <CheckCircle2 className="w-2.5 h-2.5 text-green-600" />
+            <span className="text-[11px] text-green-700">Clear to Close</span>
           </div>
         </div>
       </div>

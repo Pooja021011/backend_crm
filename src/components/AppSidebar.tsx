@@ -90,7 +90,8 @@ export function AppSidebar() {
 
   const getNavClassName = (path: string) =>
     cn(
-      "w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground rounded-lg group",
+      "w-full text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground rounded-lg group",
+      isCollapsed ? "justify-center" : "justify-start",
       isActive(path) 
         ? "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 hover:text-sidebar-primary-foreground shadow-sm" 
         : ""
@@ -116,9 +117,9 @@ export function AppSidebar() {
         {/* User Info Section - Dark Header */}
         <div className={cn(
           "bg-sidebar-accent/20 border-b border-sidebar-border/50",
-          isCollapsed ? "p-3" : "p-4"
+          isCollapsed ? "px-0 py-3" : "p-4"
         )}>
-          <div className="flex items-center gap-3">
+          <div className={cn("flex items-center gap-3", isCollapsed && "justify-center")}>
             <Avatar className={cn(
               "border-2 border-sidebar-border/30",
               isCollapsed ? "w-8 h-8" : "w-10 h-10"
@@ -142,10 +143,10 @@ export function AppSidebar() {
         </div>
 
         {/* Navigation Menu */}
-        <div className="flex-1 px-2 py-4">
-          <SidebarGroup>
+        <div className={cn("flex-1 py-4", isCollapsed ? "px-0" : "px-2")}>
+          <SidebarGroup className={isCollapsed ? "p-0" : ""}>
             <SidebarGroupContent>
-              <SidebarMenu className="space-y-1">
+              <SidebarMenu className={cn("space-y-1", isCollapsed && "items-center")}>
                 {navigationItems.map((item) => (
                   <SidebarMenuItem key={item.title}>
                     {item.hasSubmenu ? (
@@ -155,13 +156,14 @@ export function AppSidebar() {
                           <button
                             onClick={() => toggleSubmenu(item.title)}
                             className={cn(
-                              "w-full justify-between text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground rounded-lg group",
+                              "w-full text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground rounded-lg group",
+                              isCollapsed ? "justify-center" : "justify-between",
                               currentPath === '/settings' 
                                 ? "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 hover:text-sidebar-primary-foreground shadow-sm" 
                                 : ""
                             )}
                           >
-                            <div className="flex items-center">
+                            <div className={cn("flex items-center", isCollapsed && "justify-center")}>
                               <item.icon className="w-5 h-5 flex-shrink-0" />
                               {!isCollapsed && (
                                 <span className="ml-3 font-medium">{item.title}</span>
@@ -221,7 +223,7 @@ export function AppSidebar() {
         {/* Collapse/Expand Toggle Button */}
         <div className={cn(
           "border-t border-sidebar-border/50",
-          isCollapsed ? "p-2" : "p-3"
+          isCollapsed ? "px-0 py-2" : "p-3"
         )}>
           <Button
             variant="ghost"
@@ -229,7 +231,7 @@ export function AppSidebar() {
             onClick={toggleSidebar}
             className={cn(
               "w-full text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-              isCollapsed ? "px-2" : "justify-start"
+              isCollapsed ? "justify-center" : "justify-start"
             )}
           >
             {isCollapsed ? (

@@ -57,7 +57,6 @@ import {
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { useLeads, type LeadType } from "@/hooks/useLeads";
-import { ViewLeadDialog } from "@/components/ViewLeadDialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { SortableTableHeader, useSortable } from "@/components/SortableTableHeader";
 import { ImportCSVDialog } from "@/components/ImportCSVDialog";
@@ -153,8 +152,6 @@ const Leads = () => {
   
   // URL parameter handling for direct lead access
   const [searchParams, setSearchParams] = useSearchParams();
-  const [selectedLead, setSelectedLead] = useState<any>(null);
-  const [showLeadDetail, setShowLeadDetail] = useState(false);
   
   // Role-based access control
   const userRoleNames = user?.roles?.map((r: any) => {
@@ -207,30 +204,15 @@ const Leads = () => {
     loadFilterData(); // Load dynamic filter options
   }, []);
 
-  // Handle leadId parameter from URL to show specific lead
+  // Handle leadId parameter from URL to navigate to lead detail
   useEffect(() => {
     const leadIdParam = searchParams.get('leadId');
     
-    if (leadIdParam && leads.length > 0) {
-      // Find lead by ID
-      const matchingLead = leads.find(lead => lead.id === leadIdParam);
-      
-      if (matchingLead) {
-        setSelectedLead(matchingLead);
-        setShowLeadDetail(true);
-        
-        // Set the appropriate tab based on lead type
-        setActiveTab(matchingLead.leadType);
-        
-        // Remove the leadId parameter from URL after opening
-        setSearchParams(prev => {
-          const newParams = new URLSearchParams(prev);
-          newParams.delete('leadId');
-          return newParams;
-        });
-      }
+    if (leadIdParam) {
+      // Navigate directly to the lead detail page
+      navigate(`/leads/${leadIdParam}/edit`);
     }
-  }, [searchParams, leads, setSearchParams]);
+  }, [searchParams, navigate]);
 
   // Load dynamic filter data
   const loadFilterData = async () => {
@@ -1293,11 +1275,11 @@ const Leads = () => {
               <div className="bg-white overflow-x-auto rounded-lg shadow-sm">
                 <Table>
                   <TableHeader>
-                    <TableRow className="border-b-2 border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100/50">
-                      <TableHead className="w-12 sticky left-0 bg-gradient-to-r from-gray-50 to-gray-100/50 z-10 border-l border-r border-gray-200 p-0 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
-                        <div className="flex items-center justify-center h-full py-4">
+                    <TableRow className="border-b border-gray-200 bg-gray-50">
+                      <TableHead className="w-8 sticky left-0 bg-gray-50 z-10 border-r border-gray-200 p-0">
+                        <div className="flex items-center justify-center">
                           <Checkbox 
-                            className="m-2.5"
+                            className="h-3.5 w-3.5"
                             checked={currentLeads.length > 0 && selectedItems.length === currentLeads.length}
                             ref={(el) => {
                               if (el) (el as any).indeterminate = selectedItems.length > 0 && selectedItems.length < currentLeads.length;
@@ -1312,126 +1294,101 @@ const Leads = () => {
                           />
                         </div>
                       </TableHead>
-                      <SortableTableHeader sortKey="address" sortConfig={sortConfig} onSort={handleSort} className="min-w-[250px]">
+                      <SortableTableHeader sortKey="address" sortConfig={sortConfig} onSort={handleSort} className="min-w-[180px]">
                         Property Address
                       </SortableTableHeader>
-                      <SortableTableHeader sortKey="name" sortConfig={sortConfig} onSort={handleSort} className="min-w-[180px]">
+                      <SortableTableHeader sortKey="name" sortConfig={sortConfig} onSort={handleSort} className="min-w-[130px]">
                         Lead Name
                       </SortableTableHeader>
-                      <SortableTableHeader sortKey="email" sortConfig={sortConfig} onSort={handleSort} className="min-w-[200px]">
+                      <SortableTableHeader sortKey="email" sortConfig={sortConfig} onSort={handleSort} className="min-w-[150px]">
                         Contact Info
                       </SortableTableHeader>
-                      <SortableTableHeader sortKey="market" sortConfig={sortConfig} onSort={handleSort} className="min-w-[120px]">
-                        Market
-                      </SortableTableHeader>
-                      <TableHead className="text-gray-600 font-medium min-w-[120px]">Property Value</TableHead>
-                      <SortableTableHeader sortKey="motivation" sortConfig={sortConfig} onSort={handleSort} className="min-w-[100px]">
+                      <SortableTableHeader sortKey="motivation" sortConfig={sortConfig} onSort={handleSort} className="min-w-[70px]">
                         Motivation
                       </SortableTableHeader>
-                      <TableHead className="text-gray-600 font-medium min-w-[120px]">Timeline</TableHead>
-                      <SortableTableHeader sortKey="status" sortConfig={sortConfig} onSort={handleSort} className="min-w-[120px]">
+                      <SortableTableHeader sortKey="status" sortConfig={sortConfig} onSort={handleSort} className="min-w-[90px]">
                         Lead Status
                       </SortableTableHeader>
-                      <TableHead className="text-gray-600 font-medium min-w-[140px]">Pipeline Status</TableHead>
-                      <SortableTableHeader sortKey="assignedUser" sortConfig={sortConfig} onSort={handleSort} className="min-w-[140px]">
-                        Assigned Agent
+                      <SortableTableHeader sortKey="assignedUser" sortConfig={sortConfig} onSort={handleSort} className="min-w-[90px]">
+                        Assigned
                       </SortableTableHeader>
-                      <SortableTableHeader sortKey="updatedAt" sortConfig={sortConfig} onSort={handleSort} className="min-w-[120px]">
+                      <SortableTableHeader sortKey="updatedAt" sortConfig={sortConfig} onSort={handleSort} className="min-w-[80px]">
                         Last Contact
                       </SortableTableHeader>
-                      <TableHead className="w-12 sticky right-0 bg-gradient-to-r from-gray-50 to-gray-100/50 z-10 border-l border-r border-gray-200 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)]"></TableHead>
+                      <TableHead className="w-8 sticky right-0 bg-gray-50 z-10 border-l border-gray-200"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {currentLeads.map((lead) => (
                       <TableRow 
                         key={lead.id} 
-                        className="border-b border-gray-100 hover:bg-blue-50/30 hover:shadow-sm cursor-pointer transition-all duration-200"
-                        onClick={() => {
-                          setSelectedLead(lead);
-                          setShowLeadDetail(true);
-                        }}
+                        className="border-b border-gray-100 hover:bg-blue-50/50 cursor-pointer"
+                        onClick={() => navigate(`/leads/${lead.id}/edit`)}
                       >
                         <TableCell 
-                          className="sticky left-0 bg-white z-10 border-l border-r border-gray-200 p-0 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]"
+                          className="sticky left-0 bg-white z-10 border-r border-gray-200 p-0"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <div className="flex items-center justify-center h-full py-4">
+                          <div className="flex items-center justify-center">
                             <Checkbox 
-                              className="m-2.5"
+                              className="h-3.5 w-3.5"
                               checked={selectedItems.includes(lead.id)}
                               onCheckedChange={() => handleSelectItem(lead.id)}
                             />
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-2">
-                            <MapPin className="w-4 h-4 text-gray-400" />
-                            <span className="font-medium text-gray-900">
+                          <div className="flex items-center gap-1">
+                            <MapPin className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                            <span className="font-medium text-gray-900 truncate">
                               {lead.address ? `${lead.address.address1}, ${lead.address.city}, ${lead.address.state}` : 'N/A'}
                             </span>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                              <span className="text-xs font-medium text-blue-600">
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-5 h-5 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                              <span className="text-[10px] font-medium text-blue-600">
                                 {lead.seller?.firstName?.[0]}{lead.seller?.lastName?.[0]}
                               </span>
                             </div>
-                            <span className="font-medium text-gray-900">
+                            <span className="font-medium text-gray-900 truncate">
                               {lead.seller?.firstName} {lead.seller?.lastName}
                             </span>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-1 text-xs text-gray-600">
-                              <Phone className="w-3 h-3" />
-                              {lead.seller?.phone || 'N/A'}
-                            </div>
-                            <div className="flex items-center gap-1 text-xs text-gray-600">
-                              <Mail className="w-3 h-3" />
-                              {lead.seller?.email || 'N/A'}
-                            </div>
+                          <div className="flex items-center gap-1 text-gray-600">
+                            <Phone className="w-2.5 h-2.5 flex-shrink-0" />
+                            <span className="truncate">{lead.seller?.phone || 'N/A'}</span>
+                          </div>
+                          <div className="flex items-center gap-1 text-gray-500">
+                            <Mail className="w-2.5 h-2.5 flex-shrink-0" />
+                            <span className="truncate">{lead.seller?.email || 'N/A'}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="text-gray-600">{lead.marketId || 'N/A'}</TableCell>
-                        <TableCell className="font-medium text-gray-900">N/A</TableCell>
                         <TableCell>
-                          <Badge className={`border ${getMotivationColor(lead.seller?.motivation || 'Medium')}`}>
+                          <Badge className={`border text-[10px] px-1.5 py-0 ${getMotivationColor(lead.seller?.motivation || 'Medium')}`}>
                             {lead.seller?.motivation || 'Medium'}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-gray-600">N/A</TableCell>
                         <TableCell>
                           {lead.leadStatus ? (
                             <Badge 
-                              className="border" 
+                              className="border text-[10px] px-1.5 py-0" 
                               style={{ 
                                 backgroundColor: `${lead.leadStatus.color}20`,
                                 borderColor: lead.leadStatus.color,
                                 color: lead.leadStatus.color
                               }}
                             >
-                              <div className="flex items-center gap-1.5">
-                                <div 
-                                  className="w-2 h-2 rounded-full" 
-                                  style={{ backgroundColor: lead.leadStatus.color }}
-                                />
-                                {lead.leadStatus.name}
-                              </div>
+                              {lead.leadStatus.name}
                             </Badge>
                           ) : (
-                            <Badge className={`border ${getStatusBadgeColor(lead.status || 'New')}`}>
+                            <Badge className={`border text-[10px] px-1.5 py-0 ${getStatusBadgeColor(lead.status || 'New')}`}>
                               {lead.status || 'No Status'}
                             </Badge>
                           )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={getPipelineStatusColor('New Lead')}>
-                            {lead.pipelineStageId ? 'Active' : 'New Lead'}
-                          </Badge>
                         </TableCell>
                         <TableCell className="text-gray-600">
                           {lead.assignedUserId ? 'Assigned' : 'Unassigned'}
@@ -1440,7 +1397,7 @@ const Leads = () => {
                           {new Date(lead.updatedAt).toLocaleDateString()}
                         </TableCell>
                         <TableCell 
-                          className="sticky right-0 bg-white z-10 border-l border-r border-gray-200 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)]"
+                          className="sticky right-0 bg-white z-10 border-l border-gray-200 p-0"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <LeadActions 
@@ -1460,11 +1417,11 @@ const Leads = () => {
               <div className="bg-white overflow-x-auto rounded-lg shadow-sm">
                 <Table>
                   <TableHeader>
-                    <TableRow className="border-b-2 border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100/50">
-                      <TableHead className="w-12 sticky left-0 bg-gradient-to-r from-gray-50 to-gray-100/50 z-10 border-l border-r border-gray-200 p-0 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
-                        <div className="flex items-center justify-center h-full py-4">
+                    <TableRow className="border-b border-gray-200 bg-gray-50">
+                      <TableHead className="w-8 sticky left-0 bg-gray-50 z-10 border-r border-gray-200 p-0">
+                        <div className="flex items-center justify-center">
                           <Checkbox 
-                            className="m-2.5"
+                            className="h-3.5 w-3.5"
                             checked={getFilteredLeadsForTab("BUYER").length > 0 && selectedItems.length === getFilteredLeadsForTab("BUYER").length}
                             ref={(el) => {
                               if (el) (el as any).indeterminate = selectedItems.length > 0 && selectedItems.length < getFilteredLeadsForTab("BUYER").length;
@@ -1480,95 +1437,77 @@ const Leads = () => {
                           />
                         </div>
                       </TableHead>
-                      <TableHead className="text-gray-600 font-medium min-w-[180px]">Lead Name</TableHead>
-                      <TableHead className="text-gray-600 font-medium min-w-[200px]">Contact Info</TableHead>
-                      <TableHead className="text-gray-600 font-medium min-w-[120px]">Market</TableHead>
-                      <TableHead className="text-gray-600 font-medium min-w-[140px]">Price Range</TableHead>
-                      <TableHead className="text-gray-600 font-medium min-w-[120px]">Asset Class</TableHead>
-                      <TableHead className="text-gray-600 font-medium min-w-[140px]">Properties Purchased</TableHead>
-                      <TableHead className="text-gray-600 font-medium min-w-[120px]">Credit Score</TableHead>
-                      <TableHead className="text-gray-600 font-medium min-w-[120px]">Pre-Approved</TableHead>
-                      <TableHead className="text-gray-600 font-medium min-w-[100px]">Motivation</TableHead>
-                      <TableHead className="text-gray-600 font-medium min-w-[120px]">Timeline</TableHead>
-                      <TableHead className="text-gray-600 font-medium min-w-[140px]">Assigned Agent</TableHead>
-                      <TableHead className="text-gray-600 font-medium min-w-[120px]">Last Contact</TableHead>
-                      <TableHead className="w-12 sticky right-0 bg-gradient-to-r from-gray-50 to-gray-100/50 z-10 border-l border-r border-gray-200 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)]"></TableHead>
+                      <TableHead className="min-w-[130px]">Lead Name</TableHead>
+                      <TableHead className="min-w-[150px]">Contact Info</TableHead>
+                      <TableHead className="min-w-[90px]">Price Range</TableHead>
+                      <TableHead className="min-w-[80px]">Asset Class</TableHead>
+                      <TableHead className="min-w-[60px]">Purchased</TableHead>
+                      <TableHead className="min-w-[70px]">Credit</TableHead>
+                      <TableHead className="min-w-[70px]">Pre-Appr</TableHead>
+                      <TableHead className="min-w-[70px]">Motivation</TableHead>
+                      <TableHead className="min-w-[70px]">Timeline</TableHead>
+                      <TableHead className="min-w-[80px]">Assigned</TableHead>
+                      <TableHead className="min-w-[80px]">Last Contact</TableHead>
+                      <TableHead className="w-8 sticky right-0 bg-gray-50 z-10 border-l border-gray-200"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {currentLeads.map((lead) => (
                       <TableRow 
                         key={lead.id} 
-                        className="border-b border-gray-100 hover:bg-green-50/30 hover:shadow-sm cursor-pointer transition-all duration-200"
-                        onClick={() => {
-                          setSelectedLead(lead);
-                          setShowLeadDetail(true);
-                        }}
+                        className="border-b border-gray-100 hover:bg-green-50/50 cursor-pointer"
+                        onClick={() => navigate(`/leads/${lead.id}/edit`)}
                       >
                         <TableCell 
-                          className="sticky left-0 bg-white z-10 border-l border-r border-gray-200 p-0 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]"
+                          className="sticky left-0 bg-white z-10 border-r border-gray-200 p-0"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <div className="flex items-center justify-center h-full py-4">
+                          <div className="flex items-center justify-center">
                             <Checkbox 
-                              className="m-2.5"
+                              className="h-3.5 w-3.5"
                               checked={selectedItems.includes(lead.id)}
                               onCheckedChange={() => handleSelectItem(lead.id)}
                             />
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                              <span className="text-xs font-medium text-green-600">
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                              <span className="text-[10px] font-medium text-green-600">
                                 {lead.buyer?.firstName?.[0]}{lead.buyer?.lastName?.[0]}
                               </span>
                             </div>
-                            <span className="font-medium text-gray-900">
+                            <span className="font-medium text-gray-900 truncate">
                               {lead.buyer?.firstName} {lead.buyer?.lastName}
                             </span>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-1 text-xs text-gray-600">
-                              <Phone className="w-3 h-3" />
-                              {lead.buyer?.phone}
-                            </div>
-                            <div className="flex items-center gap-1 text-xs text-gray-600">
-                              <Mail className="w-3 h-3" />
-                              {lead.buyer?.email}
-                            </div>
+                          <div className="flex items-center gap-1 text-gray-600">
+                            <Phone className="w-2.5 h-2.5 flex-shrink-0" />
+                            <span className="truncate">{lead.buyer?.phone}</span>
+                          </div>
+                          <div className="flex items-center gap-1 text-gray-500">
+                            <Mail className="w-2.5 h-2.5 flex-shrink-0" />
+                            <span className="truncate">{lead.buyer?.email}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="text-gray-600 text-xs">
-                          <span className="max-w-[200px] truncate block" title={getMarketNames(lead.buyerCriteria?.marketIds)}>
-                            {getMarketNames(lead.buyerCriteria?.marketIds)}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-xs text-gray-600">
-                          <span className="max-w-[200px] truncate block" title={getPriceRangeNames(lead.buyerCriteria?.priceRangeIds)}>
+                        <TableCell className="text-gray-600">
+                          <span className="truncate block" title={getPriceRangeNames(lead.buyerCriteria?.priceRangeIds)}>
                             {getPriceRangeNames(lead.buyerCriteria?.priceRangeIds)}
                           </span>
                         </TableCell>
-                        <TableCell className="text-xs">
-                          <span className="max-w-[200px] truncate block" title={getAssetClassNames(lead.buyerCriteria?.assetClassIds)}>
+                        <TableCell>
+                          <span className="truncate block" title={getAssetClassNames(lead.buyerCriteria?.assetClassIds)}>
                             {getAssetClassNames(lead.buyerCriteria?.assetClassIds)}
                           </span>
                         </TableCell>
                         <TableCell className="text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <span className="font-medium text-gray-900">{lead.buyer?.propertiesPurchased || 0}</span>
-                            {(lead.buyer?.propertiesPurchased || 0) > 0 && (
-                              <Badge className="bg-green-100 text-green-700 text-xs">
-                                Repeat
-                              </Badge>
-                            )}
-                          </div>
+                          <span className="font-medium text-gray-900">{lead.buyer?.propertiesPurchased || 0}</span>
                         </TableCell>
                         <TableCell className="text-center">
                           {lead.buyer?.creditScore ? (
-                            <Badge className={`text-xs ${
+                            <Badge className={`text-[10px] px-1.5 py-0 ${
                               lead.buyer.creditScore === 'Excellent' ? 'bg-green-100 text-green-700' :
                               lead.buyer.creditScore === 'Good' ? 'bg-blue-100 text-blue-700' :
                               lead.buyer.creditScore === 'Fair' ? 'bg-yellow-100 text-yellow-700' :
@@ -1577,23 +1516,19 @@ const Leads = () => {
                               {lead.buyer.creditScore}
                             </Badge>
                           ) : (
-                            <span className="text-gray-400 text-xs">-</span>
+                            <span className="text-gray-400">-</span>
                           )}
                         </TableCell>
                         <TableCell className="text-center">
                           {lead.buyer?.preApproved ? (
-                            <Badge className="bg-green-100 text-green-700 text-xs">
-                              ✓ Pre-Approved
-                            </Badge>
+                            <Badge className="bg-green-100 text-green-700 text-[10px] px-1.5 py-0">✓</Badge>
                           ) : (
-                            <Badge className="bg-gray-100 text-gray-700 text-xs">
-                              Not Pre-Approved
-                            </Badge>
+                            <Badge className="bg-gray-100 text-gray-500 text-[10px] px-1.5 py-0">No</Badge>
                           )}
                         </TableCell>
                         <TableCell className="text-center">
                           {lead.buyer?.motivation ? (
-                            <Badge className={`border text-xs ${
+                            <Badge className={`border text-[10px] px-1.5 py-0 ${
                               lead.buyer.motivation === 'High' ? 'border-red-300 bg-red-50 text-red-700' :
                               lead.buyer.motivation === 'Medium' ? 'border-yellow-300 bg-yellow-50 text-yellow-700' :
                               'border-gray-300 bg-gray-50 text-gray-700'
@@ -1601,24 +1536,20 @@ const Leads = () => {
                               {lead.buyer.motivation}
                             </Badge>
                           ) : (
-                            <span className="text-gray-400 text-xs">-</span>
+                            <span className="text-gray-400">-</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-center text-xs">
+                        <TableCell className="text-center text-gray-600">
                           {lead.buyer?.timeline || <span className="text-gray-400">-</span>}
                         </TableCell>
-                        <TableCell className="text-gray-600 text-xs">
-                          {lead.assignedUserId ? (
-                            <span className="text-gray-600">Assigned</span>
-                          ) : (
-                            <span className="text-gray-400">Unassigned</span>
-                          )}
+                        <TableCell className="text-gray-600">
+                          {lead.assignedUserId ? 'Assigned' : <span className="text-gray-400">Unassigned</span>}
                         </TableCell>
-                        <TableCell className="text-gray-600 text-xs">
+                        <TableCell className="text-gray-600">
                           {lead.updatedAt ? new Date(lead.updatedAt).toLocaleDateString() : <span className="text-gray-400">-</span>}
                         </TableCell>
                         <TableCell 
-                          className="sticky right-0 bg-white z-10 border-l border-r border-gray-200 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)]"
+                          className="sticky right-0 bg-white z-10 border-l border-gray-200 p-0"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <LeadActions 
@@ -1638,11 +1569,11 @@ const Leads = () => {
               <div className="bg-white overflow-x-auto rounded-lg shadow-sm">
                 <Table>
                   <TableHeader>
-                    <TableRow className="border-b-2 border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100/50">
-                      <TableHead className="w-12 sticky left-0 bg-gradient-to-r from-gray-50 to-gray-100/50 z-10 border-l border-r border-gray-200 p-0 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
-                        <div className="flex items-center justify-center h-full py-4">
+                    <TableRow className="border-b border-gray-200 bg-gray-50">
+                      <TableHead className="w-8 sticky left-0 bg-gray-50 z-10 border-r border-gray-200 p-0">
+                        <div className="flex items-center justify-center">
                           <Checkbox 
-                            className="m-2.5"
+                            className="h-3.5 w-3.5"
                             checked={getFilteredLeadsForTab("VENDOR").length > 0 && selectedItems.length === getFilteredLeadsForTab("VENDOR").length}
                             ref={(el) => {
                               if (el) (el as any).indeterminate = selectedItems.length > 0 && selectedItems.length < getFilteredLeadsForTab("VENDOR").length;
@@ -1658,89 +1589,72 @@ const Leads = () => {
                           />
                         </div>
                       </TableHead>
-                      <TableHead className="text-gray-600 font-medium min-w-[180px]">Lead Name</TableHead>
-                      <TableHead className="text-gray-600 font-medium min-w-[200px]">Company</TableHead>
-                      <TableHead className="text-gray-600 font-medium min-w-[200px]">Contact Info</TableHead>
-                      <TableHead className="text-gray-600 font-medium min-w-[140px]">Industry</TableHead>
-                      <TableHead className="text-gray-600 font-medium min-w-[140px]">Service Area</TableHead>
-                      <TableHead className="text-gray-600 font-medium min-w-[100px]">Rating</TableHead>
-                      <TableHead className="text-gray-600 font-medium min-w-[100px]">Verified</TableHead>
-                      <TableHead className="text-gray-600 font-medium min-w-[140px]">Assigned Agent</TableHead>
-                      <TableHead className="text-gray-600 font-medium min-w-[120px]">Last Contact</TableHead>
-                      <TableHead className="w-12 sticky right-0 bg-gradient-to-r from-gray-50 to-gray-100/50 z-10 border-l border-r border-gray-200 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)]"></TableHead>
+                      <TableHead className="min-w-[130px]">Lead Name</TableHead>
+                      <TableHead className="min-w-[130px]">Company</TableHead>
+                      <TableHead className="min-w-[150px]">Contact Info</TableHead>
+                      <TableHead className="min-w-[90px]">Industry</TableHead>
+                      <TableHead className="min-w-[60px]">Rating</TableHead>
+                      <TableHead className="min-w-[60px]">Verified</TableHead>
+                      <TableHead className="min-w-[80px]">Assigned</TableHead>
+                      <TableHead className="min-w-[80px]">Last Contact</TableHead>
+                      <TableHead className="w-8 sticky right-0 bg-gray-50 z-10 border-l border-gray-200"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {activeTab === "VENDOR" ? currentLeads.map((lead) => (
                       <TableRow 
                         key={lead.id} 
-                        className="border-b border-gray-100 hover:bg-purple-50/30 hover:shadow-sm cursor-pointer transition-all duration-200"
-                        onClick={() => {
-                          setSelectedLead(lead);
-                          setShowLeadDetail(true);
-                        }}
+                        className="border-b border-gray-100 hover:bg-purple-50/50 cursor-pointer"
+                        onClick={() => navigate(`/leads/${lead.id}/edit`)}
                       >
                         <TableCell 
-                          className="sticky left-0 bg-white z-10 border-l border-r border-gray-200 p-0 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]"
+                          className="sticky left-0 bg-white z-10 border-r border-gray-200 p-0"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <div className="flex items-center justify-center h-full py-4">
+                          <div className="flex items-center justify-center">
                             <Checkbox 
-                              className="m-2.5"
+                              className="h-3.5 w-3.5"
                               checked={selectedItems.includes(lead.id)}
                               onCheckedChange={() => handleSelectItem(lead.id)}
                             />
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center">
-                              <span className="text-xs font-medium text-orange-600">
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-5 h-5 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
+                              <span className="text-[10px] font-medium text-orange-600">
                                 {lead.vendor?.firstName?.[0]}{lead.vendor?.lastName?.[0]}
                               </span>
                             </div>
-                            <span className="font-medium text-gray-900">
+                            <span className="font-medium text-gray-900 truncate">
                               {lead.vendor?.firstName} {lead.vendor?.lastName}
                             </span>
                           </div>
                         </TableCell>
-                        <TableCell className="font-medium text-gray-900">{lead.vendor?.company}</TableCell>
+                        <TableCell className="font-medium text-gray-900 truncate">{lead.vendor?.company}</TableCell>
                         <TableCell>
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-1 text-xs text-gray-600">
-                              <Phone className="w-3 h-3" />
-                              {lead.vendor?.phone}
-                            </div>
-                            <div className="flex items-center gap-1 text-xs text-gray-600">
-                              <Mail className="w-3 h-3" />
-                              {lead.vendor?.email}
-                            </div>
+                          <div className="flex items-center gap-1 text-gray-600">
+                            <Phone className="w-2.5 h-2.5 flex-shrink-0" />
+                            <span className="truncate">{lead.vendor?.phone}</span>
+                          </div>
+                          <div className="flex items-center gap-1 text-gray-500">
+                            <Mail className="w-2.5 h-2.5 flex-shrink-0" />
+                            <span className="truncate">{lead.vendor?.email}</span>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 text-xs">
+                          <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px] px-1.5 py-0">
                             {lead.vendor?.industry || '-'}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-gray-600 text-xs">
-                          <span className="max-w-[200px] truncate block" title={getMarketNames(lead.vendor?.marketIds)}>
-                            {getMarketNames(lead.vendor?.marketIds)}
-                          </span>
-                        </TableCell>
+                        <TableCell className="text-gray-400">N/A</TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-1 text-gray-400">
-                            N/A
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className="bg-gray-100 text-gray-700 text-xs">
-                            Pending
-                          </Badge>
+                          <Badge className="bg-gray-100 text-gray-700 text-[10px] px-1.5 py-0">Pending</Badge>
                         </TableCell>
                         <TableCell className="text-gray-600">{lead.assignedUserId ? 'Assigned' : 'Unassigned'}</TableCell>
                         <TableCell className="text-gray-600">{new Date(lead.updatedAt).toLocaleDateString()}</TableCell>
                         <TableCell 
-                          className="sticky right-0 bg-white z-10 border-l border-r border-gray-200 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)]"
+                          className="sticky right-0 bg-white z-10 border-l border-gray-200 p-0"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <LeadActions 
@@ -1765,15 +1679,6 @@ const Leads = () => {
         leadType={activeTab}
         onImport={handleImportCSV}
       />
-
-      {/* View Lead Dialog - Auto-opened from URL parameter */}
-      {selectedLead && (
-        <ViewLeadDialog 
-          lead={selectedLead}
-          open={showLeadDetail}
-          onOpenChange={setShowLeadDetail}
-        />
-      )}
 
       {/* Bulk Action Confirmation Dialog */}
       <Dialog open={isConfirmDialogOpen} onOpenChange={setIsConfirmDialogOpen}>

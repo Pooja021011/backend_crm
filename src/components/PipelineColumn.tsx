@@ -63,44 +63,43 @@ export const PipelineColumn = ({ stage, leads, onLeadClick }: PipelineColumnProp
   };
 
   return (
-    <div className="w-80 min-w-[320px] flex-shrink-0">
-      <Card className={`h-fit min-h-[500px] flex flex-col border ${getColumnBorderClass(stage.color)}`}>
+    <div className="w-56 min-w-[224px] flex-shrink-0 h-full">
+      <Card className={`h-full max-h-[calc(100vh-200px)] flex flex-col border ${getColumnBorderClass(stage.color)}`}>
         {/* Column Header */}
-        <div className="p-3 border-b flex-shrink-0">
+        <div className="px-2 py-1.5 border-b flex-shrink-0">
           <div className="flex items-center justify-between">
-            <h3 className="font-medium text-sm text-gray-700">
+            <h3 className="font-medium text-sm text-gray-700 truncate">
               {stage.name}
             </h3>
-            <Badge className={`${getStageColorClass(stage.color)} text-xs px-2 py-1 rounded-full font-bold`}>
+            <Badge className={`${getStageColorClass(stage.color)} text-xs px-1.5 py-0.5 rounded-full font-bold`}>
               {leads.length}
             </Badge>
           </div>
         </div>
 
-        {/* Column Content */}
+        {/* Column Content - Scrollable */}
         <div 
           ref={setNodeRef}
-          className="p-3 flex-1 overflow-y-auto min-h-[400px]"
+          className="p-1.5 flex-1 overflow-y-auto"
         >
           <SortableContext 
             items={leads.map(lead => lead.id)} 
             strategy={verticalListSortingStrategy}
           >
             {leads.length === 0 ? (
-              <div className="flex items-center justify-center h-40 text-gray-400 text-sm border-2 border-dashed border-gray-300 rounded-lg bg-gray-50/50">
-                <div className="text-center">
-                  <div className="text-lg mb-1">📋</div>
-                  <div>Drop leads here</div>
-                </div>
+              <div className="flex items-center justify-center h-20 text-gray-400 text-xs border border-dashed border-gray-300 rounded bg-gray-50/50">
+                No leads
               </div>
             ) : (
-              leads.map((lead) => (
-                <PipelineCard 
-                  key={lead.id} 
-                  lead={lead}
-                  onViewDetails={onLeadClick ? () => onLeadClick(lead.id) : undefined}
-                />
-              ))
+              <div className="space-y-1.5">
+                {leads.map((lead) => (
+                  <PipelineCard 
+                    key={lead.id} 
+                    lead={lead}
+                    onViewDetails={onLeadClick ? () => onLeadClick(lead.id) : undefined}
+                  />
+                ))}
+              </div>
             )}
           </SortableContext>
         </div>
