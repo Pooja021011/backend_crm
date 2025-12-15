@@ -542,8 +542,18 @@ export const emailService = {
             fetchThreadFromFolder('[Gmail]/Sent Mail')
           ]);
 
-          // Combine emails from both folders
-          emails = [...inboxEmails, ...sentEmails];
+          // Combine emails from both folders and deduplicate by messageId
+          const allEmails = [...inboxEmails, ...sentEmails];
+          const uniqueEmailsMap = new Map();
+          
+          // Deduplicate by messageId, keeping the first occurrence
+          allEmails.forEach(email => {
+            if (!uniqueEmailsMap.has(email.messageId)) {
+              uniqueEmailsMap.set(email.messageId, email);
+            }
+          });
+          
+          emails = Array.from(uniqueEmailsMap.values());
 
           // Sort by date (oldest first for thread view)
           emails.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
