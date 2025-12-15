@@ -12,6 +12,13 @@ export default defineConfig(({ mode }) => ({
     strictPort: true,
     https: false,
     cors: true,
+    // Allow access from domain
+    allowedHosts: [
+      'realestate.withai.agency',
+      'localhost',
+      '127.0.0.1',
+      '20.200.122.55'
+    ],
     // Force HTTP and prevent any HTTPS redirects
     headers: {
       'Strict-Transport-Security': 'max-age=0',
