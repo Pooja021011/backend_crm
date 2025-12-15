@@ -36,10 +36,17 @@ export const useTwilioDevice = () => {
       const data = await response.json();
       const token = data.token;
 
-      // Create Twilio Device
+      // Create Twilio Device with basic audio constraints
       const newDevice = new Device(token, {
         logLevel: 1,
         codecPreferences: [Call.Codec.Opus, Call.Codec.PCMU],
+        edge: 'ashburn', // Use closest edge location
+        // Simplified audio constraints for better compatibility
+        sounds: {
+          incoming: false,
+          outgoing: false,
+          disconnect: false
+        }
       });
 
       // Device event listeners
@@ -66,13 +73,30 @@ export const useTwilioDevice = () => {
       setDevice(newDevice);
       setIsInitializing(false);
       
+      console.log('✅ Twilio Device initialized and registered successfully');
       return newDevice;
     } catch (error: any) {
-      console.error('Error initializing device:', error);
+      console.error('❌ Error initializing device:', error);
       setIsInitializing(false);
+      
+      let errorMessage = 'Could not initialize calling device';
+      
+      // Provide specific error messages
+      if (error.name === 'NotAllowedError') {
+        errorMessage = 'Microphone permission denied. Please allow microphone access.';
+      } else if (error.name === 'NotFoundError') {
+        errorMessage = 'No microphone found. Please connect a microphone and try again.';
+      } else if (error.name === 'NotReadableError' || error.name === 'AcquisitionFailedError') {
+        errorMessage = 'Microphone is being used by another application. Please close other apps and try again.';
+      } else if (error.code === 31402) {
+        errorMessage = 'Could not access microphone. Please check:\n1. Microphone is connected\n2. No other app is using it\n3. Browser has permission';
+      } else {
+        errorMessage = error.message || 'Unknown error occurred';
+      }
+      
       toast({
         title: 'Initialization Failed',
-        description: error.message || 'Could not initialize calling device',
+        description: errorMessage,
         variant: 'destructive',
       });
       return null;
