@@ -2663,7 +2663,7 @@ const Inbox = () => {
 
       {/* Floating Call Status Indicator */}
       {callStatus.status !== 'idle' && (
-        <div className="fixed bottom-6 right-6 bg-white shadow-2xl rounded-lg border-2 border-purple-600 p-4 min-w-[300px] z-50 animate-in slide-in-from-bottom-5">
+        <div className="fixed bottom-6 right-6 bg-white shadow-2xl rounded-lg border-2 border-purple-600 p-4 min-w-[300px] z-[9999] animate-in slide-in-from-bottom-5">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <div className={`w-3 h-3 rounded-full ${
