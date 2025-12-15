@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { API_BASE } from "@/config/api";
 import { useToast } from "@/hooks/use-toast";
+import { useTwilioDevice } from "@/hooks/useTwilioDevice";
 
 // CSS styles for email content
 const emailContentStyles = `
@@ -42,6 +43,7 @@ import {
   Mail, 
   MessageSquare, 
   Phone, 
+  PhoneOff,
   Clock, 
   CheckSquare, 
   Users,
@@ -66,6 +68,7 @@ import {
 const Inbox = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { makeCall: makeBrowserCall, hangUp, callStatus, isInitializing } = useTwilioDevice();
   
   const [activeTab, setActiveTab] = useState("emails");
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
@@ -904,36 +907,34 @@ const Inbox = () => {
   const makeCall = async (phoneNumber: string, leadId?: string) => {
     setMakingCall(true);
     try {
-      console.log('🔵 Making call to:', phoneNumber, 'leadId:', leadId);
+      console.log('🔵 Making browser call to:', phoneNumber, 'leadId:', leadId);
       
-      const response = await makeApiCall(`${API_BASE}/calls/make`, {
-        method: 'POST',
-        body: JSON.stringify({ 
-          to: phoneNumber,
-          leadId: leadId 
-        })
-      });
-
-      const result = await response.json();
-      console.log('🔵 Call response:', result);
-
-      if (result.success) {
-        toast({
-          title: "Call Initiated",
-          description: `Calling ${phoneNumber}...`,
+      // Use browser calling instead of phone calling
+      await makeBrowserCall(phoneNumber);
+      
+      // Store call in database for history
+      try {
+        await makeApiCall(`${API_BASE}/calls/make`, {
+          method: 'POST',
+          body: JSON.stringify({ 
+            to: phoneNumber,
+            leadId: leadId 
+          })
         });
-        
-        // Refresh call history after successful call
-        await fetchCallHistory();
-        
-        // Close the new call dialog
-        setShowNewCall(false);
-        setNewCallNumber('');
-        setCallPhoneSearchQuery('');
-        setSelectedCallContact(null);
-      } else {
-        throw new Error(result.error || 'Failed to make call');
+      } catch (dbError) {
+        console.error('Failed to store call in database:', dbError);
+        // Don't fail the call if database storage fails
       }
+      
+      // Refresh call history after successful call
+      await fetchCallHistory();
+      
+      // Close the new call dialog
+      setShowNewCall(false);
+      setNewCallNumber('');
+      setCallPhoneSearchQuery('');
+      setSelectedCallContact(null);
+      
     } catch (error: any) {
       console.error('❌ Error making call:', error);
       toast({
@@ -2659,6 +2660,54 @@ const Inbox = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Floating Call Status Indicator */}
+      {callStatus.status !== 'idle' && (
+        <div className="fixed bottom-6 right-6 bg-white shadow-2xl rounded-lg border-2 border-purple-600 p-4 min-w-[300px] z-50 animate-in slide-in-from-bottom-5">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className={`w-3 h-3 rounded-full ${
+                callStatus.status === 'connected' ? 'bg-green-500 animate-pulse' :
+                callStatus.status === 'ringing' ? 'bg-yellow-500 animate-pulse' :
+                callStatus.status === 'connecting' ? 'bg-blue-500 animate-pulse' :
+                'bg-gray-500'
+              }`} />
+              <span className="font-semibold text-sm">
+                {callStatus.status === 'connected' ? 'Connected' :
+                 callStatus.status === 'ringing' ? 'Ringing...' :
+                 callStatus.status === 'connecting' ? 'Connecting...' :
+                 'Call Ended'}
+              </span>
+            </div>
+            {callStatus.status === 'connected' && (
+              <span className="text-sm text-gray-600">
+                {Math.floor(callStatus.duration / 60)}:{(callStatus.duration % 60).toString().padStart(2, '0')}
+              </span>
+            )}
+          </div>
+          
+          {callStatus.status === 'connected' && (
+            <div className="flex gap-2">
+              <Button
+                onClick={hangUp}
+                variant="destructive"
+                size="sm"
+                className="flex-1"
+              >
+                <PhoneOff className="w-4 h-4 mr-2" />
+                Hang Up
+              </Button>
+            </div>
+          )}
+          
+          {(callStatus.status === 'connecting' || callStatus.status === 'ringing') && (
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Please wait...</span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
