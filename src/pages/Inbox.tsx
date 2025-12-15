@@ -2210,44 +2210,38 @@ const Inbox = () => {
       <Dialog open={showSMSDetail} onOpenChange={setShowSMSDetail}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <MessageSquare className="w-5 h-5 text-green-600" />
-              {selectedConversation?.contactName || selectedConversation?.phoneNumber}
-            </DialogTitle>
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle className="flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5 text-green-600" />
+                  {selectedConversation?.contactName || selectedConversation?.phoneNumber}
+                </DialogTitle>
+                <p className="text-sm text-gray-600 mt-1">{selectedConversation?.phoneNumber}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {selectedConversation?.leadId && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      navigate(`/leads/${selectedConversation.leadId}/edit`);
+                      setShowSMSDetail(false);
+                    }}
+                    className="text-blue-600 border-blue-600 hover:bg-blue-50"
+                  >
+                    <User className="w-4 h-4 mr-1" />
+                    Lead Details
+                  </Button>
+                )}
+                <Badge className="bg-green-100 text-green-800">
+                  {selectedConversation?.messages?.length || 0} messages
+                </Badge>
+              </div>
+            </div>
           </DialogHeader>
           
           {selectedConversation && (
             <div className="space-y-4">
-              {/* Conversation Header */}
-              <div className="border-b pb-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-medium text-gray-900">
-                      {selectedConversation.contactName || 'Unknown Contact'}
-                    </h3>
-                    <p className="text-sm text-gray-600">{selectedConversation.phoneNumber}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {selectedConversation.leadId && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          navigate(`/leads/${selectedConversation.leadId}/edit`);
-                          setShowSMSDetail(false);
-                        }}
-                        className="text-blue-600 border-blue-600 hover:bg-blue-50"
-                      >
-                        <User className="w-4 h-4 mr-1" />
-                        Lead Details
-                      </Button>
-                    )}
-                    <Badge className="bg-green-100 text-green-800">
-                      {selectedConversation.messages?.length || 0} messages
-                    </Badge>
-                  </div>
-                </div>
-              </div>
 
               {/* Messages */}
               <div className="space-y-3 max-h-96 overflow-y-auto">
