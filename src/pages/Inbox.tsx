@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
-import { API_BASE } from "@/config/api";
+import { API_BASE, makeApiCall } from "@/config/api";
 import { useToast } from "@/hooks/use-toast";
 import { useTwilioDevice } from "@/hooks/useTwilioDevice";
 
@@ -540,7 +540,6 @@ const Inbox = () => {
     }
 
     setSendingReply(true);
-    const accessToken = localStorage.getItem('accessToken');
 
     try {
       // Always reply to the original sender (selectedEmail), not the latest email in thread
@@ -551,12 +550,11 @@ const Inbox = () => {
       const latestEmail = emailThread.length > 0 ? 
         emailThread[emailThread.length - 1] : 
         selectedEmail;
-      
-      const response = await fetch(`${API_BASE}/settings/email/send`, {
+
+      const response = await makeApiCall(`${API_BASE}/settings/email/send`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           to: originalSender, // Always send to original sender, not latest email sender
