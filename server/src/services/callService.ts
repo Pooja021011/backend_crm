@@ -1,11 +1,20 @@
-import Telnyx from 'telnyx';
+import twilio from 'twilio';
 import { logger } from '../config/logger.js';
 import { prisma } from '../config/db.js';
 import { communicationRepository } from '../repositories/communicationRepository.js';
 import { smsSettingsRepository } from '../repositories/smsSettingsRepository.js';
 
-// Initialize Telnyx client
-const telnyx = Telnyx(process.env.TELNYX_API_KEY);
+// Initialize Twilio client
+// #region agent log
+fetch('http://127.0.0.1:7242/ingest/06111847-3345-4786-9a5d-89cc38601516',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'callService.ts:8',message:'Initializing Twilio for calls',data:{hasSID:!!process.env.TWILIO_ACCOUNT_SID,hasToken:!!process.env.TWILIO_AUTH_TOKEN,baseURL:process.env.APP_BASE_URL},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
+// #endregion
+const twilioClient = twilio(
+  process.env.TWILIO_ACCOUNT_SID,
+  process.env.TWILIO_AUTH_TOKEN
+);
+// #region agent log
+fetch('http://127.0.0.1:7242/ingest/06111847-3345-4786-9a5d-89cc38601516',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'callService.ts:11',message:'Twilio call client ready',data:{hasCallsAPI:typeof twilioClient?.calls},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
+// #endregion
 
 export interface CallRequest {
   to: string;
@@ -24,7 +33,7 @@ export interface CallResponse {
 
 export const callService = {
   /**
-   * Initiate outbound call using Telnyx Voice API
+   * Initiate outbound call using Twilio Voice API
    */
   async makeCall(callRequest: CallRequest): Promise<CallResponse> {
     try {
@@ -49,22 +58,31 @@ export const callService = {
         };
       }
 
-      logger.info('Initiating call via Telnyx', { 
+      logger.info('Initiating call via Twilio', { 
         to: callRequest.to, 
         from: fromNumber, 
         userId: callRequest.userId 
       });
 
-      // Create the call using Telnyx Voice API
-      const response = await telnyx.calls.create({
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/06111847-3345-4786-9a5d-89cc38601516',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'callService.ts:62',message:'Initiating call',data:{to:callRequest.to,from:fromNumber,twimlUrl:`${process.env.APP_BASE_URL}/api/v1/calls/twiml`,statusCallback:`${process.env.APP_BASE_URL}/api/v1/calls/webhook`},timestamp:Date.now(),sessionId:'debug-session',runId:'call-make',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      
+      // Create the call using Twilio Voice API
+      const call = await twilioClient.calls.create({
         to: callRequest.to,
         from: fromNumber,
-        connection_id: process.env.TELNYX_CONNECTION_ID, // Voice connection ID
-        webhook_url: `${process.env.APP_BASE_URL}/api/v1/calls/webhook`,
-        webhook_url_method: 'POST',
+        url: `${process.env.APP_BASE_URL}/api/v1/calls/twiml`, // TwiML endpoint for call instructions
+        statusCallback: `${process.env.APP_BASE_URL}/api/v1/calls/webhook`,
+        statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
+        statusCallbackMethod: 'POST',
       });
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/06111847-3345-4786-9a5d-89cc38601516',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'callService.ts:76',message:'Call created',data:{sid:call.sid,status:call.status,direction:call.direction},timestamp:Date.now(),sessionId:'debug-session',runId:'call-make',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
 
-      logger.info('Call initiated successfully', { callId: response.data.call_control_id });
+      logger.info('Call initiated successfully', { callId: call.sid });
 
       // Store call record in communication history
       if (callRequest.leadId) {
@@ -80,12 +98,12 @@ export const callService = {
 
       return {
         success: true,
-        callId: response.data.call_control_id,
-        data: response.data,
+        callId: call.sid,
+        data: call,
         fromNumber,
       };
     } catch (error: any) {
-      logger.error('Failed to initiate call via Telnyx', { error: error.message });
+      logger.error('Failed to initiate call via Twilio', { error: error.message });
       return {
         success: false,
         error: error.message,
@@ -94,19 +112,25 @@ export const callService = {
   },
 
   /**
-   * Handle incoming call webhook from Telnyx
+   * Handle incoming call webhook from Twilio
    */
   async handleIncomingCallWebhook(webhookData: any): Promise<void> {
     try {
       logger.info('Processing incoming call webhook', { webhookData });
 
-      const { data } = webhookData;
-      const { payload } = data;
+      // Twilio webhook format
+      const { 
+        From: from, 
+        To: to, 
+        CallSid: callSid, 
+        CallStatus: callStatus,
+        CallDuration: callDuration,
+        Direction: direction 
+      } = webhookData;
 
-      if (payload.event_type === 'call.initiated') {
-        const { from, to, call_control_id } = payload;
-
-        logger.info('Incoming call received', { from, to, callId: call_control_id });
+      // Handle incoming call initiated
+      if (callStatus === 'ringing' && direction === 'inbound') {
+        logger.info('Incoming call received', { from, to, callSid });
 
         // Find user by phone number to associate the call
         const userSmsSettings = await smsSettingsRepository.findByPhoneNumber(to);
@@ -130,7 +154,7 @@ export const callService = {
               leadId: lead.id, 
               from, 
               userId: userSmsSettings.userId,
-              callId: call_control_id 
+              callSid 
             });
           } else {
             logger.info('No lead found for incoming call phone number', { from });
@@ -141,11 +165,11 @@ export const callService = {
       }
       
       // Handle call status updates (answered, completed, etc.)
-      if (payload.event_type === 'call.answered' || payload.event_type === 'call.hangup') {
+      if (callStatus === 'in-progress' || callStatus === 'completed' || callStatus === 'failed') {
         logger.info('Call status update', { 
-          eventType: payload.event_type,
-          callId: payload.call_control_id,
-          duration: payload.call_duration_secs 
+          callStatus,
+          callSid,
+          duration: callDuration 
         });
         // TODO: Update communication record with call duration for metrics
       }
@@ -160,14 +184,25 @@ export const callService = {
    */
   async findLeadByPhoneNumber(phoneNumber: string): Promise<any> {
     try {
-      // Search in lead phone fields
+      // Search in lead detail tables (seller, buyer, vendor) for phone numbers
       const lead = await prisma.lead.findFirst({
         where: {
           OR: [
-            { phone: phoneNumber },
-            { phone: phoneNumber.replace(/\D/g, '') }, // Try without formatting
-            { phone: phoneNumber.replace(/^\+1/, '') }, // Try without +1
+            { seller: { phone: phoneNumber } },
+            { seller: { phone: phoneNumber.replace(/\D/g, '') } },
+            { seller: { phone: phoneNumber.replace(/^\+1/, '') } },
+            { buyer: { phone: phoneNumber } },
+            { buyer: { phone: phoneNumber.replace(/\D/g, '') } },
+            { buyer: { phone: phoneNumber.replace(/^\+1/, '') } },
+            { vendor: { phone: phoneNumber } },
+            { vendor: { phone: phoneNumber.replace(/\D/g, '') } },
+            { vendor: { phone: phoneNumber.replace(/^\+1/, '') } },
           ]
+        },
+        include: {
+          seller: true,
+          buyer: true,
+          vendor: true,
         }
       });
       
@@ -179,25 +214,25 @@ export const callService = {
   },
 
   /**
-   * Answer an incoming call
+   * Answer an incoming call (Twilio handles this via TwiML)
+   * Note: Twilio calls are answered via TwiML responses, not by updating status
    */
-  async answerCall(callControlId: string): Promise<CallResponse> {
+  async answerCall(callSid: string): Promise<CallResponse> {
     try {
-      logger.info('Answering call', { callControlId });
+      logger.info('Fetching call status', { callSid });
 
-      const response = await telnyx.calls.answer({
-        call_control_id: callControlId,
-      });
+      // Fetch call information (Twilio handles answering via TwiML)
+      const call = await twilioClient.calls(callSid).fetch();
 
-      logger.info('Call answered successfully', { callControlId });
+      logger.info('Call info retrieved', { callSid, status: call.status });
 
       return {
         success: true,
-        callId: callControlId,
-        data: response.data,
+        callId: callSid,
+        data: call,
       };
     } catch (error: any) {
-      logger.error('Failed to answer call', { error: error.message });
+      logger.error('Failed to fetch call info', { error: error.message });
       return {
         success: false,
         error: error.message,
@@ -208,20 +243,20 @@ export const callService = {
   /**
    * Hang up a call
    */
-  async hangupCall(callControlId: string): Promise<CallResponse> {
+  async hangupCall(callSid: string): Promise<CallResponse> {
     try {
-      logger.info('Hanging up call', { callControlId });
+      logger.info('Hanging up call', { callSid });
 
-      const response = await telnyx.calls.hangup({
-        call_control_id: callControlId,
+      const call = await twilioClient.calls(callSid).update({
+        status: 'completed'
       });
 
-      logger.info('Call hung up successfully', { callControlId });
+      logger.info('Call hung up successfully', { callSid });
 
       return {
         success: true,
-        callId: callControlId,
-        data: response.data,
+        callId: callSid,
+        data: call,
       };
     } catch (error: any) {
       logger.error('Failed to hang up call', { error: error.message });
@@ -235,10 +270,10 @@ export const callService = {
   /**
    * Get call status
    */
-  async getCallStatus(callControlId: string): Promise<any> {
+  async getCallStatus(callSid: string): Promise<any> {
     try {
-      const response = await telnyx.calls.retrieve(callControlId);
-      return response.data;
+      const call = await twilioClient.calls(callSid).fetch();
+      return call;
     } catch (error: any) {
       logger.error('Failed to get call status', { error: error.message });
       throw error;
@@ -269,47 +304,93 @@ export const callService = {
   },
 
   /**
-   * Get call history for a user (mock data for now)
+   * Get call history for a user from database
    */
   async getCallHistory(userId: string): Promise<any[]> {
     try {
-      // For now, return mock call history data
-      const mockCallHistory = [
-        {
-          id: '1',
-          phoneNumber: '+1234567890',
-          contactName: 'John Doe',
-          direction: 'OUTBOUND',
-          status: 'completed',
-          duration: 180, // seconds
-          timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(), // 30 min ago
-          callId: 'call_123'
-        },
-        {
-          id: '2',
-          phoneNumber: '+1987654321',
-          contactName: 'Jane Smith',
-          direction: 'INBOUND',
-          status: 'missed',
-          duration: 0,
-          timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), // 2 hours ago
-          callId: 'call_456'
-        },
-        {
-          id: '3',
-          phoneNumber: '+1555666777',
-          contactName: 'Mike Johnson',
-          direction: 'OUTBOUND',
-          status: 'completed',
-          duration: 420, // seconds
-          timestamp: new Date(Date.now() - 1000 * 60 * 60 * 4).toISOString(), // 4 hours ago
-          callId: 'call_789'
-        }
-      ];
+      logger.info('Fetching call history from database', { userId });
 
-      return mockCallHistory;
+      // Fetch real call communications from database
+      const communications = await prisma.communication.findMany({
+        where: {
+          type: 'CALL',
+          OR: [
+            { createdById: userId },
+            { lead: { assignedUserId: userId } },
+            { lead: { createdById: userId } },
+          ]
+        },
+        include: {
+          lead: {
+            include: {
+              seller: true,
+              buyer: true,
+              vendor: true,
+              address: true
+            }
+          },
+          createdBy: {
+            select: {
+              firstName: true,
+              lastName: true
+            }
+          }
+        },
+        orderBy: {
+          occurredAt: 'desc'
+        },
+        take: 100 // Limit to recent 100 calls
+      });
+
+      // Transform communications to call history format
+      const callHistory = communications.map(comm => {
+        let phoneNumber = '';
+        let contactName = 'Unknown';
+
+        // Determine phone number and contact name based on lead type
+        if (comm.lead) {
+          if (comm.lead.seller?.phone) {
+            phoneNumber = comm.lead.seller.phone;
+            contactName = `${comm.lead.seller.firstName} ${comm.lead.seller.lastName}`;
+          } else if (comm.lead.buyer?.phone) {
+            phoneNumber = comm.lead.buyer.phone;
+            contactName = `${comm.lead.buyer.firstName} ${comm.lead.buyer.lastName}`;
+          } else if (comm.lead.vendor?.phone) {
+            phoneNumber = comm.lead.vendor.phone;
+            contactName = `${comm.lead.vendor.firstName} ${comm.lead.vendor.lastName}`;
+          }
+        }
+
+        // Fallback: try to extract phone from subject/body
+        if (!phoneNumber) {
+          const phoneMatch = comm.subject?.match(/\+?\d{10,15}/) || comm.body?.match(/\+?\d{10,15}/);
+          if (phoneMatch) {
+            phoneNumber = phoneMatch[0];
+          }
+        }
+
+        return {
+          id: comm.id,
+          phoneNumber: phoneNumber || 'Unknown',
+          contactName: contactName,
+          direction: comm.direction,
+          status: 'completed', // Default status, can be enhanced later
+          duration: 0, // Duration not tracked yet, can be added later
+          timestamp: comm.occurredAt.toISOString(),
+          callId: comm.id,
+          leadId: comm.leadId,
+          notes: comm.body
+        };
+      });
+
+      logger.info('Call history fetched successfully', { 
+        userId, 
+        totalCalls: callHistory.length 
+      });
+
+      return callHistory;
     } catch (error: any) {
-      logger.error('Failed to get call history', { error: error.message });
+      logger.error('Failed to get call history', { error: error.message, userId });
       return [];
     }
   }

@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import { authService } from '../services/authService.js';
-import { loginSchema } from '../validators/authValidators.js';
+import { loginSchema, forgotPasswordSchema, resetPasswordSchema } from '../validators/authValidators.js';
 
 export const authController = {
   async login(req: Request, res: Response) {
@@ -22,6 +22,51 @@ export const authController = {
     const token = (req.cookies?.refresh_token as string) || (req.body?.refreshToken as string);
     if (token) await authService.logout(token);
     res.clearCookie('refresh_token', { path: '/api/v1/auth/refresh' }).json({ success: true });
+  },
+
+  async forgotPassword(req: Request, res: Response) {
+    console.log('🔔 FORGOT PASSWORD CONTROLLER CALLED', { body: req.body });
+    try {
+      const input = forgotPasswordSchema.parse(req.body);
+      console.log('✅ Validation passed, calling service with email:', input.email);
+      const result = await authService.forgotPassword(input.email);
+      console.log('✅ Service returned:', result);
+      res.json(result);
+    } catch (error: any) {
+      console.error('❌ Error in forgotPassword controller:', error);
+
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Validation error', 
+          details: error.errors 
+        });
+      }
+      res.status(error.status || 500).json({ 
+        success: false, 
+        error: error.message || 'Failed to process forgot password request' 
+      });
+    }
+  },
+
+  async resetPassword(req: Request, res: Response) {
+    try {
+      const input = resetPasswordSchema.parse(req.body);
+      const result = await authService.resetPassword(input.email, input.otp, input.newPassword);
+      res.json(result);
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Validation error', 
+          details: error.errors 
+        });
+      }
+      res.status(error.status || 500).json({ 
+        success: false, 
+        error: error.message || 'Failed to reset password' 
+      });
+    }
   },
 };
 

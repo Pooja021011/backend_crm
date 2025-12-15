@@ -284,14 +284,14 @@ export const metricsService = {
       }
     }
 
-    // Get communications from database (synced from Telnyx via webhooks)
+    // Get communications from database (synced from Twilio via webhooks)
     const comms = await metricsRepository.getCommunicationsBetween(
       start.toDate(), 
       end.toDate(), 
       filters.userId
     );
 
-    // Separate calls and SMS (both synced from Telnyx)
+    // Separate calls and SMS (both synced from Twilio)
     const calls = comms.filter(c => c.type === 'CALL');
     const sms = comms.filter(c => c.type === 'SMS');
     
@@ -299,7 +299,7 @@ export const metricsService = {
     const outboundCalls = calls.filter(c => c.direction === 'OUTBOUND');
     const inboundCalls = calls.filter(c => c.direction === 'INBOUND');
     
-    // Enhanced call time calculations (TODO: Store actual durations from Telnyx)
+    // Enhanced call time calculations (TODO: Store actual durations from Twilio)
     const estimateCallDurations = (callCount: number) => {
       if (callCount === 0) return '0h 0m';
       const avgMinutes = 3.4; // Industry average
@@ -317,7 +317,7 @@ export const metricsService = {
       averageTime: totalCalls > 0 ? '3m 24s' : '0m 0s',
     };
 
-    // Calculate SMS statistics (synced from Telnyx)
+    // Calculate SMS statistics (synced from Twilio)
     const smsStats = {
       totalSent: sms.filter(c => c.direction === 'OUTBOUND').length,
       totalReceived: sms.filter(c => c.direction === 'INBOUND').length,
@@ -362,7 +362,7 @@ export const metricsService = {
       const totalCallAttempts = outboundCalls.length;
       const totalSmsAttempts = sms.filter(c => c.direction === 'OUTBOUND').length;
       
-      // Realistic success rates (in production, get from Telnyx delivery webhooks)
+      // Realistic success rates (in production, get from Twilio delivery webhooks)
       let callSuccessRate = 0;
       let smsDeliveryRate = 0;
       
@@ -401,7 +401,7 @@ export const metricsService = {
           to: end.format('YYYY-MM-DD')
         },
         totalCommunications: comms.length,
-        syncedFromTelnyx: true,
+        syncedFromTwilio: true,
         lastUpdated: now.toISOString()
       }
     };

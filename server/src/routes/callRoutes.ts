@@ -6,8 +6,8 @@ const router = Router();
 
 // All call routes require authentication except webhooks
 router.use((req, res, next) => {
-  // Skip auth for webhook endpoints
-  if (req.path === '/webhook') {
+  // Skip auth for webhook endpoints and TwiML
+  if (req.path === '/webhook' || req.path === '/twiml') {
     return next();
   }
   return authenticate(req, res, next);
@@ -41,6 +41,11 @@ router.post('/hangup/:callControlId', (req, res, next) =>
 // Webhook endpoint for incoming calls (no auth required)
 router.post('/webhook', (req, res, next) => 
   callController.webhook(req, res).catch(next)
+);
+
+// TwiML endpoint for Twilio call instructions (no auth required)
+router.post('/twiml', (req, res, next) => 
+  callController.twiml(req, res).catch(next)
 );
 
 export default router;

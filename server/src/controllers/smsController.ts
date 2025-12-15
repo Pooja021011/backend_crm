@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { smsService } from '../services/smsService.js';
 import { logger } from '../config/logger.js';
+import { prisma } from '../config/db.js';
 
 export const smsController = {
   /**
@@ -194,8 +195,94 @@ export const smsController = {
       const userId = (req as any).user?.id;
       const { limit = 50, offset = 0 } = req.query;
 
-      // For now, return mock data until we implement proper SMS storage
-      const mockSMSHistory = [
+      // Fetch real SMS communications from database
+      const communications = await prisma.communication.findMany({
+        where: {
+          type: 'SMS',
+          OR: [
+            { createdById: userId },
+            { lead: { assignedUserId: userId } },
+            { lead: { createdById: userId } }
+          ]
+        },
+        include: {
+          lead: {
+            include: {
+              seller: true,
+              buyer: true,
+              address: true
+            }
+          },
+          createdBy: {
+            select: {
+              firstName: true,
+              lastName: true
+            }
+          }
+        },
+        orderBy: {
+          occurredAt: 'desc'
+        },
+        take: Number(limit)
+      });
+
+      // Group communications by phone number to create conversations
+      const conversationsMap = new Map();
+      
+      communications.forEach(comm => {
+        // Extract phone number from subject or body
+        const phoneMatch = comm.subject?.match(/\+?\d{10,15}/) || comm.body?.match(/\+?\d{10,15}/);
+        const phoneNumber = phoneMatch ? phoneMatch[0] : 'Unknown';
+        
+        if (!conversationsMap.has(phoneNumber)) {
+          conversationsMap.set(phoneNumber, {
+            id: phoneNumber,
+            phoneNumber,
+            contactName: comm.lead?.seller ? 
+              `${comm.lead.seller.firstName} ${comm.lead.seller.lastName}` :
+              comm.lead?.buyer ?
+              `${comm.lead.buyer.firstName} ${comm.lead.buyer.lastName}` :
+              phoneNumber,
+            lastMessage: comm.body || '',
+            lastMessageTime: comm.occurredAt,
+            unreadCount: 0,
+            direction: comm.direction,
+            messages: []
+          });
+        }
+        
+        const conversation = conversationsMap.get(phoneNumber);
+        conversation.messages.push({
+          id: comm.id,
+          text: comm.body || '',
+          direction: comm.direction,
+          timestamp: comm.occurredAt,
+          status: 'delivered'
+        });
+        
+        // Update last message if this is more recent
+        if (new Date(comm.occurredAt) > new Date(conversation.lastMessageTime)) {
+          conversation.lastMessage = comm.body || '';
+          conversation.lastMessageTime = comm.occurredAt;
+        }
+      });
+
+      const conversations = Array.from(conversationsMap.values());
+
+      // Return real conversations from database (empty array if none exist)
+      res.json({
+        success: true,
+        data: {
+          conversations,
+          total: conversations.length,
+          hasMore: false
+        }
+      });
+      
+      /* Commented out mock data - only use real database data
+      // If no real data, return mock data for demo purposes
+      if (conversations.length === 0) {
+        const mockSMSHistory = [
         {
           id: '1',
           phoneNumber: '+1234567890',
@@ -261,15 +348,17 @@ export const smsController = {
           ]
         }
       ];
-
-      res.json({
-        success: true,
-        data: {
-          conversations: mockSMSHistory,
-          total: mockSMSHistory.length,
-          hasMore: false
-        }
-      });
+      
+        res.json({
+          success: true,
+          data: {
+            conversations: mockSMSHistory,
+            total: mockSMSHistory.length,
+            hasMore: false
+          }
+        });
+      }
+      End of commented mock data section */
     } catch (error: any) {
       logger.error('Error in getSMSHistory controller', { error: error.message });
       res.status(500).json({

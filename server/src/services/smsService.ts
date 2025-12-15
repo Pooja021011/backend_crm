@@ -1,11 +1,20 @@
-import Telnyx from 'telnyx';
+import twilio from 'twilio';
 import { logger } from '../config/logger.js';
 import { prisma } from '../config/db.js';
 import { communicationRepository } from '../repositories/communicationRepository.js';
 import { smsSettingsRepository } from '../repositories/smsSettingsRepository.js';
 
-// Initialize Telnyx client
-const telnyx = Telnyx(process.env.TELNYX_API_KEY);
+// Initialize Twilio client
+// #region agent log
+fetch('http://127.0.0.1:7242/ingest/06111847-3345-4786-9a5d-89cc38601516',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'smsService.ts:8',message:'Initializing Twilio client',data:{hasSID:!!process.env.TWILIO_ACCOUNT_SID,hasToken:!!process.env.TWILIO_AUTH_TOKEN,sidPrefix:process.env.TWILIO_ACCOUNT_SID?.substring(0,4)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
+// #endregion
+const twilioClient = twilio(
+  process.env.TWILIO_ACCOUNT_SID,
+  process.env.TWILIO_AUTH_TOKEN
+);
+// #region agent log
+fetch('http://127.0.0.1:7242/ingest/06111847-3345-4786-9a5d-89cc38601516',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'smsService.ts:11',message:'Twilio client created',data:{clientType:typeof twilioClient,hasMessagesAPI:typeof twilioClient?.messages},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
+// #endregion
 
 export interface SMSMessage {
   to: string;
@@ -20,14 +29,18 @@ export interface SMSResponse {
   messageId?: string;
   error?: string;
   data?: any;
+  fromNumber?: string;
 }
 
 export const smsService = {
   /**
-   * Send SMS using Telnyx with user-specific phone number
+   * Send SMS using Twilio with user-specific phone number
    */
   async sendSMS(message: SMSMessage): Promise<SMSResponse> {
     try {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/06111847-3345-4786-9a5d-89cc38601516',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'smsService.ts:35',message:'sendSMS called',data:{to:message.to,hasFrom:!!message.from,userId:message.userId,leadId:message.leadId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'})}).catch(()=>{});
+      // #endregion
       // Get user's SMS settings to determine the from number
       let fromNumber = message.from;
       if (message.userId && !fromNumber) {
@@ -49,36 +62,76 @@ export const smsService = {
         };
       }
 
-      logger.info('Sending SMS via Telnyx', { to: message.to, from: fromNumber, userId: message.userId });
+      logger.info('Sending SMS via Twilio', { to: message.to, from: fromNumber, userId: message.userId });
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/06111847-3345-4786-9a5d-89cc38601516',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'smsService.ts:57',message:'Calling Twilio API',data:{from:fromNumber,to:message.to,bodyLength:message.text?.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'})}).catch(()=>{});
+      // #endregion
 
-      const response = await telnyx.messages.create({
+      const response = await twilioClient.messages.create({
         from: fromNumber,
         to: message.to,
-        text: message.text,
+        body: message.text,
       });
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/06111847-3345-4786-9a5d-89cc38601516',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'smsService.ts:64',message:'Twilio API response',data:{sid:response.sid,status:response.status,errorCode:response.errorCode},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'})}).catch(()=>{});
+      // #endregion
 
-      logger.info('SMS sent successfully', { messageId: response.data.id });
+      logger.info('SMS sent successfully', { messageId: response.sid });
 
-      // Store SMS in communication history if leadId is provided
-      if (message.leadId) {
-        await communicationRepository.create(message.leadId, {
-          type: 'SMS',
-          direction: 'OUTBOUND',
-          subject: `SMS to ${message.to}`,
-          body: message.text,
-          occurredAt: new Date(),
-          createdById: message.userId,
-        });
+      // Store SMS in communication history
+      let storedLeadId = message.leadId;
+      
+      // If no leadId provided, try to find a lead with this phone number
+      if (!storedLeadId && message.userId) {
+        try {
+          const lead = await prisma.lead.findFirst({
+            where: {
+              OR: [
+                { seller: { phone: message.to } },
+                { buyer: { phone: message.to } },
+                { vendor: { phone: message.to } }
+              ]
+            }
+          });
+          
+          if (lead) {
+            storedLeadId = lead.id;
+            logger.info('Found lead for phone number', { leadId: lead.id, phone: message.to });
+          } else {
+            logger.warn('No lead found for phone number', { phone: message.to });
+          }
+        } catch (error: any) {
+          logger.error('Error finding lead for phone number', { error: error.message, phone: message.to });
+        }
+      }
+      
+      // Store the communication if we have a leadId
+      if (storedLeadId) {
+        try {
+          await communicationRepository.create(storedLeadId, {
+            type: 'SMS',
+            direction: 'OUTBOUND',
+            subject: `SMS to ${message.to}`,
+            body: message.text,
+            occurredAt: new Date(),
+            createdById: message.userId,
+          });
+        } catch (error) {
+          logger.error('Failed to store SMS communication', { error });
+        }
       }
 
       return {
         success: true,
-        messageId: response.data.id,
-        data: response.data,
+        messageId: response.sid,
+        data: response,
         fromNumber,
       };
     } catch (error: any) {
-      logger.error('Failed to send SMS via Telnyx', { error: error.message });
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/06111847-3345-4786-9a5d-89cc38601516',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'smsService.ts:98',message:'SMS send error',data:{errorMsg:error.message,errorCode:error.code,errorStatus:error.status,errorDetails:error.moreInfo},timestamp:Date.now(),sessionId:'debug-session',runId:'sms-send',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+      logger.error('Failed to send SMS via Twilio', { error: error.message });
       return {
         success: false,
         error: error.message,
@@ -87,18 +140,23 @@ export const smsService = {
   },
 
   /**
-   * Handle incoming SMS webhook from Telnyx
+   * Handle incoming SMS webhook from Twilio
    */
   async handleIncomingWebhook(webhookData: any): Promise<void> {
     try {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/06111847-3345-4786-9a5d-89cc38601516',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'smsService.ts:98',message:'Webhook received',data:{keys:Object.keys(webhookData),hasFrom:!!webhookData.From,hasTo:!!webhookData.To},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H4'})}).catch(()=>{});
+      // #endregion
       logger.info('Processing incoming SMS webhook', { webhookData });
 
-      const { data } = webhookData;
-      const { payload } = data;
+      // Twilio webhook format
+      const { From: from, To: to, Body: text, MessageSid: messageId, SmsStatus: smsStatus } = webhookData;
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/06111847-3345-4786-9a5d-89cc38601516',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'smsService.ts:105',message:'Webhook parsed',data:{from,to,hasText:!!text,messageId,smsStatus},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H4'})}).catch(()=>{});
+      // #endregion
 
-      if (payload.event_type === 'message.received') {
-        const { from, to, text, id: messageId } = payload;
-
+      // Handle incoming message
+      if (text && from && to) {
         logger.info('Received SMS', { from, to, text, messageId });
 
         // Find user by phone number to associate the SMS
@@ -133,11 +191,10 @@ export const smsService = {
       }
       
       // Handle delivery status updates
-      if (payload.event_type === 'message.sent' || payload.event_type === 'message.delivered' || payload.event_type === 'message.delivery_failed') {
+      if (smsStatus && messageId) {
         logger.info('SMS delivery status update', { 
-          eventType: payload.event_type,
-          messageId: payload.id,
-          status: payload.delivery_status 
+          messageId,
+          status: smsStatus 
         });
         // TODO: Update communication record with delivery status for risk management metrics
       }
@@ -152,16 +209,33 @@ export const smsService = {
    */
   async findLeadByPhoneNumber(phoneNumber: string): Promise<any> {
     try {
-      // Search in lead phone fields
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/06111847-3345-4786-9a5d-89cc38601516',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'smsService.ts:155',message:'Finding lead by phone',data:{phoneNumber,phoneLength:phoneNumber?.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
+      // #endregion
+      // Search in lead detail tables (seller, buyer, vendor) for phone numbers
       const lead = await prisma.lead.findFirst({
         where: {
           OR: [
-            { phone: phoneNumber },
-            { phone: phoneNumber.replace(/\D/g, '') }, // Try without formatting
-            { phone: phoneNumber.replace(/^\+1/, '') }, // Try without +1
+            { seller: { phone: phoneNumber } },
+            { seller: { phone: phoneNumber.replace(/\D/g, '') } },
+            { seller: { phone: phoneNumber.replace(/^\+1/, '') } },
+            { buyer: { phone: phoneNumber } },
+            { buyer: { phone: phoneNumber.replace(/\D/g, '') } },
+            { buyer: { phone: phoneNumber.replace(/^\+1/, '') } },
+            { vendor: { phone: phoneNumber } },
+            { vendor: { phone: phoneNumber.replace(/\D/g, '') } },
+            { vendor: { phone: phoneNumber.replace(/^\+1/, '') } },
           ]
+        },
+        include: {
+          seller: true,
+          buyer: true,
+          vendor: true,
         }
       });
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/06111847-3345-4786-9a5d-89cc38601516',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'smsService.ts:178',message:'Lead search result',data:{found:!!lead,leadId:lead?.id,leadType:lead?.leadType},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
+      // #endregion
       
       return lead;
     } catch (error: any) {
@@ -175,8 +249,8 @@ export const smsService = {
    */
   async getMessageStatus(messageId: string): Promise<any> {
     try {
-      const response = await telnyx.messages.retrieve(messageId);
-      return response.data;
+      const message = await twilioClient.messages(messageId).fetch();
+      return message;
     } catch (error: any) {
       logger.error('Failed to get message status', { error: error.message });
       throw error;
@@ -188,12 +262,13 @@ export const smsService = {
    */
   async getAvailableNumbers(): Promise<any[]> {
     try {
-      const response = await telnyx.phoneNumbers.list({
-        filter: {
-          status: 'purchased',
-        },
-      });
-      return response.data || [];
+      const phoneNumbers = await twilioClient.incomingPhoneNumbers.list();
+      return phoneNumbers.map(number => ({
+        phoneNumber: number.phoneNumber,
+        friendlyName: number.friendlyName,
+        sid: number.sid,
+        capabilities: number.capabilities,
+      }));
     } catch (error: any) {
       logger.error('Failed to get available numbers', { error: error.message });
       return [];

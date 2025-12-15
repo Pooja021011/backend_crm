@@ -1,27 +1,35 @@
 import { Router } from 'express';
-import { underwritingController } from '../controllers/underwritingController';
-import { authMiddleware } from '../middleware/auth';
+import { underwritingController } from '../controllers/underwritingController.js';
+import { authenticate } from '../middleware/auth.js';
 
 const router = Router();
 
 // All routes require authentication
-router.use(authMiddleware);
+router.use(authenticate);
 
-// Lead-specific underwriting scenarios
-router.get('/leads/:leadId/scenarios', underwritingController.listScenarios);
-router.post('/leads/:leadId/scenarios', underwritingController.createScenario);
+// Get all calculations for a lead
+router.get('/leads/:leadId', (req, res, next) =>
+  underwritingController.getCalculations(req, res).catch(next)
+);
 
-// Individual scenario operations
-router.get('/scenarios/:id', underwritingController.getScenario);
-router.put('/scenarios/:id', underwritingController.updateScenario);
-router.delete('/scenarios/:id', underwritingController.deleteScenario);
+// Get latest calculation for a lead
+router.get('/leads/:leadId/latest', (req, res, next) =>
+  underwritingController.getLatest(req, res).catch(next)
+);
 
-// Scenario actions
-router.put('/scenarios/:id/set-primary', underwritingController.setPrimary);
-router.post('/scenarios/:id/duplicate', underwritingController.duplicateScenario);
-router.get('/scenarios/:id/export-pdf', underwritingController.exportToPDF);
+// Calculate final offer (doesn't save)
+router.post('/calculate', (req, res, next) =>
+  underwritingController.calculate(req, res).catch(next)
+);
 
-// Calculation utility (doesn't require scenario ID)
-router.post('/calculate', underwritingController.calculateScenario);
+// Save underwriting calculation
+router.post('/leads/:leadId', (req, res, next) =>
+  underwritingController.saveCalculation(req, res).catch(next)
+);
 
-export { router as underwritingRoutes };
+// Delete a calculation
+router.delete('/:calculationId', (req, res, next) =>
+  underwritingController.deleteCalculation(req, res).catch(next)
+);
+
+export default router;

@@ -48,13 +48,23 @@ export const notificationService = {
    */
   async getUserNotifications(userId: string, userRoles: RoleName[]) {
     try {
+      // Filter out undefined/null values from userRoles
+      const validRoles = userRoles.filter(role => role != null);
+      
+      // Build the where clause conditionally
+      const whereClause: any = {
+        OR: [
+          { targetUserId: userId }
+        ]
+      };
+      
+      // Only add role-based filtering if there are valid roles
+      if (validRoles.length > 0) {
+        whereClause.OR.push({ targetRoles: { hasSome: validRoles } });
+      }
+      
       const notifications = await prisma.notification.findMany({
-        where: {
-          OR: [
-            { targetUserId: userId },
-            { targetRoles: { hasSome: userRoles } }
-          ]
-        },
+        where: whereClause,
         include: {
           lead: {
             include: {

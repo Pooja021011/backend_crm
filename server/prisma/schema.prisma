@@ -17,10 +17,13 @@ model User {
   phone         String?
   passwordHash  String
   status        String       @default("active")
+  resetOtp      String?
+  resetOtpExpiry DateTime?
   roles         UserRole[]
   refreshTokens RefreshToken[]
   auditLogs     AuditLog[]   @relation("UserAuditLogs")
   assignedLeads Lead[]       @relation("AssignedUserLeads")
+  dispLeads     Lead[]       @relation("DispAgentLeads")
   createdLeads  Lead[]       @relation("CreatedByUserLeads")
   assignedTasks Task[]       @relation("AssignedToUserTasks")
   createdTasks  Task[]       @relation("CreatedByUserTasks")
@@ -35,6 +38,7 @@ model User {
   smsSettings UserSmsSettings?
   leadDistributionSettings LeadDistributionSettings?
   priceHistoryChanges PriceHistory[] @relation("PriceChangedByUser")
+  underwritingCalculations UnderwritingCalculation[] @relation("CalculatedByUser")
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 }
@@ -189,12 +193,12 @@ model UserEmailSettings {
   updatedAt    DateTime @updatedAt
 }
 
-// Per-user SMS settings (Telnyx)
+// Per-user SMS settings (Twilio)
 model UserSmsSettings {
   userId       String   @id
   user         User     @relation(fields: [userId], references: [id])
 
-  // Telnyx phone number (from address) - user-specific
+  // Twilio phone number (from address) - user-specific
   phoneNumber  String?  // E.164 format: +1234567890
   
   // Display settings
@@ -341,6 +345,10 @@ model Lead {
   leadSourceId     String?        // Reference to lead source for filtering
   leadSource       LeadSource?    @relation(fields: [leadSourceId], references: [id])
   
+  // Disposition agent (separate from ACQ agent)
+  dispAgentId      String?
+  dispAgent        User?          @relation("DispAgentLeads", fields: [dispAgentId], references: [id])
+  
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
@@ -362,11 +370,15 @@ model Lead {
   marketingResources MarketingResource[]
   notifications    Notification[]
   priceHistory     PriceHistory[]
+  owners           LeadOwner[]
+  rehabBudget      RehabBudget?
+  underwritingCalcs UnderwritingCalculation[]
 
   @@index([leadType])
   @@index([marketId])
   @@index([pipelineStageId])
   @@index([leadStatusId])
+  @@index([dispAgentId])
 }
 
 model LeadAddress {
@@ -775,6 +787,71 @@ model PriceHistory {
   createdAt   DateTime @default(now())
   
   @@index([leadId, fieldName])
+  @@index([leadId, createdAt])
+}
+
+// Multiple Owners Support
+model LeadOwner {
+  id        String   @id @default(uuid())
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  firstName String
+  lastName  String
+  phone     String
+  email     String
+  isPrimary Boolean  @default(false)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([leadId])
+  @@index([leadId, isPrimary])
+}
+
+// Rehab Budget Calculator
+model RehabBudget {
+  id                String   @id @default(uuid())
+  leadId            String   @unique
+  lead              Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  
+  // Finish level selection
+  finishLevel       String?  // "high_end", "mid_range", "low_end"
+  
+  // Toggle states and custom values (JSON for flexibility)
+  toggledItems      Json     // { permits: true, demolition: false, ... }
+  customValues      Json?    // { numberOfBathrooms: 2, numberOfWindows: 10, ... }
+  
+  // Calculated totals
+  subtotal          Float    @default(0)
+  contingencyAmount Float    @default(0)
+  totalCost         Float    @default(0)
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// Underwriting Calculations
+model UnderwritingCalculation {
+  id           String   @id @default(uuid())
+  leadId       String
+  lead         Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  
+  // Input values
+  arv          Float
+  rehabCost    Float
+  taxes        Float    @default(1000)
+  timeline     Int      @default(6)
+  
+  // Calculated values
+  finalOffer   Float
+  
+  // Metadata
+  calculatedBy String?
+  user         User?    @relation("CalculatedByUser", fields: [calculatedBy], references: [id])
+  notes        String?
+  
+  createdAt    DateTime @default(now())
+  
   @@index([leadId, createdAt])
 }
 

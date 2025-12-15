@@ -12,7 +12,7 @@ import metricsRoutes from './metricsRoutes.js';
 import smsRoutes from './smsRoutes.js';
 import callRoutes from './callRoutes.js';
 import pipelineRoutes from './pipelineRoutes.js';
-import { underwritingRoutes } from './underwritingRoutes.js';
+import underwritingRoutes from './underwritingRoutes.js';
 import { compsRoutes } from './compsRoutes.js';
 import { buyerOfferRoutes } from './buyerOfferRoutes.js';
 import { marketingRoutes } from './marketingRoutes.js';
@@ -23,6 +23,9 @@ import googleSheetsRoutes from './googleSheetsRoutes.js';
 import leadStatusRoutes from './leadStatusRoutes.js';
 import buyerRoutes from './buyerRoutes.js';
 import priceHistoryRoutes from './priceHistoryRoutes.js';
+import leadOwnerRoutes from './leadOwnerRoutes.js';
+import rehabBudgetRoutes from './rehabBudgetRoutes.js';
+import dispositionsPipelineRoutes from './dispositionsPipelineRoutes.js';
 
 const router = Router();
 
@@ -39,7 +42,7 @@ router.use('/metrics', metricsRoutes);
 router.use('/sms', smsRoutes);
 router.use('/calls', callRoutes);
 router.use('/pipeline', pipelineRoutes);
-router.use('/underwriting', underwritingRoutes);
+router.use('/', underwritingRoutes);
 router.use('/comps', compsRoutes);
 router.use('/buyers', buyerRoutes);
 router.use('/buyer-offers', buyerOfferRoutes);
@@ -50,6 +53,9 @@ router.use('/lead-distribution', leadDistributionRoutes);
 router.use('/google-sheets', googleSheetsRoutes);
 router.use('/lead-statuses', leadStatusRoutes);
 router.use('/', priceHistoryRoutes);
+router.use('/', leadOwnerRoutes);
+router.use('/', rehabBudgetRoutes);
+router.use('/', dispositionsPipelineRoutes);
 
 export default router;
 

@@ -214,5 +214,28 @@ export const callController = {
         error: 'Failed to get call history'
       });
     }
+  },
+
+  /**
+   * TwiML endpoint for Twilio call instructions
+   */
+  async twiml(req: Request, res: Response) {
+    try {
+      logger.info('TwiML endpoint called', { body: req.body });
+
+      // Return TwiML response to connect the call
+      const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Dial>
+    <Number>${req.body.To}</Number>
+  </Dial>
+</Response>`;
+
+      res.type('text/xml');
+      res.send(twiml);
+    } catch (error: any) {
+      logger.error('Error in TwiML controller', { error: error.message });
+      res.status(500).send('Error processing call');
+    }
   }
 };

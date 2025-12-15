@@ -677,5 +677,123 @@ export const emailService = {
         handleError(error as Error);
       }
     });
+  },
+
+  // Send OTP email for password reset
+  sendPasswordResetOTP: async (email: string, otp: string, firstName: string) => {
+    try {
+      // Support both SYSTEM_SMTP_* and SMTP_* environment variables
+      const smtpHost = process.env.SYSTEM_SMTP_HOST || process.env.SMTP_HOST || 'smtp.gmail.com';
+      const smtpPort = process.env.SYSTEM_SMTP_PORT || process.env.SMTP_PORT || '587';
+      const smtpUser = process.env.SYSTEM_SMTP_USER || process.env.SMTP_USER;
+      const smtpPass = process.env.SYSTEM_SMTP_PASS || process.env.SMTP_PASS;
+      const fromEmail = process.env.FROM_EMAIL || smtpUser;
+      const smtpSecure = process.env.SMTP_SECURE === 'true' || smtpPort === '465';
+
+      // Debug: Log environment variables (remove in production)
+      console.log('🔍 SMTP Config Check:');
+      console.log('  SMTP_HOST:', smtpHost ? '✅ Set' : '❌ Missing');
+      console.log('  SMTP_PORT:', smtpPort ? '✅ Set' : '❌ Missing');
+      console.log('  SMTP_USER:', smtpUser ? '✅ Set' : '❌ Missing');
+      console.log('  SMTP_PASS:', smtpPass ? '✅ Set (hidden)' : '❌ Missing');
+      console.log('  FROM_EMAIL:', fromEmail ? '✅ Set' : '❌ Missing');
+      
+      // Check if SMTP configuration is available
+      if (!smtpUser || !smtpPass) {
+        console.error('❌ SMTP configuration missing. Please configure SMTP_USER and SMTP_PASS in .env file');
+        throw new Error('Email service not configured. Please contact administrator.');
+      }
+
+      // Create a transporter using environment variables for system emails
+      const transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: parseInt(smtpPort),
+        secure: smtpSecure,
+        auth: {
+          user: smtpUser,
+          pass: smtpPass,
+        },
+        tls: {
+          rejectUnauthorized: false, // Allow self-signed certificates
+          ciphers: 'SSLv3'
+        }
+      });
+
+      const mailOptions = {
+        from: `"${process.env.APP_NAME || 'Real Estate CRM'}" <${fromEmail}>`,
+        to: email,
+        subject: 'Password Reset OTP',
+        html: `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <style>
+              body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+              .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+              .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+              .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
+              .otp-box { background: white; border: 2px dashed #667eea; padding: 20px; text-align: center; margin: 20px 0; border-radius: 8px; }
+              .otp-code { font-size: 32px; font-weight: bold; color: #667eea; letter-spacing: 8px; }
+              .warning { background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; }
+              .footer { text-align: center; color: #666; font-size: 12px; margin-top: 20px; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h1>🔐 Password Reset Request</h1>
+              </div>
+              <div class="content">
+                <p>Hi <strong>${firstName}</strong>,</p>
+                <p>We received a request to reset your password. Use the OTP code below to proceed:</p>
+                
+                <div class="otp-box">
+                  <p style="margin: 0; color: #666; font-size: 14px;">Your OTP Code</p>
+                  <div class="otp-code">${otp}</div>
+                  <p style="margin: 10px 0 0 0; color: #666; font-size: 12px;">Valid for 10 minutes</p>
+                </div>
+
+                <div class="warning">
+                  <strong>⚠️ Security Notice:</strong>
+                  <ul style="margin: 10px 0 0 0; padding-left: 20px;">
+                    <li>Never share this OTP with anyone</li>
+                    <li>This code expires in 10 minutes</li>
+                    <li>If you didn't request this, please ignore this email</li>
+                  </ul>
+                </div>
+
+                <p>If you didn't request a password reset, you can safely ignore this email. Your password will remain unchanged.</p>
+                
+                <p>Best regards,<br><strong>${process.env.APP_NAME || 'Real Estate CRM'} Team</strong></p>
+              </div>
+              <div class="footer">
+                <p>This is an automated email. Please do not reply.</p>
+                <p>&copy; ${new Date().getFullYear()} ${process.env.APP_NAME || 'Real Estate CRM'}. All rights reserved.</p>
+              </div>
+            </div>
+          </body>
+          </html>
+        `,
+        text: `
+Hi ${firstName},
+
+We received a request to reset your password.
+
+Your OTP Code: ${otp}
+(Valid for 10 minutes)
+
+If you didn't request a password reset, you can safely ignore this email.
+
+Best regards,
+${process.env.APP_NAME || 'Real Estate CRM'} Team
+        `
+      };
+
+      await transporter.sendMail(mailOptions);
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error sending OTP email:', error);
+      throw new Error('Failed to send OTP email');
+    }
   }
 };
