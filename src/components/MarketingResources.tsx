@@ -101,7 +101,7 @@ export const MarketingResources: React.FC<MarketingResourcesProps> = ({ leadId }
       setIsLoading(true);
       const response = await fetch(`/api/v1/marketing/leads/${leadId}/resources`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         }
       });
 
@@ -124,7 +124,7 @@ export const MarketingResources: React.FC<MarketingResourcesProps> = ({ leadId }
     try {
       const response = await fetch(`/api/v1/marketing/leads/${leadId}/resources/stats`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         }
       });
 
@@ -170,7 +170,7 @@ export const MarketingResources: React.FC<MarketingResourcesProps> = ({ leadId }
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         },
         body: JSON.stringify(resourceData)
       });
@@ -207,7 +207,7 @@ export const MarketingResources: React.FC<MarketingResourcesProps> = ({ leadId }
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         },
         body: JSON.stringify(updates)
       });
@@ -234,7 +234,7 @@ export const MarketingResources: React.FC<MarketingResourcesProps> = ({ leadId }
       const response = await fetch(`/api/v1/marketing/resources/${resourceId}/toggle-status`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         }
       });
 
@@ -260,7 +260,7 @@ export const MarketingResources: React.FC<MarketingResourcesProps> = ({ leadId }
       const response = await fetch(`/api/v1/marketing/resources/${resourceId}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         }
       });
 
@@ -296,7 +296,7 @@ export const MarketingResources: React.FC<MarketingResourcesProps> = ({ leadId }
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         },
         body: JSON.stringify({
           campaignName: campaign.name,
@@ -330,7 +330,7 @@ export const MarketingResources: React.FC<MarketingResourcesProps> = ({ leadId }
     try {
       const response = await fetch(`/api/v1/marketing/leads/${leadId}/public-links`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         }
       });
 

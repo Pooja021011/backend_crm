@@ -97,6 +97,8 @@ const Settings = () => {
   // Check if user has admin or manager role
   const isAdminOrManager = user?.roles?.some(role => ['ADMIN', 'MANAGER'].includes(role)) || false;
   const [emailSettings, setEmailSettings] = useState<EmailSettings | null>(null);
+  const [originalEmailSettings, setOriginalEmailSettings] = useState<EmailSettings | null>(null);
+  const [emailSettingsModified, setEmailSettingsModified] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testingImap, setTestingImap] = useState(false);
   const [testingSmtp, setTestingSmtp] = useState(false);
@@ -217,6 +219,8 @@ const Settings = () => {
           
           console.log('Setting email settings to:', settings); // Debug log
           setEmailSettings(settings);
+          setOriginalEmailSettings(settings); // Store original settings
+          setEmailSettingsModified(false); // Reset modified flag
         } else {
           console.log('Failed to load email settings:', data.error);
           // Set default settings even if API call fails
@@ -245,6 +249,18 @@ const Settings = () => {
 
     load();
   }, [user?.email]);
+
+  // Track email settings modifications
+  useEffect(() => {
+    if (!emailSettings || !originalEmailSettings) {
+      setEmailSettingsModified(false);
+      return;
+    }
+    
+    // Compare current settings with original
+    const isModified = JSON.stringify(emailSettings) !== JSON.stringify(originalEmailSettings);
+    setEmailSettingsModified(isModified);
+  }, [emailSettings, originalEmailSettings]);
 
   // Reload settings when email tab becomes active
   useEffect(() => {
@@ -551,6 +567,10 @@ const Settings = () => {
 
       const result = await response.json();
       if (result.success) {
+        // Update original settings and reset modified flag
+        setOriginalEmailSettings(emailSettings);
+        setEmailSettingsModified(false);
+        
         toast({
           title: "Settings Saved",
           description: "Your email settings have been updated successfully!",
@@ -571,6 +591,16 @@ const Settings = () => {
 
   const testImapConnection = async () => {
     if (!emailSettings) return;
+
+    // Check if settings have been modified
+    if (emailSettingsModified) {
+      toast({
+        title: "Save Settings First",
+        description: "Please save your IMAP settings before testing the connection.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setTestingImap(true);
     try {
@@ -607,6 +637,17 @@ const Settings = () => {
 
   const testSmtpConnection = async () => {
     if (!emailSettings) return;
+    
+    // Check if settings have been modified
+    if (emailSettingsModified) {
+      toast({
+        title: "Save Settings First",
+        description: "Please save your SMTP settings before testing the connection.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setTestingSmtp(true);
     try {
       const res = await makeApiCall(`${API_BASE}/settings/email/test-smtp`, {
@@ -634,6 +675,16 @@ const Settings = () => {
 
   const connectGmail = async () => {
     if (!emailSettings) return;
+
+    // Check if settings have been modified (only for connecting, not disconnecting)
+    if (!emailSettings.gmailConnected && emailSettingsModified) {
+      toast({
+        title: "Save Settings First",
+        description: "Please save your email settings before connecting Gmail.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setConnectingGmail(true);
     try {
@@ -1003,30 +1054,31 @@ const Settings = () => {
                           <Label htmlFor="imapSecure">Use SSL/TLS</Label>
                         </div>
 
-                        <div className="flex items-center gap-4">
-                          <Button 
-                            variant="outline" 
-                            onClick={testImapConnection}
-                            disabled={testingImap || !emailSettings?.imapHost || !emailSettings?.imapUser || !emailSettings?.imapPass}
-                          >
-                            {testingImap ? (
-                              <>
-                                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                                Testing...
-                              </>
-                            ) : (
-                              <>
-                                <Server className="w-4 h-4 mr-2" />
-                                Test IMAP Connection
-                              </>
-                            )}
-                          </Button>
+                        <div className="flex flex-col gap-3">
+                          <div className="flex items-center gap-4">
+                            <Button 
+                              variant="outline" 
+                              onClick={testImapConnection}
+                              disabled={testingImap || !emailSettings?.imapHost || !emailSettings?.imapUser || !emailSettings?.imapPass || emailSettingsModified}
+                            >
+                              {testingImap ? (
+                                <>
+                                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                                  Testing...
+                                </>
+                              ) : (
+                                <>
+                                  <Server className="w-4 h-4 mr-2" />
+                                  Test IMAP Connection
+                                </>
+                              )}
+                            </Button>
 
-                          <Button
-                            onClick={connectGmail}
-                            disabled={connectingGmail}
-                            className={emailSettings?.gmailConnected ? "bg-red-600 hover:bg-red-700" : "bg-green-600 hover:bg-green-700"}
-                          >
+                            <Button
+                              onClick={connectGmail}
+                              disabled={connectingGmail || (!emailSettings?.gmailConnected && emailSettingsModified)}
+                              className={emailSettings?.gmailConnected ? "bg-red-600 hover:bg-red-700" : "bg-green-600 hover:bg-green-700"}
+                            >
                             {connectingGmail ? (
                               <>
                                 <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
@@ -1044,6 +1096,14 @@ const Settings = () => {
                               </>
                             )}
                           </Button>
+                          </div>
+                          
+                          {emailSettingsModified && (
+                            <p className="text-xs text-amber-600 flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3" />
+                              Save your settings first to test IMAP or connect Gmail
+                            </p>
+                          )}
                         </div>
 
                         {emailSettings?.gmailConnected && (
@@ -1125,12 +1185,13 @@ const Settings = () => {
                           <Label htmlFor="smtpSecure">Use SSL/TLS</Label>
                         </div>
 
-                        <div className="flex justify-start pt-4">
+                        <div className="flex flex-col gap-2 pt-4">
                           <Button 
                             variant="outline" 
                             size="sm" 
                             onClick={testSmtpConnection}
-                            disabled={testingSmtp || !emailSettings?.smtpHost || !emailSettings?.smtpUser || !emailSettings?.smtpPass}
+                            disabled={testingSmtp || !emailSettings?.smtpHost || !emailSettings?.smtpUser || !emailSettings?.smtpPass || emailSettingsModified}
+                            className="w-fit"
                           >
                             {testingSmtp ? (
                               <>
@@ -1144,6 +1205,12 @@ const Settings = () => {
                               </>
                             )}
                           </Button>
+                          {emailSettingsModified && (
+                            <p className="text-xs text-amber-600 flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3" />
+                              Save your settings first to test the connection
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>

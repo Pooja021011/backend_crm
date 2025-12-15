@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -88,10 +88,24 @@ const Inbox = () => {
   const [loadingSMS, setLoadingSMS] = useState(false);
   const [showNewSMS, setShowNewSMS] = useState(false);
   const [newSMSNumber, setNewSMSNumber] = useState('');
+  const [leadPhoneNumbers, setLeadPhoneNumbers] = useState<any[]>([]);
+  const [loadingPhoneNumbers, setLoadingPhoneNumbers] = useState(false);
+  const [phoneSearchQuery, setPhoneSearchQuery] = useState('');
+  const [selectedContactDetails, setSelectedContactDetails] = useState<any>(null);
+
+  // Refs for auto-scroll
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const conversationMessagesEndRef = useRef<HTMLDivElement>(null);
 
   // Call history state
   const [callHistory, setCallHistory] = useState<any[]>([]);
   const [loadingCallHistory, setLoadingCallHistory] = useState(false);
+  const [showNewCall, setShowNewCall] = useState(false);
+  const [newCallNumber, setNewCallNumber] = useState('');
+  const [callPhoneSearchQuery, setCallPhoneSearchQuery] = useState('');
+  const [selectedCallContact, setSelectedCallContact] = useState<any>(null);
+  const [makingCall, setMakingCall] = useState(false);
+  
   // Tasks / Communications state
   const [assignedTasks, setAssignedTasks] = useState<any[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
@@ -110,10 +124,37 @@ const Inbox = () => {
   // Notifications state
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
+
+  // Auto-scroll to bottom function
+  const scrollToBottom = (ref: React.RefObject<HTMLDivElement>) => {
+    if (ref.current) {
+      ref.current.scrollIntoView({ behavior: "smooth" });
+    }
+  };
+
+  // Auto-scroll when messages change or conversation opens
+  useEffect(() => {
+    if (showSMSDetail && selectedConversation?.messages) {
+      setTimeout(() => scrollToBottom(conversationMessagesEndRef), 100);
+    }
+  }, [showSMSDetail, selectedConversation?.messages]);
   
   // Helper function for API calls with automatic token refresh
-  const makeApiCall = async (url: string, options: RequestInit) => {
-    const response = await fetch(url, options);
+  const makeApiCall = async (url: string, options: RequestInit = {}) => {
+    // Add Authorization header with access token
+    const accessToken = localStorage.getItem('accessToken');
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+      ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {})
+    };
+
+    const requestOptions = {
+      ...options,
+      headers
+    };
+
+    const response = await fetch(url, requestOptions);
     
     // If token expired, try to refresh and retry
     if (response.status === 401) {
@@ -132,9 +173,9 @@ const Inbox = () => {
             
             // Retry original request with new token
             const retryOptions = {
-              ...options,
+              ...requestOptions,
               headers: {
-                ...options.headers,
+                ...headers,
                 'Authorization': `Bearer ${newAccessToken}`
               }
             };
@@ -583,10 +624,10 @@ const Inbox = () => {
   const fetchSMSHistory = async () => {
     setLoadingSMS(true);
     try {
-      const token = localStorage.getItem('token');
+      const accessToken = localStorage.getItem('accessToken');
       const response = await fetch(`${API_BASE}/sms/history`, {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${accessToken}`,
         },
       });
 
@@ -611,12 +652,12 @@ const Inbox = () => {
   const sendSMSMessage = async (phoneNumber: string, message: string) => {
     setSendingSMS(true);
     try {
-      const token = localStorage.getItem('token');
+      const accessToken = localStorage.getItem('accessToken');
       const response = await fetch(`${API_BASE}/sms/send`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
           to: phoneNumber,
@@ -702,6 +743,99 @@ const Inbox = () => {
     setShowSMSDetail(true);
   };
 
+  // Fetch phone numbers from leads
+  const fetchLeadPhoneNumbers = async () => {
+    setLoadingPhoneNumbers(true);
+    try {
+      const accessToken = localStorage.getItem('accessToken');
+      console.log('🔐 Fetching leads with token:', accessToken ? 'Token exists' : 'No token');
+      
+      const response = await fetch(`${API_BASE}/leads?limit=1000`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        },
+      });
+
+      console.log('📡 Response status:', response.status, response.statusText);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ API Error:', errorText);
+        throw new Error(`API returned ${response.status}: ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log('📦 API Result:', { hasData: !!result.data, dataLength: result.data?.length });
+      
+      // Leads API returns { data: [...], skip, take } format (no success field)
+      if (result.data && Array.isArray(result.data)) {
+        const phoneNumbers: any[] = [];
+        
+        result.data.forEach((lead: any) => {
+          // Add seller phone numbers
+          if (lead.seller?.phone) {
+            phoneNumbers.push({
+              phone: lead.seller.phone,
+              name: `${lead.seller.firstName} ${lead.seller.lastName}`,
+              type: 'Seller',
+              leadId: lead.id,
+              address: lead.address?.address1 || 'No address'
+            });
+          }
+          if (lead.seller?.mobile) {
+            phoneNumbers.push({
+              phone: lead.seller.mobile,
+              name: `${lead.seller.firstName} ${lead.seller.lastName}`,
+              type: 'Seller (Mobile)',
+              leadId: lead.id,
+              address: lead.address?.address1 || 'No address'
+            });
+          }
+          
+          // Add buyer phone numbers
+          if (lead.buyer?.phone) {
+            phoneNumbers.push({
+              phone: lead.buyer.phone,
+              name: `${lead.buyer.firstName} ${lead.buyer.lastName}`,
+              type: 'Buyer',
+              leadId: lead.id,
+              address: lead.address?.address1 || 'No address'
+            });
+          }
+          if (lead.buyer?.mobile) {
+            phoneNumbers.push({
+              phone: lead.buyer.mobile,
+              name: `${lead.buyer.firstName} ${lead.buyer.lastName}`,
+              type: 'Buyer (Mobile)',
+              leadId: lead.id,
+              address: lead.address?.address1 || 'No address'
+            });
+          }
+        });
+        
+        setLeadPhoneNumbers(phoneNumbers);
+        console.log(`✅ Loaded ${phoneNumbers.length} phone numbers from ${result.data.length} leads`);
+        console.log('📱 Phone numbers:', phoneNumbers.map(p => `${p.name}: ${p.phone}`));
+      } else {
+        console.error('❌ No data in response');
+        toast({
+          title: "Error Loading Contacts",
+          description: "Invalid response format from server",
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      console.error('❌ Error fetching phone numbers:', error);
+      toast({
+        title: "Error Loading Contacts",
+        description: error.message || "Failed to load contacts. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingPhoneNumbers(false);
+    }
+  };
+
   const handleNewSMSSubmit = async () => {
     if (!newSMSNumber.trim() || !smsMessage.trim()) {
       toast({
@@ -716,6 +850,7 @@ const Inbox = () => {
     setShowNewSMS(false);
     setNewSMSNumber('');
     setSmsMessage('');
+    setPhoneSearchQuery('');
   };
 
   // Load SMS history when switching to SMS tab
@@ -726,6 +861,20 @@ const Inbox = () => {
       fetchCallHistory();
     }
   }, [activeTab]);
+
+  // Fetch phone numbers when New SMS dialog opens
+  useEffect(() => {
+    if (showNewSMS) {
+      fetchLeadPhoneNumbers();
+    }
+  }, [showNewSMS]);
+
+  // Fetch phone numbers when New Call dialog opens
+  useEffect(() => {
+    if (showNewCall) {
+      fetchLeadPhoneNumbers();
+    }
+  }, [showNewCall]);
 
   // Fetch call history
   const fetchCallHistory = async () => {
@@ -749,6 +898,66 @@ const Inbox = () => {
     } finally {
       setLoadingCallHistory(false);
     }
+  };
+
+  // Make outbound call
+  const makeCall = async (phoneNumber: string, leadId?: string) => {
+    setMakingCall(true);
+    try {
+      console.log('🔵 Making call to:', phoneNumber, 'leadId:', leadId);
+      
+      const response = await makeApiCall(`${API_BASE}/calls/make`, {
+        method: 'POST',
+        body: JSON.stringify({ 
+          to: phoneNumber,
+          leadId: leadId 
+        })
+      });
+
+      const result = await response.json();
+      console.log('🔵 Call response:', result);
+
+      if (result.success) {
+        toast({
+          title: "Call Initiated",
+          description: `Calling ${phoneNumber}...`,
+        });
+        
+        // Refresh call history after successful call
+        await fetchCallHistory();
+        
+        // Close the new call dialog
+        setShowNewCall(false);
+        setNewCallNumber('');
+        setCallPhoneSearchQuery('');
+        setSelectedCallContact(null);
+      } else {
+        throw new Error(result.error || 'Failed to make call');
+      }
+    } catch (error: any) {
+      console.error('❌ Error making call:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to make call",
+        variant: "destructive",
+      });
+    } finally {
+      setMakingCall(false);
+    }
+  };
+
+  // Handle new call submission
+  const handleNewCallSubmit = async () => {
+    if (!newCallNumber || !newCallNumber.trim()) {
+      toast({
+        title: "Error",
+        description: "Please select a contact to call",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    await makeCall(newCallNumber, selectedCallContact?.leadId);
   };
 
   // Optional placeholder for calls/SMS until wired
@@ -1142,14 +1351,14 @@ const Inbox = () => {
 
   const getMessageIcon = (type: string) => {
     switch (type) {
-      case 'email': return '📧';
-      case 'sms': return '💬';
-      case 'call': return '📞';
-      case 'task': return '✅';
-      case 'communication': return '💼';
-      case 'reminder': return '🔔';
-      case 'notification': return '📢';
-      default: return '📄';
+      case 'email': return <Mail className="w-3 h-3" />;
+      case 'sms': return <MessageSquare className="w-3 h-3" />;
+      case 'call': return <Phone className="w-3 h-3" />;
+      case 'task': return <CheckSquare className="w-3 h-3" />;
+      case 'communication': return <MessageCircle className="w-3 h-3" />;
+      case 'reminder': return <Bell className="w-3 h-3" />;
+      case 'notification': return <Bell className="w-3 h-3" />;
+      default: return <Mail className="w-3 h-3" />;
     }
   };
 
@@ -1361,47 +1570,6 @@ const Inbox = () => {
             </TabsTrigger>
           </TabsList>
 
-          {/* Toolbar */}
-          <div className="flex items-center justify-between py-3 border-b border-gray-200">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Checkbox 
-                  checked={allSelected}
-                  ref={(el) => {
-                    if (el && el instanceof HTMLInputElement) el.indeterminate = someSelected;
-                  }}
-                  onCheckedChange={handleSelectAll}
-                  className="border-gray-300"
-                />
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={handleSelectAll}
-                  className="text-sm text-gray-600 hover:text-gray-900 px-2"
-                >
-                  Select all
-                </Button>
-              </div>
-              
-              {selectedItems.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <Button variant="ghost" size="sm" className="text-gray-600 hover:text-gray-900">
-                    <Archive className="w-4 h-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm" className="text-gray-600 hover:text-gray-900">
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              )}
-            </div>
-            
-            <div className="flex items-center gap-4">
-              <Button variant="ghost" size="sm" className="text-gray-600 hover:text-gray-900">
-                <span className="text-sm">Due date</span>
-                <ChevronDown className="w-4 h-4 ml-1" />
-              </Button>
-            </div>
-          </div>
 
           {/* Messages List */}
           <TabsContent value={activeTab} className="mt-0">
@@ -1496,20 +1664,30 @@ const Inbox = () => {
                   {/* Call History Header */}
                   <div className="flex items-center justify-between p-4 border-b bg-gray-50">
                     <h3 className="text-lg font-semibold text-gray-900">Call History</h3>
-                    <Button
-                      onClick={fetchCallHistory}
-                      variant="ghost"
-                      size="sm"
-                      disabled={loadingCallHistory}
-                      className="text-gray-600 hover:text-gray-900"
-                    >
-                      {loadingCallHistory ? (
-                        <RefreshCw className="w-4 h-4 animate-spin mr-2" />
-                      ) : (
-                        <RefreshCw className="w-4 h-4 mr-2" />
-                      )}
-                      Refresh
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => setShowNewCall(true)}
+                        size="sm"
+                        className="bg-purple-600 hover:bg-purple-700"
+                      >
+                        <Phone className="w-4 h-4 mr-2" />
+                        Make Call
+                      </Button>
+                      <Button
+                        onClick={fetchCallHistory}
+                        variant="ghost"
+                        size="sm"
+                        disabled={loadingCallHistory}
+                        className="text-gray-600 hover:text-gray-900"
+                      >
+                        {loadingCallHistory ? (
+                          <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                        ) : (
+                          <RefreshCw className="w-4 h-4 mr-2" />
+                        )}
+                        Refresh
+                      </Button>
+                    </div>
                   </div>
 
                   {/* Call History List */}
@@ -1524,7 +1702,14 @@ const Inbox = () => {
                         <Phone className="w-8 h-8 text-purple-600" />
                       </div>
                       <p className="text-lg font-medium text-gray-500">No call history yet</p>
-                      <p className="text-sm text-gray-400 mt-2">Your recent calls will appear here</p>
+                      <p className="text-gray-400 mb-4">Make your first call to see it here.</p>
+                      <Button
+                        onClick={() => setShowNewCall(true)}
+                        className="bg-purple-600 hover:bg-purple-700"
+                      >
+                        <Phone className="w-4 h-4 mr-2" />
+                        Make First Call
+                      </Button>
                     </div>
                   ) : (
                     <div className="divide-y divide-gray-200">
@@ -1675,15 +1860,6 @@ const Inbox = () => {
                             handleEmailClick(message);
                           }}
                         >
-                          {/* Checkbox */}
-                          <div onClick={(e) => e.stopPropagation()}>
-                            <Checkbox 
-                              checked={selectedItems.includes(message.id)}
-                              onCheckedChange={() => handleSelectItem(message.id)}
-                              className="border-gray-300"
-                            />
-                          </div>
-                          
                           {/* Message Icon */}
                           <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center">
                             <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
@@ -2043,30 +2219,34 @@ const Inbox = () => {
 
               {/* Messages */}
               <div className="space-y-3 max-h-96 overflow-y-auto">
-                {selectedConversation.messages?.map((message: any) => (
-                  <div
-                    key={message.id}
-                    className={`flex ${message.direction === 'OUTBOUND' ? 'justify-end' : 'justify-start'}`}
-                  >
+                {selectedConversation.messages
+                  ?.slice()
+                  .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+                  .map((message: any) => (
                     <div
-                      className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                        message.direction === 'OUTBOUND'
-                          ? 'bg-green-500 text-white'
-                          : 'bg-gray-200 text-gray-900'
-                      }`}
+                      key={message.id}
+                      className={`flex ${message.direction === 'OUTBOUND' ? 'justify-end' : 'justify-start'}`}
                     >
-                      <p className="text-sm">{message.text}</p>
-                      <p className={`text-xs mt-1 ${
-                        message.direction === 'OUTBOUND' ? 'text-green-100' : 'text-gray-500'
-                      }`}>
-                        {new Date(message.timestamp).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </p>
+                      <div
+                        className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                          message.direction === 'OUTBOUND'
+                            ? 'bg-green-500 text-white'
+                            : 'bg-gray-200 text-gray-900'
+                        }`}
+                      >
+                        <p className="text-sm">{message.text}</p>
+                        <p className={`text-xs mt-1 ${
+                          message.direction === 'OUTBOUND' ? 'text-green-100' : 'text-gray-500'
+                        }`}>
+                          {new Date(message.timestamp).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                <div ref={conversationMessagesEndRef} />
               </div>
 
               {/* Reply Section */}
@@ -2110,23 +2290,139 @@ const Inbox = () => {
 
       {/* New SMS Modal */}
       <Dialog open={showNewSMS} onOpenChange={setShowNewSMS}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-md max-h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <MessageSquare className="w-5 h-5 text-green-600" />
               New SMS Message
             </DialogTitle>
           </DialogHeader>
           
-          <div className="space-y-4">
+          <div className="space-y-4 overflow-y-auto flex-1">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Phone Number</label>
-              <Input
-                placeholder="+1234567890"
-                value={newSMSNumber}
-                onChange={(e) => setNewSMSNumber(e.target.value)}
-                disabled={sendingSMS}
-              />
+              <label className="text-sm font-medium">
+                Select Contact
+                {!loadingPhoneNumbers && leadPhoneNumbers.length > 0 && (
+                  <span className="ml-2 text-xs text-gray-500">
+                    ({leadPhoneNumbers.length} contacts available)
+                  </span>
+                )}
+              </label>
+              <div className="relative">
+                <Input
+                  placeholder="Search by name or phone number..."
+                  value={phoneSearchQuery}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setPhoneSearchQuery(value);
+                    // Clear selected number if search is cleared
+                    if (!value) {
+                      setNewSMSNumber('');
+                    }
+                  }}
+                  disabled={sendingSMS || loadingPhoneNumbers}
+                  className="pr-10"
+                />
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                
+                {/* Phone Numbers Dropdown - Absolutely positioned */}
+                {phoneSearchQuery && !newSMSNumber && (
+                  <div className="absolute top-full left-0 right-0 mt-1 max-h-60 overflow-y-auto border rounded-md bg-white shadow-lg z-50">
+                  {loadingPhoneNumbers ? (
+                    <div className="p-4 text-center text-sm text-gray-500">
+                      <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2" />
+                      Loading contacts...
+                    </div>
+                  ) : leadPhoneNumbers.length === 0 ? (
+                    <div className="p-4 text-center text-sm text-amber-600 bg-amber-50">
+                      ⚠️ No phone numbers loaded from database. Please add leads with phone numbers.
+                    </div>
+                  ) : (
+                    leadPhoneNumbers
+                      .filter(item => {
+                        const searchLower = phoneSearchQuery.toLowerCase();
+                        const phoneDigits = item.phone.replace(/\D/g, ''); // Remove non-digits
+                        const searchDigits = phoneSearchQuery.replace(/\D/g, ''); // Remove non-digits from search
+                        
+                        return item.name.toLowerCase().includes(searchLower) ||
+                               item.phone.includes(phoneSearchQuery) ||
+                               phoneDigits.includes(searchDigits) || // Match by digits only
+                               item.address.toLowerCase().includes(searchLower);
+                      })
+                      .map((item, index) => (
+                        <button
+                          key={index}
+                          onClick={() => {
+                            setNewSMSNumber(item.phone);
+                            setPhoneSearchQuery(item.phone);
+                          }}
+                          className="w-full px-4 py-3 text-left hover:bg-gray-50 border-b last:border-b-0 transition-colors"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="font-medium text-sm">{item.name}</div>
+                              <div className="text-xs text-gray-600">{item.phone}</div>
+                              <div className="text-xs text-gray-500 mt-1">
+                                {item.type} • {item.address}
+                              </div>
+                            </div>
+                            <Phone className="w-4 h-4 text-green-600 mt-1" />
+                          </div>
+                        </button>
+                      ))
+                  )}
+                  {!loadingPhoneNumbers && leadPhoneNumbers.filter(item => {
+                    const searchLower = phoneSearchQuery.toLowerCase();
+                    const phoneDigits = item.phone.replace(/\D/g, '');
+                    const searchDigits = phoneSearchQuery.replace(/\D/g, '');
+                    
+                    return item.name.toLowerCase().includes(searchLower) ||
+                           item.phone.includes(phoneSearchQuery) ||
+                           phoneDigits.includes(searchDigits) ||
+                           item.address.toLowerCase().includes(searchLower);
+                  }).length === 0 && (
+                    <div className="p-4 text-center text-sm text-gray-500">
+                      No contacts found matching "{phoneSearchQuery}"
+                    </div>
+                  )}
+                  </div>
+                )}
+              </div>
+              
+              {/* Show message if no contacts loaded */}
+              {!loadingPhoneNumbers && leadPhoneNumbers.length === 0 && !phoneSearchQuery && (
+                <div className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-md p-3">
+                  ⚠️ No contacts with phone numbers found. Please add leads with phone numbers first.
+                </div>
+              )}
+              
+              {newSMSNumber && (() => {
+                // Find the selected contact details
+                const selectedContact = leadPhoneNumbers.find(item => item.phone === newSMSNumber);
+                return selectedContact ? (
+                  <div className="p-3 bg-green-50 border border-green-200 rounded-md">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Phone className="w-4 h-4 text-green-600" />
+                          <span className="font-semibold text-sm text-green-900">{selectedContact.name}</span>
+                        </div>
+                        <div className="text-xs text-green-700 ml-6">
+                          <div className="font-medium">{selectedContact.phone}</div>
+                          <div className="text-green-600 mt-1">
+                            {selectedContact.type} • {selectedContact.address}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 p-2 bg-green-50 border border-green-200 rounded-md">
+                    <Phone className="w-4 h-4 text-green-600" />
+                    <span className="text-sm font-medium text-green-900">{newSMSNumber}</span>
+                  </div>
+                );
+              })()}
             </div>
             
             <div className="space-y-2">
@@ -2142,21 +2438,22 @@ const Inbox = () => {
                 {smsMessage.length}/160 characters
               </div>
             </div>
-            
-            <div className="flex gap-2 pt-4">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowNewSMS(false);
-                  setNewSMSNumber('');
-                  setSmsMessage('');
-                }}
-                disabled={sendingSMS}
-                className="flex-1"
-              >
-                Cancel
-              </Button>
-              <Button
+          </div>
+          
+          <div className="flex gap-2 pt-4 border-t flex-shrink-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowNewSMS(false);
+                setNewSMSNumber('');
+                setSmsMessage('');
+              }}
+              disabled={sendingSMS}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button
                 onClick={handleNewSMSSubmit}
                 disabled={sendingSMS || !newSMSNumber.trim() || !smsMessage.trim()}
                 className="flex-1 bg-green-600 hover:bg-green-700"
@@ -2173,7 +2470,178 @@ const Inbox = () => {
                   </>
                 )}
               </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* New Call Modal */}
+      <Dialog open={showNewCall} onOpenChange={setShowNewCall}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Phone className="w-5 h-5 text-purple-600" />
+              Make a Call
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Select Contact
+                {!loadingPhoneNumbers && leadPhoneNumbers.length > 0 && (
+                  <span className="ml-2 text-xs text-gray-500">
+                    ({leadPhoneNumbers.length} contacts available)
+                  </span>
+                )}
+              </label>
+              <div className="relative">
+                <Input
+                  placeholder={newCallNumber ? "Contact selected - search again to change" : "Search by name or phone number..."}
+                  value={callPhoneSearchQuery}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setCallPhoneSearchQuery(value);
+                    // Clear selected number if user starts typing
+                    if (value && newCallNumber) {
+                      setNewCallNumber('');
+                      setSelectedCallContact(null);
+                    }
+                  }}
+                  disabled={makingCall || loadingPhoneNumbers}
+                  className="pr-10"
+                />
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                
+                {/* Phone Numbers Dropdown - Absolutely positioned */}
+                {callPhoneSearchQuery && !newCallNumber && (
+                  <div className="absolute top-full left-0 right-0 mt-1 max-h-60 overflow-y-auto border rounded-md bg-white shadow-lg z-50">
+                  {loadingPhoneNumbers ? (
+                    <div className="p-4 text-center text-sm text-gray-500">
+                      <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2" />
+                      Loading contacts...
+                    </div>
+                  ) : leadPhoneNumbers.length === 0 ? (
+                    <div className="p-4 text-center text-sm text-amber-600 bg-amber-50">
+                      ⚠️ No phone numbers loaded from database. Please add leads with phone numbers.
+                    </div>
+                  ) : (
+                    leadPhoneNumbers
+                      .filter(item => {
+                        const searchLower = callPhoneSearchQuery.toLowerCase();
+                        const phoneDigits = item.phone.replace(/\D/g, ''); // Remove non-digits
+                        const searchDigits = callPhoneSearchQuery.replace(/\D/g, ''); // Remove non-digits from search
+                        
+                        return item.name.toLowerCase().includes(searchLower) ||
+                               item.phone.includes(callPhoneSearchQuery) ||
+                               phoneDigits.includes(searchDigits) || // Match by digits only
+                               item.address.toLowerCase().includes(searchLower);
+                      })
+                      .map((item, index) => (
+                        <button
+                          key={index}
+                          onClick={() => {
+                            setNewCallNumber(item.phone);
+                            setCallPhoneSearchQuery(''); // Clear search to hide dropdown
+                            setSelectedCallContact({
+                              name: item.name,
+                              phone: item.phone,
+                              type: item.type,
+                              address: item.address,
+                              leadId: item.leadId
+                            });
+                          }}
+                          className="w-full px-4 py-3 text-left hover:bg-gray-50 border-b last:border-b-0 transition-colors"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="font-medium text-sm">{item.name}</div>
+                              <div className="text-xs text-gray-600">{item.phone}</div>
+                              <div className="text-xs text-gray-500 mt-1">
+                                {item.type} • {item.address}
+                              </div>
+                            </div>
+                            <Phone className="w-4 h-4 text-purple-600 mt-1" />
+                          </div>
+                        </button>
+                      ))
+                  )}
+                  {!loadingPhoneNumbers && leadPhoneNumbers.filter(item => {
+                    const searchLower = callPhoneSearchQuery.toLowerCase();
+                    const phoneDigits = item.phone.replace(/\D/g, '');
+                    const searchDigits = callPhoneSearchQuery.replace(/\D/g, '');
+                    
+                    return item.name.toLowerCase().includes(searchLower) ||
+                           item.phone.includes(callPhoneSearchQuery) ||
+                           phoneDigits.includes(searchDigits) ||
+                           item.address.toLowerCase().includes(searchLower);
+                  }).length === 0 && (
+                    <div className="p-4 text-center text-sm text-gray-500">
+                      No contacts found matching "{callPhoneSearchQuery}"
+                    </div>
+                  )}
+                  </div>
+                )}
+              </div>
+              
+              {/* Show message if no contacts loaded */}
+              {!loadingPhoneNumbers && leadPhoneNumbers.length === 0 && !callPhoneSearchQuery && (
+                <div className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-md p-3">
+                  ⚠️ No contacts with phone numbers found. Please add leads with phone numbers first.
+                </div>
+              )}
+              
+              {newCallNumber && selectedCallContact && (
+                <div className="p-3 bg-purple-50 border border-purple-200 rounded-md">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Phone className="w-4 h-4 text-purple-600" />
+                        <span className="font-semibold text-sm text-purple-900">{selectedCallContact.name}</span>
+                      </div>
+                      <div className="text-xs text-purple-700 ml-6">
+                        <div className="font-medium">{selectedCallContact.phone}</div>
+                        <div className="text-purple-600 mt-1">
+                          {selectedCallContact.type} • {selectedCallContact.address}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
+          </div>
+          
+          <div className="flex gap-2 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowNewCall(false);
+                setNewCallNumber('');
+                setCallPhoneSearchQuery('');
+                setSelectedCallContact(null);
+              }}
+              disabled={makingCall}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleNewCallSubmit}
+              disabled={makingCall || !newCallNumber.trim()}
+              className="flex-1 bg-purple-600 hover:bg-purple-700"
+            >
+              {makingCall ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Calling...
+                </>
+              ) : (
+                <>
+                  <Phone className="w-4 h-4 mr-2" />
+                  Make Call
+                </>
+              )}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

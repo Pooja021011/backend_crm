@@ -71,12 +71,12 @@ const SMSWidget: React.FC = () => {
     setIsSending(true);
 
     try {
-      const token = localStorage.getItem('token');
+      const accessToken = localStorage.getItem('accessToken');
       const response = await fetch('/api/v1/sms/send', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
           to: formattedPhone,

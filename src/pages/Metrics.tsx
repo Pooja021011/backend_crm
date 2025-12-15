@@ -62,6 +62,12 @@ const Metrics = () => {
   
   // Pipeline Overview Data
   const [pipelineView, setPipelineView] = useState<'funnel' | 'timeline'>('funnel');
+  const [pipelineType, setPipelineType] = useState<'acquisitions' | 'dispositions'>('acquisitions');
+  
+  // Dispositions Pipeline Dynamic Data
+  const [dispPipelineLoading, setDispPipelineLoading] = useState(false);
+  const [dispPipelineFunnel, setDispPipelineFunnel] = useState<any>(null);
+  const [dispPipelineTimeline, setDispPipelineTimeline] = useState<any>(null);
   
   // Communications Overview Data
   const [commViewScope, setCommViewScope] = useState<'personal' | 'team'>('personal');
@@ -296,6 +302,54 @@ const Metrics = () => {
     };
     load();
   }, [user?.id]);
+
+  // Fetch Dispositions Pipeline Funnel Data
+  useEffect(() => {
+    if (activeTab === 'pipeline' && pipelineType === 'dispositions' && pipelineView === 'funnel') {
+      const fetchDispPipelineFunnel = async () => {
+        setDispPipelineLoading(true);
+        try {
+          const accessToken = localStorage.getItem('accessToken');
+          const res = await fetch(`${API_BASE}/metrics/dispositions/pipeline/funnel?period=${selectedPeriod}`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+          });
+          const json = await res.json();
+          if (json.success) {
+            setDispPipelineFunnel(json.data);
+          }
+        } catch (error) {
+          console.error('Failed to fetch dispositions pipeline funnel:', error);
+        } finally {
+          setDispPipelineLoading(false);
+        }
+      };
+      fetchDispPipelineFunnel();
+    }
+  }, [activeTab, pipelineType, pipelineView, selectedPeriod]);
+
+  // Fetch Dispositions Pipeline Timeline Data
+  useEffect(() => {
+    if (activeTab === 'pipeline' && pipelineType === 'dispositions' && pipelineView === 'timeline') {
+      const fetchDispPipelineTimeline = async () => {
+        setDispPipelineLoading(true);
+        try {
+          const accessToken = localStorage.getItem('accessToken');
+          const res = await fetch(`${API_BASE}/metrics/dispositions/pipeline/timeline?period=${selectedPeriod}`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+          });
+          const json = await res.json();
+          if (json.success) {
+            setDispPipelineTimeline(json.data);
+          }
+        } catch (error) {
+          console.error('Failed to fetch dispositions pipeline timeline:', error);
+        } finally {
+          setDispPipelineLoading(false);
+        }
+      };
+      fetchDispPipelineTimeline();
+    }
+  }, [activeTab, pipelineType, pipelineView, selectedPeriod]);
 
   // Lead Sources dynamic component
   const DynamicLeadSources: React.FC = () => {
@@ -635,19 +689,14 @@ const Metrics = () => {
           ) : (
             <div className="overflow-x-auto">
               <div className="min-w-[1000px] pb-4">
-                <div className="flex items-end justify-between gap-3 px-2">
+                <div className="flex items-end justify-evenly gap-6 px-4">
                   {stages.map((stage, index) => {
                     const height = (stage.count / maxCount) * 200;
                     // Fixed bar width instead of proportional - makes it look like a bar chart
                     const barWidth = 50; // Reduced width for narrower bars
                     
                     return (
-                      <div key={index} className="flex flex-col items-center min-w-[90px]">
-                        {/* Stage Name Badge - Above bar */}
-                        <Badge className={`text-white text-[10px] px-2 py-1 font-bold uppercase tracking-wide whitespace-nowrap mb-2 ${stage.color}`}>
-                          {stage.name.toUpperCase()}
-                        </Badge>
-                        
+                      <div key={index} className="flex flex-col items-center flex-1 max-w-[120px]">
                         {/* Count - Above bar */}
                         <div className="text-xl font-bold text-gray-900 mb-2">{stage.count}</div>
                         
@@ -673,32 +722,31 @@ const Metrics = () => {
                           {index === 0 ? '100%' : `${stage.conversionRate}%`}
                         </div>
                         
-                        {/* Lost leads section - Dynamic data (show for all stages after first) */}
-                        {index > 0 && (
-                          <>
-                            <div className="flex items-center gap-1 mb-1">
-                              <span className="text-red-500 text-[10px]">▼</span>
-                              <span className="text-[10px] text-red-600 font-semibold">{stage.lost || 0} LOST</span>
-                            </div>
-                            
-                            {/* Lost Percentage */}
-                            <div className="text-[10px] text-red-600 font-bold mb-1">
-                              {stage.lostPercent || 0}%
-                            </div>
-                          </>
-                        )}
+                        {/* Lost leads section - Fixed height for alignment */}
+                        <div className="h-[32px] flex flex-col items-center justify-start mb-1">
+                          {index > 0 && (
+                            <>
+                              <div className="flex items-center gap-1 mb-1">
+                                <span className="text-red-500 text-[10px]">▼</span>
+                                <span className="text-[10px] text-red-600 font-semibold">{stage.lost || 0} LOST</span>
+                              </div>
+                              
+                              {/* Lost Percentage */}
+                              <div className="text-[10px] text-red-600 font-bold">
+                                {stage.lostPercent || 0}%
+                              </div>
+                            </>
+                          )}
+                        </div>
                         
-                        {/* Stage Label - Below everything */}
-                        <div className="text-[10px] text-gray-600 text-center leading-tight max-w-[100px]">
+                        {/* Stage Label - Fixed height for alignment */}
+                        <div className="h-[40px] flex items-center justify-center text-[10px] text-gray-600 text-center leading-tight max-w-[100px]">
                           {stage.name}
                         </div>
                       </div>
                     );
                   })}
                 </div>
-              </div>
-              <div className="text-xs text-gray-500 text-center mt-6 px-4 py-2 bg-blue-50 rounded-lg">
-                💡 <strong>Tip:</strong> Scroll horizontally to view all pipeline stages. Hover over stage names to see full text. Conversion rates show % of leads moving to the next stage.
               </div>
             </div>
           )}
@@ -1359,17 +1407,17 @@ const Metrics = () => {
 
       {/* Global Filters Panel */}
       {showFilters && (
-        <Card className="p-6 border-2 border-blue-100 bg-blue-50/30">
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card className="p-3 border border-blue-200 bg-blue-50/30">
+          <div className="space-y-2">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {/* Date Filters */}
-              <div className="space-y-3">
-                <h4 className="font-medium text-gray-700 flex items-center gap-2">
-                  <Calendar className="w-4 h-4" />
+              <div className="space-y-1">
+                <h4 className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
+                  <Calendar className="w-3 h-3" />
                   Date Range
                 </h4>
                 <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-                  <SelectTrigger>
+                  <SelectTrigger className="h-8 text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1382,9 +1430,9 @@ const Metrics = () => {
                 </Select>
                 
                 {selectedPeriod === 'Custom Range' && (
-                  <div className="space-y-2">
+                  <div className="space-y-1 mt-1">
                     <div>
-                      <Label className="text-sm text-gray-600">From Date</Label>
+                      <Label className="text-[10px] font-medium text-gray-600">From Date</Label>
                       <input
                         type="date"
                         value={customDateRange.from?.toISOString().split('T')[0] || ''}
@@ -1392,11 +1440,11 @@ const Metrics = () => {
                           ...prev, 
                           from: e.target.value ? new Date(e.target.value) : undefined 
                         }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        className="w-full px-2 py-1 border border-gray-300 rounded-md text-xs font-normal"
                       />
                     </div>
                     <div>
-                      <Label className="text-sm text-gray-600">To Date</Label>
+                      <Label className="text-[10px] font-medium text-gray-600">To Date</Label>
                       <input
                         type="date"
                         value={customDateRange.to?.toISOString().split('T')[0] || ''}
@@ -1404,7 +1452,7 @@ const Metrics = () => {
                           ...prev, 
                           to: e.target.value ? new Date(e.target.value) : undefined 
                         }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        className="w-full px-2 py-1 border border-gray-300 rounded-md text-xs font-normal"
                       />
                     </div>
                   </div>
@@ -1412,13 +1460,13 @@ const Metrics = () => {
               </div>
 
               {/* Source Filters */}
-              <div className="space-y-3">
-                <h4 className="font-medium text-gray-700 flex items-center gap-2">
-                  <Target className="w-4 h-4" />
+              <div className="space-y-1">
+                <h4 className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
+                  <Target className="w-3 h-3" />
                   Lead Sources
                 </h4>
                 <Select value={selectedSource} onValueChange={setSelectedSource}>
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger className="w-full h-8 text-xs">
                     <SelectValue placeholder="Select source" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1433,8 +1481,8 @@ const Metrics = () => {
               </div>
 
               {/* Clear All Button */}
-              <div className="space-y-3">
-                <h4 className="font-medium text-gray-700 opacity-0">Spacer</h4>
+              <div className="space-y-1">
+                <h4 className="text-xs font-semibold text-gray-700 opacity-0">Spacer</h4>
                 <Button
                   variant="default"
                   onClick={() => {
@@ -1442,26 +1490,26 @@ const Metrics = () => {
                     setCustomDateRange({});
                     setSelectedSource('all');
                   }}
-                  className="h-10 px-4 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-md hover:shadow-lg transition-all duration-200"
+                  className="h-8 px-3 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-xs font-medium shadow-sm hover:shadow-md transition-all duration-200"
                 >
-                  <X className="w-4 h-4 mr-2" />
-                  Clear All Filters
+                  <X className="w-3 h-3 mr-1.5" />
+                  Clear Filters
                 </Button>
               </div>
             </div>
             
             {/* Active Filters Summary */}
             {(selectedSource !== 'all' || selectedPeriod !== 'This Month') && (
-              <div className="mt-4 pt-4 border-t">
-                <div className="text-sm font-medium text-gray-700 mb-2">Active Filters:</div>
-                <div className="flex flex-wrap gap-2">
+              <div className="mt-2 pt-2 border-t border-blue-200">
+                <div className="text-xs font-semibold text-gray-700 mb-1">Active Filters:</div>
+                <div className="flex flex-wrap gap-1.5">
                   {selectedPeriod !== 'This Month' && (
-                    <Badge variant="secondary" className="text-xs">
+                    <Badge variant="secondary" className="text-[10px] font-medium px-1.5 py-0">
                       {selectedPeriod}
                     </Badge>
                   )}
                   {selectedSource !== 'all' && (
-                    <Badge variant="secondary" className="text-xs">
+                    <Badge variant="secondary" className="text-[10px] font-medium px-1.5 py-0">
                       Source: {selectedSource}
                     </Badge>
                   )}
@@ -1473,87 +1521,93 @@ const Metrics = () => {
       )}
 
       {/* Navigation Buttons */}
-      <div className="flex flex-wrap gap-2 mb-6">
-        <Button
-          onClick={() => setActiveTab("company")}
-          variant={activeTab === "company" ? "default" : "outline"}
-          className="flex items-center gap-2"
-        >
-          <BarChart3 className="w-4 h-4" />
-          Company Overview
-        </Button>
-        
-        <Button
-          onClick={() => setActiveTab("marketing")}
-          variant={activeTab === "marketing" ? "default" : "outline"}
-          className="flex items-center gap-2"
-        >
-          <Activity className="w-4 h-4" />
-          Marketing Overview
-        </Button>
-        
-        <Button
-          onClick={() => setActiveTab("pipeline")}
-          variant={activeTab === "pipeline" ? "default" : "outline"}
-          className="flex items-center gap-2"
-        >
-          <Target className="w-4 h-4" />
-          Pipeline Overview
-        </Button>
-        
-        <Button
-          onClick={() => setActiveTab("communications")}
-          variant={activeTab === "communications" ? "default" : "outline"}
-          className="flex items-center gap-2"
-        >
-          <Zap className="w-4 h-4" />
-          Communications View
-        </Button>
-        
-        <Button
-          onClick={() => setActiveTab("acquisitions")}
-          variant={activeTab === "acquisitions" ? "default" : "outline"}
-          className="flex items-center gap-2"
-        >
-          <Users className="w-4 h-4" />
-          Acquisitions Team
-        </Button>
-        
-        <Button
-          onClick={() => setActiveTab("dispositions-team")}
-          variant={activeTab === "dispositions-team" ? "default" : "outline"}
-          className="flex items-center gap-2"
-        >
-          <Users className="w-4 h-4" />
-          Dispositions Team
-        </Button>
-        
-        <Button
-          onClick={() => setActiveTab("transaction-coordinator")}
-          variant={activeTab === "transaction-coordinator" ? "default" : "outline"}
-          className="flex items-center gap-2"
-        >
-          <FileText className="w-4 h-4" />
-          Transaction Coordinator
-        </Button>
-        
-        <Button
-          onClick={() => setActiveTab("acquisitions-leaderboard")}
-          variant={activeTab === "acquisitions-leaderboard" ? "default" : "outline"}
-          className="flex items-center gap-2"
-        >
-          <Trophy className="w-4 h-4" />
-          Acquisitions Leaderboard
-        </Button>
-        
-        <Button
-          onClick={() => setActiveTab("dispositions-leaderboard")}
-          variant={activeTab === "dispositions-leaderboard" ? "default" : "outline"}
-          className="flex items-center gap-2"
-        >
-          <Award className="w-4 h-4" />
-          Dispositions Leaderboard
-        </Button>
+      <div className="space-y-2 mb-6">
+        {/* Top Row */}
+        <div className="flex flex-wrap gap-2">
+          <Button
+            onClick={() => setActiveTab("company")}
+            variant={activeTab === "company" ? "default" : "outline"}
+            className="flex items-center gap-2"
+          >
+            <BarChart3 className="w-4 h-4" />
+            Company Overview
+          </Button>
+          
+          <Button
+            onClick={() => setActiveTab("marketing")}
+            variant={activeTab === "marketing" ? "default" : "outline"}
+            className="flex items-center gap-2"
+          >
+            <Activity className="w-4 h-4" />
+            Marketing Overview
+          </Button>
+          
+          <Button
+            onClick={() => setActiveTab("pipeline")}
+            variant={activeTab === "pipeline" ? "default" : "outline"}
+            className="flex items-center gap-2"
+          >
+            <Target className="w-4 h-4" />
+            Pipeline Overview
+          </Button>
+          
+          <Button
+            onClick={() => setActiveTab("communications")}
+            variant={activeTab === "communications" ? "default" : "outline"}
+            className="flex items-center gap-2"
+          >
+            <Zap className="w-4 h-4" />
+            Communications Overview
+          </Button>
+        </div>
+
+        {/* Bottom Row */}
+        <div className="flex flex-wrap gap-2">
+          <Button
+            onClick={() => setActiveTab("acquisitions")}
+            variant={activeTab === "acquisitions" ? "default" : "outline"}
+            className="flex items-center gap-2"
+          >
+            <Users className="w-4 h-4" />
+            Acquisitions Team
+          </Button>
+          
+          <Button
+            onClick={() => setActiveTab("dispositions-team")}
+            variant={activeTab === "dispositions-team" ? "default" : "outline"}
+            className="flex items-center gap-2"
+          >
+            <Users className="w-4 h-4" />
+            Dispositions Team
+          </Button>
+          
+          <Button
+            onClick={() => setActiveTab("transaction-coordinator")}
+            variant={activeTab === "transaction-coordinator" ? "default" : "outline"}
+            className="flex items-center gap-2"
+          >
+            <FileText className="w-4 h-4" />
+            Transaction Coordinator
+          </Button>
+          
+          <Button
+            onClick={() => setActiveTab("acquisitions-leaderboard")}
+            variant={activeTab === "acquisitions-leaderboard" ? "default" : "outline"}
+            className="flex items-center gap-2"
+          >
+            <Trophy className="w-4 h-4" />
+            Acquisitions Leaderboard
+          </Button>
+          
+          <Button
+            onClick={() => setActiveTab("dispositions-leaderboard")}
+            variant={activeTab === "dispositions-leaderboard" ? "default" : "outline"}
+            className="flex items-center gap-2"
+          >
+            <Award className="w-4 h-4" />
+            Dispositions Leaderboard
+          </Button>
+        </div>
       </div>
 
       {/* Company Overview Tab */}
@@ -1913,60 +1967,319 @@ const Metrics = () => {
             </Card>
           ) : (
             <>
-          <div className="flex justify-between items-center">
-                <h2 className="text-xl font-semibold">Pipeline Overview</h2>
-                <div className="flex items-center space-x-4">
-                  {/* View Toggle */}
-                  <div className="flex bg-gray-100 rounded-lg p-1">
-                    <button
-                      onClick={() => setPipelineView('funnel')}
-                      className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                        pipelineView === 'funnel'
-                          ? 'bg-white text-gray-900 shadow-sm'
-                          : 'text-gray-600 hover:text-gray-900'
-                      }`}
-                    >
-                      Funnel View
-                    </button>
-                    <button
-                      onClick={() => setPipelineView('timeline')}
-                      className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                        pipelineView === 'timeline'
-                          ? 'bg-white text-gray-900 shadow-sm'
-                          : 'text-gray-600 hover:text-gray-900'
-                      }`}
-                    >
-                      Timeline View
-                    </button>
-                  </div>
-                  
-                  {/* Period Selector */}
-            <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-              <SelectTrigger className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="This Month">This Month</SelectItem>
-                <SelectItem value="Last Month">Last Month</SelectItem>
-                <SelectItem value="This Quarter">This Quarter</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="space-y-4">
+            {/* Pipeline Type Toggle */}
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-semibold">Pipeline Overview</h2>
+            </div>
+            
+            <div className="flex justify-between items-center">
+              {/* Pipeline Type Selector */}
+              <div className="flex bg-blue-100 rounded-lg p-1">
+                <button
+                  onClick={() => setPipelineType('acquisitions')}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                    pipelineType === 'acquisitions'
+                      ? 'bg-white text-blue-900 shadow-sm'
+                      : 'text-blue-700 hover:text-blue-900'
+                  }`}
+                >
+                  Acquisitions Pipeline
+                </button>
+                <button
+                  onClick={() => setPipelineType('dispositions')}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                    pipelineType === 'dispositions'
+                      ? 'bg-white text-blue-900 shadow-sm'
+                      : 'text-blue-700 hover:text-blue-900'
+                  }`}
+                >
+                  Dispositions Pipeline
+                </button>
+              </div>
+
+              <div className="flex items-center space-x-4">
+                {/* View Toggle */}
+                <div className="flex bg-gray-100 rounded-lg p-1">
+                  <button
+                    onClick={() => setPipelineView('funnel')}
+                    className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                      pipelineView === 'funnel'
+                        ? 'bg-white text-gray-900 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    Funnel View
+                  </button>
+                  <button
+                    onClick={() => setPipelineView('timeline')}
+                    className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                      pipelineView === 'timeline'
+                        ? 'bg-white text-gray-900 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    Timeline View
+                  </button>
                 </div>
+                
+                {/* Period Selector */}
+                <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="This Month">This Month</SelectItem>
+                    <SelectItem value="Last Month">Last Month</SelectItem>
+                    <SelectItem value="This Quarter">This Quarter</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </div>
 
-              {/* Conditional View Rendering */}
-              {pipelineView === 'funnel' ? (
+              {/* Conditional View Rendering Based on Pipeline Type */}
+              {pipelineType === 'acquisitions' ? (
                 <>
-                  {/* Enhanced Pipeline Funnel Chart */}
-                  <EnhancedPipelineFunnel selectedPeriod={selectedPeriod} />
-                  
-                  {/* Pipeline Table for additional details */}
-          <PipelineTable selectedPeriod={selectedPeriod} />
+                  {/* Acquisitions Pipeline */}
+                  {pipelineView === 'funnel' ? (
+                    <>
+                      {/* Enhanced Pipeline Funnel Chart */}
+                      <EnhancedPipelineFunnel selectedPeriod={selectedPeriod} />
+                      
+                      {/* Pipeline Table for additional details */}
+                      <PipelineTable selectedPeriod={selectedPeriod} />
+                    </>
+                  ) : (
+                    <>
+                      {/* Enhanced Timeline Chart */}
+                      <EnhancedPipelineTimeline selectedPeriod={selectedPeriod} />
+                    </>
+                  )}
                 </>
               ) : (
                 <>
-                  {/* Enhanced Timeline Chart */}
-                  <EnhancedPipelineTimeline selectedPeriod={selectedPeriod} />
+                  {/* Dispositions Pipeline */}
+                  {pipelineView === 'funnel' ? (
+                    <>
+                      {/* Dispositions Pipeline Funnel */}
+                      <Card className="p-6">
+                        <CardHeader>
+                          <CardTitle className="flex items-center space-x-2">
+                            <Target className="h-5 w-5" />
+                            <span>Dispositions Pipeline Funnel</span>
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          {dispPipelineLoading ? (
+                            <div className="text-center py-8">
+                              <div className="text-gray-500">Loading pipeline data...</div>
+                            </div>
+                          ) : dispPipelineFunnel && dispPipelineFunnel.stages ? (
+                            <div className="overflow-x-auto">
+                              <div className="min-w-[1000px] pb-4">
+                                <div className="flex items-end justify-evenly gap-6 px-4">
+                                  {dispPipelineFunnel.stages.map((stage: any, index: number) => {
+                                    const maxCount = Math.max(1, ...dispPipelineFunnel.stages.map((s: any) => s.count));
+                                    const height = (stage.count / maxCount) * 200;
+                                    const barWidth = 50;
+
+                                    return (
+                                      <div key={stage.stageId} className="flex flex-col items-center flex-1 max-w-[120px]">
+                                        {/* Count - Above bar */}
+                                        <div className="text-xl font-bold text-gray-900 mb-2">{stage.count}</div>
+                                        
+                                        {/* Bar Shape with white circle on top */}
+                                        <div className="relative flex flex-col items-center mb-2">
+                                          <div 
+                                            className={`${stage.stageColor || 'bg-gradient-to-b from-blue-400 to-blue-600'} relative transition-all duration-300 hover:opacity-90 shadow-lg rounded-t-lg rounded-b-sm`}
+                                            style={{ 
+                                              width: `${barWidth}px`, 
+                                              height: `${Math.max(80, height)}px`
+                                            }}
+                                          >
+                                            {/* White circle on top of bar */}
+                                            <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-white rounded-full border-2 border-gray-300 shadow-sm"></div>
+                                            
+                                            {/* Gradient overlay for better visual appeal */}
+                                            <div className="absolute inset-0 bg-gradient-to-b from-white/20 to-transparent rounded-t-lg rounded-b-sm" />
+                                          </div>
+                                        </div>
+                                        
+                                        {/* Conversion Rate Badge - Below bar */}
+                                        <div className="bg-gray-800 text-white text-[10px] font-bold px-2 py-1 rounded-full mb-1">
+                                          {stage.conversionRate}%
+                                        </div>
+                                        
+                                        {/* Stage Label - Fixed height for alignment */}
+                                        <div className="h-[40px] flex items-center justify-center text-[10px] text-gray-600 text-center leading-tight max-w-[100px]">
+                                          {stage.stageName}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-center py-8">
+                              <div className="text-gray-500">No pipeline data available</div>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+
+                      {/* Dispositions Pipeline Table */}
+                      <Card className="p-6">
+                        <CardHeader>
+                          <CardTitle className="flex items-center space-x-2">
+                            <BarChart3 className="h-5 w-5" />
+                            <span>Dispositions Pipeline Details</span>
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          {dispPipelineLoading ? (
+                            <div className="text-center py-8">
+                              <div className="text-gray-500">Loading pipeline data...</div>
+                            </div>
+                          ) : dispPipelineFunnel && dispPipelineFunnel.stages ? (
+                            <div className="overflow-x-auto">
+                              <table className="w-full">
+                                <thead className="bg-gray-50 border-b">
+                                  <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stage</th>
+                                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Count</th>
+                                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Conversion Rate</th>
+                                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Avg. Time in Stage</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                  {dispPipelineFunnel.stages.map((stage: any, index: number) => {
+                                    const isLastStage = index === dispPipelineFunnel.stages.length - 1;
+
+                                    return (
+                                      <tr key={stage.stageId} className="hover:bg-gray-50">
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                          <div className="flex items-center">
+                                            <span className={`w-3 h-3 ${stage.stageColor || 'bg-gray-500'} rounded-full mr-2`}></span>
+                                            <span className="text-sm font-medium text-gray-900">{stage.stageName}</span>
+                                          </div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-900">
+                                          {stage.count}
+                                        </td>
+                                        <td className={`px-6 py-4 whitespace-nowrap text-center text-sm ${isLastStage ? 'text-green-600 font-semibold' : 'text-gray-900'}`}>
+                                          {stage.conversionRate}%
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-500">
+                                          {stage.avgTimeInStage > 0 ? `${stage.avgTimeInStage} days` : '-'}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : (
+                            <div className="text-center py-8">
+                              <div className="text-gray-500">No pipeline data available</div>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </>
+                  ) : (
+                    <>
+                      {/* Dispositions Timeline View */}
+                      <Card className="p-6">
+                        <CardHeader>
+                          <CardTitle className="flex items-center space-x-2">
+                            <Clock className="h-5 w-5" />
+                            <span>Dispositions Timeline Metrics</span>
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          {dispPipelineLoading ? (
+                            <div className="text-center py-8">
+                              <div className="text-gray-500">Loading timeline data...</div>
+                            </div>
+                          ) : dispPipelineTimeline && dispPipelineTimeline.transitions ? (
+                            <div className="overflow-x-auto">
+                              <table className="w-full">
+                                <thead className="bg-gray-50 border-b">
+                                  <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                      <div className="flex items-center gap-2">
+                                        <Activity className="h-4 w-4" />
+                                        <span>Transition</span>
+                                      </div>
+                                    </th>
+                                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                      <div className="flex items-center justify-center gap-2">
+                                        <Clock className="h-4 w-4" />
+                                        <span>Average Time</span>
+                                      </div>
+                                    </th>
+                                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                      <div className="flex items-center justify-center gap-2">
+                                        <TrendingUp className="h-4 w-4" />
+                                        <span>Best Time</span>
+                                      </div>
+                                    </th>
+                                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                      <div className="flex items-center justify-center gap-2">
+                                        <TrendingDown className="h-4 w-4" />
+                                        <span>Worst Time</span>
+                                      </div>
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                  {dispPipelineTimeline.transitions.map((transition: any, index: number) => (
+                                    <tr key={index} className="hover:bg-gray-50">
+                                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                        {transition.fromStage} → {transition.toStage}
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-900">
+                                        {transition.avgTime > 0 ? `${transition.avgTime} days` : '-'}
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-green-600">
+                                        {transition.bestTime > 0 ? `${transition.bestTime} days` : '-'}
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-red-600">
+                                        {transition.worstTime > 0 ? `${transition.worstTime} days` : '-'}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                  {dispPipelineTimeline.totalPipelineTime && (
+                                    <tr className="hover:bg-gray-50 bg-blue-50">
+                                      <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 flex items-center gap-2">
+                                        <Target className="h-4 w-4" />
+                                        <span>Total: {dispPipelineTimeline.totalPipelineTime.fromStage} → {dispPipelineTimeline.totalPipelineTime.toStage}</span>
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-bold text-gray-900">
+                                        {dispPipelineTimeline.totalPipelineTime.avgTime > 0 ? `${dispPipelineTimeline.totalPipelineTime.avgTime} days` : '-'}
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-bold text-green-600">
+                                        {dispPipelineTimeline.totalPipelineTime.bestTime > 0 ? `${dispPipelineTimeline.totalPipelineTime.bestTime} days` : '-'}
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-bold text-red-600">
+                                        {dispPipelineTimeline.totalPipelineTime.worstTime > 0 ? `${dispPipelineTimeline.totalPipelineTime.worstTime} days` : '-'}
+                                      </td>
+                                    </tr>
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : (
+                            <div className="text-center py-8">
+                              <div className="text-gray-500">No timeline data available</div>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </>
+                  )}
                 </>
               )}
             </>
@@ -1974,7 +2287,7 @@ const Metrics = () => {
         </div>
       )}
 
-      {/* Communications View Tab */}
+      {/* Communications Overview Tab */}
       {activeTab === "communications" && (
         <div className="space-y-6">
           {/* Header with Role-Based View Selector */}
@@ -2858,7 +3171,7 @@ const Metrics = () => {
               </div>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Total Properties in Pipeline */}
             <Card className="p-6 text-center bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
               <div className="space-y-4">
@@ -2931,44 +3244,6 @@ const Metrics = () => {
                   <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Total Properties Sold</h3>
                   <p className="text-lg font-bold text-gray-900">{dispClosed}</p>
                   <p className="text-xs text-gray-500">Closed this period</p>
-                </div>
-              </div>
-            </Card>
-
-            {/* Percentage of Properties Sold */}
-            <Card className="p-6 text-center bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-              <div className="space-y-4">
-                <div className="relative w-24 h-24 mx-auto">
-                  <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 100 100">
-                    <circle
-                      cx="50"
-                      cy="50"
-                      r="40"
-                      stroke="currentColor"
-                      strokeWidth="8"
-                      fill="transparent"
-                      className="text-gray-200"
-                    />
-                    <circle
-                      cx="50"
-                      cy="50"
-                      r="40"
-                      stroke="currentColor"
-                      strokeWidth="8"
-                      fill="transparent"
-                      strokeDasharray={`${(25/25) * 251.2} 251.2`}
-                      className="text-purple-500"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-xl font-bold text-gray-900">100%</span>
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Percentage of Properties Sold</h3>
-                  <p className="text-lg font-bold text-gray-900">25% of 25%</p>
-                  <p className="text-xs text-gray-500">Sales conversion rate</p>
                 </div>
               </div>
             </Card>

@@ -772,15 +772,6 @@ const Leads = () => {
     }
   };
 
-  const getMotivationColor = (motivation: string) => {
-    switch (motivation?.toLowerCase()) {
-      case 'very high': return 'bg-red-100 text-red-700 border-red-200';
-      case 'high': return 'bg-orange-100 text-orange-700 border-orange-200';
-      case 'medium': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-      case 'low': return 'bg-gray-100 text-gray-700 border-gray-200';
-      default: return 'bg-gray-100 text-gray-700 border-gray-200';
-    }
-  };
 
   const getRatingStars = (rating: number) => {
     return Array.from({ length: 5 }, (_, i) => (
@@ -805,26 +796,13 @@ const Leads = () => {
 
         {/* Collapsible Filters */}
         {showFilters && (
-          <div className="bg-white border-b border-gray-200 px-6 py-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Search Filter */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Search</label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                  <Input
-                    placeholder="Name, phone, email, address..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 h-9 border-gray-300 focus:border-blue-500 focus:ring-blue-500/20"
-                  />
-                </div>
-              </div>
+          <div className="bg-white border-b border-gray-200 px-6 py-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
               {/* Market Filter */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Market</label>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-700">Market</label>
                 <select 
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                   value={selectedMarket}
                   onChange={(e) => setSelectedMarket(e.target.value)}
                   disabled={loadingFilters}
@@ -839,10 +817,10 @@ const Leads = () => {
               </div>
 
               {/* Status Filter */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Lead Status</label>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-700">Lead Status</label>
                 <select 
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                   value={selectedStatus}
                   onChange={(e) => setSelectedStatus(e.target.value)}
                   disabled={loadingFilters}
@@ -857,10 +835,10 @@ const Leads = () => {
               </div>
 
               {/* Pipeline Status Filter */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Pipeline Status</label>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-700">Pipeline Status</label>
                 <select 
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                   value={selectedPipelineStatus}
                   onChange={(e) => setSelectedPipelineStatus(e.target.value)}
                   disabled={loadingFilters}
@@ -875,10 +853,10 @@ const Leads = () => {
               </div>
 
               {/* Date Range Filter */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Date Range</label>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-700">Date Range</label>
                 <select 
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                   value={selectedDateRange}
                   onChange={(e) => setSelectedDateRange(e.target.value)}
                 >
@@ -1135,20 +1113,10 @@ const Leads = () => {
                     <DropdownMenuItem onClick={() => handleSort('updatedAt')}>
                       Sort by Last Contact
                     </DropdownMenuItem>
-                    {activeTab === 'SELLER' && (
-                      <DropdownMenuItem onClick={() => handleSort('motivation')}>
-                        Sort by Motivation
-                      </DropdownMenuItem>
-                    )}
                     {activeTab === 'BUYER' && (
-                      <>
-                        <DropdownMenuItem onClick={() => handleSort('priceRange')}>
-                          Sort by Price Range
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleSort('motivation')}>
-                          Sort by Motivation
-                        </DropdownMenuItem>
-                      </>
+                      <DropdownMenuItem onClick={() => handleSort('priceRange')}>
+                        Sort by Price Range
+                      </DropdownMenuItem>
                     )}
                     {activeTab === 'VENDOR' && (
                       <>
@@ -1303,9 +1271,6 @@ const Leads = () => {
                       <SortableTableHeader sortKey="email" sortConfig={sortConfig} onSort={handleSort} className="min-w-[150px]">
                         Contact Info
                       </SortableTableHeader>
-                      <SortableTableHeader sortKey="motivation" sortConfig={sortConfig} onSort={handleSort} className="min-w-[70px]">
-                        Motivation
-                      </SortableTableHeader>
                       <SortableTableHeader sortKey="status" sortConfig={sortConfig} onSort={handleSort} className="min-w-[90px]">
                         Lead Status
                       </SortableTableHeader>
@@ -1366,11 +1331,6 @@ const Leads = () => {
                             <Mail className="w-2.5 h-2.5 flex-shrink-0" />
                             <span className="truncate">{lead.seller?.email || 'N/A'}</span>
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={`border text-[10px] px-1.5 py-0 ${getMotivationColor(lead.seller?.motivation || 'Medium')}`}>
-                            {lead.seller?.motivation || 'Medium'}
-                          </Badge>
                         </TableCell>
                         <TableCell>
                           {lead.leadStatus ? (
@@ -1444,7 +1404,6 @@ const Leads = () => {
                       <TableHead className="min-w-[60px]">Purchased</TableHead>
                       <TableHead className="min-w-[70px]">Credit</TableHead>
                       <TableHead className="min-w-[70px]">Pre-Appr</TableHead>
-                      <TableHead className="min-w-[70px]">Motivation</TableHead>
                       <TableHead className="min-w-[70px]">Timeline</TableHead>
                       <TableHead className="min-w-[80px]">Assigned</TableHead>
                       <TableHead className="min-w-[80px]">Last Contact</TableHead>
@@ -1524,19 +1483,6 @@ const Leads = () => {
                             <Badge className="bg-green-100 text-green-700 text-[10px] px-1.5 py-0">✓</Badge>
                           ) : (
                             <Badge className="bg-gray-100 text-gray-500 text-[10px] px-1.5 py-0">No</Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {lead.buyer?.motivation ? (
-                            <Badge className={`border text-[10px] px-1.5 py-0 ${
-                              lead.buyer.motivation === 'High' ? 'border-red-300 bg-red-50 text-red-700' :
-                              lead.buyer.motivation === 'Medium' ? 'border-yellow-300 bg-yellow-50 text-yellow-700' :
-                              'border-gray-300 bg-gray-50 text-gray-700'
-                            }`}>
-                              {lead.buyer.motivation}
-                            </Badge>
-                          ) : (
-                            <span className="text-gray-400">-</span>
                           )}
                         </TableCell>
                         <TableCell className="text-center text-gray-600">

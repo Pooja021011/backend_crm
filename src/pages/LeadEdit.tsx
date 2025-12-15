@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import {
   Home,
   User,
@@ -30,14 +31,22 @@ import {
   Trash,
   Trash2,
   DollarSign,
-  Wrench
+  Wrench,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
 import { API_BASE, makeApiCall } from '@/config/api';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { CompsManager } from '@/components/CompsManager';
-import { UnderwritingCalculator } from '@/components/UnderwritingCalculator';
 import { LeadTimeline } from '@/components/LeadTimeline';
+import { UnderwritingCalculator } from '@/components/UnderwritingCalculator';
+import { LeadOwnerSection } from '@/components/LeadOwnerSection';
+import { PropertyInfoCard } from '@/components/PropertyInfoCard';
+import { RehabBudgetCalculatorCompact } from '@/components/RehabBudgetCalculatorCompact';
+import { UnderwritingSectionCompact } from '@/components/UnderwritingSectionCompact';
+import { ProjectionsSection } from '@/components/ProjectionsSection';
 
 interface Contact {
   id?: string;
@@ -83,6 +92,7 @@ const LeadEdit: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user } = useAuth();
   
   const [lead, setLead] = useState<LeadData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -93,6 +103,26 @@ const LeadEdit: React.FC = () => {
   const [pipelineStages, setPipelineStages] = useState<any[]>([]);
   const [leadSources, setLeadSources] = useState<any[]>([]);
   const [leadStatuses, setLeadStatuses] = useState<any[]>([]);
+  
+  // Permission state
+  const [canEditLead, setCanEditLead] = useState(false);
+  const [canViewLead, setCanViewLead] = useState(false);
+  const [hasTaskAccess, setHasTaskAccess] = useState(false);
+  const [accessReason, setAccessReason] = useState('');
+  
+  // Task management state
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
+  const [showTaskDialog, setShowTaskDialog] = useState(false);
+  const [editingTask, setEditingTask] = useState<any>(null);
+  const [taskForm, setTaskForm] = useState({
+    title: '',
+    description: '',
+    dueAt: '',
+    assignedToId: ''
+  });
+  const [savingTask, setSavingTask] = useState(false);
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   
   // Editable fields
   const [leadSource, setLeadSource] = useState('');
@@ -186,7 +216,15 @@ const LeadEdit: React.FC = () => {
     loadDeal();
     loadBuyerOffers();
     loadBuyers();
+    loadTasks();
   }, [id]);
+
+  // Check permissions after lead and tasks are loaded
+  useEffect(() => {
+    if (lead && !loading && !loadingTasks) {
+      checkUserPermissions();
+    }
+  }, [lead, tasks, user, loading, loadingTasks]);
 
   const loadLead = async () => {
     try {
@@ -355,6 +393,230 @@ const LeadEdit: React.FC = () => {
     }
   };
 
+  // Permission Check Function
+  const checkUserPermissions = () => {
+    if (!lead || !user) {
+      setCanViewLead(false);
+      setCanEditLead(false);
+      setHasTaskAccess(false);
+      return;
+    }
+    
+    // Check if user is lead owner/assigned
+    const isLeadOwner = lead.assignedUserId === user.id;
+    const isLeadCreator = (lead as any).createdById === user.id;
+    
+    // Check if user has any tasks assigned for this lead
+    const hasAssignedTask = tasks.some(task => task.assignedToId === user.id);
+    const assignedTaskTitle = tasks.find(t => t.assignedToId === user.id)?.title;
+    
+    // Check if user is admin/manager
+    const isAdmin = user.roles?.includes('ADMIN');
+    const isManager = user.roles?.includes('MANAGER');
+    
+    // Determine permissions
+    if (isAdmin || isManager) {
+      setCanEditLead(true);
+      setCanViewLead(true);
+      setHasTaskAccess(true);
+      setAccessReason('Admin/Manager access');
+    } else if (isLeadOwner || isLeadCreator) {
+      setCanEditLead(true);
+      setCanViewLead(true);
+      setHasTaskAccess(true);
+      setAccessReason('Lead owner');
+    } else if (hasAssignedTask) {
+      setCanEditLead(false); // Cannot edit lead details
+      setCanViewLead(true);  // Can view lead
+      setHasTaskAccess(true); // Can complete tasks
+      setAccessReason(`Task assigned: ${assignedTaskTitle || 'View only'}`);
+    } else {
+      // No access at all
+      setCanEditLead(false);
+      setCanViewLead(false);
+      setHasTaskAccess(false);
+      setAccessReason('No access');
+      
+      // Redirect to leads page
+      toast({
+        title: "Access Denied",
+        description: "You don't have permission to view this lead",
+        variant: "destructive"
+      });
+      setTimeout(() => navigate('/leads'), 1000);
+    }
+  };
+
+  // Task Management Functions
+  const loadTasks = async () => {
+    if (!id) return;
+    setLoadingTasks(true);
+    try {
+      const response = await makeApiCall(`${API_BASE}/leads/${id}/tasks`);
+      if (response.ok) {
+        const data = await response.json();
+        setTasks(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error loading tasks:', error);
+    } finally {
+      setLoadingTasks(false);
+    }
+  };
+
+  const openTaskDialog = (task?: any) => {
+    if (task) {
+      setEditingTask(task);
+      setTaskForm({
+        title: task.title || '',
+        description: task.description || '',
+        dueAt: task.dueAt ? new Date(task.dueAt).toISOString().slice(0, 16) : '',
+        assignedToId: task.assignedToId || ''
+      });
+    } else {
+      setEditingTask(null);
+      setTaskForm({
+        title: '',
+        description: '',
+        dueAt: '',
+        assignedToId: ''
+      });
+    }
+    setShowTaskDialog(true);
+  };
+
+  const closeTaskDialog = () => {
+    setShowTaskDialog(false);
+    setEditingTask(null);
+    setTaskForm({
+      title: '',
+      description: '',
+      dueAt: '',
+      assignedToId: ''
+    });
+  };
+
+  const handleTaskSubmit = async () => {
+    if (!taskForm.title || !taskForm.dueAt) {
+      toast({
+        title: "Validation Error",
+        description: "Title and due date are required",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setSavingTask(true);
+    try {
+      const taskData = {
+        title: taskForm.title,
+        description: taskForm.description || undefined,
+        dueAt: new Date(taskForm.dueAt).toISOString(),
+        assignedToId: taskForm.assignedToId || undefined
+      };
+
+      if (editingTask) {
+        // Update existing task
+        const response = await makeApiCall(`${API_BASE}/leads/${id}/tasks/${editingTask.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(taskData)
+        });
+
+        if (response.ok) {
+          toast({
+            title: "Task Updated",
+            description: "Task has been updated successfully"
+          });
+          await loadTasks();
+          closeTaskDialog();
+        } else {
+          throw new Error('Failed to update task');
+        }
+      } else {
+        // Create new task
+        const response = await makeApiCall(`${API_BASE}/leads/${id}/tasks`, {
+          method: 'POST',
+          body: JSON.stringify(taskData)
+        });
+
+        if (response.ok) {
+          toast({
+            title: "Task Created",
+            description: "New task has been created successfully"
+          });
+          await loadTasks();
+          closeTaskDialog();
+        } else {
+          throw new Error('Failed to create task');
+        }
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save task",
+        variant: "destructive"
+      });
+    } finally {
+      setSavingTask(false);
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    if (!confirm('Are you sure you want to delete this task?')) return;
+
+    setDeletingTaskId(taskId);
+    try {
+      const response = await makeApiCall(`${API_BASE}/leads/${id}/tasks/${taskId}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        toast({
+          title: "Task Deleted",
+          description: "Task has been deleted successfully"
+        });
+        await loadTasks();
+      } else {
+        throw new Error('Failed to delete task');
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete task",
+        variant: "destructive"
+      });
+    } finally {
+      setDeletingTaskId(null);
+    }
+  };
+
+  const handleToggleTaskStatus = async (task: any) => {
+    const newStatus = task.status === 'OPEN' ? 'DONE' : 'OPEN';
+    
+    try {
+      const response = await makeApiCall(`${API_BASE}/leads/${id}/tasks/${task.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: newStatus })
+      });
+
+      if (response.ok) {
+        toast({
+          title: newStatus === 'DONE' ? "Task Completed" : "Task Reopened",
+          description: `Task marked as ${newStatus.toLowerCase()}`
+        });
+        await loadTasks();
+      } else {
+        throw new Error('Failed to update task status');
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update task status",
+        variant: "destructive"
+      });
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -459,10 +721,62 @@ const LeadEdit: React.FC = () => {
   };
 
   const saveContacts = async () => {
-    // This would need a proper API endpoint to save contacts
-    // For now, we'll log it
-    console.log('Contacts to save:', contacts);
-    // TODO: Implement contact save API call when endpoint is available
+    if (contacts.length === 0) return;
+    
+    try {
+      // Get the first contact (primary contact)
+      const primaryContact = contacts[0];
+      if (!primaryContact) return;
+      
+      // Prepare the update based on lead type
+      const contactUpdate: any = {};
+      
+      if (lead?.leadType === 'SELLER' && lead?.seller) {
+        contactUpdate.seller = {
+          firstName: primaryContact.name.split(' ')[0] || primaryContact.name,
+          lastName: primaryContact.name.split(' ').slice(1).join(' ') || '',
+          phone: primaryContact.phone,
+          email: primaryContact.email,
+          motivation: lead.seller.motivation,
+          notes: lead.seller.notes
+        };
+      } else if (lead?.leadType === 'BUYER' && lead?.buyer) {
+        contactUpdate.buyer = {
+          firstName: primaryContact.name.split(' ')[0] || primaryContact.name,
+          lastName: primaryContact.name.split(' ').slice(1).join(' ') || '',
+          phone: primaryContact.phone,
+          email: primaryContact.email,
+          vip: lead.buyer.vip,
+          blacklisted: lead.buyer.blacklisted
+        };
+      } else if (lead?.leadType === 'VENDOR' && lead?.vendor) {
+        contactUpdate.vendor = {
+          firstName: primaryContact.name.split(' ')[0] || primaryContact.name,
+          lastName: primaryContact.name.split(' ').slice(1).join(' ') || '',
+          phone: primaryContact.phone,
+          email: primaryContact.email,
+          companyName: lead.vendor.companyName,
+          serviceType: lead.vendor.serviceType
+        };
+      }
+      
+      if (Object.keys(contactUpdate).length > 0) {
+        const response = await makeApiCall(`${API_BASE}/leads/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(contactUpdate)
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to save contact information');
+        }
+        
+        console.log('✅ Contact information saved successfully');
+      }
+    } catch (error) {
+      console.error('Error saving contacts:', error);
+      throw error; // Re-throw to be caught by handleSave
+    }
   };
 
   // Helper function to track price changes
@@ -950,11 +1264,28 @@ const LeadEdit: React.FC = () => {
             <ArrowLeft className="w-3 h-3 mr-1" />
             Back
           </Button>
-          <Button size="sm" onClick={handleSave} disabled={saving}>
+          <Button size="sm" onClick={handleSave} disabled={saving || !canEditLead}>
             <Save className="w-3 h-3 mr-1" />
             {saving ? 'Saving...' : 'Save'}
           </Button>
         </div>
+
+        {/* Access Information Banner */}
+        {canViewLead && !canEditLead && (
+          <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-yellow-800">
+                  Limited Access - Task Assignment
+                </p>
+                <p className="text-xs text-yellow-700 mt-1">
+                  {accessReason}. You can view lead details and complete your assigned tasks, but cannot edit lead information.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Top Section - Address, Owner, and Lead Info Combined */}
         <div className="border border-slate-200 rounded-lg bg-white p-3">
@@ -981,7 +1312,7 @@ const LeadEdit: React.FC = () => {
             {/* Lead Source */}
             <div className="col-span-1">
               <Label className="text-[10px] text-slate-500">Source</Label>
-              <Select value={leadSource} onValueChange={setLeadSource}>
+              <Select value={leadSource} onValueChange={setLeadSource} disabled={!canEditLead}>
                 <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Source" /></SelectTrigger>
                 <SelectContent>
                   {leadSources.length > 0 ? leadSources.map((source) => (<SelectItem key={source.id} value={source.name}>{source.name}</SelectItem>)) : (<><SelectItem value="Cold Call">Cold Call</SelectItem><SelectItem value="SMS">SMS</SelectItem><SelectItem value="Mailer">Mailer</SelectItem><SelectItem value="Online">Online</SelectItem><SelectItem value="Other">Other</SelectItem></>)}
@@ -991,7 +1322,7 @@ const LeadEdit: React.FC = () => {
             {/* Lead Status */}
             <div className="col-span-2">
               <Label className="text-[10px] text-slate-500">Status</Label>
-              <Select value={leadStatus} onValueChange={setLeadStatus}>
+              <Select value={leadStatus} onValueChange={setLeadStatus} disabled={!canEditLead}>
                 <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
                 <SelectContent>
                   {leadStatuses.length > 0 ? leadStatuses.map((status) => (<SelectItem key={status.id} value={status.id}>{status.name}</SelectItem>)) : (<><SelectItem value="Pipeline">Pipeline</SelectItem><SelectItem value="Follow Up">Follow Up</SelectItem><SelectItem value="Closed">Closed</SelectItem><SelectItem value="Dead">Dead</SelectItem></>)}
@@ -1001,7 +1332,7 @@ const LeadEdit: React.FC = () => {
             {/* Pipeline Status */}
             <div className="col-span-2">
               <Label className="text-[10px] text-slate-500">Pipeline</Label>
-              <Select value={pipelineStatus} onValueChange={setPipelineStatus}>
+              <Select value={pipelineStatus} onValueChange={setPipelineStatus} disabled={!canEditLead}>
                 <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Stage" /></SelectTrigger>
                 <SelectContent>{pipelineStages.map((stage) => (<SelectItem key={stage.id} value={stage.id}>{stage.name}</SelectItem>))}</SelectContent>
               </Select>
@@ -1010,14 +1341,14 @@ const LeadEdit: React.FC = () => {
             <div className="col-span-2">
               <Label className="text-[10px] text-slate-500">ACQ / DISP Agent</Label>
               <div className="flex gap-1">
-                <Select value={acquisitionsAgent || 'unassigned'} onValueChange={(value) => setAcquisitionsAgent(value === 'unassigned' ? '' : value)}>
+                <Select value={acquisitionsAgent || 'unassigned'} onValueChange={(value) => setAcquisitionsAgent(value === 'unassigned' ? '' : value)} disabled={!canEditLead}>
                   <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="ACQ" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="unassigned">None</SelectItem>
                     {agents.filter(a => { const roles = Array.isArray(a.roles) ? a.roles : []; return roles.includes('ACQ') || roles.some((r: any) => r.role?.name === 'ACQ' || r.name === 'ACQ'); }).map((agent) => (<SelectItem key={agent.id} value={agent.id}>{agent.firstName}</SelectItem>))}
                   </SelectContent>
                 </Select>
-                <Select value={dispositionsAgent || 'unassigned'} onValueChange={(value) => setDispositionsAgent(value === 'unassigned' ? '' : value)}>
+                <Select value={dispositionsAgent || 'unassigned'} onValueChange={(value) => setDispositionsAgent(value === 'unassigned' ? '' : value)} disabled={!canEditLead}>
                   <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="DISP" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="unassigned">None</SelectItem>
@@ -1234,7 +1565,57 @@ const LeadEdit: React.FC = () => {
                   )}
                 </div>
 
-                {/* Comp Information */}
+                {/* Underwriting Information - ORIGINAL (Keep visible) */}
+                <UnderwritingCalculator leadId={id!} />
+
+                {/* ========== NEW FEATURES - HIDDEN (Uncomment to enable) ========== */}
+                
+                {/* Lead Owners Section - NEW */}
+                {/* <LeadOwnerSection leadId={id!} readOnly={false} /> */}
+
+                {/* Property Information Card - NEW */}
+                {/* <PropertyInfoCard 
+                  property={{
+                    address: lead?.address?.address1,
+                    city: lead?.address?.city,
+                    state: lead?.address?.state,
+                    zipCode: lead?.address?.zipCode,
+                    propertyType: propertyType,
+                    sqft: parseInt(sqft) || undefined,
+                    bedrooms: parseInt(bedrooms) || undefined,
+                    bathrooms: parseFloat(bathrooms) || undefined,
+                    yearBuilt: parseInt(yearBuilt) || undefined,
+                    lotSize: lotSize ? parseFloat(lotSize) : undefined,
+                    estimatedValue: parseInt(estimatedValue) || undefined,
+                    purchasePrice: parseInt(askingPrice) || undefined
+                  }}
+                /> */}
+
+                {/* Rehab Budget Calculator - NEW */}
+                {/* <RehabBudgetCalculatorCompact 
+                  leadId={id!}
+                  sqft={parseInt(sqft) || 0}
+                  bathrooms={parseInt(bathrooms) || 1}
+                  readOnly={false}
+                /> */}
+
+                {/* Underwriting Section - NEW */}
+                {/* <UnderwritingSectionCompact 
+                  leadId={id!}
+                  rehabCost={0}
+                  readOnly={false}
+                /> */}
+
+                {/* Projections Section - NEW */}
+                {/* <ProjectionsSection 
+                  leadId={id!}
+                  purchasePrice={parseInt(askingPrice) || 0}
+                  rehabCost={0}
+                  arv={parseInt(estimatedValue) || 0}
+                  readOnly={false}
+                /> */}
+
+                {/* Comp Information - ORIGINAL (Keep visible) */}
                 <CompsManager 
                   leadId={id!} 
                   leadAddress={lead?.address ? {
@@ -1244,9 +1625,6 @@ const LeadEdit: React.FC = () => {
                     zip: lead.address.zip
                   } : undefined}
                 />
-
-                {/* Underwriting Information */}
-                <UnderwritingCalculator leadId={id!} />
               </TabsContent>
 
               {/* Transactions Tab */}
@@ -1407,11 +1785,123 @@ const LeadEdit: React.FC = () => {
               </div>
               {/* Tasks */}
               <div className="mb-2">
-                <div className="flex items-center gap-1 mb-1">
-                  <CheckSquare className="w-2.5 h-2.5 text-slate-500" />
-                  <span className="text-[10px] font-medium text-slate-600">Tasks</span>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-1">
+                    <CheckSquare className="w-2.5 h-2.5 text-slate-500" />
+                    <span className="text-[10px] font-medium text-slate-600">Tasks ({tasks.length})</span>
+                  </div>
+                  {/* Only show Add Task if can edit lead OR is admin/manager */}
+                  {(canEditLead || user?.roles?.includes('ADMIN') || user?.roles?.includes('MANAGER')) && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => openTaskDialog()}
+                      className="h-5 px-1.5 text-[10px]"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </Button>
+                  )}
                 </div>
-                <div className="p-1.5 bg-slate-50 rounded text-[10px] text-slate-500">No tasks</div>
+                
+                {loadingTasks ? (
+                  <div className="p-1.5 bg-slate-50 rounded text-[10px] text-slate-500 flex items-center justify-center">
+                    <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                    Loading...
+                  </div>
+                ) : tasks.length === 0 ? (
+                  <div className="p-1.5 bg-slate-50 rounded text-[10px] text-slate-500">
+                    No tasks yet
+                  </div>
+                ) : (
+                  <div className="space-y-1 max-h-48 overflow-y-auto">
+                    {tasks.map((task) => {
+                      const isOverdue = new Date(task.dueAt) < new Date() && task.status === 'OPEN';
+                      const assignedUser = agents.find(a => a.id === task.assignedToId);
+                      const isMyTask = task.assignedToId === user?.id;
+                      const canToggleTask = hasTaskAccess && (isMyTask || canEditLead);
+                      const canEditTask = canEditLead || isMyTask;
+                      
+                      return (
+                        <div
+                          key={task.id}
+                          className={`p-1.5 rounded text-[10px] border ${
+                            task.status === 'DONE'
+                              ? 'bg-green-50 border-green-200'
+                              : isOverdue
+                              ? 'bg-red-50 border-red-200'
+                              : 'bg-slate-50 border-slate-200'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-1 mb-0.5">
+                            <div className="flex items-start gap-1 flex-1 min-w-0">
+                              <button
+                                onClick={() => handleToggleTaskStatus(task)}
+                                disabled={!canToggleTask}
+                                className={`flex-shrink-0 mt-0.5 ${!canToggleTask ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                title={!canToggleTask ? 'Only task assignee or lead owner can toggle status' : ''}
+                              >
+                                {task.status === 'DONE' ? (
+                                  <CheckSquare className="w-3 h-3 text-green-600 fill-green-600" />
+                                ) : (
+                                  <CheckSquare className="w-3 h-3 text-slate-400" />
+                                )}
+                              </button>
+                              <div className="flex-1 min-w-0">
+                                <p className={`font-medium break-words ${
+                                  task.status === 'DONE' ? 'line-through text-slate-500' : 'text-slate-700'
+                                }`}>
+                                  {task.title}
+                                  {isMyTask && <span className="ml-1 text-[8px] bg-purple-100 text-purple-700 px-1 py-0.5 rounded">Your Task</span>}
+                                </p>
+                                {task.description && (
+                                  <p className="text-slate-600 line-clamp-2 mt-0.5">
+                                    {task.description}
+                                  </p>
+                                )}
+                                <div className="flex items-center gap-2 mt-0.5 text-[9px] text-slate-500">
+                                  <span className={isOverdue ? 'text-red-600 font-medium' : ''}>
+                                    <Calendar className="w-2.5 h-2.5 inline mr-0.5" />
+                                    {new Date(task.dueAt).toLocaleDateString()}
+                                  </span>
+                                  {assignedUser && (
+                                    <span>
+                                      <User className="w-2.5 h-2.5 inline mr-0.5" />
+                                      {assignedUser.firstName}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            {/* Show edit/delete only if can edit lead or is task assignee */}
+                            {canEditTask && (
+                              <div className="flex gap-0.5 flex-shrink-0">
+                                <button
+                                  onClick={() => openTaskDialog(task)}
+                                  className="p-0.5 hover:bg-slate-200 rounded"
+                                  title="Edit"
+                                >
+                                  <Edit2 className="w-2.5 h-2.5 text-slate-500" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteTask(task.id)}
+                                  disabled={deletingTaskId === task.id}
+                                  className="p-0.5 hover:bg-red-100 rounded"
+                                  title="Delete"
+                                >
+                                  {deletingTaskId === task.id ? (
+                                    <Loader2 className="w-2.5 h-2.5 text-red-500 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="w-2.5 h-2.5 text-red-500" />
+                                  )}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
               {/* Timeline */}
               <div className="mb-2">
@@ -1442,6 +1932,104 @@ const LeadEdit: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Task Dialog */}
+      <Dialog open={showTaskDialog} onOpenChange={setShowTaskDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckSquare className="w-5 h-5 text-purple-600" />
+              {editingTask ? 'Edit Task' : 'Create New Task'}
+            </DialogTitle>
+            <DialogDescription>
+              {editingTask ? 'Update task details below.' : 'Create a new task for this lead.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="task-title">Title *</Label>
+              <Input
+                id="task-title"
+                placeholder="Enter task title..."
+                value={taskForm.title}
+                onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })}
+                disabled={savingTask}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="task-description">Description</Label>
+              <Textarea
+                id="task-description"
+                placeholder="Enter task description..."
+                value={taskForm.description}
+                onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })}
+                disabled={savingTask}
+                rows={3}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="task-due-date">Due Date *</Label>
+              <Input
+                id="task-due-date"
+                type="datetime-local"
+                value={taskForm.dueAt}
+                onChange={(e) => setTaskForm({ ...taskForm, dueAt: e.target.value })}
+                disabled={savingTask}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="task-assignee">Assign To</Label>
+              <Select
+                value={taskForm.assignedToId || undefined}
+                onValueChange={(value) => setTaskForm({ ...taskForm, assignedToId: value })}
+                disabled={savingTask}
+              >
+                <SelectTrigger id="task-assignee">
+                  <SelectValue placeholder="Select team member (optional)..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {agents.map((agent) => (
+                    <SelectItem key={agent.id} value={agent.id}>
+                      {agent.firstName} {agent.lastName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={closeTaskDialog}
+              disabled={savingTask}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleTaskSubmit}
+              disabled={savingTask || !taskForm.title || !taskForm.dueAt}
+              className="bg-purple-600 hover:bg-purple-700"
+            >
+              {savingTask ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 mr-2" />
+                  {editingTask ? 'Update Task' : 'Create Task'}
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 };
