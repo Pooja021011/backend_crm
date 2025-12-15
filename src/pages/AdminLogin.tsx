@@ -117,6 +117,7 @@ const AdminLogin = () => {
               
               <button
                 type="button"
+                onClick={() => navigate('/forgot-password')}
                 className="text-sm text-primary hover:text-primary-light transition-colors font-medium"
               >
                 Forgot password?

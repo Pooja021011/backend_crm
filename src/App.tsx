@@ -13,6 +13,8 @@ import Pipeline from "./pages/Pipeline";
 import Metrics from "./pages/Metrics";
 import Settings from "./pages/Settings";
 import AdminLogin from "./pages/AdminLogin";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 import ConceptDemo from "./pages/ConceptDemo";
 import AddSellerLead from "./pages/AddSellerLead";
@@ -32,6 +34,8 @@ const App = () => (
         <AuthProvider>
           <Routes>
             <Route path="/login" element={<AdminLogin />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/" element={
               <ProtectedRoute>
                 <DashboardLayout>
