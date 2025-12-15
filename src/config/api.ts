@@ -20,22 +20,17 @@ export const getApiBaseUrl = (): string => {
 
 export const API_BASE = getApiBaseUrl();
 
-// HTTP fetch wrapper that forces HTTP
+// Fetch wrapper for API calls
 export const httpFetch = async (url: string, options?: RequestInit): Promise<Response> => {
-  // Ensure URL uses HTTP
-  const httpUrl = url.startsWith('https://') ? url.replace('https://', 'http://') : url;
-  
   const defaultOptions: RequestInit = {
     headers: {
       'Content-Type': 'application/json',
-      // Prevent HTTPS upgrade requests
-      'Upgrade-Insecure-Requests': '0',
       ...options?.headers,
     },
     ...options,
   };
 
-  return fetch(httpUrl, defaultOptions);
+  return fetch(url, defaultOptions);
 };
 
 // Helper function for API calls with automatic token refresh
