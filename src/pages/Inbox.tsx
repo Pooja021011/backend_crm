@@ -1329,6 +1329,8 @@ const Inbox = () => {
       return gmailEmails.filter(email => email.category === 'primary');
     } else if (source === "emails") {
       // For emails tab, show all Gmail emails (all categories)
+      console.log(`🔍 Getting Gmail emails for display: ${gmailEmails.length} items`, gmailEmails);
+      console.log(`🔍 Email settings:`, emailSettings);
       return [...gmailEmails];
     } else if (source === 'tasks') {
       console.log(`🔍 Getting tasks for display: ${assignedTasks.length} items`, assignedTasks);
@@ -1858,8 +1860,24 @@ const Inbox = () => {
                       <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                         <Mail className="w-8 h-8 text-gray-400" />
                       </div>
-                      <p className="text-lg font-medium text-gray-500">No messages in this category</p>
-                      <p className="text-sm text-gray-400 mt-2">All caught up! Check back later for new messages.</p>
+                      {activeTab === 'emails' && !emailSettings?.gmailConnected ? (
+                        <>
+                          <p className="text-lg font-medium text-gray-500">Gmail Not Connected</p>
+                          <p className="text-sm text-gray-400 mt-2">Please connect your Gmail account in Settings to view emails.</p>
+                          <Button 
+                            onClick={() => navigate('/settings')} 
+                            className="mt-4"
+                            variant="outline"
+                          >
+                            Go to Settings
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-lg font-medium text-gray-500">No messages in this category</p>
+                          <p className="text-sm text-gray-400 mt-2">All caught up! Check back later for new messages.</p>
+                        </>
+                      )}
                     </div>
                   ) : (
                     <div className="divide-y divide-gray-200">

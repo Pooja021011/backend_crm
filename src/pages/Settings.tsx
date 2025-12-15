@@ -689,14 +689,27 @@ const Settings = () => {
     setConnectingGmail(true);
     try {
       if (emailSettings.gmailConnected) {
-        // Disconnect Gmail
-        setEmailSettings(s => s ? { ...s, gmailConnected: false } : s);
-        // Also save to backend
-        await saveEmailSettings();
-        toast({
-          title: "Gmail Disconnected",
-          description: "Gmail account disconnected successfully!",
+        // Disconnect Gmail and save immediately
+        const updatedSettings = { ...emailSettings, gmailConnected: false };
+        setEmailSettings(updatedSettings);
+        
+        // Save to backend with updated settings
+        const saveResponse = await makeApiCall(`${API_BASE}/settings/email`, {
+          method: 'POST',
+          body: JSON.stringify(updatedSettings)
         });
+        
+        const saveResult = await saveResponse.json();
+        if (saveResult.success) {
+          setOriginalEmailSettings(updatedSettings);
+          setEmailSettingsModified(false);
+          toast({
+            title: "Gmail Disconnected",
+            description: "Gmail account disconnected successfully!",
+          });
+        } else {
+          throw new Error(saveResult.error || 'Failed to save Gmail disconnection');
+        }
       } else {
         // First test IMAP connection before connecting
         if (!emailSettings?.imapHost || !emailSettings?.imapUser || !emailSettings?.imapPass) {
@@ -723,14 +736,27 @@ const Settings = () => {
         const result = await response.json();
 
         if (result.success) {
-          // Connection successful, mark as connected
-          setEmailSettings(s => s ? { ...s, gmailConnected: true } : s);
-          // Save to backend
-          await saveEmailSettings();
-          toast({
-            title: "Gmail Connected",
-            description: "Gmail account connected successfully! You can now sync emails.",
+          // Connection successful, mark as connected and save immediately
+          const updatedSettings = { ...emailSettings, gmailConnected: true };
+          setEmailSettings(updatedSettings);
+          
+          // Save to backend with updated settings
+          const saveResponse = await makeApiCall(`${API_BASE}/settings/email`, {
+            method: 'POST',
+            body: JSON.stringify(updatedSettings)
           });
+          
+          const saveResult = await saveResponse.json();
+          if (saveResult.success) {
+            setOriginalEmailSettings(updatedSettings);
+            setEmailSettingsModified(false);
+            toast({
+              title: "Gmail Connected",
+              description: "Gmail account connected successfully! You can now sync emails.",
+            });
+          } else {
+            throw new Error(saveResult.error || 'Failed to save Gmail connection');
+          }
         } else {
           throw new Error(result.error || 'IMAP connection failed');
         }
