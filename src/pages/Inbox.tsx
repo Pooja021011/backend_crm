@@ -47,6 +47,7 @@ import {
   Clock, 
   CheckSquare, 
   Users,
+  User,
   PhoneMissed,
   MessageCircle,
   Calendar,
@@ -2226,9 +2227,25 @@ const Inbox = () => {
                     </h3>
                     <p className="text-sm text-gray-600">{selectedConversation.phoneNumber}</p>
                   </div>
-                  <Badge className="bg-green-100 text-green-800">
-                    {selectedConversation.messages?.length || 0} messages
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    {selectedConversation.leadId && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          navigate(`/leads/${selectedConversation.leadId}/edit`);
+                          setShowSMSDetail(false);
+                        }}
+                        className="text-blue-600 border-blue-600 hover:bg-blue-50"
+                      >
+                        <User className="w-4 h-4 mr-1" />
+                        Lead Details
+                      </Button>
+                    )}
+                    <Badge className="bg-green-100 text-green-800">
+                      {selectedConversation.messages?.length || 0} messages
+                    </Badge>
+                  </div>
                 </div>
               </div>
 
