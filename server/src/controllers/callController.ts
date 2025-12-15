@@ -1,8 +1,68 @@
 import type { Request, Response } from 'express';
 import { callService } from '../services/callService.js';
 import { logger } from '../config/logger.js';
+import twilio from 'twilio';
+
+const AccessToken = twilio.jwt.AccessToken;
+const VoiceGrant = AccessToken.VoiceGrant;
 
 export const callController = {
+  /**
+   * Generate Twilio access token for browser-based calling
+   */
+  async getAccessToken(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user?.id;
+      const userEmail = (req as any).user?.email;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: 'User not authenticated'
+        });
+      }
+
+      const accountSid = process.env.TWILIO_ACCOUNT_SID;
+      const apiKey = process.env.TWILIO_API_KEY;
+      const apiSecret = process.env.TWILIO_API_SECRET;
+      const twimlAppSid = process.env.TWILIO_TWIML_APP_SID;
+
+      if (!accountSid || !apiKey || !apiSecret || !twimlAppSid) {
+        logger.error('Missing Twilio credentials for browser calling');
+        return res.status(500).json({
+          success: false,
+          error: 'Voice calling not configured'
+        });
+      }
+
+      // Create access token
+      const token = new AccessToken(accountSid, apiKey, apiSecret, {
+        identity: userEmail || userId,
+        ttl: 3600 // 1 hour
+      });
+
+      // Create voice grant
+      const voiceGrant = new VoiceGrant({
+        outgoingApplicationSid: twimlAppSid,
+        incomingAllow: true
+      });
+
+      token.addGrant(voiceGrant);
+
+      res.json({
+        success: true,
+        token: token.toJwt(),
+        identity: userEmail || userId
+      });
+    } catch (error: any) {
+      logger.error('Error generating access token', { error: error.message });
+      res.status(500).json({
+        success: false,
+        error: 'Failed to generate access token'
+      });
+    }
+  },
+
   /**
    * Make outbound call
    */
@@ -223,27 +283,57 @@ export const callController = {
     try {
       logger.info('TwiML endpoint called', { body: req.body, query: req.query });
 
-      // Get the contact number from query parameter
-      const contactNumber = req.query.contactNumber as string;
+      // Get the contact number from query parameter (for browser calls) or body (for phone calls)
+      const contactNumber = req.query.contactNumber as string || req.body.To;
 
       if (!contactNumber) {
         logger.error('No contact number provided in TwiML request');
         return res.status(400).send('Contact number required');
       }
 
-      // When YOUR phone answers, Twilio will dial the CONTACT
+      // TwiML to dial the contact number
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="alice">Connecting you now.</Say>
-  <Dial>
+  <Say voice="alice">Connecting your call.</Say>
+  <Dial callerId="${process.env.TWILIO_PHONE_NUMBER || req.body.From}">
     <Number>${contactNumber}</Number>
   </Dial>
+  <Say voice="alice">The call has ended. Goodbye!</Say>
 </Response>`;
 
       res.type('text/xml');
       res.send(twiml);
     } catch (error: any) {
       logger.error('Error in TwiML controller', { error: error.message });
+      res.status(500).send('Error processing call');
+    }
+  },
+
+  /**
+   * TwiML for browser-based voice calls
+   */
+  async twimlVoice(req: Request, res: Response) {
+    try {
+      logger.info('TwiML Voice endpoint called', { body: req.body });
+
+      const to = req.body.To;
+
+      if (!to) {
+        return res.status(400).send('To number required');
+      }
+
+      // TwiML for browser calling
+      const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Dial callerId="${process.env.TWILIO_PHONE_NUMBER}">
+    <Number>${to}</Number>
+  </Dial>
+</Response>`;
+
+      res.type('text/xml');
+      res.send(twiml);
+    } catch (error: any) {
+      logger.error('Error in TwiML Voice controller', { error: error.message });
       res.status(500).send('Error processing call');
     }
   }
