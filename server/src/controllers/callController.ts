@@ -223,7 +223,7 @@ export const callController = {
     try {
       logger.info('TwiML endpoint called', { body: req.body });
 
-      // Return TwiML response to connect the call
+      // Return TwiML response to connect the call directly
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Dial>

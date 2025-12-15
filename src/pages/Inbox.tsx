@@ -1714,7 +1714,21 @@ const Inbox = () => {
                   ) : (
                     <div className="divide-y divide-gray-200">
                       {callHistory.map((call) => (
-                        <div key={call.id} className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50">
+                        <div 
+                          key={call.id} 
+                          className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50 cursor-pointer transition-colors"
+                          onClick={() => {
+                            if (call.leadId) {
+                              navigate(`/leads/${call.leadId}`);
+                            } else {
+                              toast({
+                                title: "No Lead Associated",
+                                description: "This call is not associated with any lead.",
+                                variant: "destructive",
+                              });
+                            }
+                          }}
+                        >
                           {/* Call Direction Icon */}
                           <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center">
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
