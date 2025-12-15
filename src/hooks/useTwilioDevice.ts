@@ -36,16 +36,39 @@ export const useTwilioDevice = () => {
       const data = await response.json();
       const token = data.token;
 
-      // Create Twilio Device with basic audio constraints
+      // Test microphone access first before creating Device
+      console.log('🎤 Testing microphone access...');
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          } 
+        });
+        console.log('✅ Microphone access granted');
+        // Stop the test stream
+        stream.getTracks().forEach(track => track.stop());
+      } catch (micError: any) {
+        console.error('❌ Microphone test failed:', micError);
+        throw new Error(`Microphone not accessible: ${micError.message}`);
+      }
+
+      // Create Twilio Device with minimal constraints
       const newDevice = new Device(token, {
         logLevel: 1,
         codecPreferences: [Call.Codec.Opus, Call.Codec.PCMU],
-        edge: 'ashburn', // Use closest edge location
-        // Simplified audio constraints for better compatibility
+        edge: 'ashburn',
         sounds: {
           incoming: false,
           outgoing: false,
           disconnect: false
+        },
+        // Let browser use default audio settings
+        audioConstraints: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
         }
       });
 
