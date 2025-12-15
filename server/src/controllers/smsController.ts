@@ -243,6 +243,7 @@ export const smsController = {
               comm.lead?.buyer ?
               `${comm.lead.buyer.firstName} ${comm.lead.buyer.lastName}` :
               phoneNumber,
+            leadId: comm.leadId,
             lastMessage: comm.body || '',
             lastMessageTime: comm.occurredAt,
             unreadCount: 0,
