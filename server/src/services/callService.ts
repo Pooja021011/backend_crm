@@ -69,10 +69,11 @@ export const callService = {
       // #endregion
       
       // Create the call using Twilio Voice API
+      // This will call YOUR phone first, then connect to the contact
       const call = await twilioClient.calls.create({
-        to: callRequest.to,
-        from: fromNumber,
-        url: `${process.env.APP_BASE_URL}/api/v1/calls/twiml`, // TwiML endpoint for call instructions
+        to: fromNumber, // Call YOUR phone first
+        from: fromNumber, // From your Twilio number
+        url: `${process.env.APP_BASE_URL}/api/v1/calls/twiml?contactNumber=${encodeURIComponent(callRequest.to)}`, // Pass contact number to TwiML
         statusCallback: `${process.env.APP_BASE_URL}/api/v1/calls/webhook`,
         statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
         statusCallbackMethod: 'POST',

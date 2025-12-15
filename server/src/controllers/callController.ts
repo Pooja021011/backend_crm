@@ -221,13 +221,22 @@ export const callController = {
    */
   async twiml(req: Request, res: Response) {
     try {
-      logger.info('TwiML endpoint called', { body: req.body });
+      logger.info('TwiML endpoint called', { body: req.body, query: req.query });
 
-      // Return TwiML response to connect the call directly
+      // Get the contact number from query parameter
+      const contactNumber = req.query.contactNumber as string;
+
+      if (!contactNumber) {
+        logger.error('No contact number provided in TwiML request');
+        return res.status(400).send('Contact number required');
+      }
+
+      // When YOUR phone answers, Twilio will dial the CONTACT
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
+  <Say voice="alice">Connecting you now.</Say>
   <Dial>
-    <Number>${req.body.To}</Number>
+    <Number>${contactNumber}</Number>
   </Dial>
 </Response>`;
 
