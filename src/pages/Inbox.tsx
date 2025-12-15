@@ -2215,6 +2215,9 @@ const Inbox = () => {
                 <DialogTitle className="flex items-center gap-2">
                   <MessageSquare className="w-5 h-5 text-green-600" />
                   {selectedConversation?.contactName || selectedConversation?.phoneNumber}
+                  <span className="text-sm font-normal text-gray-500">
+                    ({selectedConversation?.messages?.length || 0})
+                  </span>
                 </DialogTitle>
                 <p className="text-sm text-gray-600 mt-1">{selectedConversation?.phoneNumber}</p>
               </div>
@@ -2233,15 +2236,14 @@ const Inbox = () => {
                     Lead Details
                   </Button>
                 )}
-                <Badge className="bg-green-100 text-green-800">
-                  {selectedConversation?.messages?.length || 0} messages
-                </Badge>
               </div>
             </div>
           </DialogHeader>
           
           {selectedConversation && (
             <div className="space-y-4">
+              {/* Separator */}
+              <Separator className="my-2" />
 
               {/* Messages */}
               <div className="space-y-3 max-h-96 overflow-y-auto">
@@ -2674,7 +2676,7 @@ const Inbox = () => {
 
       {/* Floating Call Status Indicator */}
       {callStatus.status !== 'idle' && (
-        <div className="fixed bottom-6 right-6 bg-white shadow-2xl rounded-lg border-2 border-purple-600 p-4 min-w-[300px] z-[9999] animate-in slide-in-from-bottom-5">
+        <div className="fixed top-6 right-6 bg-white shadow-2xl rounded-lg border-2 border-purple-600 p-4 min-w-[300px] z-[9999] animate-in slide-in-from-top-5">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <div className={`w-3 h-3 rounded-full ${
