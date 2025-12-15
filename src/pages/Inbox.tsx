@@ -48,6 +48,7 @@ import {
   CheckSquare, 
   Users,
   User,
+  Eye,
   PhoneMissed,
   MessageCircle,
   Calendar,
@@ -2218,24 +2219,20 @@ const Inbox = () => {
                   <span className="text-sm font-normal text-gray-500">
                     ({selectedConversation?.messages?.length || 0})
                   </span>
+                  {selectedConversation?.leadId && (
+                    <button
+                      onClick={() => {
+                        navigate(`/leads/${selectedConversation.leadId}/edit`);
+                        setShowSMSDetail(false);
+                      }}
+                      className="text-blue-600 hover:text-blue-700 transition-colors"
+                      title="View Lead Details"
+                    >
+                      <Eye className="w-5 h-5" />
+                    </button>
+                  )}
                 </DialogTitle>
                 <p className="text-sm text-gray-600 mt-1">{selectedConversation?.phoneNumber}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                {selectedConversation?.leadId && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      navigate(`/leads/${selectedConversation.leadId}/edit`);
-                      setShowSMSDetail(false);
-                    }}
-                    className="text-blue-600 border-blue-600 hover:bg-blue-50"
-                  >
-                    <User className="w-4 h-4 mr-1" />
-                    Lead Details
-                  </Button>
-                )}
               </div>
             </div>
           </DialogHeader>
