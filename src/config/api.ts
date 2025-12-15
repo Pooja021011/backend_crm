@@ -15,7 +15,7 @@ export const getApiBaseUrl = (): string => {
   }
   
   // Fallback to hardcoded server URL if env variable not found
-  return 'http://20.200.122.55:4000/api/v1';
+  return 'https://realestate.withai.agency/api/v1';
 };
 
 export const API_BASE = getApiBaseUrl();
