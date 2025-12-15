@@ -1719,7 +1719,7 @@ const Inbox = () => {
                           className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50 cursor-pointer transition-colors"
                           onClick={() => {
                             if (call.leadId) {
-                              navigate(`/leads/${call.leadId}`);
+                              navigate(`/leads/${call.leadId}/edit`);
                             } else {
                               toast({
                                 title: "No Lead Associated",
