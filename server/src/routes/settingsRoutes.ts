@@ -22,6 +22,7 @@ router.post('/email', (req, res, next) => settingsController.upsertUserEmailSett
 router.post('/email/test-imap', (req, res, next) => settingsController.testImapConnection(req, res).catch(next));
 router.post('/email/test-smtp', (req, res, next) => settingsController.testSmtpConnection(req, res).catch(next));
 router.get('/email/fetch-gmail', (req, res, next) => settingsController.fetchGmailEmails(req, res).catch(next));
+router.get('/email/fetch-lead-emails', (req, res, next) => settingsController.fetchLeadEmails(req, res).catch(next));
 router.post('/email/send', (req, res, next) => settingsController.sendEmail(req, res).catch(next));
 router.post('/email/fetch-thread', (req, res, next) => settingsController.fetchEmailThread(req, res).catch(next));
 router.post('/email/mark-read', (req, res, next) => settingsController.markEmailAsRead(req, res).catch(next));

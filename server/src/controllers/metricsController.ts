@@ -16,23 +16,33 @@ export const metricsController = {
     return res.json({ data });
   },
   marketingBreakdown: async (req: Request, res: Response) => {
-    const { dateFrom, dateTo, sources } = req.query;
-    const data = await metricsService.getMarketingBreakdown({
-      dateFrom: dateFrom as string,
-      dateTo: dateTo as string,
-      sources: sources ? (sources as string).split(',') : undefined
-    });
-    return res.json({ data });
+    try {
+      const { dateFrom, dateTo, sources } = req.query;
+      const data = await metricsService.getMarketingBreakdown({
+        dateFrom: dateFrom as string,
+        dateTo: dateTo as string,
+        sources: sources ? (sources as string).split(',') : undefined
+      });
+      return res.json({ data });
+    } catch (error) {
+      console.error('❌ Error in marketingBreakdown:', error);
+      return res.status(500).json({ error: error instanceof Error ? error.message : 'Internal server error' });
+    }
   },
   pipelineAnalysis: async (req: Request, res: Response) => {
-    const { timeframe, dateFrom, dateTo, sources } = req.query;
-    const data = await metricsService.getPipelineAnalysis({
-      timeframe: timeframe as string,
-      dateFrom: dateFrom as string,
-      dateTo: dateTo as string,
-      sources: sources ? (sources as string).split(',') : undefined
-    });
-    return res.json({ data });
+    try {
+      const { timeframe, dateFrom, dateTo, sources } = req.query;
+      const data = await metricsService.getPipelineAnalysis({
+        timeframe: timeframe as string,
+        dateFrom: dateFrom as string,
+        dateTo: dateTo as string,
+        sources: sources ? (sources as string).split(',') : undefined
+      });
+      return res.json({ data });
+    } catch (error) {
+      console.error('❌ Error in pipelineAnalysis:', error);
+      return res.status(500).json({ error: error instanceof Error ? error.message : 'Internal server error' });
+    }
   },
   pipelineOverview: async (req: Request, res: Response) => {
     const timeframe = (req.query.timeframe as 'This Month'|'Last Month'|'This Quarter') || 'This Month';

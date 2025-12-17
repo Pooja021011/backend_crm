@@ -101,6 +101,7 @@ const Inbox = () => {
   // Refs for auto-scroll
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const conversationMessagesEndRef = useRef<HTMLDivElement>(null);
+  const emailThreadEndRef = useRef<HTMLDivElement>(null);
 
   // Call history state
   const [callHistory, setCallHistory] = useState<any[]>([]);
@@ -281,7 +282,8 @@ const Inbox = () => {
     const accessToken = localStorage.getItem('accessToken');
     
     try {
-      const res = await fetch(`${API_BASE}/settings/email/fetch-gmail?limit=20`, {
+      // Use fetch-lead-emails to only show emails linked to leads
+      const res = await fetch(`${API_BASE}/settings/email/fetch-lead-emails?limit=20`, {
         headers: { 'Authorization': `Bearer ${accessToken}` }
       });
       
@@ -290,7 +292,7 @@ const Inbox = () => {
       if (json.success && json.data) {
         console.log('✅ INBOX emails received:', json.data.length);
         
-        // Simple: Just map all INBOX emails directly (no grouping, no SENT mixing)
+        // Map lead-linked emails (filtered by backend)
         const transformedEmails = json.data.map((email: any) => {
           return {
             id: email.id,
@@ -316,17 +318,18 @@ const Inbox = () => {
             priority: "normal",
             isGmail: true,
             threadCount: 1, // Will be updated when thread is fetched
-            folder: email.folder
+            folder: email.folder,
+            leadId: email.leadId // Include leadId from backend
           };
         });
         
         setGmailEmails(transformedEmails);
         
-        console.log('📊 Total INBOX emails in list:', transformedEmails.length);
+        console.log('📊 Total lead-linked emails in list:', transformedEmails.length);
         
         toast({
           title: "Gmail Sync Complete",
-          description: `${transformedEmails.length} INBOX emails synced`,
+          description: `${transformedEmails.length} lead-linked emails synced`,
         });
       } else {
         throw new Error(json.error || 'Failed to fetch emails');
@@ -427,7 +430,29 @@ const Inbox = () => {
       return;
     }
     
-    // Only allow popup for Gmail emails
+    // Handle Gmail email clicks - navigate to lead edit page
+    if (email.isGmail && email.leadId) {
+      console.log('📧 Gmail email clicked - navigating to lead:', email.leadId);
+      navigate(`/leads/${email.leadId}/edit`);
+      
+      toast({
+        title: "Lead Opened",
+        description: `Opened lead details for email from ${email.from}`,
+      });
+      return;
+    }
+    
+    // If Gmail email but no leadId (shouldn't happen with fetch-lead-emails, but just in case)
+    if (email.isGmail && !email.leadId) {
+      toast({
+        title: "No Lead Linked",
+        description: "This email is not linked to any lead.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Fallback: Only allow popup for Gmail emails (legacy code, shouldn't reach here)
     if (!email.isGmail) {
       return; // Do nothing for non-Gmail emails
     }
@@ -514,6 +539,11 @@ const Inbox = () => {
       if (result.success) {
         console.log('📧 Thread fetched:', result.data.length, 'emails');
         setEmailThread(result.data);
+        
+        // Auto-scroll to latest message after a short delay
+        setTimeout(() => {
+          emailThreadEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, 100);
       } else {
         console.error('Thread fetch failed:', result.error);
         // Fallback: show just the single email
@@ -623,7 +653,7 @@ const Inbox = () => {
     }
   };
 
-  // SMS Functions
+  // SMS Functions (only received messages for inbox)
   const fetchSMSHistory = async () => {
     setLoadingSMS(true);
     try {
@@ -636,7 +666,15 @@ const Inbox = () => {
 
       const result = await response.json();
       if (result.success) {
-        setSmsConversations(result.data.conversations);
+        // Filter to show only conversations with received messages (inbound)
+        const receivedConversations = (result.data.conversations || []).filter(
+          (conv: any) => {
+            // Check if the last message was inbound (received)
+            const lastMessage = conv.messages?.[conv.messages.length - 1];
+            return lastMessage?.direction === 'INBOUND';
+          }
+        );
+        setSmsConversations(receivedConversations);
       } else {
         throw new Error(result.error || 'Failed to fetch SMS history');
       }
@@ -742,8 +780,16 @@ const Inbox = () => {
   };
 
   const handleSMSConversationClick = (conversation: any) => {
-    setSelectedConversation(conversation);
-    setShowSMSDetail(true);
+    // Navigate to lead edit page if leadId exists
+    if (conversation.leadId) {
+      navigate(`/leads/${conversation.leadId}/edit`);
+    } else {
+      toast({
+        title: "No Lead Associated",
+        description: "This conversation is not associated with any lead",
+        variant: "destructive",
+      });
+    }
   };
 
   // Fetch phone numbers from leads
@@ -879,7 +925,7 @@ const Inbox = () => {
     }
   }, [showNewCall]);
 
-  // Fetch call history
+  // Fetch call history (only missed calls for inbox)
   const fetchCallHistory = async () => {
     setLoadingCallHistory(true);
     try {
@@ -887,7 +933,11 @@ const Inbox = () => {
       const result = await response.json();
       
       if (result.success) {
-        setCallHistory(result.data.calls || []);
+        // Filter to show only missed calls in inbox
+        const missedCalls = (result.data.calls || []).filter(
+          (call: any) => call.status === 'missed' || call.status === 'no-answer'
+        );
+        setCallHistory(missedCalls);
       } else {
         throw new Error(result.error || 'Failed to fetch call history');
       }
@@ -1580,16 +1630,22 @@ const Inbox = () => {
               {/* SMS Tab Content */}
               {activeTab === 'sms' ? (
                 <div>
-                  {/* SMS Header with New Message Button */}
+                  {/* SMS Header */}
                   <div className="flex items-center justify-between p-4 border-b bg-gray-50">
-                    <h3 className="text-lg font-semibold text-gray-900">SMS Conversations</h3>
+                    <h3 className="text-lg font-semibold text-gray-900">Received Messages</h3>
                     <Button
-                      onClick={() => setShowNewSMS(true)}
+                      onClick={fetchSMSHistory}
+                      variant="ghost"
                       size="sm"
-                      className="bg-green-600 hover:bg-green-700"
+                      disabled={loadingSMS}
+                      className="text-gray-600 hover:text-gray-900"
                     >
-                      <Plus className="w-4 h-4 mr-2" />
-                      New Message
+                      {loadingSMS ? (
+                        <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                      ) : (
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                      )}
+                      Refresh
                     </Button>
                   </div>
 
@@ -1604,15 +1660,8 @@ const Inbox = () => {
                       <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                         <MessageSquare className="w-8 h-8 text-green-600" />
                       </div>
-                      <p className="text-lg font-medium text-gray-500">No SMS conversations yet</p>
-                      <p className="text-gray-400 mb-4">Start a new conversation to see messages here.</p>
-                      <Button
-                        onClick={() => setShowNewSMS(true)}
-                        className="bg-green-600 hover:bg-green-700"
-                      >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Send First Message
-                      </Button>
+                      <p className="text-lg font-medium text-gray-500">No received messages</p>
+                      <p className="text-gray-400">All caught up! You have no new messages.</p>
                     </div>
                   ) : (
                     <div className="divide-y divide-gray-200">
@@ -1666,31 +1715,21 @@ const Inbox = () => {
                 <div>
                   {/* Call History Header */}
                   <div className="flex items-center justify-between p-4 border-b bg-gray-50">
-                    <h3 className="text-lg font-semibold text-gray-900">Call History</h3>
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={() => setShowNewCall(true)}
-                        size="sm"
-                        className="bg-purple-600 hover:bg-purple-700"
-                      >
-                        <Phone className="w-4 h-4 mr-2" />
-                        Make Call
-                      </Button>
-                      <Button
-                        onClick={fetchCallHistory}
-                        variant="ghost"
-                        size="sm"
-                        disabled={loadingCallHistory}
-                        className="text-gray-600 hover:text-gray-900"
-                      >
-                        {loadingCallHistory ? (
-                          <RefreshCw className="w-4 h-4 animate-spin mr-2" />
-                        ) : (
-                          <RefreshCw className="w-4 h-4 mr-2" />
-                        )}
-                        Refresh
-                      </Button>
-                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900">Missed Calls</h3>
+                    <Button
+                      onClick={fetchCallHistory}
+                      variant="ghost"
+                      size="sm"
+                      disabled={loadingCallHistory}
+                      className="text-gray-600 hover:text-gray-900"
+                    >
+                      {loadingCallHistory ? (
+                        <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                      ) : (
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                      )}
+                      Refresh
+                    </Button>
                   </div>
 
                   {/* Call History List */}
@@ -1702,17 +1741,10 @@ const Inbox = () => {
                   ) : callHistory.length === 0 ? (
                     <div className="p-12 text-center">
                       <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <Phone className="w-8 h-8 text-purple-600" />
+                        <PhoneMissed className="w-8 h-8 text-purple-600" />
                       </div>
-                      <p className="text-lg font-medium text-gray-500">No call history yet</p>
-                      <p className="text-gray-400 mb-4">Make your first call to see it here.</p>
-                      <Button
-                        onClick={() => setShowNewCall(true)}
-                        className="bg-purple-600 hover:bg-purple-700"
-                      >
-                        <Phone className="w-4 h-4 mr-2" />
-                        Make First Call
-                      </Button>
+                      <p className="text-lg font-medium text-gray-500">No missed calls</p>
+                      <p className="text-gray-400">All caught up! You have no missed calls.</p>
                     </div>
                   ) : (
                     <div className="divide-y divide-gray-200">
@@ -2170,6 +2202,7 @@ const Inbox = () => {
                           )}
                         </div>
                       ))}
+                      <div ref={emailThreadEndRef} />
                     </div>
                   )}
                 </div>

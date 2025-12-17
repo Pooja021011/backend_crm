@@ -5,9 +5,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { TrendingUp, TrendingDown, Users, DollarSign, Target, Clock, BarChart3, Activity, Zap, Trophy, Award, FileText, MessageSquare, Phone, CheckSquare, MessageCircle, Bell, Filter, X, ChevronDown, Calendar, Shield } from 'lucide-react';
+import { TrendingUp, TrendingDown, Users, DollarSign, Target, Clock, BarChart3, Activity, Zap, Trophy, Award, FileText, MessageSquare, Phone, CheckSquare, MessageCircle, Bell, Filter, X, ChevronDown, Calendar, Shield, Medal, Lightbulb } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
-import { API_BASE } from '@/config/api';
+import { API_BASE, makeApiCall } from '@/config/api';
 import { useAuth } from '@/contexts/AuthContext';
 
 const Metrics = () => {
@@ -258,10 +258,7 @@ const Metrics = () => {
   useEffect(() => {
     const loadLeadSources = async () => {
       try {
-        const accessToken = localStorage.getItem('accessToken');
-        const response = await fetch(`${API_BASE}/leads/sources`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` }
-        });
+        const response = await makeApiCall(`${API_BASE}/leads/sources`);
         
         if (response.ok) {
           const result = await response.json();
@@ -288,10 +285,7 @@ const Metrics = () => {
       setIsLoadingFlow(true);
       setFlowError(null);
       try {
-        const accessToken = localStorage.getItem('accessToken');
-        const res = await fetch(`${API_BASE}/metrics/lead-deal-flow`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` },
-        });
+        const res = await makeApiCall(`${API_BASE}/metrics/lead-deal-flow`);
         const json = await res.json();
         setFlowData(json?.data || []);
       } catch (e) {
@@ -309,10 +303,7 @@ const Metrics = () => {
       const fetchDispPipelineFunnel = async () => {
         setDispPipelineLoading(true);
         try {
-          const accessToken = localStorage.getItem('accessToken');
-          const res = await fetch(`${API_BASE}/metrics/dispositions/pipeline/funnel?period=${selectedPeriod}`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` },
-          });
+          const res = await makeApiCall(`${API_BASE}/metrics/dispositions/pipeline/funnel?period=${selectedPeriod}`);
           const json = await res.json();
           if (json.success) {
             setDispPipelineFunnel(json.data);
@@ -333,10 +324,7 @@ const Metrics = () => {
       const fetchDispPipelineTimeline = async () => {
         setDispPipelineLoading(true);
         try {
-          const accessToken = localStorage.getItem('accessToken');
-          const res = await fetch(`${API_BASE}/metrics/dispositions/pipeline/timeline?period=${selectedPeriod}`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` },
-          });
+          const res = await makeApiCall(`${API_BASE}/metrics/dispositions/pipeline/timeline?period=${selectedPeriod}`);
           const json = await res.json();
           if (json.success) {
             setDispPipelineTimeline(json.data);
@@ -362,10 +350,7 @@ const Metrics = () => {
         setLoading(true);
         setError(null);
         try {
-          const accessToken = localStorage.getItem('accessToken');
-          const res = await fetch(`${API_BASE}/metrics/lead-sources`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` },
-          });
+          const res = await makeApiCall(`${API_BASE}/metrics/lead-sources`);
           const json = await res.json();
           const buckets: { name: string; sources: Record<string, number> }[] = json?.data || [];
           // Aggregate across last 12 months into total per source
@@ -422,10 +407,7 @@ const Metrics = () => {
         setLoading(true);
         setError(null);
         try {
-          const accessToken = localStorage.getItem('accessToken');
-          const res = await fetch(`${API_BASE}/metrics/pipeline-overview?timeframe=${encodeURIComponent(selectedPeriod)}`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` },
-          });
+          const res = await makeApiCall(`${API_BASE}/metrics/pipeline-overview?timeframe=${encodeURIComponent(selectedPeriod)}`);
           const json = await res.json();
           const stageData = json?.data?.stages || [];
           
@@ -508,8 +490,9 @@ const Metrics = () => {
               })}
             </div>
           </div>
-          <div className="text-xs text-gray-500 text-center mt-4 px-4">
-            💡 Funnel shows lead progression with accurate conversion rates between stages
+          <div className="text-xs text-gray-500 text-center mt-4 px-4 flex items-center justify-center gap-1">
+            <Lightbulb className="w-3 h-3" />
+            Funnel shows lead progression with accurate conversion rates between stages
           </div>
         </div>
       </div>
@@ -520,10 +503,7 @@ const Metrics = () => {
     const [rows, setRows] = useState<{ name: string; count: number; value: string; weightedValue: string; avgTimeToAdvance: string; conversionRate: string; lost: number }[]>([]);
     useEffect(() => {
       const load = async () => {
-        const accessToken = localStorage.getItem('accessToken');
-        const res = await fetch(`${API_BASE}/metrics/pipeline-overview?timeframe=${encodeURIComponent(selectedPeriod)}`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` },
-        });
+        const res = await makeApiCall(`${API_BASE}/metrics/pipeline-overview?timeframe=${encodeURIComponent(selectedPeriod)}`);
         const json = await res.json();
         setRows(json?.data?.table || []);
       };
@@ -570,10 +550,7 @@ const Metrics = () => {
     const [rows, setRows] = useState<{ type: string; created_appt: string; appt_offer: string; created_offer: string; offer_closed: string }[]>([]);
     useEffect(() => {
       const load = async () => {
-        const accessToken = localStorage.getItem('accessToken');
-        const res = await fetch(`${API_BASE}/metrics/pipeline-overview?timeframe=${encodeURIComponent(selectedPeriod)}`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` },
-        });
+        const res = await makeApiCall(`${API_BASE}/metrics/pipeline-overview?timeframe=${encodeURIComponent(selectedPeriod)}`);
         const json = await res.json();
         setRows(json?.data?.timeline || []);
       };
@@ -630,10 +607,7 @@ const Metrics = () => {
         setLoading(true);
         setError(null);
         try {
-          const accessToken = localStorage.getItem('accessToken');
-          const res = await fetch(`${API_BASE}/metrics/pipeline-overview?timeframe=${encodeURIComponent(selectedPeriod)}`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` },
-          });
+          const res = await makeApiCall(`${API_BASE}/metrics/pipeline-overview?timeframe=${encodeURIComponent(selectedPeriod)}`);
           const json = await res.json();
           const stageData = json?.data?.stages || [];
           
@@ -765,10 +739,7 @@ const Metrics = () => {
         setLoading(true);
         setError(null);
         try {
-          const accessToken = localStorage.getItem('accessToken');
-          const res = await fetch(`${API_BASE}/metrics/pipeline-overview?timeframe=${encodeURIComponent(selectedPeriod)}`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` },
-          });
+          const res = await makeApiCall(`${API_BASE}/metrics/pipeline-overview?timeframe=${encodeURIComponent(selectedPeriod)}`);
           const json = await res.json();
           
           // Transform the timeline data from the existing API
@@ -885,7 +856,6 @@ const Metrics = () => {
     const load = async () => {
       setCommLoading(true);
       try {
-        const accessToken = localStorage.getItem('accessToken');
         const params = new URLSearchParams();
         params.append('timeframe', selectedPeriod);
         
@@ -905,9 +875,7 @@ const Metrics = () => {
         if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
         if (filters.dateTo) params.append('dateTo', filters.dateTo);
         
-        const res = await fetch(`${API_BASE}/metrics/communications-overview?${params.toString()}`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` },
-        });
+        const res = await makeApiCall(`${API_BASE}/metrics/communications-overview?${params.toString()}`);
         const json = await res.json();
         setCallStats(json?.data?.callStats || { totalMade: 0, totalReceived: 0, totalTime: '—', averageTime: '—' });
         setCallsByHour(json?.data?.callsByHour || []);
@@ -929,7 +897,6 @@ const Metrics = () => {
       setAcqLoading(true);
       setAcqError(null);
       try {
-        const accessToken = localStorage.getItem('accessToken');
         const params = new URLSearchParams();
         params.append('timeframe', selectedPeriod);
         
@@ -954,9 +921,7 @@ const Metrics = () => {
         if (filters.dateTo) params.append('dateTo', filters.dateTo);
         if (filters.sources?.length) params.append('sources', filters.sources.join(','));
         
-        const res = await fetch(`${API_BASE}/metrics/acquisitions-overview?${params.toString()}`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` },
-        });
+        const res = await makeApiCall(`${API_BASE}/metrics/acquisitions-overview?${params.toString()}`);
         const json = await res.json();
         
         const data = json?.data || {};
@@ -990,7 +955,6 @@ const Metrics = () => {
       setDispLoading(true);
       setDispError(null);
       try {
-        const accessToken = localStorage.getItem('accessToken');
         const params = new URLSearchParams();
         params.append('timeframe', selectedPeriod);
         
@@ -1015,9 +979,7 @@ const Metrics = () => {
         if (filters.dateTo) params.append('dateTo', filters.dateTo);
         if (filters.sources?.length) params.append('sources', filters.sources.join(','));
         
-        const res = await fetch(`${API_BASE}/metrics/dispositions-overview?${params.toString()}`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` },
-        });
+        const res = await makeApiCall(`${API_BASE}/metrics/dispositions-overview?${params.toString()}`);
         const json = await res.json();
         
         const data = json?.data || {};
@@ -1052,7 +1014,6 @@ const Metrics = () => {
       setTcLoading(true);
       setTcError(null);
       try {
-        const accessToken = localStorage.getItem('accessToken');
         const params = new URLSearchParams();
         params.append('timeframe', selectedPeriod);
         
@@ -1077,9 +1038,7 @@ const Metrics = () => {
         if (filters.dateTo) params.append('dateTo', filters.dateTo);
         if (filters.sources?.length) params.append('sources', filters.sources.join(','));
         
-        const res = await fetch(`${API_BASE}/metrics/transactions-overview?${params.toString()}`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` },
-        });
+        const res = await makeApiCall(`${API_BASE}/metrics/transactions-overview?${params.toString()}`);
         const json = await res.json();
         
         const data = json?.data || {};
@@ -1113,7 +1072,6 @@ const Metrics = () => {
       setAcqLeaderboardLoading(true);
       setAcqLeaderboardError(null);
       try {
-        const accessToken = localStorage.getItem('accessToken');
         const params = new URLSearchParams();
         params.append('period', acqLeaderboardPeriod);
         
@@ -1131,9 +1089,7 @@ const Metrics = () => {
         if (filters.dateTo) params.append('dateTo', filters.dateTo);
         if (filters.sources?.length) params.append('sources', filters.sources.join(','));
         
-        const res = await fetch(`${API_BASE}/metrics/acquisitions-leaderboard?${params.toString()}`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` },
-        });
+        const res = await makeApiCall(`${API_BASE}/metrics/acquisitions-leaderboard?${params.toString()}`);
         const json = await res.json();
         
         // API returns data as an array directly
@@ -1169,7 +1125,6 @@ const Metrics = () => {
       setDispLeaderboardLoading(true);
       setDispLeaderboardError(null);
       try {
-        const accessToken = localStorage.getItem('accessToken');
         const params = new URLSearchParams();
         params.append('period', dispLeaderboardPeriod);
         
@@ -1187,9 +1142,7 @@ const Metrics = () => {
         if (filters.dateTo) params.append('dateTo', filters.dateTo);
         if (filters.sources?.length) params.append('sources', filters.sources.join(','));
         
-        const res = await fetch(`${API_BASE}/metrics/dispositions-leaderboard?${params.toString()}`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` },
-        });
+        const res = await makeApiCall(`${API_BASE}/metrics/dispositions-leaderboard?${params.toString()}`);
         const json = await res.json();
         
         // API returns data as an array directly
@@ -1225,16 +1178,13 @@ const Metrics = () => {
       setMarketingLoading(true);
       setMarketingError(null);
       try {
-        const accessToken = localStorage.getItem('accessToken');
         const filters = getActiveFilters();
         const params = new URLSearchParams();
         if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
         if (filters.dateTo) params.append('dateTo', filters.dateTo);
         if (filters.sources?.length) params.append('sources', filters.sources.join(','));
         
-        const res = await fetch(`${API_BASE}/metrics/marketing-breakdown?${params.toString()}`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` },
-        });
+        const res = await makeApiCall(`${API_BASE}/metrics/marketing-breakdown?${params.toString()}`);
         const json = await res.json();
         setMarketingData(json?.data || []);
       } catch (e) {
@@ -1248,20 +1198,15 @@ const Metrics = () => {
 
   // Fetch Team pipelines on tab switch
   useEffect(() => {
-    const accessToken = localStorage.getItem('accessToken');
     const fetchPipe = async (pipeline: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION') => {
-      const res = await fetch(`${API_BASE}/metrics/pipeline-overview?timeframe=${encodeURIComponent(selectedPeriod)}&pipeline=${pipeline}`, {
-        headers: { 'Authorization': `Bearer ${accessToken}` },
-      });
+      const res = await makeApiCall(`${API_BASE}/metrics/pipeline-overview?timeframe=${encodeURIComponent(selectedPeriod)}&pipeline=${pipeline}`);
       const json = await res.json();
       return json?.data?.stages as { name: string; count: number }[] || [];
     };
     const load = async () => {
       // Fetch team KPIs in one call
       try {
-        const kpiRes = await fetch(`${API_BASE}/metrics/team-kpis?timeframe=${encodeURIComponent(selectedPeriod)}`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` },
-        });
+        const kpiRes = await makeApiCall(`${API_BASE}/metrics/team-kpis?timeframe=${encodeURIComponent(selectedPeriod)}`);
         const k = await kpiRes.json();
         setAcqTotal(k?.data?.acqTotal || 0);
         setTranTotal(k?.data?.tranTotal || 0);
@@ -1294,10 +1239,7 @@ const Metrics = () => {
     const load = async () => {
       setKpiLoading(true);
       try {
-        const accessToken = localStorage.getItem('accessToken');
-        const res = await fetch(`${API_BASE}/metrics/company-kpis?timeframe=${encodeURIComponent(selectedPeriod)}`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` },
-        });
+        const res = await makeApiCall(`${API_BASE}/metrics/company-kpis?timeframe=${encodeURIComponent(selectedPeriod)}`);
         const json = await res.json();
         setKpis(json?.data || null);
       } finally {
@@ -1349,39 +1291,115 @@ const Metrics = () => {
     );
   };
 
-  const pieData = [
-    { name: 'Website', value: 35, color: '#3b82f6' },
-    { name: 'Referrals', value: 25, color: '#10b981' },
-    { name: 'Social Media', value: 20, color: '#f59e0b' },
-    { name: 'Direct Mail', value: 15, color: '#ef4444' },
-    { name: 'Other', value: 5, color: '#8b5cf6' },
-  ];
+  // Lead source pie chart data - will be populated from API
+  const [pieData, setPieData] = useState<{ name: string; value: number; color: string }[]>([]);
 
-  // Pipeline data for funnel chart
-  const pipelineData = [
-    { id: 'new-lead', name: 'New Lead', count: 160, color: 'bg-orange-500', badge: 'bg-orange-500', percentage: '100%', lost: 0, lostPercentage: '0%' },
-    { id: 'no-contact', name: 'No Contact Made', count: 140, color: 'bg-orange-500', badge: 'bg-orange-500', percentage: '88%', lost: 20, lostPercentage: '12%' },
-    { id: 'contact-made', name: 'Contact Made', count: 120, color: 'bg-orange-500', badge: 'bg-orange-500', percentage: '86%', lost: 20, lostPercentage: '14%' },
-    { id: 'appointment-set', name: 'Appointment Set', count: 95, color: 'bg-blue-500', badge: 'bg-blue-500', percentage: '79%', lost: 25, lostPercentage: '21%' },
-    { id: 'appointment-complete', name: 'Appointment Complete', count: 80, color: 'bg-blue-500', badge: 'bg-blue-500', percentage: '84%', lost: 15, lostPercentage: '16%' },
-    { id: 'due-diligence', name: 'Due Diligence Complete', count: 65, color: 'bg-orange-500', badge: 'bg-orange-500', percentage: '81%', lost: 15, lostPercentage: '19%' },
-    { id: 'offer-made', name: 'Offer Made', count: 50, color: 'bg-orange-500', badge: 'bg-orange-500', percentage: '77%', lost: 15, lostPercentage: '23%' },
-    { id: 'contract-sent', name: 'Contract Sent', count: 40, color: 'bg-orange-500', badge: 'bg-orange-500', percentage: '80%', lost: 10, lostPercentage: '20%' },
-    { id: 'under-contract', name: 'Under Contract', count: 30, color: 'bg-blue-500', badge: 'bg-blue-500', percentage: '75%', lost: 10, lostPercentage: '25%' },
-    { id: 'processing', name: 'Processing', count: 25, color: 'bg-blue-500', badge: 'bg-blue-500', percentage: '83%', lost: 5, lostPercentage: '17%' },
-    { id: 'for-sale', name: 'For Sale', count: 20, color: 'bg-orange-500', badge: 'bg-orange-500', percentage: '80%', lost: 5, lostPercentage: '20%' },
-    { id: 'under-contract-sale', name: 'Under Contract (Sale)', count: 15, color: 'bg-blue-500', badge: 'bg-blue-500', percentage: '75%', lost: 5, lostPercentage: '25%' },
-    { id: 'closed', name: 'Closed', count: 12, color: 'bg-green-500', badge: 'bg-green-500', percentage: '80%', lost: 3, lostPercentage: '20%' }
-  ];
+  // Pipeline data for funnel chart - will be populated from API
+  const [pipelineData, setPipelineData] = useState<any[]>([]);
 
-  // Timeline Metrics Data
-  const timelineData = [
-    { type: 'Cold Calling', created_appt: '5 days', appt_offer: '2 days', created_offer: '7 days', offer_closed: '3 days' },
-    { type: 'Direct Mail', created_appt: '8 days', appt_offer: '1 days', created_offer: '9 days', offer_closed: '5 days' },
-    { type: 'SMS Blast', created_appt: '3 days', appt_offer: '1 days', created_offer: '4 days', offer_closed: '2 days' },
-    { type: 'Website', created_appt: '0 days', appt_offer: '0 days', created_offer: '12 days', offer_closed: '8 days' },
-    { type: 'Total', created_appt: '0 days', appt_offer: '0 days', created_offer: '4 days', offer_closed: '2 days' },
-  ];
+  // Timeline Metrics Data - will be populated from API
+  const [timelineData, setTimelineData] = useState<{ type: string; created_appt: string; appt_offer: string; created_offer: string; offer_closed: string }[]>([]);
+
+  // Fetch lead source pie chart data
+  useEffect(() => {
+    const fetchPieData = async () => {
+      try {
+        const res = await makeApiCall(`${API_BASE}/metrics/lead-sources`);
+        const json = await res.json();
+        const buckets: { name: string; sources: Record<string, number> }[] = json?.data || [];
+        
+        // Aggregate across last 12 months into total per source
+        const totals: Record<string, number> = {};
+        for (const b of buckets) {
+          for (const [k, v] of Object.entries(b.sources)) {
+            totals[k] = (totals[k] || 0) + (v as number);
+          }
+        }
+        
+        // Convert to pie chart format with colors
+        const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16'];
+        const items = Object.entries(totals)
+          .map(([name, value], index) => ({ 
+            name, 
+            value, 
+            color: colors[index % colors.length] 
+          }))
+          .sort((a, b) => b.value - a.value)
+          .slice(0, 8); // top 8
+        
+        setPieData(items);
+      } catch (error) {
+        console.error('Failed to fetch pie chart data:', error);
+        setPieData([]);
+      }
+    };
+
+    fetchPieData();
+  }, [user?.id]);
+
+  // Fetch pipeline funnel data
+  useEffect(() => {
+    const fetchPipelineData = async () => {
+      try {
+        const res = await makeApiCall(`${API_BASE}/metrics/pipeline-overview?timeframe=${selectedPeriod}&pipeline=ACQUISITIONS`);
+        const json = await res.json();
+        const stages = json?.data?.stages || [];
+        
+        // Transform to match the expected format
+        const transformedData = stages.map((stage: any, index: number) => {
+          const prevCount = index > 0 ? stages[index - 1]?.count : stage.count;
+          const conversionRate = prevCount > 0 ? Math.round((stage.count / prevCount) * 100) : 100;
+          const lost = prevCount - stage.count;
+          const lostPercentage = prevCount > 0 ? Math.round((lost / prevCount) * 100) : 0;
+          
+          return {
+            id: stage.name.toLowerCase().replace(/\s+/g, '-'),
+            name: stage.name,
+            count: stage.count,
+            color: stage.color || 'bg-blue-500',
+            badge: stage.color || 'bg-blue-500',
+            percentage: `${conversionRate}%`,
+            lost: lost > 0 ? lost : 0,
+            lostPercentage: `${lostPercentage}%`
+          };
+        });
+        
+        setPipelineData(transformedData);
+      } catch (error) {
+        console.error('Failed to fetch pipeline data:', error);
+        setPipelineData([]);
+      }
+    };
+
+    fetchPipelineData();
+  }, [selectedPeriod, user?.id]);
+
+  // Fetch timeline metrics data
+  useEffect(() => {
+    const fetchTimelineData = async () => {
+      try {
+        const res = await makeApiCall(`${API_BASE}/metrics/pipeline-analysis?timeframe=${selectedPeriod}`);
+        const json = await res.json();
+        const timeline = json?.data?.timeline || [];
+        
+        // Transform to match the expected format
+        const transformedTimeline = timeline.map((item: any) => ({
+          type: item.source || item.type || 'Unknown',
+          created_appt: item.avgDaysToAppointment ? `${Math.round(item.avgDaysToAppointment)} days` : '0 days',
+          appt_offer: item.avgDaysFromApptToOffer ? `${Math.round(item.avgDaysFromApptToOffer)} days` : '0 days',
+          created_offer: item.avgDaysToOffer ? `${Math.round(item.avgDaysToOffer)} days` : '0 days',
+          offer_closed: item.avgDaysFromOfferToClosed ? `${Math.round(item.avgDaysFromOfferToClosed)} days` : '0 days'
+        }));
+        
+        setTimelineData(transformedTimeline);
+      } catch (error) {
+        console.error('Failed to fetch timeline data:', error);
+        setTimelineData([]);
+      }
+    };
+
+    fetchTimelineData();
+  }, [selectedPeriod, user?.id]);
 
   return (
     <div className="space-y-6">
@@ -1621,7 +1639,6 @@ const Metrics = () => {
                 <div className="p-3 bg-blue-100 rounded-xl">
                   <Users className="w-6 h-6 text-blue-600" />
                 </div>
-                <div className="text-xs text-green-600 font-bold bg-green-100 px-2 py-1 rounded-full">+12%</div>
               </div>
               <ContractsSignedCard />
             </Card>
@@ -1632,7 +1649,6 @@ const Metrics = () => {
                 <div className="p-3 bg-green-100 rounded-xl">
                   <Target className="w-6 h-6 text-green-600" />
                 </div>
-                <div className="text-xs text-green-600 font-bold bg-green-100 px-2 py-1 rounded-full">+8%</div>
               </div>
               <ContractsSoldCard />
             </Card>
@@ -1643,7 +1659,6 @@ const Metrics = () => {
                 <div className="p-3 bg-purple-100 rounded-xl">
                   <TrendingUp className="w-6 h-6 text-purple-600" />
                 </div>
-                <div className="text-xs text-green-600 font-bold bg-green-100 px-2 py-1 rounded-full">+15%</div>
               </div>
               <ProjectedProfitCard />
             </Card>
@@ -1654,7 +1669,6 @@ const Metrics = () => {
                 <div className="p-3 bg-orange-100 rounded-xl">
                   <DollarSign className="w-6 h-6 text-orange-600" />
                 </div>
-                <div className="text-xs text-green-600 font-bold bg-green-100 px-2 py-1 rounded-full">+22%</div>
               </div>
               <ClosedProfitCard />
             </Card>
@@ -1793,7 +1807,7 @@ const Metrics = () => {
                 <div className="p-3 bg-gray-100 rounded-xl">
                   <TrendingUp className="w-6 h-6 text-gray-600" />
                 </div>
-                <div className="text-xs text-green-600 font-bold bg-green-100 px-2 py-1 rounded-full">+18%</div>
+                <div className="text-xs text-blue-600 font-bold bg-blue-100 px-2 py-1 rounded-full">Avg</div>
               </div>
               <div className="space-y-2">
                 <p className="text-sm font-bold text-gray-600 uppercase tracking-wider">Average Deal Profit</p>
@@ -1847,6 +1861,86 @@ const Metrics = () => {
                 </div>
                 </div>
                 </div>
+
+              {/* Lead Sources Pie Chart */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Target className="w-5 h-5" />
+                    Lead Sources Distribution
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {pieData.length === 0 ? (
+                    <div className="text-center py-8">
+                      <div className="text-gray-500">Loading lead sources data...</div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      {/* Pie Chart */}
+                      <div className="flex items-center justify-center">
+                        <div className="relative w-64 h-64">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={pieData}
+                                cx="50%"
+                                cy="50%"
+                                labelLine={false}
+                                outerRadius={100}
+                                fill="#8884d8"
+                                dataKey="value"
+                                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                              >
+                                {pieData.map((entry, index) => (
+                                  <Cell key={`cell-${index}`} fill={entry.color} />
+                                ))}
+                              </Pie>
+                              <Tooltip />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+
+                      {/* Legend and Stats */}
+                      <div className="space-y-4">
+                        <div>
+                          <h4 className="text-sm font-semibold text-gray-700 mb-3">Lead Sources</h4>
+                          <div className="space-y-2">
+                            {pieData.map((source, index) => (
+                              <div key={index} className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <div 
+                                    className="w-4 h-4 rounded-full" 
+                                    style={{ backgroundColor: source.color }}
+                                  />
+                                  <span className="text-sm text-gray-700">{source.name}</span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <span className="text-sm font-semibold text-gray-900">{source.value}</span>
+                                  <span className="text-xs text-gray-500 w-12 text-right">
+                                    {((source.value / pieData.reduce((sum, s) => sum + s.value, 0)) * 100).toFixed(1)}%
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Total */}
+                        <div className="pt-3 border-t border-gray-200">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-semibold text-gray-700">Total Leads</span>
+                            <span className="text-lg font-bold text-blue-600">
+                              {pieData.reduce((sum, s) => sum + s.value, 0)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
 
               {/* Marketing Breakdown Table */}
               <Card>
@@ -1949,6 +2043,166 @@ const Metrics = () => {
                   )}
                 </CardContent>
             </Card>
+
+              {/* Conversion Metrics Chart */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5" />
+                    Conversion Metrics
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {marketingLoading ? (
+                    <div className="text-center py-8">
+                      <div className="text-gray-500">Loading conversion data...</div>
+                    </div>
+                  ) : marketingError ? (
+                    <div className="text-center py-8">
+                      <div className="text-red-500">{marketingError}</div>
+                    </div>
+                  ) : marketingData.length === 0 ? (
+                    <div className="text-center py-8">
+                      <div className="text-gray-500">No conversion data available</div>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {/* Conversion Funnel */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {/* Lead → Qualified */}
+                        <div className="bg-gradient-to-br from-blue-50 to-white p-4 rounded-lg border border-blue-200">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-semibold text-gray-700">Lead → Qualified</span>
+                            <TrendingUp className="w-4 h-4 text-blue-600" />
+                          </div>
+                          <div className="text-2xl font-bold text-blue-600">
+                            {(() => {
+                              const totalLeads = marketingData.reduce((sum: number, s: any) => sum + (s.totalLeads || 0), 0);
+                              const qualified = marketingData.reduce((sum: number, s: any) => sum + (s.qualified || 0), 0);
+                              return totalLeads > 0 ? ((qualified / totalLeads) * 100).toFixed(1) : '0.0';
+                            })()}%
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {marketingData.reduce((sum: number, s: any) => sum + (s.qualified || 0), 0)} of {marketingData.reduce((sum: number, s: any) => sum + (s.totalLeads || 0), 0)} leads
+                          </div>
+                        </div>
+
+                        {/* Qualified → Appointment */}
+                        <div className="bg-gradient-to-br from-green-50 to-white p-4 rounded-lg border border-green-200">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-semibold text-gray-700">Qualified → Appointment</span>
+                            <TrendingUp className="w-4 h-4 text-green-600" />
+                          </div>
+                          <div className="text-2xl font-bold text-green-600">
+                            {(() => {
+                              const qualified = marketingData.reduce((sum: number, s: any) => sum + (s.qualified || 0), 0);
+                              const appointments = marketingData.reduce((sum: number, s: any) => sum + (s.appointments || 0), 0);
+                              return qualified > 0 ? ((appointments / qualified) * 100).toFixed(1) : '0.0';
+                            })()}%
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {marketingData.reduce((sum: number, s: any) => sum + (s.appointments || 0), 0)} of {marketingData.reduce((sum: number, s: any) => sum + (s.qualified || 0), 0)} qualified
+                          </div>
+                        </div>
+
+                        {/* Appointment → Offer */}
+                        <div className="bg-gradient-to-br from-purple-50 to-white p-4 rounded-lg border border-purple-200">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-semibold text-gray-700">Appointment → Offer</span>
+                            <TrendingUp className="w-4 h-4 text-purple-600" />
+                          </div>
+                          <div className="text-2xl font-bold text-purple-600">
+                            {(() => {
+                              const appointments = marketingData.reduce((sum: number, s: any) => sum + (s.appointments || 0), 0);
+                              const offers = marketingData.reduce((sum: number, s: any) => sum + (s.offers || 0), 0);
+                              return appointments > 0 ? ((offers / appointments) * 100).toFixed(1) : '0.0';
+                            })()}%
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {marketingData.reduce((sum: number, s: any) => sum + (s.offers || 0), 0)} of {marketingData.reduce((sum: number, s: any) => sum + (s.appointments || 0), 0)} appointments
+                          </div>
+                        </div>
+
+                        {/* Offer → Under Contract */}
+                        <div className="bg-gradient-to-br from-orange-50 to-white p-4 rounded-lg border border-orange-200">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-semibold text-gray-700">Offer → Under Contract</span>
+                            <TrendingUp className="w-4 h-4 text-orange-600" />
+                          </div>
+                          <div className="text-2xl font-bold text-orange-600">
+                            {(() => {
+                              const offers = marketingData.reduce((sum: number, s: any) => sum + (s.offers || 0), 0);
+                              const underContract = marketingData.reduce((sum: number, s: any) => sum + (s.underContract || 0), 0);
+                              return offers > 0 ? ((underContract / offers) * 100).toFixed(1) : '0.0';
+                            })()}%
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {marketingData.reduce((sum: number, s: any) => sum + (s.underContract || 0), 0)} of {marketingData.reduce((sum: number, s: any) => sum + (s.offers || 0), 0)} offers
+                          </div>
+                        </div>
+
+                        {/* Under Contract → Sold */}
+                        <div className="bg-gradient-to-br from-yellow-50 to-white p-4 rounded-lg border border-yellow-200">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-semibold text-gray-700">Under Contract → Sold</span>
+                            <TrendingUp className="w-4 h-4 text-yellow-600" />
+                          </div>
+                          <div className="text-2xl font-bold text-yellow-600">
+                            {(() => {
+                              const underContract = marketingData.reduce((sum: number, s: any) => sum + (s.underContract || 0), 0);
+                              const sold = marketingData.reduce((sum: number, s: any) => sum + (s.sold || 0), 0);
+                              return underContract > 0 ? ((sold / underContract) * 100).toFixed(1) : '0.0';
+                            })()}%
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {marketingData.reduce((sum: number, s: any) => sum + (s.sold || 0), 0)} of {marketingData.reduce((sum: number, s: any) => sum + (s.underContract || 0), 0)} under contract
+                          </div>
+                        </div>
+
+                        {/* Sold → Closed */}
+                        <div className="bg-gradient-to-br from-red-50 to-white p-4 rounded-lg border border-red-200">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-semibold text-gray-700">Sold → Closed</span>
+                            <TrendingUp className="w-4 h-4 text-red-600" />
+                          </div>
+                          <div className="text-2xl font-bold text-red-600">
+                            {(() => {
+                              const sold = marketingData.reduce((sum: number, s: any) => sum + (s.sold || 0), 0);
+                              const closed = marketingData.reduce((sum: number, s: any) => sum + (s.closed || 0), 0);
+                              return sold > 0 ? ((closed / sold) * 100).toFixed(1) : '0.0';
+                            })()}%
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {marketingData.reduce((sum: number, s: any) => sum + (s.closed || 0), 0)} of {marketingData.reduce((sum: number, s: any) => sum + (s.sold || 0), 0)} sold
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Overall Conversion Rate */}
+                      <div className="bg-gradient-to-br from-indigo-50 to-white p-6 rounded-lg border-2 border-indigo-300">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="text-lg font-semibold text-gray-900 mb-1">Overall Conversion Rate</h4>
+                            <p className="text-sm text-gray-600">Lead to Closed Deal</p>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-4xl font-bold text-indigo-600">
+                              {(() => {
+                                const totalLeads = marketingData.reduce((sum: number, s: any) => sum + (s.totalLeads || 0), 0);
+                                const closed = marketingData.reduce((sum: number, s: any) => sum + (s.closed || 0), 0);
+                                return totalLeads > 0 ? ((closed / totalLeads) * 100).toFixed(1) : '0.0';
+                              })()}%
+                            </div>
+                            <div className="text-sm text-gray-600 mt-1">
+                              {marketingData.reduce((sum: number, s: any) => sum + (s.closed || 0), 0)} closed from {marketingData.reduce((sum: number, s: any) => sum + (s.totalLeads || 0), 0)} leads
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </>
           )}
         </div>
@@ -2054,6 +2308,110 @@ const Metrics = () => {
                     <>
                       {/* Enhanced Timeline Chart */}
                       <EnhancedPipelineTimeline selectedPeriod={selectedPeriod} />
+                      
+                      {/* Timeline Metrics Table */}
+                      {timelineData.length > 0 && (
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                              <Clock className="w-5 h-5" />
+                              Average Time by Source
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="overflow-x-auto">
+                              <table className="w-full">
+                                <thead className="bg-gray-50 border-b">
+                                  <tr>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                      Source Type
+                                    </th>
+                                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                      Created → Appt
+                                    </th>
+                                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                      Appt → Offer
+                                    </th>
+                                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                      Created → Offer
+                                    </th>
+                                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                      Offer → Closed
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                  {timelineData.map((row, index) => (
+                                    <tr key={index} className="hover:bg-gray-50">
+                                      <td className="px-4 py-3 whitespace-nowrap">
+                                        <div className="text-sm font-medium text-gray-900">{row.type}</div>
+                                      </td>
+                                      <td className="px-4 py-3 whitespace-nowrap text-center">
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                          {row.created_appt}
+                                        </span>
+                                      </td>
+                                      <td className="px-4 py-3 whitespace-nowrap text-center">
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                          {row.appt_offer}
+                                        </span>
+                                      </td>
+                                      <td className="px-4 py-3 whitespace-nowrap text-center">
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                          {row.created_offer}
+                                        </span>
+                                      </td>
+                                      <td className="px-4 py-3 whitespace-nowrap text-center">
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                          {row.offer_closed}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                            
+                            {/* Summary Stats */}
+                            <div className="mt-4 pt-4 border-t border-gray-200">
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div className="text-center">
+                                  <div className="text-xs text-gray-500 mb-1">Avg Created → Appt</div>
+                                  <div className="text-lg font-bold text-blue-600">
+                                    {timelineData.length > 0 
+                                      ? Math.round(timelineData.reduce((sum, item) => sum + parseInt(item.created_appt), 0) / timelineData.length)
+                                      : 0} days
+                                  </div>
+                                </div>
+                                <div className="text-center">
+                                  <div className="text-xs text-gray-500 mb-1">Avg Appt → Offer</div>
+                                  <div className="text-lg font-bold text-green-600">
+                                    {timelineData.length > 0 
+                                      ? Math.round(timelineData.reduce((sum, item) => sum + parseInt(item.appt_offer), 0) / timelineData.length)
+                                      : 0} days
+                                  </div>
+                                </div>
+                                <div className="text-center">
+                                  <div className="text-xs text-gray-500 mb-1">Avg Created → Offer</div>
+                                  <div className="text-lg font-bold text-purple-600">
+                                    {timelineData.length > 0 
+                                      ? Math.round(timelineData.reduce((sum, item) => sum + parseInt(item.created_offer), 0) / timelineData.length)
+                                      : 0} days
+                                  </div>
+                                </div>
+                                <div className="text-center">
+                                  <div className="text-xs text-gray-500 mb-1">Avg Offer → Closed</div>
+                                  <div className="text-lg font-bold text-orange-600">
+                                    {timelineData.length > 0 
+                                      ? Math.round(timelineData.reduce((sum, item) => sum + parseInt(item.offer_closed), 0) / timelineData.length)
+                                      : 0} days
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )}
                     </>
                   )}
                 </>
@@ -3199,12 +3557,16 @@ const Metrics = () => {
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-2xl font-bold text-gray-900">70%</span>
+                    <span className="text-2xl font-bold text-gray-900">
+                      {dispLoading ? '...' : (dispositionsData?.propertiesSoldPercentage || 0).toFixed(0)}%
+                    </span>
                   </div>
                 </div>
                 <div className="space-y-1">
                   <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Total Properties in Pipeline</h3>
-                  <p className="text-lg font-bold text-gray-900">{dispTotal}</p>
+                  <p className="text-lg font-bold text-gray-900">
+                    {dispLoading ? '...' : (dispositionsData?.totalPropertiesInPipeline || dispTotal || 0)}
+                  </p>
                   <p className="text-xs text-gray-500">Properties in dispositions pipeline</p>
                 </div>
               </div>
@@ -3237,12 +3599,16 @@ const Metrics = () => {
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-2xl font-bold text-gray-900">70%</span>
+                    <span className="text-2xl font-bold text-gray-900">
+                      {dispLoading ? '...' : (dispositionsData?.propertiesSoldPercentage || 0).toFixed(0)}%
+                    </span>
                   </div>
                 </div>
                 <div className="space-y-1">
                   <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Total Properties Sold</h3>
-                  <p className="text-lg font-bold text-gray-900">{dispClosed}</p>
+                  <p className="text-lg font-bold text-gray-900">
+                    {dispLoading ? '...' : (dispositionsData?.totalPropertiesSold || dispClosed || 0)}
+                  </p>
                   <p className="text-xs text-gray-500">Closed this period</p>
                 </div>
               </div>
@@ -3269,18 +3635,22 @@ const Metrics = () => {
                       stroke="currentColor"
                       strokeWidth="8"
                       fill="transparent"
-                      strokeDasharray={`${(150000/200000) * 251.2} 251.2`}
+                      strokeDasharray={`${((dispositionsData?.projectedProfit || 0) / 200000) * 251.2} 251.2`}
                       className="text-orange-500"
                       strokeLinecap="round"
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-2xl font-bold text-gray-900">75%</span>
+                    <span className="text-2xl font-bold text-gray-900">
+                      {dispLoading ? '...' : (((dispositionsData?.projectedProfit || 0) / 200000) * 100).toFixed(0)}%
+                    </span>
                   </div>
                 </div>
                 <div className="space-y-1">
                   <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Projected Profit</h3>
-                  <p className="text-lg font-bold text-gray-900">$150,000.00</p>
+                  <p className="text-lg font-bold text-gray-900">
+                    {dispLoading ? '...' : `$${(dispositionsData?.projectedProfit || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  </p>
                   <p className="text-xs text-gray-500">of $200,000.00 target</p>
                 </div>
               </div>
@@ -3311,18 +3681,22 @@ const Metrics = () => {
                       stroke="currentColor"
                       strokeWidth="8"
                       fill="transparent"
-                      strokeDasharray={`${(6/8) * 251.2} 251.2`}
+                      strokeDasharray={`${((dispositionsData?.totalDealsClosed || 0) / Math.max((dispositionsData?.totalPropertiesInPipeline || 1), 1)) * 251.2} 251.2`}
                       className="text-emerald-500"
                       strokeLinecap="round"
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-2xl font-bold text-gray-900">75%</span>
+                    <span className="text-2xl font-bold text-gray-900">
+                      {dispLoading ? '...' : (((dispositionsData?.totalDealsClosed || 0) / Math.max((dispositionsData?.totalPropertiesInPipeline || 1), 1)) * 100).toFixed(0)}%
+                    </span>
                   </div>
                 </div>
                 <div className="space-y-1">
                   <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Total Deals Closed</h3>
-                  <p className="text-lg font-bold text-gray-900">6 of 8</p>
+                  <p className="text-lg font-bold text-gray-900">
+                    {dispLoading ? '...' : `${dispositionsData?.totalDealsClosed || 0} of ${dispositionsData?.totalPropertiesInPipeline || 0}`}
+                  </p>
                   <p className="text-xs text-gray-500">Deals closed this month</p>
                 </div>
               </div>
@@ -3349,18 +3723,22 @@ const Metrics = () => {
                       stroke="currentColor"
                       strokeWidth="8"
                       fill="transparent"
-                      strokeDasharray={`${(145000/200000) * 251.2} 251.2`}
+                      strokeDasharray={`${((dispositionsData?.closedProfit || 0) / 200000) * 251.2} 251.2`}
                       className="text-cyan-500"
                       strokeLinecap="round"
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-xl font-bold text-gray-900">73%</span>
+                    <span className="text-xl font-bold text-gray-900">
+                      {dispLoading ? '...' : (((dispositionsData?.closedProfit || 0) / 200000) * 100).toFixed(0)}%
+                    </span>
                   </div>
                 </div>
                 <div className="space-y-1">
                   <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Closed Profit</h3>
-                  <p className="text-lg font-bold text-gray-900">$145,000.00</p>
+                  <p className="text-lg font-bold text-gray-900">
+                    {dispLoading ? '...' : `$${(dispositionsData?.closedProfit || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  </p>
                   <p className="text-xs text-gray-500">of $200,000.00 target</p>
                 </div>
               </div>
@@ -3387,18 +3765,22 @@ const Metrics = () => {
                       stroke="currentColor"
                       strokeWidth="8"
                       fill="transparent"
-                      strokeDasharray={`${(42/100) * 251.2} 251.2`}
+                      strokeDasharray={`${((dispositionsData?.buyersAdded || 0) / 100) * 251.2} 251.2`}
                       className="text-indigo-500"
                       strokeLinecap="round"
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-2xl font-bold text-gray-900">42%</span>
+                    <span className="text-2xl font-bold text-gray-900">
+                      {dispLoading ? '...' : (((dispositionsData?.buyersAdded || 0) / 100) * 100).toFixed(0)}%
+                    </span>
                   </div>
                 </div>
                 <div className="space-y-1">
                   <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Buyers Added</h3>
-                  <p className="text-lg font-bold text-gray-900">42 of 100</p>
+                  <p className="text-lg font-bold text-gray-900">
+                    {dispLoading ? '...' : `${dispositionsData?.buyersAdded || 0} of 100`}
+                  </p>
                   <p className="text-xs text-gray-500">New buyers this month</p>
                 </div>
               </div>
@@ -3408,13 +3790,35 @@ const Metrics = () => {
             <Card className="p-6 text-center bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
               <div className="space-y-4">
                 <div className="relative w-24 h-24 mx-auto">
-                  <div className="w-24 h-24 rounded-full bg-yellow-100 border-4 border-yellow-500 flex items-center justify-center">
-                    <span className="text-2xl font-bold text-yellow-700">3</span>
+                  <div className={`w-24 h-24 rounded-full border-4 flex items-center justify-center ${
+                    (dispositionsData?.leadsMishandled?.count || 0) <= 4 
+                      ? 'bg-yellow-100 border-yellow-500' 
+                      : (dispositionsData?.leadsMishandled?.count || 0) <= 9 
+                      ? 'bg-orange-100 border-orange-500' 
+                      : 'bg-red-100 border-red-500'
+                  }`}>
+                    <span className={`text-2xl font-bold ${
+                      (dispositionsData?.leadsMishandled?.count || 0) <= 4 
+                        ? 'text-yellow-700' 
+                        : (dispositionsData?.leadsMishandled?.count || 0) <= 9 
+                        ? 'text-orange-700' 
+                        : 'text-red-700'
+                    }`}>
+                      {dispLoading ? '...' : (dispositionsData?.leadsMishandled?.count || 0)}
+                    </span>
                   </div>
                 </div>
                 <div className="space-y-1">
                   <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Leads Mishandled</h3>
-                  <p className="text-lg font-bold text-yellow-700">3 Leads</p>
+                  <p className={`text-lg font-bold ${
+                    (dispositionsData?.leadsMishandled?.count || 0) <= 4 
+                      ? 'text-yellow-700' 
+                      : (dispositionsData?.leadsMishandled?.count || 0) <= 9 
+                      ? 'text-orange-700' 
+                      : 'text-red-700'
+                  }`}>
+                    {dispLoading ? '...' : `${dispositionsData?.leadsMishandled?.count || 0} Leads`}
+                  </p>
                   <p className="text-xs text-yellow-600">1-4: Yellow • 5-9: Orange • 10+: Red</p>
                 </div>
               </div>
@@ -3787,7 +4191,10 @@ const Metrics = () => {
             <>
           <div className="flex items-center justify-between">
             <div>
-                  <h2 className="text-2xl font-bold text-gray-900">🏆 Acquisitions Leaderboard</h2>
+                  <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                    <Trophy className="w-6 h-6 text-yellow-500" />
+                    Acquisitions Leaderboard
+                  </h2>
                   <p className="text-sm text-gray-600">
                     {user?.roles?.some(role => ['ACQ'].includes(role)) 
                       ? 'Your ranking and performance among the acquisitions team' 
@@ -3849,70 +4256,74 @@ const Metrics = () => {
                 <div className="space-y-6">
                   {/* Performance Leaderboard */}
                   <Card className="overflow-hidden">
-                    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4">
-                      <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                        <Trophy className="w-5 h-5" />
-                        Performance Leaderboard
-                      </h3>
-                      <p className="text-blue-100 text-sm">Ranked by Contracts Signed, Projected Profit, Leads per Contract (minus mishandled leads)</p>
-                    </div>
-                    <div className="p-0">
+                    <CardHeader className="bg-white border-b">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle className="flex items-center gap-2 text-lg">
+                            <Trophy className="w-5 h-5 text-yellow-500" />
+                            Performance Leaderboard
+                          </CardTitle>
+                          <p className="text-sm text-gray-500 mt-1">Ranked by total score</p>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-0">
                       <div className="overflow-x-auto">
                         <table className="w-full">
                           <thead className="bg-gray-50 border-b">
                             <tr>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Agent</th>
-                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
-                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Contracts</th>
-                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Projected Profit</th>
-                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Leads/Contract</th>
-                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Mishandled</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rank</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Agent</th>
+                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Score</th>
+                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Contracts</th>
+                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Profit</th>
+                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Efficiency</th>
+                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Risk</th>
                             </tr>
                           </thead>
                           <tbody className="bg-white divide-y divide-gray-200">
                             {acqLeaderboardData.agents.map((agent, index) => (
-                              <tr key={agent.userId} className={`hover:bg-gray-50 ${
-                                user?.id === agent.userId ? 'bg-blue-50 border-l-4 border-blue-500' : ''
+                              <tr key={agent.userId} className={`hover:bg-gray-50 transition-colors ${
+                                user?.id === agent.userId ? 'bg-blue-50 border-l-2 border-blue-500' : ''
                               }`}>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                  <div className="flex items-center">
-                                    {index === 0 && <span className="text-2xl mr-2">🥇</span>}
-                                    {index === 1 && <span className="text-2xl mr-2">🥈</span>}
-                                    {index === 2 && <span className="text-2xl mr-2">🥉</span>}
-                                    <span className="text-lg font-bold text-gray-900">#{index + 1}</span>
+                                <td className="px-4 py-3 whitespace-nowrap">
+                                  <div className="flex items-center gap-2">
+                                    {index === 0 && <Medal className="w-4 h-4 text-yellow-500" />}
+                                    {index === 1 && <Medal className="w-4 h-4 text-gray-400" />}
+                                    {index === 2 && <Medal className="w-4 h-4 text-amber-600" />}
+                                    <span className="text-sm font-semibold text-gray-700">#{index + 1}</span>
                                   </div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                  <div className="flex items-center">
-                                    <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                                <td className="px-4 py-3 whitespace-nowrap">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold text-xs">
                                       {agent.name.split(' ').map(n => n[0]).join('').toUpperCase()}
                                     </div>
-                                    <div className="ml-4">
+                                    <div>
                                       <div className="text-sm font-medium text-gray-900">{agent.name}</div>
-                                      <div className="text-sm text-gray-500">{agent.email}</div>
+                                      <div className="text-xs text-gray-500">{agent.email}</div>
                                     </div>
                                   </div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-lg font-bold text-blue-600">{agent.totalScore || 0}</div>
+                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                  <div className="text-sm font-bold text-blue-600">{agent.totalScore || 0}</div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-lg font-semibold text-green-600">{agent.contractsSigned || 0}</div>
+                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                  <div className="text-sm font-semibold text-green-600">{agent.contractsSigned || 0}</div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-lg font-semibold text-orange-600">
+                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                  <div className="text-sm font-semibold text-orange-600">
                                     ${new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(agent.projectedProfit || 0)}
                                   </div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-lg font-semibold text-purple-600">{(agent.leadsPerContract || 0).toFixed(1)}</div>
+                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                  <div className="text-sm text-gray-700">{(agent.leadsPerContract || 0).toFixed(1)}</div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                    agent.mishandledLeads === 0 ? 'bg-green-100 text-green-800' :
-                                    agent.mishandledLeads <= 3 ? 'bg-yellow-100 text-yellow-800' :
-                                    'bg-red-100 text-red-800'
+                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                    agent.mishandledLeads === 0 ? 'bg-green-100 text-green-700' :
+                                    agent.mishandledLeads <= 3 ? 'bg-yellow-100 text-yellow-700' :
+                                    'bg-red-100 text-red-700'
                                   }`}>
                                     {agent.mishandledLeads}
                                   </span>
@@ -3922,70 +4333,74 @@ const Metrics = () => {
                           </tbody>
                         </table>
                       </div>
-                    </div>
+                    </CardContent>
                   </Card>
 
                   {/* Communications Leaderboard */}
                   <Card className="overflow-hidden">
-                    <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-4">
-                      <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                        <Phone className="w-5 h-5" />
-                        Communications Leaderboard
-                      </h3>
-                      <p className="text-green-100 text-sm">Ranked by calls, SMS, and email activity</p>
-                    </div>
-                    <div className="p-0">
+                    <CardHeader className="bg-white border-b">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle className="flex items-center gap-2 text-lg">
+                            <Phone className="w-5 h-5 text-green-500" />
+                            Communications Activity
+                          </CardTitle>
+                          <p className="text-sm text-gray-500 mt-1">Ranked by total communications</p>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-0">
                       <div className="overflow-x-auto">
                         <table className="w-full">
                           <thead className="bg-gray-50 border-b">
                             <tr>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Agent</th>
-                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Total Comms</th>
-                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Calls</th>
-                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">SMS</th>
-                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Emails</th>
-                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Response Rate</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rank</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Agent</th>
+                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Total</th>
+                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Calls</th>
+                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">SMS</th>
+                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Emails</th>
+                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Response</th>
                             </tr>
                           </thead>
                           <tbody className="bg-white divide-y divide-gray-200">
                             {[...acqLeaderboardData.agents]
                               .sort((a, b) => (b.communications.total || 0) - (a.communications.total || 0))
                               .map((agent, index) => (
-                              <tr key={`comm-${agent.userId}`} className={`hover:bg-gray-50 ${
-                                user?.id === agent.userId ? 'bg-green-50 border-l-4 border-green-500' : ''
+                              <tr key={`comm-${agent.userId}`} className={`hover:bg-gray-50 transition-colors ${
+                                user?.id === agent.userId ? 'bg-green-50 border-l-2 border-green-500' : ''
                               }`}>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                  <div className="flex items-center">
-                                    {index === 0 && <span className="text-2xl mr-2">🥇</span>}
-                                    {index === 1 && <span className="text-2xl mr-2">🥈</span>}
-                                    {index === 2 && <span className="text-2xl mr-2">🥉</span>}
-                                    <span className="text-lg font-bold text-gray-900">#{index + 1}</span>
+                                <td className="px-4 py-3 whitespace-nowrap">
+                                  <div className="flex items-center gap-2">
+                                    {index === 0 && <Medal className="w-4 h-4 text-yellow-500" />}
+                                    {index === 1 && <Medal className="w-4 h-4 text-gray-400" />}
+                                    {index === 2 && <Medal className="w-4 h-4 text-amber-600" />}
+                                    <span className="text-sm font-semibold text-gray-700">#{index + 1}</span>
                                   </div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                  <div className="flex items-center">
-                                    <div className="w-10 h-10 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                                <td className="px-4 py-3 whitespace-nowrap">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-white font-semibold text-xs">
                                       {agent.name.split(' ').map(n => n[0]).join('').toUpperCase()}
                                     </div>
-                                    <div className="ml-4">
+                                    <div>
                                       <div className="text-sm font-medium text-gray-900">{agent.name}</div>
                                     </div>
                                   </div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-lg font-bold text-green-600">{agent.communications.total || 0}</div>
+                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                  <div className="text-sm font-bold text-green-600">{agent.communications.total || 0}</div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-sm text-gray-900">{agent.communications.calls || 0}</div>
+                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                  <div className="text-sm text-gray-700">{agent.communications.calls || 0}</div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-sm text-gray-900">{agent.communications.sms || 0}</div>
+                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                  <div className="text-sm text-gray-700">{agent.communications.sms || 0}</div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-sm text-gray-900">{agent.communications.emails || 0}</div>
+                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                  <div className="text-sm text-gray-700">{agent.communications.emails || 0}</div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                <td className="px-4 py-3 whitespace-nowrap text-center">
                                   <div className="text-sm font-semibold text-blue-600">
                                     {agent.communications.responseRate || 0}%
                                   </div>
@@ -3995,7 +4410,7 @@ const Metrics = () => {
                           </tbody>
                         </table>
                       </div>
-                    </div>
+                    </CardContent>
                   </Card>
                 </div>
               )}
@@ -4019,7 +4434,10 @@ const Metrics = () => {
             <>
           <div className="flex items-center justify-between">
             <div>
-                  <h2 className="text-2xl font-bold text-gray-900">🏅 Dispositions Leaderboard</h2>
+                  <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                    <Award className="w-6 h-6 text-purple-500" />
+                    Dispositions Leaderboard
+                  </h2>
                   <p className="text-sm text-gray-600">
                     {user?.roles?.some(role => ['DISP'].includes(role)) 
                       ? 'Your ranking and performance among the dispositions team' 
@@ -4081,70 +4499,74 @@ const Metrics = () => {
                 <div className="space-y-6">
                   {/* Performance Leaderboard */}
                   <Card className="overflow-hidden">
-                    <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-4">
-                      <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                        <Award className="w-5 h-5" />
-                        Performance Leaderboard
-                      </h3>
-                      <p className="text-purple-100 text-sm">Ranked by Properties Sold, Projected Profit, Buyers Added (minus mishandled leads)</p>
-                    </div>
-                    <div className="p-0">
+                    <CardHeader className="bg-white border-b">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle className="flex items-center gap-2 text-lg">
+                            <Trophy className="w-5 h-5 text-purple-500" />
+                            Performance Leaderboard
+                          </CardTitle>
+                          <p className="text-sm text-gray-500 mt-1">Ranked by total score</p>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-0">
                       <div className="overflow-x-auto">
                         <table className="w-full">
                           <thead className="bg-gray-50 border-b">
                             <tr>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Agent</th>
-                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
-                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Properties Sold</th>
-                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Projected Profit</th>
-                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Buyers Added</th>
-                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Mishandled</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rank</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Agent</th>
+                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Score</th>
+                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Sold</th>
+                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Profit</th>
+                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Buyers</th>
+                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Risk</th>
                             </tr>
                           </thead>
                           <tbody className="bg-white divide-y divide-gray-200">
                             {dispLeaderboardData.agents.map((agent, index) => (
-                              <tr key={agent.userId} className={`hover:bg-gray-50 ${
-                                user?.id === agent.userId ? 'bg-purple-50 border-l-4 border-purple-500' : ''
+                              <tr key={agent.userId} className={`hover:bg-gray-50 transition-colors ${
+                                user?.id === agent.userId ? 'bg-purple-50 border-l-2 border-purple-500' : ''
                               }`}>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                  <div className="flex items-center">
-                                    {index === 0 && <span className="text-2xl mr-2">🥇</span>}
-                                    {index === 1 && <span className="text-2xl mr-2">🥈</span>}
-                                    {index === 2 && <span className="text-2xl mr-2">🥉</span>}
-                                    <span className="text-lg font-bold text-gray-900">#{index + 1}</span>
+                                <td className="px-4 py-3 whitespace-nowrap">
+                                  <div className="flex items-center gap-2">
+                                    {index === 0 && <Medal className="w-4 h-4 text-yellow-500" />}
+                                    {index === 1 && <Medal className="w-4 h-4 text-gray-400" />}
+                                    {index === 2 && <Medal className="w-4 h-4 text-amber-600" />}
+                                    <span className="text-sm font-semibold text-gray-700">#{index + 1}</span>
                                   </div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                  <div className="flex items-center">
-                                    <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                                <td className="px-4 py-3 whitespace-nowrap">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center text-white font-semibold text-xs">
                                       {agent.name.split(' ').map(n => n[0]).join('').toUpperCase()}
                                     </div>
-                                    <div className="ml-4">
+                                    <div>
                                       <div className="text-sm font-medium text-gray-900">{agent.name}</div>
-                                      <div className="text-sm text-gray-500">{agent.email}</div>
+                                      <div className="text-xs text-gray-500">{agent.email}</div>
                                     </div>
                                   </div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-lg font-bold text-purple-600">{agent.totalScore || 0}</div>
+                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                  <div className="text-sm font-bold text-purple-600">{agent.totalScore || 0}</div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-lg font-semibold text-green-600">{agent.propertiesSold || 0}</div>
+                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                  <div className="text-sm font-semibold text-green-600">{agent.propertiesSold || 0}</div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-lg font-semibold text-orange-600">
+                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                  <div className="text-sm font-semibold text-orange-600">
                                     ${new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(agent.projectedProfit || 0)}
                                   </div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-lg font-semibold text-blue-600">{agent.buyersAdded || 0}</div>
+                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                  <div className="text-sm font-semibold text-blue-600">{agent.buyersAdded || 0}</div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                    agent.mishandledLeads === 0 ? 'bg-green-100 text-green-800' :
-                                    agent.mishandledLeads <= 3 ? 'bg-yellow-100 text-yellow-800' :
-                                    'bg-red-100 text-red-800'
+                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                    agent.mishandledLeads === 0 ? 'bg-green-100 text-green-700' :
+                                    agent.mishandledLeads <= 3 ? 'bg-yellow-100 text-yellow-700' :
+                                    'bg-red-100 text-red-700'
                                   }`}>
                                     {agent.mishandledLeads}
                                   </span>
@@ -4154,70 +4576,75 @@ const Metrics = () => {
                           </tbody>
                         </table>
                       </div>
-                    </div>
+                    </CardContent>
                   </Card>
 
                   {/* Communications Leaderboard */}
                   <Card className="overflow-hidden">
-                    <div className="bg-gradient-to-r from-teal-600 to-cyan-600 px-6 py-4">
-                      <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                        <MessageSquare className="w-5 h-5" />
-                        Communications Leaderboard
-                      </h3>
-                      <p className="text-teal-100 text-sm">Ranked by calls, SMS, and email activity</p>
-                    </div>
-                    <div className="p-0">
+                    <CardHeader className="bg-white border-b">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle className="flex items-center gap-2 text-lg">
+                            <MessageSquare className="w-5 h-5 text-teal-500" />
+                            Communications Leaderboard
+                          </CardTitle>
+                          <p className="text-sm text-gray-500 mt-1">Ranked by total communications</p>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-0">
                       <div className="overflow-x-auto">
                         <table className="w-full">
                           <thead className="bg-gray-50 border-b">
                             <tr>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Agent</th>
-                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Total Comms</th>
-                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Calls</th>
-                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">SMS</th>
-                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Emails</th>
-                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Response Rate</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rank</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Agent</th>
+                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Total</th>
+                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Calls</th>
+                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">SMS</th>
+                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Emails</th>
+                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Response</th>
                             </tr>
                           </thead>
                           <tbody className="bg-white divide-y divide-gray-200">
                             {[...dispLeaderboardData.agents]
                               .sort((a, b) => (b.communications.total || 0) - (a.communications.total || 0))
                               .map((agent, index) => (
-                              <tr key={`comm-${agent.userId}`} className={`hover:bg-gray-50 ${
-                                user?.id === agent.userId ? 'bg-teal-50 border-l-4 border-teal-500' : ''
+                              <tr key={`comm-${agent.userId}`} className={`hover:bg-gray-50 transition-colors ${
+                                user?.id === agent.userId ? 'bg-teal-50 border-l-2 border-teal-500' : ''
                               }`}>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                  <div className="flex items-center">
-                                    {index === 0 && <span className="text-2xl mr-2">🥇</span>}
-                                    {index === 1 && <span className="text-2xl mr-2">🥈</span>}
-                                    {index === 2 && <span className="text-2xl mr-2">🥉</span>}
-                                    <span className="text-lg font-bold text-gray-900">#{index + 1}</span>
+                                <td className="px-4 py-3 whitespace-nowrap">
+                                  <div className="flex items-center gap-2">
+                                    {index === 0 && <Medal className="w-4 h-4 text-yellow-500" />}
+                                    {index === 1 && <Medal className="w-4 h-4 text-gray-400" />}
+                                    {index === 2 && <Medal className="w-4 h-4 text-amber-600" />}
+                                    <span className="text-sm font-semibold text-gray-700">#{index + 1}</span>
                                   </div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                  <div className="flex items-center">
-                                    <div className="w-10 h-10 bg-gradient-to-r from-teal-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                                <td className="px-4 py-3 whitespace-nowrap">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 bg-teal-500 rounded-full flex items-center justify-center text-white font-semibold text-xs">
                                       {agent.name.split(' ').map(n => n[0]).join('').toUpperCase()}
                                     </div>
-                                    <div className="ml-4">
+                                    <div>
                                       <div className="text-sm font-medium text-gray-900">{agent.name}</div>
+                                      <div className="text-xs text-gray-500">{agent.email}</div>
                                     </div>
                                   </div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-lg font-bold text-teal-600">{agent.communications.total || 0}</div>
+                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                  <div className="text-sm font-bold text-teal-600">{agent.communications.total || 0}</div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-sm text-gray-900">{agent.communications.calls || 0}</div>
+                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                  <div className="text-sm text-gray-700">{agent.communications.calls || 0}</div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-sm text-gray-900">{agent.communications.sms || 0}</div>
+                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                  <div className="text-sm text-gray-700">{agent.communications.sms || 0}</div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-center">
-                                  <div className="text-sm text-gray-900">{agent.communications.emails || 0}</div>
+                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                  <div className="text-sm text-gray-700">{agent.communications.emails || 0}</div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                <td className="px-4 py-3 whitespace-nowrap text-center">
                                   <div className="text-sm font-semibold text-blue-600">
                                     {agent.communications.responseRate || 0}%
                                   </div>
@@ -4227,7 +4654,7 @@ const Metrics = () => {
                           </tbody>
                         </table>
                       </div>
-                    </div>
+                    </CardContent>
                   </Card>
                 </div>
               )}

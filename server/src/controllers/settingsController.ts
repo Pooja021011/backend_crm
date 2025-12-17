@@ -89,10 +89,46 @@ export const settingsController = {
     }
   },
 
+  // Fetch only lead-related emails
+  fetchLeadEmails: async (req: Request, res: Response) => {
+    const userId = (req as any).user.id as string;
+    const limit = parseInt(req.query.limit as string) || 20;
+    
+    try {
+      const { emailService } = await import('../services/emailService.js');
+      const { emailMatchingService } = await import('../services/emailMatchingService.js');
+      
+      // Fetch all emails
+      const allEmails = await emailService.fetchGmailEmails(userId, limit);
+      
+      // Filter to only emails that match leads
+      const leadEmails = [];
+      for (const email of allEmails) {
+        const leadId = await emailMatchingService.findLeadByMultipleEmails([
+          email.from,
+          email.to,
+          email.cc,
+          email.bcc
+        ].filter(Boolean));
+        
+        if (leadId) {
+          leadEmails.push({
+            ...email,
+            leadId
+          });
+        }
+      }
+      
+      return res.json({ success: true, data: leadEmails });
+    } catch (error: any) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+  },
+
   // Send email using user's SMTP settings
   sendEmail: async (req: Request, res: Response) => {
     const userId = (req as any).user.id as string;
-    const { to, subject, text, html, replyTo, inReplyTo, references } = req.body;
+    const { to, subject, text, html, replyTo, inReplyTo, references, leadId } = req.body;
     
     if (!to || !subject || (!text && !html)) {
       return res.status(400).json({ 
@@ -110,7 +146,8 @@ export const settingsController = {
         html,
         replyTo,
         inReplyTo,
-        references
+        references,
+        leadId
       });
       return res.json({ success: true, data: result });
     } catch (error: any) {

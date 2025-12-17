@@ -1,5 +1,6 @@
 import { prisma } from '../config/db.js';
 import { logger } from '../config/logger.js';
+import { stageTransitionService } from './stageTransitionService.js';
 
 export interface PipelineLeadFilters {
   needsAttention?: boolean;
@@ -559,18 +560,50 @@ export const pipelineService = {
       if (!currentLead) {
         throw new Error('Lead not found');
       }
+      
+      // NEW: Validation check before stage change
+      const validation = await stageTransitionService.validateStageTransition(
+        leadId,
+        currentLead.pipelineStageId,
+        stageId
+      );
+      
+      if (!validation.valid) {
+        const error: any = new Error(validation.errors?.[0] || 'Validation failed');
+        error.code = 'VALIDATION_REQUIRED';
+        error.requiredFields = validation.requiredFields;
+        error.stageName = validation.stageName;
+        throw error;
+      }
 
-      // Verify the new stage exists
+      // EXISTING: Verify the new stage exists
       const stage = await prisma.pipelineStage.findUnique({
         where: { id: stageId },
         select: { id: true, name: true }
       });
 
       if (!stage) {
-        throw new Error('Pipeline stage not found');
+        logger.error('Pipeline stage not found - cannot move lead', { 
+          stageId, 
+          leadId,
+          stageIdType: typeof stageId,
+          stageIdLength: stageId?.length 
+        });
+        
+        // Try to find a similar stage by name or list available stages
+        const allStages = await prisma.pipelineStage.findMany({
+          select: { id: true, name: true, pipelineId: true }
+        });
+        
+        logger.error('Available stages in database', { 
+          count: allStages.length,
+          stages: allStages.map(s => ({ id: s.id, name: s.name }))
+        });
+        
+        throw new Error(`Pipeline stage ${stageId} does not exist in database. Available stages: ${allStages.length}`);
       }
 
-      // Don't move if it's the same stage
+      // EXISTING: Don't move if it's the same stage
       if (currentLead.pipelineStageId === stageId) {
         return {
           leadId,
@@ -580,7 +613,7 @@ export const pipelineService = {
         };
       }
 
-      // Update the lead's pipeline stage and stageEnteredAt
+      // EXISTING: Update the lead's pipeline stage and stageEnteredAt
       const updatedLead = await prisma.lead.update({
         where: { id: leadId },
         data: {
@@ -593,7 +626,7 @@ export const pipelineService = {
         }
       });
 
-      // Create stage history record only if we have a fromStageId (skip if lead was never in a stage)
+      // EXISTING: Create stage history record only if we have a fromStageId (skip if lead was never in a stage)
       if (currentLead.pipelineStageId) {
         await prisma.stageHistory.create({
           data: {
@@ -612,6 +645,11 @@ export const pipelineService = {
         stageName: stage.name, 
         userId 
       });
+      
+      // NEW: Execute post-transition actions (task creation)
+      if (userId) {
+        await stageTransitionService.executePostTransitionActions(leadId, stageId, userId);
+      }
 
       return {
         leadId,
@@ -628,7 +666,7 @@ export const pipelineService = {
         stack: error.stack,
         code: error.code
       });
-      throw new Error(`Failed to move lead: ${error.message}`);
+      throw error;
     }
   },
 

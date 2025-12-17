@@ -138,6 +138,9 @@ export const rehabCalculationService = {
     if (toggledItems.insulation) {
       itemizedCosts.insulation = 4.00 * sqft;
     }
+    if (toggledItems.drywall) {
+      itemizedCosts.drywall = 2.50 * sqft;
+    }
 
     // Miscellaneous
     if (toggledItems.smartHome) {
@@ -145,6 +148,9 @@ export const rehabCalculationService = {
     }
     if (toggledItems.landscaping) {
       itemizedCosts.landscaping = 3000;
+    }
+    if (toggledItems.miscellaneous) {
+      itemizedCosts.miscellaneous = 5000; // Flat fee for misc items
     }
 
     // Calculate subtotal

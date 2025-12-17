@@ -90,14 +90,66 @@ export const fileController = {
         leadId
       }));
 
-      res.json({ files: formattedFiles });
+      res.json({ success: true, data: formattedFiles });
     } catch (error) {
       console.error('Error listing files:', error);
-      res.status(500).json({ error: 'Failed to list files' });
+      res.status(500).json({ success: false, error: 'Failed to list files' });
     }
   },
 
-  // Upload new file
+  // Upload new file (for route /leads/:id/files)
+  async uploadFile(req: Request, res: Response) {
+    try {
+      const file = (req as any).file as Express.Multer.File;
+      if (!file) {
+        return res.status(400).json({ success: false, error: 'No file provided' });
+      }
+
+      const leadId = req.params.id; // Get leadId from URL params
+      const { category = 'PHOTO', tags = '[]', description = '', isPublic = 'false' } = req.body;
+      const userId = (req as any).user?.id;
+
+      if (!leadId) {
+        return res.status(400).json({ success: false, error: 'Lead ID is required' });
+      }
+
+      let parsedTags: string[] = [];
+      try {
+        parsedTags = JSON.parse(tags);
+      } catch (e) {
+        // If tags is not valid JSON, treat as empty array
+      }
+
+      const created = await fileRepository.createForLead(leadId, {
+        filename: file.filename,
+        originalName: file.originalname,
+        mimeType: file.mimetype,
+        size: file.size,
+        storageKey: file.filename,
+        category,
+        tags: parsedTags,
+        description: description || undefined,
+        isPublic: isPublic === 'true',
+        uploadedById: userId || null,
+      });
+
+      res.status(201).json({ 
+        success: true, 
+        data: {
+          id: created.id,
+          originalName: created.originalName,
+          category: created.category,
+          tags: created.tags,
+          fileId: created.id
+        }
+      });
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      res.status(500).json({ success: false, error: 'Failed to upload file' });
+    }
+  },
+
+  // Upload new file (legacy - for routes that pass leadId in body)
   async upload(req: Request, res: Response) {
     try {
       const file = (req as any).file as Express.Multer.File;

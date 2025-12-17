@@ -2,6 +2,7 @@ import { leadRepository, type LeadCreateInput } from '../repositories/leadReposi
 import { taskRepository } from '../repositories/taskRepository.js';
 import { prisma } from '../config/db.js';
 import { dealRepository } from '../repositories/dealRepository.js';
+import { stageTransitionService } from './stageTransitionService.js';
 
 export const leadService = {
   create: (input: LeadCreateInput, createdById?: string) => leadRepository.create(input, createdById),
@@ -10,8 +11,30 @@ export const leadService = {
   list: (params: any) => leadRepository.list(params),
   delete: (id: string) => leadRepository.delete(id),
   changeStage: async (leadId: string, toStageId: string, userId?: string) => {
+    // NEW: Validation check before stage change
+    const currentLead = await prisma.lead.findUnique({
+      where: { id: leadId },
+      select: { pipelineStageId: true }
+    });
+    
+    const validation = await stageTransitionService.validateStageTransition(
+      leadId,
+      currentLead?.pipelineStageId || null,
+      toStageId
+    );
+    
+    if (!validation.valid) {
+      const error: any = new Error(validation.errors?.[0] || 'Validation failed');
+      error.code = 'VALIDATION_REQUIRED';
+      error.requiredFields = validation.requiredFields;
+      error.stageName = validation.stageName;
+      throw error;
+    }
+    
+    // EXISTING LOGIC - UNCHANGED
     const updated = await leadRepository.changeStage(leadId, toStageId, userId);
-    // Auto-create/update Deal timestamps based on stage names
+    
+    // EXISTING: Auto-create/update Deal timestamps based on stage names
     const stage = updated?.pipelineStage;
     const name = (stage?.name || '').toLowerCase();
     if (name.includes('contract')) {
@@ -20,6 +43,12 @@ export const leadService = {
     if (name.includes('closed')) {
       await dealRepository.upsertByLeadId(leadId, { closedAt: new Date() });
     }
+    
+    // NEW: Execute post-transition actions (task creation)
+    if (userId) {
+      await stageTransitionService.executePostTransitionActions(leadId, toStageId, userId);
+    }
+    
     return updated;
   },
 

@@ -47,53 +47,67 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   useEffect(() => {
     const initializeAuth = async () => {
       const accessToken = localStorage.getItem('accessToken');
+      const refreshTokenStored = localStorage.getItem('refreshToken');
       const savedUser = localStorage.getItem('user');
       
-      if (accessToken) {
+      console.log('🔐 Auth initialization:', { hasAccessToken: !!accessToken, hasRefreshToken: !!refreshTokenStored, hasSavedUser: !!savedUser });
+      
+      if (accessToken && savedUser) {
         // If we have saved user data, restore it immediately
-        if (savedUser) {
-          try {
-            setUser(JSON.parse(savedUser));
-          } catch (error) {
-            console.error('Error parsing saved user data:', error);
-            localStorage.removeItem('user');
-          }
-        }
-        
         try {
-          // Try to refresh token to validate session
+          setUser(JSON.parse(savedUser));
+          setIsLoading(false);
+        } catch (error) {
+          console.error('Error parsing saved user data:', error);
+          localStorage.removeItem('user');
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+          setUser(null);
+          setIsLoading(false);
+        }
+      } else if (refreshTokenStored) {
+        // Try to refresh token if we don't have access token but have refresh token
+        console.log('🔄 Attempting token refresh...');
+        try {
           const response = await httpFetch(`${API_BASE}/auth/refresh`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
-            credentials: 'include',
+            body: JSON.stringify({ refreshToken: refreshTokenStored }),
           });
 
           if (response.ok) {
             const data = await response.json();
+            console.log('✅ Token refresh successful');
             localStorage.setItem('accessToken', data.accessToken);
             if (data.user) {
               localStorage.setItem('user', JSON.stringify(data.user));
               setUser(data.user);
             }
           } else {
+            console.warn('❌ Token refresh failed');
             localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
             localStorage.removeItem('user');
             setUser(null);
           }
         } catch (error) {
-          console.error('Auth initialization error:', error);
+          console.error('❌ Auth initialization error:', error);
           localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
           localStorage.removeItem('user');
           setUser(null);
         }
+        setIsLoading(false);
+      } else {
+        console.log('⚠️ No auth tokens found');
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
 
     initializeAuth();
-  }, [API_BASE]);
+  }, []);
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
@@ -111,6 +125,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (response.ok) {
         localStorage.setItem('accessToken', data.accessToken);
+        if (data.refreshToken) {
+          localStorage.setItem('refreshToken', data.refreshToken);
+        }
         localStorage.setItem('user', JSON.stringify(data.user));
         setUser(data.user);
         toast({
@@ -141,17 +158,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const refreshToken = async (): Promise<boolean> => {
     try {
-        const response = await httpFetch(`${API_BASE}/auth/refresh`, {
+      const refreshTokenStored = localStorage.getItem('refreshToken');
+      
+      if (!refreshTokenStored) {
+        console.warn('⚠️ No refresh token available');
+        return false;
+      }
+
+      console.log('🔄 Refreshing token...');
+      const response = await httpFetch(`${API_BASE}/auth/refresh`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include', // Include cookies for refresh token
+        body: JSON.stringify({ refreshToken: refreshTokenStored }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
+        console.log('✅ Token refreshed successfully');
         localStorage.setItem('accessToken', data.accessToken);
         // If user data is returned, update it and save to localStorage
         if (data.user) {
@@ -160,10 +186,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
         return true;
       } else {
+        console.error('❌ Token refresh failed:', data);
         return false;
       }
     } catch (error) {
-      console.error('Token refresh error:', error);
+      console.error('❌ Token refresh error:', error);
       return false;
     }
   };
@@ -179,6 +206,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.error('Logout error:', error);
     } finally {
       localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
       localStorage.removeItem('user');
       setUser(null);
       toast({

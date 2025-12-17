@@ -44,7 +44,10 @@ export function UnderwritingSectionCompact({ leadId, rehabCost = 0, readOnly = f
   useEffect(() => {
     if (arv > 0 && rehabCostValue > 0) {
       const calculated = (arv * 0.72) - rehabCostValue - 25000;
-      setFinalOffer(Math.round(calculated * 100) / 100);
+      // Ensure final offer is not negative (set to 0 if negative)
+      setFinalOffer(Math.max(0, Math.round(calculated * 100) / 100));
+    } else {
+      setFinalOffer(0);
     }
   }, [arv, rehabCostValue]);
 
@@ -170,25 +173,53 @@ export function UnderwritingSectionCompact({ leadId, rehabCost = 0, readOnly = f
         </div>
       </div>
 
+      {/* Collapsed Summary View */}
+      {!expanded && arv > 0 && rehabCostValue > 0 && (
+        <div className="grid grid-cols-4 gap-2 mt-2 text-[10px]">
+          <div>
+            <span className="text-slate-500">ARV</span>
+            <div className="font-medium text-slate-900">{formatCurrency(arv)}</div>
+          </div>
+          <div>
+            <span className="text-slate-500">Rehab Cost</span>
+            <div className="font-medium text-slate-900">{formatCurrency(rehabCostValue)}</div>
+          </div>
+          <div>
+            <span className="text-slate-500">ARV × 72%:</span>
+            <div className="font-medium text-slate-900">{formatCurrency(arv * 0.72)}</div>
+          </div>
+          <div>
+            <span className="text-slate-500">Rehab Cost:</span>
+            <div className="font-medium text-slate-900">- {formatCurrency(rehabCostValue)}</div>
+          </div>
+          <div>
+            <span className="text-slate-500">Buffer:</span>
+            <div className="font-medium text-slate-900">- $25,000</div>
+          </div>
+          <div>
+            <span className="text-slate-500">Final Offer:</span>
+            <div className="font-semibold text-emerald-600">{formatCurrency(finalOffer)}</div>
+          </div>
+        </div>
+      )}
+
       {expanded && (
         <div className="space-y-1 mt-2">
-          {/* Formula */}
-          <div className="p-1 bg-slate-50 rounded text-[10px] text-slate-600">
-            Formula: (ARV × 72%) - Rehab - $25,000
-          </div>
-
           {/* Input Fields */}
           <div className="grid grid-cols-2 gap-1">
             <div>
-              <Label className="text-[10px] text-slate-500">ARV</Label>
+              <Label className="text-[10px] text-slate-500">ARV (After Repair Value)</Label>
               <Input
                 type="number"
                 value={arv || ''}
                 onChange={(e) => setArv(Number(e.target.value))}
                 disabled={readOnly}
                 className="h-6 text-xs"
-                placeholder="After Repair Value"
+                placeholder="e.g., 200000"
+                min={0}
+                step={1000}
               />
+              <span className="text-[9px] text-slate-400">Enter full amount (e.g., 200000 for $200k)</span>
             </div>
             <div>
               <Label className="text-[10px] text-slate-500">Rehab Cost</Label>
@@ -198,8 +229,11 @@ export function UnderwritingSectionCompact({ leadId, rehabCost = 0, readOnly = f
                 onChange={(e) => setRehabCostValue(Number(e.target.value))}
                 disabled={readOnly}
                 className="h-6 text-xs"
-                placeholder="Rehab Cost"
+                placeholder="e.g., 30000"
+                min={0}
+                step={1000}
               />
+              <span className="text-[9px] text-slate-400">Enter full amount (e.g., 30000 for $30k)</span>
             </div>
           </div>
 

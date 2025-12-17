@@ -10,7 +10,7 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({ children }) => {
   const authContext = useContext(AuthContext);
 
   if (!authContext) {
-    return <Navigate to="/admin-login" replace />;
+    return <Navigate to="/login" replace />;
   }
 
   const { user, isLoading } = authContext;
@@ -29,7 +29,7 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({ children }) => {
 
   // Redirect to login if not authenticated
   if (!user) {
-    return <Navigate to="/admin-login" replace />;
+    return <Navigate to="/login" replace />;
   }
 
   // Check if user has admin role

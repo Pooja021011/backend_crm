@@ -58,7 +58,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { API_BASE } from "@/config/api";
+import { API_BASE, makeApiCall } from "@/config/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useAgents, type Agent } from "@/hooks/useAgents";
@@ -139,51 +139,6 @@ const Settings = () => {
   const [sendingTestSMS, setSendingTestSMS] = useState(false);
   const [makingTestCall, setMakingTestCall] = useState(false);
   
-
-  // Helper function to make API calls with automatic token refresh
-  const makeApiCall = async (url: string, options: RequestInit = {}) => {
-    let accessToken = localStorage.getItem('accessToken');
-    
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
-        ...options.headers
-      }
-    });
-
-    // If token expired, try to refresh
-    if (response.status === 401) {
-      try {
-        const refreshResponse = await fetch(`${API_BASE}/auth/refresh`, {
-          method: 'POST',
-          credentials: 'include'
-        });
-        
-        if (refreshResponse.ok) {
-          const refreshData = await refreshResponse.json();
-          accessToken = refreshData.accessToken;
-          localStorage.setItem('accessToken', accessToken);
-          
-          // Retry the original request with new token
-          return fetch(url, {
-            ...options,
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${accessToken}`,
-              ...options.headers
-            }
-          });
-        }
-      } catch (refreshError) {
-        console.error('Token refresh failed:', refreshError);
-      }
-    }
-
-    return response;
-  };
-
   // Load per-user email settings
   useEffect(() => {
     const load = async () => {
@@ -1265,7 +1220,7 @@ const Settings = () => {
                     </div>
                     <div>
                       <h2 className="text-2xl font-bold text-foreground">SMS and Call Settings</h2>
-                      <p className="text-muted-foreground mt-1">Configure your Telnyx phone number for SMS messaging</p>
+                      <p className="text-muted-foreground mt-1">Configure your Twilio phone number for SMS messaging</p>
                     </div>
                   </div>
 
@@ -1288,7 +1243,7 @@ const Settings = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <div className="space-y-2">
                             <Label htmlFor="phoneNumber" className="text-sm font-medium">
-                              Telnyx Phone Number <span className="text-red-500">*</span>
+                              Twilio Phone Number <span className="text-red-500">*</span>
                             </Label>
                             <Input
                               id="phoneNumber"
@@ -1301,7 +1256,7 @@ const Settings = () => {
                               className="font-mono"
                             />
                             <p className="text-xs text-muted-foreground">
-                              Enter your Telnyx phone number in E.164 format (e.g., +1234567890)
+                              Enter your Twilio phone number in E.164 format (e.g., +1234567890)
                             </p>
                           </div>
 
@@ -1343,90 +1298,6 @@ const Settings = () => {
                           <Badge variant={smsSettings?.active !== false ? "default" : "secondary"}>
                             {smsSettings?.active !== false ? "Active" : "Inactive"}
                           </Badge>
-                        </div>
-                      </div>
-
-                      {/* Test SMS Section */}
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-3">
-                          <MessageSquare className="w-5 h-5 text-green-500" />
-                          <h3 className="text-lg font-semibold">Test SMS Configuration</h3>
-                        </div>
-                        
-                        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                          <div className="space-y-4">
-                            <p className="text-sm text-green-800">
-                              Test if SMS is working with your configured phone number: <span className="font-mono font-semibold">{smsSettings?.phoneNumber || 'Not configured'}</span>
-                            </p>
-                            
-                            <Button
-                              onClick={testSMSConnection}
-                              disabled={sendingTestSMS || !smsSettings?.phoneNumber}
-                              variant="outline"
-                              className="border-green-300 text-green-700 hover:bg-green-50"
-                            >
-                              {sendingTestSMS ? (
-                                <>
-                                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                                  Testing SMS...
-                                </>
-                              ) : (
-                                <>
-                                  <MessageSquare className="w-4 h-4 mr-2" />
-                                  Test SMS Connection
-                                </>
-                              )}
-                            </Button>
-                            
-                            {!smsSettings?.phoneNumber && (
-                              <p className="text-xs text-amber-600 flex items-center gap-1">
-                                <AlertCircle className="w-3 h-3" />
-                                Please configure your phone number first to test SMS
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Test Call Section */}
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-3">
-                          <Phone className="w-5 h-5 text-blue-500" />
-                          <h3 className="text-lg font-semibold">Test Call Configuration</h3>
-                        </div>
-                        
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                          <div className="space-y-4">
-                            <p className="text-sm text-blue-800">
-                              Test if calling is working with your configured phone number: <span className="font-mono font-semibold">{smsSettings?.phoneNumber || 'Not configured'}</span>
-                            </p>
-                            
-                            <Button
-                              onClick={testCallConnection}
-                              disabled={makingTestCall || !smsSettings?.phoneNumber}
-                              variant="outline"
-                              className="border-blue-300 text-blue-700 hover:bg-blue-50"
-                            >
-                              {makingTestCall ? (
-                                <>
-                                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                                  Testing Call...
-                                </>
-                              ) : (
-                                <>
-                                  <Phone className="w-4 h-4 mr-2" />
-                                  Test Call Connection
-                                </>
-                              )}
-                            </Button>
-                            
-                            {!smsSettings?.phoneNumber && (
-                              <p className="text-xs text-amber-600 flex items-center gap-1">
-                                <AlertCircle className="w-3 h-3" />
-                                Please configure your phone number first to test calls
-                              </p>
-                            )}
-                          </div>
                         </div>
                       </div>
 

@@ -40,8 +40,8 @@ export function ProjectionsSection({
   const [loanInterest, setLoanInterest] = useState(10.99); // 10.99%
   const [originationFee, setOriginationFee] = useState(1.99); // 1.99%
 
-  // Additional costs
-  const [salePrice, setSalePrice] = useState(200000);
+  // Additional costs - Use ARV as sale price
+  const [salePrice, setSalePrice] = useState(arv || 0);
   const [utilities, setUtilities] = useState(1800);
   const [insurance, setInsurance] = useState(294);
   const [agentCommission, setAgentCommission] = useState(10000);
@@ -96,6 +96,10 @@ export function ProjectionsSection({
     setPurchasePriceValue(purchasePrice);
     setRehabCostValue(rehabCost);
     setArvValue(arv);
+    // Use ARV as sale price if provided
+    if (arv > 0) {
+      setSalePrice(arv);
+    }
   }, [purchasePrice, rehabCost, arv]);
 
   useEffect(() => {
@@ -110,18 +114,21 @@ export function ProjectionsSection({
 
   const calculateProjections = () => {
     // Purchase costs
-    const transferTax = splitTransfer ? (purchasePriceValue * transferTaxRate) : (purchasePriceValue * transferTaxRate);
+    // Transfer Tax: If split, divide rate by 2
+    const transferTax = splitTransfer ? (purchasePriceValue * (transferTaxRate / 2)) : (purchasePriceValue * transferTaxRate);
     const titleInsurance = 1000;
     const recordingFees = 300;
     const miscClosingCost = 500;
     const totalClosingCost = transferTax + titleInsurance + recordingFees + miscClosingCost;
     const totalPurchaseCost = purchasePriceValue + rehabCostValue;
 
-    // Taxes and utilities
-    const totalTaxesUtilities = taxes + utilities + insurance;
+    // Holding costs: (Taxes/12) × Timeline + utilities + insurance
+    const holdingTaxes = (taxes / 12) * timeline;
+    const totalHoldingCost = holdingTaxes + utilities + insurance;
 
     // Exit costs
-    const exitTransferTax = exitSplitTransfer ? (salePrice * transferTaxRate) : (salePrice * transferTaxRate);
+    // Exit Transfer Tax: If split, divide rate by 2
+    const exitTransferTax = exitSplitTransfer ? (salePrice * (transferTaxRate / 2)) : (salePrice * transferTaxRate);
     const totalExitCost = agentCommission + titleCost + exitTransferTax + miscClosing;
 
     // Financing (if lender)
@@ -131,37 +138,39 @@ export function ProjectionsSection({
     let totalFinancingCost = 0;
 
     if (isLender) {
-      loanAmount = totalPurchaseCost * (loanPercentage / 100);
-      const monthlyRate = (loanInterest / 100) / 12;
-      loanPayments = loanAmount * monthlyRate * timeline;
+      // Loan Amount = (Purchase Price × Loan %) + Rehab Cost
+      loanAmount = (purchasePriceValue * (loanPercentage / 100)) + rehabCostValue;
+      // Loan Payments = ((Purchase + Rehab) × Loan %) × Interest × Timeline / 12
+      loanPayments = ((purchasePriceValue + rehabCostValue) * (loanPercentage / 100)) * (loanInterest / 100) * timeline / 12;
       originationPoints = loanAmount * (originationFee / 100);
       const underwritingFee = 0;
       const appraisalFee = 0;
       totalFinancingCost = loanPayments + originationPoints + underwritingFee + appraisalFee;
     }
 
-    // Holding costs
-    const totalHoldingCost = totalTaxesUtilities;
-
     // Out of pocket
-    const purchaseOOP = purchasePriceValue - (isLender ? loanAmount * (purchasePriceValue / totalPurchaseCost) : 0);
-    const closingOOP = totalClosingCost;
-    const financeOOP = originationPoints;
-    const holdingOOP = totalHoldingCost;
-    const exitCostOOP = totalExitCost;
-    const totalOOP = purchaseOOP + closingOOP + financeOOP + holdingOOP + exitCostOOP;
+    // Purchase OOP = (Purchase + Rehab) - Loan Amount
+    const purchaseOOP = (purchasePriceValue + rehabCostValue) - loanAmount;
+    const closingOOP = totalClosingCost || 0;
+    const financeOOP = totalFinancingCost || 0; // Use total financing cost, not just origination
+    const holdingOOP = totalHoldingCost || 0;
+    const exitCostOOP = totalExitCost || 0;
+    // Total OOP = Purchase + Closing + Finance + Holding (Exit Cost NOT included per Google Sheet)
+    const totalOOP = (purchaseOOP || 0) + closingOOP + financeOOP + holdingOOP;
 
-    // Acquisitions cost
-    const acquisitionsCost = totalPurchaseCost + totalClosingCost;
+    // Acquisitions cost (Purchase + Rehab only, closing is separate)
+    const acquisitionsCost = totalPurchaseCost;
 
-    // All In
+    // All In = Acquisitions + Closing + Financing + Holding + Exit
     const allIn = acquisitionsCost + totalClosingCost + totalFinancingCost + totalHoldingCost + totalExitCost;
 
     // Outlook
-    const totalIncome = salePrice;
+    const totalIncome = salePrice || 0;
     const profit = totalIncome - allIn;
-    const spread = ((profit / totalIncome) * 100);
-    const roi = totalOOP > 0 ? ((profit / totalOOP) * 100) : 0;
+    // Spread = (Purchase Price + Rehab Cost) / ARV × 100 (70% Rule)
+    const spread = arvValue > 0 ? (((purchasePriceValue + rehabCostValue) / arvValue) * 100) : 0;
+    // ROI = Profit / All In × 100 (per Google Sheet formula =M22/M17)
+    const roi = allIn > 0 ? ((profit / allIn) * 100) : 0;
 
     setCalculations({
       totalPurchaseCost,
@@ -194,6 +203,7 @@ export function ProjectionsSection({
   };
 
   const formatCurrency = (value: number) => {
+    if (isNaN(value) || !isFinite(value)) return '$0';
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
@@ -202,6 +212,7 @@ export function ProjectionsSection({
   };
 
   const formatPercent = (value: number) => {
+    if (isNaN(value) || !isFinite(value)) return '0.00%';
     return `${value.toFixed(2)}%`;
   };
 
@@ -237,6 +248,9 @@ export function ProjectionsSection({
                 onChange={(e) => setPurchasePriceValue(Number(e.target.value))}
                 disabled={readOnly}
                 className="h-6 text-xs"
+                min={0}
+                step={1000}
+                placeholder="e.g., 150000"
               />
             </div>
             <div>
@@ -247,16 +261,26 @@ export function ProjectionsSection({
                 onChange={(e) => setRehabCostValue(Number(e.target.value))}
                 disabled={readOnly}
                 className="h-6 text-xs"
+                min={0}
+                step={1000}
+                placeholder="e.g., 30000"
               />
             </div>
             <div>
-              <Label className="text-[10px] text-slate-500">ARV</Label>
+              <Label className="text-[10px] text-slate-500">ARV (Sale Price)</Label>
               <Input
                 type="number"
                 value={arvValue || ''}
-                onChange={(e) => setArvValue(Number(e.target.value))}
+                onChange={(e) => {
+                  const value = Number(e.target.value);
+                  setArvValue(value);
+                  setSalePrice(value);
+                }}
                 disabled={readOnly}
                 className="h-6 text-xs"
+                min={0}
+                step={1000}
+                placeholder="e.g., 200000"
               />
             </div>
             <div>
@@ -267,6 +291,8 @@ export function ProjectionsSection({
                 onChange={(e) => setTaxes(Number(e.target.value))}
                 disabled={readOnly}
                 className="h-6 text-xs"
+                min={0}
+                step={100}
               />
             </div>
             <div>
@@ -277,6 +303,9 @@ export function ProjectionsSection({
                 onChange={(e) => setTimeline(Number(e.target.value))}
                 disabled={readOnly}
                 className="h-6 text-xs"
+                min={1}
+                max={24}
+                step={1}
               />
             </div>
           </div>
@@ -404,8 +433,8 @@ export function ProjectionsSection({
             <div className="space-y-1 p-1 bg-slate-50 rounded">
               <div className="font-medium text-slate-700 border-b pb-0.5">Holding & Exit</div>
               <div className="flex justify-between">
-                <span>Taxes:</span>
-                <span>{formatCurrency(taxes)}</span>
+                <span>Taxes ({timeline}mo):</span>
+                <span>{formatCurrency((taxes / 12) * timeline)}</span>
               </div>
               <div className="flex justify-between">
                 <span>Utilities:</span>
@@ -492,8 +521,39 @@ export function ProjectionsSection({
             </div>
           </div>
 
+          {/* Cost Summary */}
+          <div className="p-1 bg-amber-50 rounded text-[10px] border border-amber-200">
+            <div className="font-medium text-slate-700 mb-1">Cost Breakdown</div>
+            <div className="grid grid-cols-6 gap-2">
+              <div>
+                <span className="text-slate-600">Acquisitions:</span>
+                <div className="font-medium">{formatCurrency(calculations.acquisitionsCost)}</div>
+              </div>
+              <div>
+                <span className="text-slate-600">Closing:</span>
+                <div className="font-medium">{formatCurrency(calculations.totalClosingCost)}</div>
+              </div>
+              <div>
+                <span className="text-slate-600">Financing:</span>
+                <div className="font-medium">{formatCurrency(calculations.totalFinancingCost)}</div>
+              </div>
+              <div>
+                <span className="text-slate-600">Holding:</span>
+                <div className="font-medium">{formatCurrency(calculations.totalHoldingCost)}</div>
+              </div>
+              <div>
+                <span className="text-slate-600">Exit:</span>
+                <div className="font-medium">{formatCurrency(calculations.totalExitCost)}</div>
+              </div>
+              <div>
+                <span className="text-slate-600 font-semibold">All In:</span>
+                <div className="font-bold text-amber-700">{formatCurrency(calculations.allIn)}</div>
+              </div>
+            </div>
+          </div>
+
           {/* Out of Pocket Summary */}
-          <div className="p-1 bg-blue-50 rounded text-[10px]">
+          <div className="p-1 bg-blue-50 rounded text-[10px] border border-blue-200">
             <div className="font-medium text-slate-700 mb-1">Out of Pocket</div>
             <div className="grid grid-cols-6 gap-2">
               <div>

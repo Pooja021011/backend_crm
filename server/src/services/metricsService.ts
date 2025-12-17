@@ -4,6 +4,36 @@ import { metricsRepository } from '../repositories/metricsRepository.js';
 
 type MonthlyFlow = { name: string; totalLeads: number; contractedLeads: number; soldLeads: number; closedLeads: number };
 
+/**
+ * Helper function to check if a lead is mishandled based on business hours rules
+ * Business hours: 6 AM - 8 PM (2-hour threshold)
+ * After hours: 8 PM - 6 AM (16-hour threshold)
+ */
+function isLeadMishandled(createdAt: Date, lastContactAt: Date | null): boolean {
+  const now = dayjs();
+  const created = dayjs(createdAt);
+  const lastContact = lastContactAt ? dayjs(lastContactAt) : created;
+  
+  // If already contacted, not mishandled
+  if (lastContactAt && dayjs(lastContactAt).isAfter(created)) {
+    return false;
+  }
+  
+  const createdHour = created.hour();
+  const isBusinessHours = createdHour >= 6 && createdHour < 20; // 6 AM to 8 PM
+  
+  // Calculate hours since creation
+  const hoursSinceCreation = now.diff(created, 'hours', true);
+  
+  if (isBusinessHours) {
+    // Business hours: 2-hour threshold
+    return hoursSinceCreation > 2;
+  } else {
+    // After hours: 16-hour threshold
+    return hoursSinceCreation > 16;
+  }
+}
+
 export const metricsService = {
   async getLeadDealFlowLast12Months(): Promise<MonthlyFlow[]> {
     const end = dayjs().endOf('month');
@@ -528,13 +558,10 @@ export const metricsService = {
       Math.round((dealsClosed / totalProperties) * 100) : 0;
 
     // Calculate lead quality metrics (mishandled leads)
+    // Using 2-hour threshold for business hours (6 AM - 8 PM)
+    // Using 16-hour threshold for after hours (8 PM - 6 AM)
     const mishandledLeads = leads.filter(l => {
-      // Check for leads that haven't been contacted in too long
-      const lastContact = l.lastContactAt || l.createdAt;
-      const daysSinceContact = dayjs().diff(dayjs(lastContact), 'days');
-      
-      // Acquisitions agents should contact leads within 36 hours
-      return daysSinceContact > 1.5;
+      return isLeadMishandled(l.createdAt, l.lastContactAt);
     });
 
     const leadsRiskCount = mishandledLeads.length;
@@ -714,13 +741,10 @@ export const metricsService = {
     });
 
     // Calculate lead quality metrics (mishandled leads)
+    // Using 2-hour threshold for business hours (6 AM - 8 PM)
+    // Using 16-hour threshold for after hours (8 PM - 6 AM)
     const mishandledLeads = leads.filter(l => {
-      // Check for leads that haven't been contacted in too long
-      const lastContact = l.lastContactAt || l.createdAt;
-      const daysSinceContact = dayjs().diff(dayjs(lastContact), 'days');
-      
-      // Dispositions agents should contact leads within 36 hours
-      return daysSinceContact > 1.5;
+      return isLeadMishandled(l.createdAt, l.lastContactAt);
     });
 
     const leadsRiskCount = mishandledLeads.length;
@@ -893,13 +917,10 @@ export const metricsService = {
       Math.round((dealsClosed / totalProperties) * 100) : 0;
 
     // Calculate lead quality metrics (mishandled leads)
+    // Using 2-hour threshold for business hours (6 AM - 8 PM)
+    // Using 16-hour threshold for after hours (8 PM - 6 AM)
     const mishandledLeads = leads.filter(l => {
-      // Check for leads that haven't been contacted in too long
-      const lastContact = l.lastContactAt || l.createdAt;
-      const daysSinceContact = dayjs().diff(dayjs(lastContact), 'days');
-      
-      // Transaction coordinators should manage leads within 2 days for closing, 16 hours for communications
-      return daysSinceContact > 2;
+      return isLeadMishandled(l.createdAt, l.lastContactAt);
     });
 
     const leadsRiskCount = mishandledLeads.length;
@@ -1035,11 +1056,11 @@ export const metricsService = {
       const leadsPerContract = contractsSigned > 0 ? 
         Math.round((userLeads.length / contractsSigned) * 10) / 10 : 0;
 
-      // Calculate mishandled leads (not contacted within 36 hours)
+      // Calculate mishandled leads using business hours rules
+      // 2-hour threshold for business hours (6 AM - 8 PM)
+      // 16-hour threshold for after hours (8 PM - 6 AM)
       const mishandledLeads = userLeads.filter(l => {
-        const lastContact = l.lastContactAt || l.createdAt;
-        const daysSinceContact = dayjs().diff(dayjs(lastContact), 'days');
-        return daysSinceContact > 1.5;
+        return isLeadMishandled(l.createdAt, l.lastContactAt);
       }).length;
 
       // Get communications data
@@ -1189,11 +1210,11 @@ export const metricsService = {
         }
       });
 
-      // Calculate mishandled leads (not contacted within 36 hours)
+      // Calculate mishandled leads using business hours rules
+      // 2-hour threshold for business hours (6 AM - 8 PM)
+      // 16-hour threshold for after hours (8 PM - 6 AM)
       const mishandledLeads = userLeads.filter(l => {
-        const lastContact = l.lastContactAt || l.createdAt;
-        const daysSinceContact = dayjs().diff(dayjs(lastContact), 'days');
-        return daysSinceContact > 1.5;
+        return isLeadMishandled(l.createdAt, l.lastContactAt);
       }).length;
 
       // Get communications data
@@ -1325,7 +1346,7 @@ export const metricsService = {
     }
     
     // Get all leads with filters
-    const leads = await metricsRepository.prisma.lead.findMany({
+    const leads = await prisma.lead.findMany({
       where: {
         ...dateFilter,
         ...sourceFilter
@@ -1437,7 +1458,7 @@ export const metricsService = {
     }
     
     // Get all leads with stage history
-    const leads = await metricsRepository.prisma.lead.findMany({
+    const leads = await prisma.lead.findMany({
       where: {
         ...dateFilter,
         ...sourceFilter
@@ -1445,15 +1466,15 @@ export const metricsService = {
       include: {
         pipelineStage: true,
         stageHistory: {
-          orderBy: { createdAt: 'asc' },
-          include: { stage: true }
+          orderBy: { changedAt: 'asc' },
+          include: { toStage: true, fromStage: true }
         }
       }
     });
     
     // Get all pipeline stages for funnel structure
-    const pipelineStages = await metricsRepository.prisma.pipelineStage.findMany({
-      where: { pipelineDefinition: { name: 'ACQUISITIONS' } },
+    const pipelineStages = await prisma.pipelineStage.findMany({
+      where: { pipeline: { key: 'ACQUISITIONS' } },
       orderBy: { orderIndex: 'asc' }
     });
     
@@ -1461,7 +1482,7 @@ export const metricsService = {
     const funnelData = pipelineStages.map(stage => {
       const leadsInStage = leads.filter(lead => 
         lead.pipelineStageId === stage.id || 
-        lead.stageHistory.some(history => history.stageId === stage.id)
+        lead.stageHistory.some(history => history.toStageId === stage.id)
       );
       
       return {
@@ -1481,18 +1502,18 @@ export const metricsService = {
       const transitions: number[] = [];
       
       leads.forEach(lead => {
-        const history = lead.stageHistory.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        const history = lead.stageHistory.sort((a, b) => new Date(a.changedAt).getTime() - new Date(b.changedAt).getTime());
         
         let fromTime: Date | null = null;
         let toTime: Date | null = null;
         
         // Find transition times
         history.forEach(entry => {
-          if (entry.stageId === fromStage.id && !fromTime) {
-            fromTime = new Date(entry.createdAt);
+          if (entry.toStageId === fromStage.id && !fromTime) {
+            fromTime = new Date(entry.changedAt);
           }
-          if (entry.stageId === toStage.id && fromTime && !toTime) {
-            toTime = new Date(entry.createdAt);
+          if (entry.toStageId === toStage.id && fromTime && !toTime) {
+            toTime = new Date(entry.changedAt);
           }
         });
         

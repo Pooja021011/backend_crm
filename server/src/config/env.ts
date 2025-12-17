@@ -12,5 +12,14 @@ export const env = {
   TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID || '',
   TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN || '',
   APP_BASE_URL: process.env.APP_BASE_URL || 'http://localhost:4000',
+  // DocuSign Configuration
+  DOCUSIGN_BASE_PATH: process.env.DOCUSIGN_BASE_PATH || 'https://demo.docusign.net/restapi',
+  DOCUSIGN_INTEGRATION_KEY: process.env.DOCUSIGN_INTEGRATION_KEY || '',
+  DOCUSIGN_USER_ID: process.env.DOCUSIGN_USER_ID || '',
+  DOCUSIGN_ACCOUNT_ID: process.env.DOCUSIGN_ACCOUNT_ID || '',
+  DOCUSIGN_PRIVATE_KEY_PATH: process.env.DOCUSIGN_PRIVATE_KEY_PATH || './config/docusign_private.key',
+  DOCUSIGN_TEMPLATE_ID: process.env.DOCUSIGN_TEMPLATE_ID || '',
+  DOCUSIGN_WEBHOOK_SECRET: process.env.DOCUSIGN_WEBHOOK_SECRET || '',
+  CONTRACT_EXPIRATION_DAYS: Number(process.env.CONTRACT_EXPIRATION_DAYS || 7),
 };
 

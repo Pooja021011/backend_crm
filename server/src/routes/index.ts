@@ -26,6 +26,7 @@ import priceHistoryRoutes from './priceHistoryRoutes.js';
 import leadOwnerRoutes from './leadOwnerRoutes.js';
 import rehabBudgetRoutes from './rehabBudgetRoutes.js';
 import dispositionsPipelineRoutes from './dispositionsPipelineRoutes.js';
+import docusignRoutes from './docusignRoutes.js';
 
 const router = Router();
 
@@ -56,6 +57,7 @@ router.use('/', priceHistoryRoutes);
 router.use('/', leadOwnerRoutes);
 router.use('/', rehabBudgetRoutes);
 router.use('/', dispositionsPipelineRoutes);
+router.use('/docusign', docusignRoutes);
 
 export default router;
 

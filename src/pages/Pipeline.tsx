@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -6,6 +7,11 @@ import { Label } from "@/components/ui/label";
 import { PipelineColumn } from "@/components/PipelineColumn";
 import { PipelineCard } from "@/components/PipelineCard";
 import { ViewLeadDialog } from "@/components/ViewLeadDialog";
+import { 
+  AppointmentCompletePopup,
+  DueDiligencePopup,
+  OfferMadePopup
+} from "@/components/StageTransitionPopups";
 import { 
   Users, 
   AlertTriangle,
@@ -23,6 +29,7 @@ import { useAuth } from "@/contexts/AuthContext";
 const Pipeline = () => {
   const { toast } = useToast();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [needsAttentionView, setNeedsAttentionView] = useState(false);
   const [transactionPipelineView, setTransactionPipelineView] = useState(false);
   const [dispositionsView, setDispositionsView] = useState(false);
@@ -41,6 +48,17 @@ const Pipeline = () => {
   // ViewLeadDialog state
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  
+  // Stage transition validation popups
+  const [showAppointmentPopup, setShowAppointmentPopup] = useState(false);
+  const [showDueDiligencePopup, setShowDueDiligencePopup] = useState(false);
+  const [showOfferMadePopup, setShowOfferMadePopup] = useState(false);
+  const [pendingStageChange, setPendingStageChange] = useState<{
+    leadId: string;
+    newStageId: string;
+    stageName: string;
+    leadToMove: any;
+  } | null>(null);
 
   // Sample data - replace with API calls
   const sampleStages = [
@@ -275,6 +293,7 @@ const Pipeline = () => {
         const stagesData = await stagesResponse.json();
         console.log('📊 Received stages:', stagesData.data?.length || 0, 'stages');
         console.log('📊 Stage names:', stagesData.data?.map((s: any) => s.name));
+        console.log('📊 Stage IDs:', stagesData.data?.map((s: any) => ({ name: s.name, id: s.id })));
         setPipelineStages(stagesData.data || sampleStages);
       } else {
         console.log('❌ Failed to load stages, status:', stagesResponse.status);
@@ -303,25 +322,52 @@ const Pipeline = () => {
         const leadsData = await leadsResponse.json();
         
         // Transform API data to match our component interface
-        const transformedLeads = (leadsData.data || []).map((lead: any) => ({
-          id: lead.id,
-          address: lead.address?.address1 || 'No address',
-          sellerName: lead.seller ? `${lead.seller.firstName} ${lead.seller.lastName}` : 'No seller',
-          buyerName: lead.buyer ? `${lead.buyer.firstName} ${lead.buyer.lastName}` : undefined,
-          dateCreated: lead.createdAt,
-          statusChangedDate: lead.stageEnteredAt || lead.updatedAt,
-          lastContactDate: lead.lastContactAt || lead.updatedAt,
-          priceReduction: lead.priceReduction || false,
-          clearToClose: lead.clearToClose || false,
-          originalPrice: lead.deal?.contractPrice || 0,
-          currentPrice: lead.deal?.soldPrice || 0,
-          // Use the stage field from backend API, fallback to pipelineStage.id
-          stage: lead.stage || lead.pipelineStage?.id || 'unknown-stage',
-          stageName: lead.stageName || lead.pipelineStage?.name || 'Unknown Stage',
-          assignedAgent: lead.assignedUser ? `${lead.assignedUser.firstName} ${lead.assignedUser.lastName}` : undefined,
-          leadType: lead.leadType,
-          status: lead.needsAttention ? 'urgent' : 'active'
-        }));
+        const transformedLeads = (leadsData.data || []).map((lead: any) => {
+          // Handle address - backend returns string, but we need to handle both formats
+          let addressDisplay = 'No address';
+          if (typeof lead.address === 'string') {
+            // Backend returns concatenated string
+            addressDisplay = lead.address;
+          } else if (lead.address?.address1) {
+            // Handle object format
+            addressDisplay = lead.address.address1;
+          }
+          
+          // Handle seller/buyer/vendor name
+          let ownerName = 'No seller';
+          if (lead.sellerName) {
+            ownerName = lead.sellerName;
+          } else if (lead.seller) {
+            ownerName = `${lead.seller.firstName} ${lead.seller.lastName}`;
+          } else if (lead.buyerName) {
+            ownerName = lead.buyerName;
+          } else if (lead.buyer) {
+            ownerName = `${lead.buyer.firstName} ${lead.buyer.lastName}`;
+          } else if (lead.vendor) {
+            ownerName = `${lead.vendor.firstName} ${lead.vendor.lastName}`;
+          }
+          
+          return {
+            id: lead.id,
+            address: addressDisplay,
+            sellerName: ownerName,
+            buyerName: lead.buyer ? `${lead.buyer.firstName} ${lead.buyer.lastName}` : undefined,
+            dateCreated: lead.createdAt,
+            statusChangedDate: lead.stageEnteredAt || lead.updatedAt,
+            lastContactDate: lead.lastContactAt || lead.updatedAt,
+            priceReduction: lead.priceReduction || false,
+            clearToClose: lead.clearToClose || false,
+            originalPrice: lead.deal?.contractPrice || 0,
+            currentPrice: lead.deal?.soldPrice || 0,
+            // Use the stage field from backend API, fallback to pipelineStage.id
+            stage: lead.stage || lead.pipelineStage?.id || 'unknown-stage',
+            stageName: lead.stageName || lead.pipelineStage?.name || 'Unknown Stage',
+            assignedAgent: lead.assignedUser ? `${lead.assignedUser.firstName} ${lead.assignedUser.lastName}` : undefined,
+            leadType: lead.leadType,
+            status: lead.needsAttention ? 'urgent' : 'active',
+            customFields: lead.customFields // Keep customFields for validation popups
+          };
+        });
         
         setLeads(transformedLeads);
         setNeedsAttentionCount(transformedLeads.filter((l: any) => l.status === 'urgent').length);
@@ -401,7 +447,25 @@ const Pipeline = () => {
 
     const stageName = pipelineStages.find(s => s.id === newStageId)?.name || newStageId;
     
-    // Update UI immediately (optimistic update)
+    // NEW: Check if validation popup is needed
+    const stageNameLower = stageName.toLowerCase();
+    if (stageNameLower.includes('appointment') && stageNameLower.includes('complete')) {
+      setPendingStageChange({ leadId, newStageId, stageName, leadToMove });
+      setShowAppointmentPopup(true);
+      return;
+    }
+    if (stageNameLower.includes('due diligence') && stageNameLower.includes('complete')) {
+      setPendingStageChange({ leadId, newStageId, stageName, leadToMove });
+      setShowDueDiligencePopup(true);
+      return;
+    }
+    if (stageNameLower.includes('offer') && stageNameLower.includes('made')) {
+      setPendingStageChange({ leadId, newStageId, stageName, leadToMove });
+      setShowOfferMadePopup(true);
+      return;
+    }
+    
+    // EXISTING: Update UI immediately (optimistic update)
     setLeads(prev => prev.map(lead => 
       lead.id === leadId 
         ? { ...lead, stage: newStageId, statusChangedDate: new Date().toISOString() }
@@ -409,7 +473,7 @@ const Pipeline = () => {
     ));
 
     try {
-      // API call to move lead
+      // EXISTING: API call to move lead
       const response = await makeApiCall(`${API_BASE}/pipeline/leads/${leadId}/move`, {
         method: 'PUT',
         headers: {
@@ -419,6 +483,27 @@ const Pipeline = () => {
       });
 
       if (!response.ok) {
+        const errorData = await response.json();
+        
+        // NEW: Handle validation errors from backend
+        if (errorData.error?.code === 'VALIDATION_REQUIRED' || errorData.code === 'VALIDATION_REQUIRED') {
+          // Revert optimistic update
+          setLeads(prev => prev.map(lead => 
+            lead.id === leadId ? leadToMove : lead
+          ));
+          
+          // Show appropriate validation popup
+          setPendingStageChange({ leadId, newStageId, stageName, leadToMove });
+          if (stageNameLower.includes('appointment') && stageNameLower.includes('complete')) {
+            setShowAppointmentPopup(true);
+          } else if (stageNameLower.includes('due diligence') && stageNameLower.includes('complete')) {
+            setShowDueDiligencePopup(true);
+          } else if (stageNameLower.includes('offer') && stageNameLower.includes('made')) {
+            setShowOfferMadePopup(true);
+          }
+          return;
+        }
+        
         throw new Error('Failed to move lead');
       }
 
@@ -429,7 +514,7 @@ const Pipeline = () => {
     } catch (error) {
       console.error('Error moving lead:', error);
       
-      // Revert optimistic update on error
+      // EXISTING: Revert optimistic update on error
       setLeads(prev => prev.map(lead => 
         lead.id === leadId 
           ? { ...lead, stage: leadToMove.stage, statusChangedDate: leadToMove.statusChangedDate }
@@ -457,29 +542,9 @@ const Pipeline = () => {
 
   const activeLead = activeId ? leads.find(lead => lead.id === activeId) : null;
 
-  const handleLeadClick = async (leadId: string) => {
-    try {
-      // Fetch full lead details
-      const response = await makeApiCall(`${API_BASE}/leads/${leadId}`);
-      if (response.ok) {
-        const data = await response.json();
-        setSelectedLead(data.data);
-        setIsViewDialogOpen(true);
-      } else {
-        toast({
-          title: "Error",
-          description: "Failed to load lead details",
-          variant: "destructive"
-        });
-      }
-    } catch (error) {
-      console.error('Error fetching lead details:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load lead details",
-        variant: "destructive"
-      });
-    }
+  const handleLeadClick = (leadId: string) => {
+    // Navigate to lead edit page
+    navigate(`/leads/${leadId}/edit`);
   };
 
   if (loading) {
@@ -656,19 +721,175 @@ const Pipeline = () => {
           </div>
         </Card>
       )}
-
-      {/* Empty state when no leads need attention */}
-      {!loading && needsAttentionView && needsAttentionCount === 0 && (
-        <Card className="p-12 text-center border border-green-200 bg-green-50">
-          <AlertTriangle className="w-16 h-16 text-green-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-green-900 mb-2">
-            All Caught Up!
-          </h3>
-          <p className="text-green-700">
-            No leads currently need immediate attention.
-          </p>
-        </Card>
+      
+      {/* Stage Transition Validation Popups */}
+      {pendingStageChange && (
+        <>
+          <AppointmentCompletePopup
+            open={showAppointmentPopup}
+            onClose={() => {
+              setShowAppointmentPopup(false);
+              setPendingStageChange(null);
+            }}
+            leadId={pendingStageChange.leadId}
+            onSubmit={async (files) => {
+              try {
+                // Upload photos
+                let uploadedCount = 0;
+                for (const file of files) {
+                  const formData = new FormData();
+                  formData.append('file', file);
+                  formData.append('category', 'PHOTO');
+                  
+                  const uploadResponse = await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}/files`, {
+                    method: 'POST',
+                    body: formData
+                  });
+                  
+                  if (uploadResponse.ok) {
+                    uploadedCount++;
+                    console.log('✅ Photo uploaded:', file.name);
+                  } else {
+                    const errorData = await uploadResponse.json();
+                    console.error('❌ Failed to upload photo:', file.name, errorData);
+                    toast({
+                      title: "Upload Error",
+                      description: `Failed to upload ${file.name}`,
+                      variant: "destructive"
+                    });
+                  }
+                }
+                
+                console.log(`📸 Uploaded ${uploadedCount} of ${files.length} photos`);
+                
+                // Now proceed with stage change
+                setLeads(prev => prev.map(lead => 
+                  lead.id === pendingStageChange.leadId 
+                    ? { ...lead, stage: pendingStageChange.newStageId, statusChangedDate: new Date().toISOString() }
+                    : lead
+                ));
+                
+                const response = await makeApiCall(`${API_BASE}/pipeline/leads/${pendingStageChange.leadId}/move`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ stageId: pendingStageChange.newStageId })
+                });
+                
+                if (response.ok) {
+                  toast({
+                    title: "Lead Moved",
+                    description: `${pendingStageChange.leadToMove.address} moved to ${pendingStageChange.stageName}. ${uploadedCount} photo(s) uploaded.`,
+                  });
+                } else {
+                  const errorData = await response.json();
+                  throw new Error(errorData.error || 'Failed to move lead');
+                }
+                
+                setShowAppointmentPopup(false);
+                setPendingStageChange(null);
+              } catch (error: any) {
+                console.error('Error in appointment complete flow:', error);
+                toast({
+                  title: "Error",
+                  description: error.message || "Failed to complete appointment",
+                  variant: "destructive"
+                });
+              }
+            }}
+          />
+          
+          <DueDiligencePopup
+            open={showDueDiligencePopup}
+            onClose={() => {
+              setShowDueDiligencePopup(false);
+              setPendingStageChange(null);
+            }}
+            existingData={pendingStageChange.leadToMove.customFields}
+            onSubmit={async (data) => {
+              // Update lead with property info
+              await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  customFields: {
+                    ...pendingStageChange.leadToMove.customFields,
+                    ...data
+                  }
+                })
+              });
+              
+              // Now proceed with stage change
+              setLeads(prev => prev.map(lead => 
+                lead.id === pendingStageChange.leadId 
+                  ? { ...lead, stage: pendingStageChange.newStageId, statusChangedDate: new Date().toISOString() }
+                  : lead
+              ));
+              
+              const response = await makeApiCall(`${API_BASE}/pipeline/leads/${pendingStageChange.leadId}/move`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ stageId: pendingStageChange.newStageId })
+              });
+              
+              if (response.ok) {
+                toast({
+                  title: "Lead Moved",
+                  description: `${pendingStageChange.leadToMove.address} moved to ${pendingStageChange.stageName}`,
+                });
+              }
+              
+              setShowDueDiligencePopup(false);
+              setPendingStageChange(null);
+            }}
+          />
+          
+          <OfferMadePopup
+            open={showOfferMadePopup}
+            onClose={() => {
+              setShowOfferMadePopup(false);
+              setPendingStageChange(null);
+            }}
+            existingData={pendingStageChange.leadToMove.customFields}
+            onSubmit={async (data) => {
+              // Update lead with offer info
+              await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  customFields: {
+                    ...pendingStageChange.leadToMove.customFields,
+                    ...data
+                  }
+                })
+              });
+              
+              // Now proceed with stage change
+              setLeads(prev => prev.map(lead => 
+                lead.id === pendingStageChange.leadId 
+                  ? { ...lead, stage: pendingStageChange.newStageId, statusChangedDate: new Date().toISOString() }
+                  : lead
+              ));
+              
+              const response = await makeApiCall(`${API_BASE}/pipeline/leads/${pendingStageChange.leadId}/move`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ stageId: pendingStageChange.newStageId })
+              });
+              
+              if (response.ok) {
+                toast({
+                  title: "Lead Moved",
+                  description: `${pendingStageChange.leadToMove.address} moved to ${pendingStageChange.stageName}`,
+                });
+              }
+              
+              setShowOfferMadePopup(false);
+              setPendingStageChange(null);
+            }}
+          />
+        </>
       )}
+
     </div>
   );
 };

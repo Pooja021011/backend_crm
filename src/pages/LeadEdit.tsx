@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -33,16 +33,27 @@ import {
   DollarSign,
   Wrench,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  PhoneCall,
+  PhoneOff,
+  Send,
+  RefreshCw
 } from 'lucide-react';
+import { differenceInHours, differenceInDays } from 'date-fns';
 import { API_BASE, makeApiCall } from '@/config/api';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTwilioDevice } from '@/hooks/useTwilioDevice';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { CompsManager } from '@/components/CompsManager';
 import { LeadTimeline } from '@/components/LeadTimeline';
 import { UnderwritingCalculator } from '@/components/UnderwritingCalculator';
 import { LeadOwnerSection } from '@/components/LeadOwnerSection';
+import { 
+  AppointmentCompletePopup,
+  DueDiligencePopup,
+  OfferMadePopup
+} from '@/components/StageTransitionPopups';
 import { PropertyInfoCard } from '@/components/PropertyInfoCard';
 import { RehabBudgetCalculatorCompact } from '@/components/RehabBudgetCalculatorCompact';
 import { UnderwritingSectionCompact } from '@/components/UnderwritingSectionCompact';
@@ -66,6 +77,8 @@ interface LeadData {
   seller: {
     firstName: string;
     lastName: string;
+    phone?: string;
+    email?: string;
   };
   leadSource?: string;
   leadStatus?: string;
@@ -131,6 +144,12 @@ const LeadEdit: React.FC = () => {
   const [acquisitionsAgent, setAcquisitionsAgent] = useState('');
   const [dispositionsAgent, setDispositionsAgent] = useState('');
   
+  // Stage transition validation popups
+  const [showAppointmentPopup, setShowAppointmentPopup] = useState(false);
+  const [showDueDiligencePopup, setShowDueDiligencePopup] = useState(false);
+  const [showOfferMadePopup, setShowOfferMadePopup] = useState(false);
+  const [pendingPipelineStatus, setPendingPipelineStatus] = useState<string | null>(null);
+  
   // Property info
   const [propertyType, setPropertyType] = useState('');
   const [sqft, setSqft] = useState('');
@@ -152,6 +171,17 @@ const LeadEdit: React.FC = () => {
   const [noteText, setNoteText] = useState('');
   const [notes, setNotes] = useState<any[]>([]);
   const [addingNote, setAddingNote] = useState(false);
+  
+  // Communication features
+  const { makeCall: makeBrowserCall, hangUp, callStatus, isInitializing } = useTwilioDevice();
+  const [communications, setCommunications] = useState<any[]>([]);
+  const [loadingCommunications, setLoadingCommunications] = useState(false);
+  const [smsText, setSmsText] = useState('');
+  const [sendingSMS, setSendingSMS] = useState(false);
+  const [makingCall, setMakingCall] = useState(false);
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailBody, setEmailBody] = useState('');
+  const [sendingEmail, setSendingEmail] = useState(false);
   
   // Lead source specific data
   const [leadSourceData, setLeadSourceData] = useState<any>({});
@@ -203,6 +233,97 @@ const LeadEdit: React.FC = () => {
   const [newBuyerPhone, setNewBuyerPhone] = useState('');
   const [newBuyerSegmentation, setNewBuyerSegmentation] = useState('');
 
+  // Countdown timer state
+  const [timeInStatus, setTimeInStatus] = useState('0 hours');
+  const [showNoContactAlert, setShowNoContactAlert] = useState(false);
+
+  // Calculate time in current status
+  const calculateTimeInStatus = () => {
+    try {
+      if (!lead?.stageEnteredAt && !lead?.updatedAt) {
+        return '0 hours';
+      }
+
+      const statusDate = new Date(lead.stageEnteredAt || lead.updatedAt);
+      const now = new Date();
+      
+      const hours = differenceInHours(now, statusDate);
+      const days = differenceInDays(now, statusDate);
+      
+      if (days > 0) {
+        return `${days} day${days > 1 ? 's' : ''}`;
+      } else {
+        return `${Math.max(0, hours)} hour${hours !== 1 ? 's' : ''}`;
+      }
+    } catch (error) {
+      console.warn('Error calculating time in status:', error);
+      return '0 hours';
+    }
+  };
+
+  // Check if lead needs attention (no contact in 72+ hours)
+  const checkNoContactAlert = () => {
+    try {
+      if (!lead?.lastContactAt) {
+        return false;
+      }
+
+      const lastContact = new Date(lead.lastContactAt);
+      const now = new Date();
+      const hoursSinceContact = differenceInHours(now, lastContact);
+      
+      return hoursSinceContact >= 72;
+    } catch (error) {
+      return false;
+    }
+  };
+
+  // Update countdown timer every minute
+  useEffect(() => {
+    if (lead) {
+      setTimeInStatus(calculateTimeInStatus());
+      setShowNoContactAlert(checkNoContactAlert());
+
+      const interval = setInterval(() => {
+        setTimeInStatus(calculateTimeInStatus());
+        setShowNoContactAlert(checkNoContactAlert());
+      }, 60000); // Update every minute
+
+      return () => clearInterval(interval);
+    }
+  }, [lead?.stageEnteredAt, lead?.updatedAt, lead?.lastContactAt]);
+
+  // Handler for pipeline status changes with validation
+  const handlePipelineStatusChange = (newStageId: string) => {
+    const newStage = pipelineStages.find(s => s.id === newStageId);
+    if (!newStage) {
+      setPipelineStatus(newStageId);
+      return;
+    }
+    
+    const stageName = newStage.name.toLowerCase();
+    
+    // Check if validation popup is needed
+    if (stageName.includes('appointment') && stageName.includes('complete')) {
+      setPendingPipelineStatus(newStageId);
+      setShowAppointmentPopup(true);
+      return;
+    }
+    if (stageName.includes('due diligence') && stageName.includes('complete')) {
+      setPendingPipelineStatus(newStageId);
+      setShowDueDiligencePopup(true);
+      return;
+    }
+    if (stageName.includes('offer') && stageName.includes('made')) {
+      setPendingPipelineStatus(newStageId);
+      setShowOfferMadePopup(true);
+      return;
+    }
+    
+    // No validation needed, proceed with change
+    setPipelineStatus(newStageId);
+  };
+
   useEffect(() => {
     loadLead();
     loadAgents();
@@ -217,6 +338,7 @@ const LeadEdit: React.FC = () => {
     loadBuyerOffers();
     loadBuyers();
     loadTasks();
+    loadCommunications();
   }, [id]);
 
   // Check permissions after lead and tasks are loaded
@@ -650,6 +772,9 @@ const LeadEdit: React.FC = () => {
         customFields: propertyDetails
       };
 
+      // Track if pipeline stage changed
+      const stageChanged = pipelineStatus && lead?.pipelineStageId !== pipelineStatus;
+      
       // Only add these fields if they have values
       if (pipelineStatus) updates.pipelineStageId = pipelineStatus;
       if (acquisitionsAgent && acquisitionsAgent !== 'unassigned') updates.assignedUserId = acquisitionsAgent;
@@ -680,6 +805,27 @@ const LeadEdit: React.FC = () => {
       });
 
       if (response.ok) {
+        // If stage changed, call the stage change endpoint to trigger backend logic (validation, task creation, etc.)
+        if (stageChanged && pipelineStatus) {
+          try {
+            const stageResponse = await makeApiCall(`${API_BASE}/pipeline/leads/${id}/move`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ stageId: pipelineStatus })
+            });
+            
+            if (stageResponse.ok) {
+              console.log('✅ Stage changed successfully with backend validation and task creation');
+            } else {
+              const stageError = await stageResponse.json();
+              console.error('Stage change failed:', stageError);
+              // Don't show error toast since the lead was already updated
+            }
+          } catch (stageError) {
+            console.error('Error changing stage:', stageError);
+          }
+        }
+        
         // Track price changes for valuation and rehab budget
         const oldEstimatedValue = lead?.customFields?.estimatedValue || null;
         const newEstimatedValue = estimatedValue ? parseInt(estimatedValue) : null;
@@ -855,6 +1001,253 @@ const LeadEdit: React.FC = () => {
       });
     } finally {
       setAddingNote(false);
+    }
+  };
+
+  // Fetch communication history
+  const loadCommunications = async () => {
+    setLoadingCommunications(true);
+    try {
+      const response = await makeApiCall(`${API_BASE}/leads/${id}/communications`);
+      if (response.ok) {
+        const data = await response.json();
+        // Filter to show only calls, SMS, and emails (not notes)
+        const comms = (data.data || []).filter((c: any) => 
+          ['CALL', 'SMS', 'EMAIL'].includes(c.type)
+        ).sort((a: any, b: any) => 
+          new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime() // Sort latest first (newest at top)
+        );
+        setCommunications(comms);
+      }
+    } catch (error) {
+      console.error('Error loading communications:', error);
+    } finally {
+      setLoadingCommunications(false);
+    }
+  };
+
+  // Helper to get phone number
+  const getLeadPhoneNumber = () => {
+    if (!lead) {
+      console.log('❌ No lead data available');
+      return null;
+    }
+    
+    const contactPhone = lead.contacts?.[0]?.phone?.trim();
+    const sellerPhone = lead.seller?.phone?.trim();
+    const phoneNumber = contactPhone || sellerPhone || null;
+    
+    console.log('📞 Phone check:', { 
+      contactPhone, 
+      sellerPhone, 
+      finalPhone: phoneNumber,
+      hasContacts: !!lead.contacts?.length,
+      hasSeller: !!lead.seller,
+      leadData: lead
+    });
+    
+    return phoneNumber;
+  };
+
+  const getLeadEmail = () => {
+    if (!lead) {
+      console.log('❌ No lead data available');
+      return null;
+    }
+    
+    const contactEmail = lead.contacts?.[0]?.email?.trim();
+    const sellerEmail = lead.seller?.email?.trim();
+    const buyerEmail = lead.buyer?.email?.trim();
+    const vendorEmail = lead.vendor?.email?.trim();
+    const emailAddress = contactEmail || sellerEmail || buyerEmail || vendorEmail || null;
+    
+    console.log('📧 Email check:', { 
+      contactEmail, 
+      sellerEmail,
+      buyerEmail,
+      vendorEmail,
+      finalEmail: emailAddress
+    });
+    
+    return emailAddress;
+  };
+
+  // Helper to check if phone number is valid
+  const hasValidPhone = () => {
+    const phone = getLeadPhoneNumber();
+    return phone && phone.length > 0;
+  };
+
+  // Make a call
+  const handleMakeCall = async () => {
+    const phoneNumber = getLeadPhoneNumber();
+    
+    if (!phoneNumber) {
+      toast({
+        title: 'Error',
+        description: 'No phone number found for this lead',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setMakingCall(true);
+    try {
+      console.log('🔵 Making browser call to:', phoneNumber, 'leadId:', id);
+      
+      // Use browser calling
+      await makeBrowserCall(phoneNumber);
+      
+      // Store call in database for history
+      try {
+        await makeApiCall(`${API_BASE}/calls/make`, {
+          method: 'POST',
+          body: JSON.stringify({ 
+            to: phoneNumber,
+            leadId: id 
+          })
+        });
+      } catch (dbError) {
+        console.error('Failed to store call in database:', dbError);
+      }
+      
+      // Refresh communications
+      await loadCommunications();
+      
+      toast({
+        title: 'Call Started',
+        description: 'Call connected successfully'
+      });
+      
+    } catch (error: any) {
+      console.error('❌ Error making call:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to make call",
+        variant: "destructive",
+      });
+    } finally {
+      setMakingCall(false);
+    }
+  };
+
+  // Send SMS
+  const handleSendSMS = async () => {
+    if (!smsText.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Please enter a message',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    const phoneNumber = getLeadPhoneNumber();
+    
+    if (!phoneNumber) {
+      toast({
+        title: 'Error',
+        description: 'No phone number found for this lead',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setSendingSMS(true);
+    try {
+      console.log('📤 Sending SMS:', { to: phoneNumber, text: smsText.trim(), leadId: id });
+      
+      const response = await makeApiCall(`${API_BASE}/sms/send`, {
+        method: 'POST',
+        body: JSON.stringify({
+          to: phoneNumber,
+          text: smsText.trim(),  // Backend expects 'text' not 'message'
+          leadId: id
+        })
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        toast({
+          title: 'SMS Sent',
+          description: 'Message sent successfully'
+        });
+        setSmsText('');
+        await loadCommunications();
+      } else {
+        throw new Error(result.error || 'Failed to send SMS');
+      }
+    } catch (error: any) {
+      console.error('Error sending SMS:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to send SMS',
+        variant: 'destructive'
+      });
+    } finally {
+      setSendingSMS(false);
+    }
+  };
+
+  // Send Email
+  const handleSendEmail = async () => {
+    if (!emailSubject.trim() || !emailBody.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Please enter subject and message',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    const emailAddress = getLeadEmail();
+    
+    if (!emailAddress) {
+      toast({
+        title: 'Error',
+        description: 'No email address found for this lead',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setSendingEmail(true);
+    try {
+      console.log('📧 Sending Email:', { to: emailAddress, subject: emailSubject, leadId: id });
+      
+      const response = await makeApiCall(`${API_BASE}/settings/email/send`, {
+        method: 'POST',
+        body: JSON.stringify({
+          to: emailAddress,
+          subject: emailSubject.trim(),
+          text: emailBody.trim(),
+          leadId: id
+        })
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        toast({
+          title: 'Email Sent',
+          description: 'Email sent successfully'
+        });
+        setEmailSubject('');
+        setEmailBody('');
+        await loadCommunications();
+      } else {
+        throw new Error(result.error || 'Failed to send email');
+      }
+    } catch (error: any) {
+      console.error('❌ Email send error:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to send email',
+        variant: 'destructive'
+      });
+    } finally {
+      setSendingEmail(false);
     }
   };
 
@@ -1260,14 +1653,28 @@ const LeadEdit: React.FC = () => {
       <div className="space-y-2">
         {/* Header with Back Button and Save */}
         <div className="flex items-center justify-between">
-          <Button variant="outline" size="sm" onClick={() => navigate('/leads')}>
-            <ArrowLeft className="w-3 h-3 mr-1" />
+          <Button variant="outline" className="h-5 text-[9px] px-2 py-1 rounded-md inline-flex items-center justify-center" onClick={() => navigate('/leads')}>
+            <ArrowLeft className="w-2.5 h-2.5 mr-0.5" />
             Back
           </Button>
-          <Button size="sm" onClick={handleSave} disabled={saving || !canEditLead}>
-            <Save className="w-3 h-3 mr-1" />
-            {saving ? 'Saving...' : 'Save'}
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* Countdown Timer */}
+            <div className={`flex items-center gap-1.5 px-2 py-0.5 h-5 rounded-md border ${showNoContactAlert ? 'bg-orange-50 border-orange-300' : 'bg-slate-50 border-slate-200'}`}>
+              <Clock className={`w-2.5 h-2.5 ${showNoContactAlert ? 'text-orange-600' : 'text-slate-600'}`} />
+              <span className={`text-[9px] font-medium ${showNoContactAlert ? 'text-orange-700' : 'text-slate-700'}`}>
+                {timeInStatus}
+              </span>
+              {showNoContactAlert && (
+                <Badge className="text-[8px] bg-orange-600 text-white px-1 py-0 h-3 leading-none">
+                  72h+
+                </Badge>
+              )}
+            </div>
+            <Button className="h-5 text-[9px] bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md inline-flex items-center justify-center" onClick={handleSave} disabled={saving || !canEditLead}>
+              <Save className="w-2.5 h-2.5 mr-0.5" />
+              {saving ? 'Saving...' : 'Save'}
+            </Button>
+          </div>
         </div>
 
         {/* Access Information Banner */}
@@ -1299,7 +1706,7 @@ const LeadEdit: React.FC = () => {
               <p className="text-sm font-semibold text-slate-900 truncate">{lead.address?.address1 || 'No Address'}</p>
               <p className="text-[10px] text-slate-500">{lead.address?.city && lead.address?.state ? `${lead.address.city}, ${lead.address.state} ${lead.address.zipCode || ''}` : ''}</p>
             </div>
-            {/* Owner */}
+            {/* Owner with Email & Phone */}
             <div className="col-span-2">
               <div className="flex items-center gap-1 mb-0.5">
                 <User className="w-3 h-3 text-slate-500" />
@@ -1308,6 +1715,20 @@ const LeadEdit: React.FC = () => {
               <p className="text-sm font-semibold text-slate-900 truncate">
                 {lead.seller?.firstName && lead.seller?.lastName ? `${lead.seller.firstName} ${lead.seller.lastName}` : lead.buyer?.firstName && lead.buyer?.lastName ? `${lead.buyer.firstName} ${lead.buyer.lastName}` : lead.vendor?.firstName && lead.vendor?.lastName ? `${lead.vendor.firstName} ${lead.vendor.lastName}` : 'No Owner'}
               </p>
+              <div className="text-[10px] text-slate-600 space-y-0.5 mt-1">
+                {(lead.seller?.email || lead.buyer?.email || lead.vendor?.email) && (
+                  <div className="flex items-center gap-1">
+                    <Mail className="w-2.5 h-2.5 text-slate-400" />
+                    <span className="truncate">{lead.seller?.email || lead.buyer?.email || lead.vendor?.email}</span>
+                  </div>
+                )}
+                {(lead.seller?.phone || lead.buyer?.phone || lead.vendor?.phone) && (
+                  <div className="flex items-center gap-1">
+                    <Phone className="w-2.5 h-2.5 text-slate-400" />
+                    <span>{lead.seller?.phone || lead.buyer?.phone || lead.vendor?.phone}</span>
+                  </div>
+                )}
+              </div>
             </div>
             {/* Lead Source */}
             <div className="col-span-1">
@@ -1332,7 +1753,7 @@ const LeadEdit: React.FC = () => {
             {/* Pipeline Status */}
             <div className="col-span-2">
               <Label className="text-[10px] text-slate-500">Pipeline</Label>
-              <Select value={pipelineStatus} onValueChange={setPipelineStatus} disabled={!canEditLead}>
+              <Select value={pipelineStatus} onValueChange={handlePipelineStatusChange} disabled={!canEditLead}>
                 <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Stage" /></SelectTrigger>
                 <SelectContent>{pipelineStages.map((stage) => (<SelectItem key={stage.id} value={stage.id}>{stage.name}</SelectItem>))}</SelectContent>
               </Select>
@@ -1431,6 +1852,61 @@ const LeadEdit: React.FC = () => {
             </div>
           </div>
 
+          {/* Offer Information - Show if offer data exists */}
+          {(lead?.customFields?.offerMadePrice || lead?.customFields?.maxAllowableOffer || lead?.customFields?.offerMadeResponse) && (
+            <div className="border border-slate-200 rounded-lg bg-white p-3">
+              <div className="flex items-center gap-1.5 mb-2">
+                <DollarSign className="w-3.5 h-3.5 text-green-600" />
+                <span className="text-xs font-medium text-slate-600">Offer Information</span>
+                {lead?.customFields?.offerMadeResponse && (
+                  <Badge 
+                    className={`text-[10px] ml-auto ${
+                      lead.customFields.offerMadeResponse === 'Accepted' ? 'bg-green-100 text-green-700' :
+                      lead.customFields.offerMadeResponse === 'Negotiating' ? 'bg-blue-100 text-blue-700' :
+                      'bg-orange-100 text-orange-700'
+                    }`}
+                  >
+                    {lead.customFields.offerMadeResponse}
+                  </Badge>
+                )}
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <Label className="text-[10px] text-slate-500">Offer Made Price</Label>
+                  <div className="relative">
+                    <DollarSign className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-slate-400" />
+                    <Input 
+                      type="number" 
+                      value={lead?.customFields?.offerMadePrice || ''} 
+                      readOnly
+                      className="h-7 text-xs pl-6 bg-slate-50" 
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-[10px] text-slate-500">Max Allowable Offer</Label>
+                  <div className="relative">
+                    <DollarSign className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-slate-400" />
+                    <Input 
+                      type="number" 
+                      value={lead?.customFields?.maxAllowableOffer || ''} 
+                      readOnly
+                      className="h-7 text-xs pl-6 bg-slate-50" 
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-[10px] text-slate-500">Response Status</Label>
+                  <Input 
+                    value={lead?.customFields?.offerMadeResponse || 'N/A'} 
+                    readOnly
+                    className="h-7 text-xs bg-slate-50 font-medium" 
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Property Information */}
           <div className="border border-slate-200 rounded-lg bg-white p-3">
             <div className="flex items-center gap-1.5 mb-2">
@@ -1488,34 +1964,9 @@ const LeadEdit: React.FC = () => {
 
               {/* Acquisitions Tab */}
               <TabsContent value="acquisitions" className="space-y-2 mt-2">
-                {/* Lead Creation Section - Compact */}
+                {/* 1. Additional Property Information */}
                 <div className="border border-slate-200 rounded-lg bg-white p-2">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-medium text-slate-600">Lead Source: <Badge variant="outline" className="text-[10px] ml-1">{leadSource || 'N/A'}</Badge></span>
-                    <span className="text-[10px] text-slate-500">Created: {lead?.createdAt ? new Date(lead.createdAt).toLocaleDateString() : 'N/A'}</span>
-                  </div>
-                  {leadSource === 'Cold Call' && (
-                    <div className="grid grid-cols-4 gap-2 p-1.5 bg-slate-50 rounded text-[10px]">
-                      <div><span className="text-slate-500">Condition:</span> <span className="text-slate-800">{leadSourceData.condition || 'N/A'}</span></div>
-                      <div><span className="text-slate-500">Motivation:</span> <span className="text-slate-800">{leadSourceData.motivation || 'N/A'}</span></div>
-                      <div><span className="text-slate-500">Timeline:</span> <span className="text-slate-800">{leadSourceData.timeline || 'N/A'}</span></div>
-                      <div><span className="text-slate-500">Asking:</span> <span className="text-slate-800">{leadSourceData.askingPrice ? `$${parseInt(leadSourceData.askingPrice).toLocaleString()}` : 'N/A'}</span></div>
-                    </div>
-                  )}
-                  {leadSource === 'SMS' && leadSourceData.smsMessages?.length > 0 && (
-                    <div className="max-h-20 overflow-y-auto p-1.5 bg-slate-50 rounded space-y-1">
-                      {leadSourceData.smsMessages.map((msg: any, idx: number) => (
-                        <div key={idx} className={`p-1 rounded text-[10px] ${msg.direction === 'inbound' ? 'bg-slate-200 ml-4' : 'bg-white mr-4 border'}`}>
-                          <p className="text-slate-900">{msg.text}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Additional Property Info - Compact */}
-                <div className="border border-slate-200 rounded-lg bg-white p-2">
-                  <span className="text-xs font-medium text-slate-600 block mb-1">Additional Property Info</span>
+                  <span className="text-xs font-medium text-slate-600 block mb-1">Additional Property Information</span>
                   <div className="grid grid-cols-7 gap-1">
                     <div><Label className="text-[10px] text-slate-500">Roof</Label><Input value={roofType} onChange={(e) => setRoofType(e.target.value)} placeholder="Type" className="h-6 text-xs" /></div>
                     <div><Label className="text-[10px] text-slate-500">Roof Age</Label><Input type="number" value={roofAge} onChange={(e) => setRoofAge(e.target.value)} placeholder="Yrs" className="h-6 text-xs" /></div>
@@ -1527,95 +1978,7 @@ const LeadEdit: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Rehab Information - Compact */}
-                <div className="border border-slate-200 rounded-lg bg-white p-2">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-1">
-                      <Wrench className="w-3 h-3 text-slate-500" />
-                      <span className="text-xs font-medium text-slate-600">Rehab</span>
-                      <span className="text-xs text-emerald-600 font-semibold ml-2">${rehabBudget ? parseInt(rehabBudget).toLocaleString() : '0'}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Input type="number" value={rehabBudget} onChange={(e) => setRehabBudget(e.target.value)} placeholder="Budget" className="h-6 text-xs w-24" />
-                      <Button type="button" size="sm" variant="ghost" className="h-5 text-[10px] px-1" onClick={() => {
-                        const name = prompt('Item name:'); if (!name) return;
-                        const cost = prompt('Cost ($):'); if (!cost) return;
-                        const newItems = [...rehabItems, { name, cost: parseInt(cost), description: '' }];
-                        setRehabItems(newItems);
-                        setRehabBudget(((parseInt(rehabBudget) || 0) + (parseInt(cost) || 0)).toString());
-                      }}><Plus className="w-2.5 h-2.5" /></Button>
-                    </div>
-                  </div>
-                  {rehabItems.length > 0 && (
-                    <div className="space-y-0.5 max-h-24 overflow-y-auto">
-                      {rehabItems.map((item: any, idx: number) => (
-                        <div key={idx} className="flex items-center justify-between p-1 bg-slate-50 rounded text-[10px] group">
-                          <span className="text-slate-800">{item.name}</span>
-                          <div className="flex items-center gap-1">
-                            <span className="font-medium">${parseInt(item.cost || 0).toLocaleString()}</span>
-                            <Button type="button" size="sm" variant="ghost" className="h-4 w-4 p-0 opacity-0 group-hover:opacity-100" onClick={() => {
-                              const newItems = rehabItems.filter((_, i) => i !== idx);
-                              setRehabItems(newItems);
-                              setRehabBudget(Math.max(0, (parseInt(rehabBudget) || 0) - (parseInt(item.cost) || 0)).toString());
-                            }}><X className="w-2.5 h-2.5 text-red-500" /></Button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Underwriting Information - ORIGINAL (Keep visible) */}
-                <UnderwritingCalculator leadId={id!} />
-
-                {/* ========== NEW FEATURES - HIDDEN (Uncomment to enable) ========== */}
-                
-                {/* Lead Owners Section - NEW */}
-                {/* <LeadOwnerSection leadId={id!} readOnly={false} /> */}
-
-                {/* Property Information Card - NEW */}
-                {/* <PropertyInfoCard 
-                  property={{
-                    address: lead?.address?.address1,
-                    city: lead?.address?.city,
-                    state: lead?.address?.state,
-                    zipCode: lead?.address?.zipCode,
-                    propertyType: propertyType,
-                    sqft: parseInt(sqft) || undefined,
-                    bedrooms: parseInt(bedrooms) || undefined,
-                    bathrooms: parseFloat(bathrooms) || undefined,
-                    yearBuilt: parseInt(yearBuilt) || undefined,
-                    lotSize: lotSize ? parseFloat(lotSize) : undefined,
-                    estimatedValue: parseInt(estimatedValue) || undefined,
-                    purchasePrice: parseInt(askingPrice) || undefined
-                  }}
-                /> */}
-
-                {/* Rehab Budget Calculator - NEW */}
-                {/* <RehabBudgetCalculatorCompact 
-                  leadId={id!}
-                  sqft={parseInt(sqft) || 0}
-                  bathrooms={parseInt(bathrooms) || 1}
-                  readOnly={false}
-                /> */}
-
-                {/* Underwriting Section - NEW */}
-                {/* <UnderwritingSectionCompact 
-                  leadId={id!}
-                  rehabCost={0}
-                  readOnly={false}
-                /> */}
-
-                {/* Projections Section - NEW */}
-                {/* <ProjectionsSection 
-                  leadId={id!}
-                  purchasePrice={parseInt(askingPrice) || 0}
-                  rehabCost={0}
-                  arv={parseInt(estimatedValue) || 0}
-                  readOnly={false}
-                /> */}
-
-                {/* Comp Information - ORIGINAL (Keep visible) */}
+                {/* 2. Comparable Properties */}
                 <CompsManager 
                   leadId={id!} 
                   leadAddress={lead?.address ? {
@@ -1624,6 +1987,34 @@ const LeadEdit: React.FC = () => {
                     state: lead.address.state,
                     zip: lead.address.zip
                   } : undefined}
+                />
+
+                {/* 3. Rehab Information (Full Calculator with toggles) */}
+                <RehabBudgetCalculatorCompact 
+                  leadId={id!}
+                  sqft={parseInt(sqft) || 0}
+                  bathrooms={parseInt(bathrooms) || 1}
+                  readOnly={false}
+                  onTotalChange={(total) => setRehabBudget(total.toString())}
+                />
+
+                {/* 4. Underwriting Information - Visible to Admin, Manager, ACQ only */}
+                {user?.roles && (user.roles.includes('ADMIN') || user.roles.includes('MANAGER') || user.roles.includes('ACQ')) && (
+                  <UnderwritingSectionCompact 
+                    leadId={id!}
+                    rehabCost={parseInt(rehabBudget) || 0}
+                    readOnly={false}
+                    key={`underwriting-${rehabBudget}`}
+                  />
+                )}
+
+                {/* 5. Projections Section - Visible to all users (Editable) */}
+                <ProjectionsSection 
+                  leadId={id!}
+                  purchasePrice={parseInt(askingPrice) || 0}
+                  rehabCost={parseInt(rehabBudget) || 0}
+                  arv={parseInt(estimatedValue) || 0}
+                  readOnly={false}
                 />
               </TabsContent>
 
@@ -1745,30 +2136,89 @@ const LeadEdit: React.FC = () => {
                     </Button>
                   </div>
                   {files.length > 0 ? (
-                    <div className="space-y-0.5 max-h-32 overflow-y-auto">
-                      {files.map((file: any) => (
-                        <div key={file.id} className="flex items-center justify-between p-1 border border-slate-100 rounded bg-slate-50 text-[10px]">
-                          <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                            <FileText className="w-3 h-3 text-slate-500" />
-                            <span className="truncate">{file.file?.name || 'File'}</span>
-                            <span className="text-slate-400">{(file.file?.size / 1024).toFixed(0)}KB</span>
+                    <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">
+                      {files.map((file: any) => {
+                        const isImage = file.mimeType?.startsWith('image/');
+                        const accessToken = localStorage.getItem('accessToken');
+                        const previewUrl = isImage ? `${API_BASE}/files/${file.id}/preview?token=${accessToken}` : null;
+                        
+                        return (
+                          <div key={file.id} className="border border-slate-200 rounded-lg bg-white hover:shadow-md transition-shadow">
+                            {/* Thumbnail */}
+                            {isImage && previewUrl ? (
+                              <div className="relative w-full h-32 bg-slate-100 rounded-t-lg overflow-hidden">
+                                <img 
+                                  src={previewUrl} 
+                                  alt={file.originalName}
+                                  className="w-full h-full object-cover cursor-pointer"
+                                  onClick={() => window.open(`${API_BASE}/files/${file.id}/download`, '_blank')}
+                                  onError={(e) => {
+                                    // Fallback if preview fails - show file icon instead
+                                    const parent = e.currentTarget.parentElement;
+                                    if (parent) {
+                                      parent.innerHTML = '<div class="flex flex-col items-center justify-center h-full text-slate-400"><svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg><span class="text-xs mt-1">No preview</span></div>';
+                                    }
+                                  }}
+                                />
+                              </div>
+                            ) : (
+                              <div className="w-full h-32 bg-slate-100 rounded-t-lg flex items-center justify-center">
+                                <FileText className="w-12 h-12 text-slate-400" />
+                              </div>
+                            )}
+                            
+                            {/* File Info */}
+                            <div className="p-2">
+                              <div className="flex items-start justify-between gap-1 mb-1">
+                                <span className="text-xs font-medium truncate flex-1" title={file.originalName}>
+                                  {file.originalName || file.filename || 'File'}
+                                </span>
+                                {file.category && (
+                                  <span className="text-[9px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded flex-shrink-0">
+                                    {file.category}
+                                  </span>
+                                )}
+                              </div>
+                              
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] text-slate-500">
+                                  {((file.size || 0) / 1024).toFixed(0)}KB
+                                </span>
+                                <div className="flex gap-1">
+                                  <Button 
+                                    size="sm" 
+                                    variant="ghost" 
+                                    className="h-6 w-6 p-0 hover:bg-blue-50" 
+                                    onClick={() => window.open(`${API_BASE}/files/${file.id}/download`, '_blank')} 
+                                    title="Download"
+                                  >
+                                    <Download className="w-3 h-3 text-blue-600" />
+                                  </Button>
+                                  <Button 
+                                    size="sm" 
+                                    variant="ghost" 
+                                    className="h-6 w-6 p-0 hover:bg-red-50" 
+                                    onClick={async () => {
+                                      if (confirm('Delete this file?')) {
+                                        try {
+                                          await makeApiCall(`${API_BASE}/files/${file.id}`, { method: 'DELETE' });
+                                          toast({ title: 'Success', description: 'File deleted' });
+                                          loadFiles();
+                                        } catch (error) {
+                                          toast({ title: 'Error', description: 'Failed to delete file', variant: 'destructive' });
+                                        }
+                                      }
+                                    }} 
+                                    title="Delete"
+                                  >
+                                    <Trash className="w-3 h-3 text-red-600" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
                           </div>
-                          <div className="flex gap-0.5">
-                            {file.file?.path && (<Button size="sm" variant="ghost" className="h-4 w-4 p-0" onClick={() => window.open(`${API_BASE}${file.file.path}`, '_blank')}><Download className="w-2.5 h-2.5" /></Button>)}
-                            <Button size="sm" variant="ghost" className="h-4 w-4 p-0" onClick={async () => {
-                              if (confirm('Delete file?')) {
-                                try {
-                                  await makeApiCall(`${API_BASE}/files/${file.fileId}`, { method: 'DELETE' });
-                                  toast({ title: 'Success', description: 'File deleted' });
-                                  loadFiles();
-                                } catch (error) {
-                                  toast({ title: 'Error', description: 'Failed', variant: 'destructive' });
-                                }
-                              }
-                            }}><Trash className="w-2.5 h-2.5 text-red-500" /></Button>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (<div className="text-center py-2 bg-slate-50 rounded text-[10px] text-slate-500">No files yet</div>)}
                 </div>
@@ -1903,6 +2353,238 @@ const LeadEdit: React.FC = () => {
                   </div>
                 )}
               </div>
+              
+              {/* Call History & Actions */}
+              <div className="mb-2">
+                <div className="flex items-center gap-1 mb-1">
+                  <Phone className="w-2.5 h-2.5 text-purple-600" />
+                  <span className="text-[10px] font-medium text-slate-600">Call History</span>
+                </div>
+                
+                {/* Call History List */}
+                <div className="space-y-1 max-h-32 overflow-y-auto mb-1">
+                  {loadingCommunications ? (
+                    <div className="p-1.5 bg-slate-50 rounded text-[10px] text-slate-500 flex items-center justify-center">
+                      <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                      Loading...
+                    </div>
+                  ) : communications.filter(c => c.type === 'CALL').length === 0 ? (
+                    <div className="text-[10px] text-slate-500 text-center py-1.5 bg-slate-50 rounded">
+                      No call history
+                    </div>
+                  ) : (
+                    <>
+                      {communications.filter(c => c.type === 'CALL').map((comm) => (
+                        <div key={comm.id} className="p-1.5 bg-slate-50 rounded text-[10px] border border-slate-200">
+                          <div className="flex items-center justify-between mb-0.5">
+                            <div className="flex items-center gap-1">
+                              <Phone className="w-2.5 h-2.5 text-purple-600" />
+                              <span className={`text-[9px] px-1 py-0.5 rounded ${
+                                comm.direction === 'INBOUND' 
+                                  ? 'bg-green-100 text-green-700' 
+                                  : 'bg-blue-100 text-blue-700'
+                              }`}>
+                                {comm.direction === 'INBOUND' ? 'Received' : 'Sent'}
+                              </span>
+                            </div>
+                            <span className="text-slate-400 text-[9px]">
+                              {new Date(comm.occurredAt).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
+                            </span>
+                          </div>
+                          {comm.body && (
+                            <p className="text-slate-600 line-clamp-1 mt-0.5">{comm.body}</p>
+                          )}
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+                
+                {/* Make Call Button - Always visible */}
+                <Button
+                  onClick={handleMakeCall}
+                  disabled={makingCall || (callStatus?.status && callStatus.status !== 'idle')}
+                  className="h-5 text-[9px] bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed px-2 py-1 rounded-md inline-flex items-center justify-center"
+                  title={!hasValidPhone() ? 'Please add a phone number in the contacts section' : 'Click to make a call'}
+                >
+                  {makingCall ? (
+                    <><Loader2 className="w-2.5 h-2.5 mr-0.5 animate-spin" />Connecting...</>
+                  ) : (
+                    <><PhoneCall className="w-2.5 h-2.5 mr-0.5" />Make Call</>
+                  )}
+                </Button>
+                
+                {/* Hang Up Button - Only show when call is active */}
+                {callStatus?.status && callStatus.status !== 'idle' && callStatus.status !== 'disconnected' && (
+                  <div className="flex items-center gap-1 mt-1">
+                    <div className="flex-1 p-1.5 bg-purple-50 border border-purple-200 rounded text-[10px] flex items-center gap-1.5">
+                      <PhoneCall className="w-3 h-3 text-purple-600 animate-pulse" />
+                      <span className="text-purple-700 font-medium">
+                        {callStatus.status === 'connecting' && 'Connecting...'}
+                        {callStatus.status === 'ringing' && 'Ringing...'}
+                        {callStatus.status === 'connected' && 'In progress'}
+                      </span>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={hangUp}
+                      className="h-5 px-2 text-[9px] bg-red-600 hover:bg-red-700 text-white"
+                    >
+                      <PhoneOff className="w-2.5 h-2.5 mr-1" />
+                      Hang Up
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {/* SMS History & Actions */}
+              <div className="mb-2">
+                <div className="flex items-center gap-1 mb-1">
+                  <MessageSquare className="w-2.5 h-2.5 text-green-600" />
+                  <span className="text-[10px] font-medium text-slate-600">SMS History</span>
+                </div>
+                
+                {/* SMS History List */}
+                <div className="space-y-1 max-h-32 overflow-y-auto mb-1">
+                  {loadingCommunications ? (
+                    <div className="p-1.5 bg-slate-50 rounded text-[10px] text-slate-500 flex items-center justify-center">
+                      <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                      Loading...
+                    </div>
+                  ) : communications.filter(c => c.type === 'SMS').length === 0 ? (
+                    <div className="text-[10px] text-slate-500 text-center py-1.5 bg-slate-50 rounded">
+                      No SMS history
+                    </div>
+                  ) : (
+                    <>
+                      {communications.filter(c => c.type === 'SMS').map((comm) => (
+                        <div key={comm.id} className="p-1.5 bg-slate-50 rounded text-[10px] border border-slate-200">
+                          <div className="flex items-center justify-between mb-0.5">
+                            <div className="flex items-center gap-1">
+                              <MessageSquare className="w-2.5 h-2.5 text-green-600" />
+                              <span className={`text-[9px] px-1 py-0.5 rounded ${
+                                comm.direction === 'INBOUND' 
+                                  ? 'bg-green-100 text-green-700' 
+                                  : 'bg-blue-100 text-blue-700'
+                              }`}>
+                                {comm.direction === 'INBOUND' ? 'Received' : 'Sent'}
+                              </span>
+                            </div>
+                            <span className="text-slate-400 text-[9px]">
+                              {new Date(comm.occurredAt).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
+                            </span>
+                          </div>
+                          {comm.body && (
+                            <p className="text-slate-600 line-clamp-2 mt-0.5">{comm.body}</p>
+                          )}
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+                
+                {/* Send SMS */}
+                <div className="space-y-1">
+                  <Textarea
+                    value={smsText}
+                    onChange={(e) => setSmsText(e.target.value)}
+                    placeholder="Type SMS message..."
+                    className="min-h-[50px] text-[10px] resize-none"
+                    disabled={sendingSMS}
+                  />
+                  <Button
+                    onClick={handleSendSMS}
+                    disabled={sendingSMS || !smsText.trim()}
+                    className="h-5 text-[9px] bg-green-600 hover:bg-green-700 px-2 py-1 rounded-md inline-flex items-center justify-center"
+                  >
+                    {sendingSMS ? (
+                      <><Loader2 className="w-2.5 h-2.5 mr-0.5 animate-spin" />Sending...</>
+                    ) : (
+                      <><Send className="w-2.5 h-2.5 mr-0.5" />Send SMS</>
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Email History & Actions */}
+              <div className="mb-2">
+                <div className="flex items-center gap-1 mb-1">
+                  <Mail className="w-2.5 h-2.5 text-blue-600" />
+                  <span className="text-[10px] font-medium text-slate-600">Email History</span>
+                </div>
+                
+                {/* Email History List */}
+                <div className="space-y-1 max-h-32 overflow-y-auto mb-1">
+                  {loadingCommunications ? (
+                    <div className="p-1.5 bg-slate-50 rounded text-[10px] text-slate-500 flex items-center justify-center">
+                      <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                      Loading...
+                    </div>
+                  ) : communications.filter(c => c.type === 'EMAIL').length === 0 ? (
+                    <div className="text-[10px] text-slate-500 text-center py-1.5 bg-slate-50 rounded">
+                      No email history
+                    </div>
+                  ) : (
+                    <>
+                      {communications.filter(c => c.type === 'EMAIL').map((comm) => (
+                        <div key={comm.id} className="p-1.5 bg-slate-50 rounded text-[10px] border border-slate-200">
+                          <div className="flex items-center justify-between mb-0.5">
+                            <div className="flex items-center gap-1">
+                              <Mail className="w-2.5 h-2.5 text-blue-600" />
+                              <span className={`text-[9px] px-1 py-0.5 rounded ${
+                                comm.direction === 'INBOUND' 
+                                  ? 'bg-blue-100 text-blue-700' 
+                                  : 'bg-purple-100 text-purple-700'
+                              }`}>
+                                {comm.direction === 'INBOUND' ? 'Received' : 'Sent'}
+                              </span>
+                            </div>
+                            <span className="text-slate-400 text-[9px]">
+                              {new Date(comm.occurredAt).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
+                            </span>
+                          </div>
+                          {comm.subject && (
+                            <p className="text-slate-700 font-medium line-clamp-1 mt-0.5">{comm.subject}</p>
+                          )}
+                          {comm.body && (
+                            <p className="text-slate-600 line-clamp-2 mt-0.5">{comm.body}</p>
+                          )}
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+                
+                {/* Send Email */}
+                <div className="space-y-1">
+                  <Input
+                    value={emailSubject}
+                    onChange={(e) => setEmailSubject(e.target.value)}
+                    placeholder="Email subject..."
+                    className="h-7 text-[10px]"
+                    disabled={sendingEmail}
+                  />
+                  <Textarea
+                    value={emailBody}
+                    onChange={(e) => setEmailBody(e.target.value)}
+                    placeholder="Type email message..."
+                    className="min-h-[50px] text-[10px] resize-none"
+                    disabled={sendingEmail}
+                  />
+                  <Button
+                    onClick={handleSendEmail}
+                    disabled={sendingEmail || !emailSubject.trim() || !emailBody.trim()}
+                    className="h-5 text-[9px] bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md inline-flex items-center justify-center"
+                  >
+                    {sendingEmail ? (
+                      <><Loader2 className="w-2.5 h-2.5 mr-0.5 animate-spin" />Sending...</>
+                    ) : (
+                      <><Mail className="w-2.5 h-2.5 mr-0.5" />Send Email</>
+                    )}
+                  </Button>
+                </div>
+              </div>
+              
               {/* Timeline */}
               <div className="mb-2">
                 <div className="flex items-center gap-1 mb-1">
@@ -1924,7 +2606,7 @@ const LeadEdit: React.FC = () => {
               {/* Add Note */}
               <div>
                 <Textarea value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Add note..." className="min-h-[50px] text-xs" disabled={addingNote} />
-                <Button className="w-full mt-1 h-6 text-xs" size="sm" onClick={handleAddNote} disabled={addingNote || !noteText.trim()}>
+                <Button className="mt-1 h-5 text-[9px] bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md inline-flex items-center justify-center" onClick={handleAddNote} disabled={addingNote || !noteText.trim()}>
                   <Plus className="w-2.5 h-2.5 mr-0.5" />{addingNote ? '...' : 'Add'}
                 </Button>
               </div>
@@ -2007,22 +2689,23 @@ const LeadEdit: React.FC = () => {
               variant="outline"
               onClick={closeTaskDialog}
               disabled={savingTask}
+              className="h-5 text-[9px] px-2 py-1 rounded-md inline-flex items-center justify-center"
             >
               Cancel
             </Button>
             <Button
               onClick={handleTaskSubmit}
               disabled={savingTask || !taskForm.title || !taskForm.dueAt}
-              className="bg-purple-600 hover:bg-purple-700"
+              className="h-5 text-[9px] bg-purple-600 hover:bg-purple-700 px-2 py-1 rounded-md inline-flex items-center justify-center"
             >
               {savingTask ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  <Loader2 className="w-2.5 h-2.5 mr-0.5 animate-spin" />
                   Saving...
                 </>
               ) : (
                 <>
-                  <Save className="w-4 h-4 mr-2" />
+                  <Save className="w-2.5 h-2.5 mr-0.5" />
                   {editingTask ? 'Update Task' : 'Create Task'}
                 </>
               )}
@@ -2030,6 +2713,223 @@ const LeadEdit: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+      {/* Stage Transition Validation Popups */}
+      <AppointmentCompletePopup
+        open={showAppointmentPopup}
+        onClose={() => {
+          setShowAppointmentPopup(false);
+          setPendingPipelineStatus(null);
+        }}
+        leadId={id || ''}
+        onSubmit={async (files) => {
+          try {
+            // Upload photos
+            let uploadedCount = 0;
+            for (const file of files) {
+              const formData = new FormData();
+              formData.append('file', file);
+              formData.append('category', 'PHOTO');
+              
+              const uploadResponse = await makeApiCall(`${API_BASE}/leads/${id}/files`, {
+                method: 'POST',
+                body: formData
+              });
+              
+              if (uploadResponse.ok) {
+                uploadedCount++;
+                console.log('✅ Photo uploaded:', file.name);
+              } else {
+                const errorData = await uploadResponse.json();
+                console.error('❌ Failed to upload photo:', file.name, errorData);
+                toast({
+                  title: "Upload Error",
+                  description: `Failed to upload ${file.name}`,
+                  variant: "destructive"
+                });
+              }
+            }
+            
+            console.log(`📸 Uploaded ${uploadedCount} of ${files.length} photos`);
+            
+            // Now move the lead to the new stage using the backend API
+            if (pendingPipelineStatus) {
+              const stageResponse = await makeApiCall(`${API_BASE}/pipeline/leads/${id}/move`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ stageId: pendingPipelineStatus })
+              });
+              
+              if (stageResponse.ok) {
+                setPipelineStatus(pendingPipelineStatus);
+                console.log('✅ Stage changed successfully');
+              } else {
+                const errorData = await stageResponse.json();
+                throw new Error(errorData.error || 'Failed to change stage');
+              }
+            }
+            
+            setShowAppointmentPopup(false);
+            setPendingPipelineStatus(null);
+            
+            // Reload files to show new photos
+            await loadFiles();
+            
+            // Reload lead to show updated stage
+            await loadLead();
+            
+            toast({
+              title: "Success",
+              description: `${uploadedCount} photo(s) uploaded and stage updated`,
+            });
+          } catch (error: any) {
+            console.error('Error uploading photos:', error);
+            toast({
+              title: "Error",
+              description: error.message || "Failed to upload photos",
+              variant: "destructive"
+            });
+          }
+        }}
+      />
+      
+      <DueDiligencePopup
+        open={showDueDiligencePopup}
+        onClose={() => {
+          setShowDueDiligencePopup(false);
+          setPendingPipelineStatus(null);
+        }}
+        existingData={lead?.customFields}
+        onSubmit={async (data) => {
+          try {
+            // Update lead with property info first
+            const response = await makeApiCall(`${API_BASE}/leads/${id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                customFields: {
+                  ...lead?.customFields,
+                  ...data
+                }
+              })
+            });
+            
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.error || 'Failed to update property information');
+            }
+            
+            // Now move the lead to the new stage using the backend API
+            if (pendingPipelineStatus) {
+              const stageResponse = await makeApiCall(`${API_BASE}/pipeline/leads/${id}/move`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ stageId: pendingPipelineStatus })
+              });
+              
+              if (stageResponse.ok) {
+                setPipelineStatus(pendingPipelineStatus);
+                console.log('✅ Stage changed successfully');
+              } else {
+                const errorData = await stageResponse.json();
+                throw new Error(errorData.error || 'Failed to change stage');
+              }
+            }
+            
+            setShowDueDiligencePopup(false);
+            setPendingPipelineStatus(null);
+            
+            // Reload lead to show updated data
+            await loadLead();
+            
+            toast({
+              title: "Success",
+              description: "Property information updated and stage changed",
+            });
+          } catch (error: any) {
+            console.error('Error updating property info:', error);
+            toast({
+              title: "Error",
+              description: error.message || "Failed to update property information",
+              variant: "destructive"
+            });
+          }
+        }}
+      />
+      
+      <OfferMadePopup
+        open={showOfferMadePopup}
+        onClose={() => {
+          setShowOfferMadePopup(false);
+          setPendingPipelineStatus(null);
+        }}
+        existingData={lead?.customFields}
+        onSubmit={async (data) => {
+          try {
+            console.log('💰 Saving offer data:', data);
+            console.log('💰 Existing customFields:', lead?.customFields);
+            
+            const updatedCustomFields = {
+              ...lead?.customFields,
+              ...data
+            };
+            
+            console.log('💰 Updated customFields:', updatedCustomFields);
+            
+            // Update lead with offer info first
+            const response = await makeApiCall(`${API_BASE}/leads/${id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                customFields: updatedCustomFields
+              })
+            });
+            
+            if (!response.ok) {
+              const errorData = await response.json();
+              console.error('❌ Failed to save offer data:', errorData);
+              throw new Error(errorData.error || 'Failed to update offer information');
+            }
+            
+            console.log('✅ Offer data saved successfully');
+            
+            // Now move the lead to the new stage using the backend API
+            if (pendingPipelineStatus) {
+              const stageResponse = await makeApiCall(`${API_BASE}/pipeline/leads/${id}/move`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ stageId: pendingPipelineStatus })
+              });
+              
+              if (stageResponse.ok) {
+                setPipelineStatus(pendingPipelineStatus);
+                console.log('✅ Stage changed successfully');
+              } else {
+                const errorData = await stageResponse.json();
+                throw new Error(errorData.error || 'Failed to change stage');
+              }
+            }
+            
+            setShowOfferMadePopup(false);
+            setPendingPipelineStatus(null);
+            
+            // Reload lead to show updated data
+            await loadLead();
+            
+            toast({
+              title: "Success",
+              description: "Offer information updated and stage changed",
+            });
+          } catch (error: any) {
+            console.error('Error updating offer info:', error);
+            toast({
+              title: "Error",
+              description: error.message || "Failed to update offer information",
+              variant: "destructive"
+            });
+          }
+        }}
+      />
     </DashboardLayout>
   );
 };

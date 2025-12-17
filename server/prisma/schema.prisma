@@ -349,6 +349,14 @@ model Lead {
   dispAgentId      String?
   dispAgent        User?          @relation("DispAgentLeads", fields: [dispAgentId], references: [id])
   
+  // DocuSign E-Signature fields
+  docusignEnvelopeId  String?    // DocuSign envelope ID
+  contractSentAt      DateTime?  // When contract was sent
+  contractVoidAt      DateTime?  // When contract expires/voids
+  contractSignedAt    DateTime?  // When contract was signed
+  contractStatus      String?    // SENT, COMPLETED, VOIDED, DECLINED, EXPIRED
+  esignProvider       String?    @default("docusign") // E-signature provider
+  
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 

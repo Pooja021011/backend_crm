@@ -22,12 +22,12 @@ export const API_BASE = getApiBaseUrl();
 
 // Fetch wrapper for API calls
 export const httpFetch = async (url: string, options?: RequestInit): Promise<Response> => {
+  // Don't override headers if they're already set (especially for FormData)
+  const headers = options?.headers || {};
+  
   const defaultOptions: RequestInit = {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
     ...options,
+    headers,
   };
 
   return fetch(url, defaultOptions);
@@ -37,48 +37,87 @@ export const httpFetch = async (url: string, options?: RequestInit): Promise<Res
 export const makeApiCall = async (url: string, options: RequestInit = {}): Promise<Response> => {
   let accessToken = localStorage.getItem('accessToken');
   
+  // Don't set Content-Type for FormData - browser will set it automatically with boundary
+  const isFormData = options.body instanceof FormData;
+  const headers: Record<string, string> = {
+    'Authorization': `Bearer ${accessToken}`,
+    ...options.headers as Record<string, string>,
+  };
+  
+  // Only add Content-Type for non-FormData requests
+  if (!isFormData && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
+  
   const response = await httpFetch(url, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${accessToken}`,
-      ...options.headers,
-    },
+    headers,
   });
   
   // If token expired, try to refresh and retry
   if (response.status === 401) {
     const refreshToken = localStorage.getItem('refreshToken');
+    console.log('🔄 Token expired, attempting refresh. RefreshToken exists:', !!refreshToken);
+    
     if (refreshToken) {
       try {
-        const refreshResponse = await httpFetch(`${API_BASE}/auth/refresh`, {
+        const refreshResponse = await fetch(`${API_BASE}/auth/refresh`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json'
+          },
           body: JSON.stringify({ refreshToken }),
         });
 
+        console.log('🔄 Refresh response status:', refreshResponse.status);
+
         if (refreshResponse.ok) {
-          const { accessToken: newAccessToken } = await refreshResponse.json();
-          localStorage.setItem('accessToken', newAccessToken);
+          const data = await refreshResponse.json();
+          console.log('✅ Token refresh successful');
+          const newAccessToken = data.accessToken || data.data?.accessToken;
           
-          // Retry original request with new token
-          return httpFetch(url, {
-            ...options,
-            headers: {
-              'Content-Type': 'application/json',
+          if (newAccessToken) {
+            localStorage.setItem('accessToken', newAccessToken);
+            
+            // Retry original request with new token
+            const retryHeaders: Record<string, string> = {
               'Authorization': `Bearer ${newAccessToken}`,
-              ...options.headers,
-            },
-          });
+              ...options.headers as Record<string, string>,
+            };
+            
+            // Only add Content-Type for non-FormData requests
+            if (!isFormData && !retryHeaders['Content-Type']) {
+              retryHeaders['Content-Type'] = 'application/json';
+            }
+            
+            return httpFetch(url, {
+              ...options,
+              headers: retryHeaders,
+            });
+          } else {
+            console.error('❌ No access token in refresh response');
+            localStorage.clear();
+            window.location.href = '/login';
+          }
+        } else {
+          console.error('❌ Token refresh failed with status:', refreshResponse.status);
+          const errorData = await refreshResponse.json();
+          console.error('Error details:', errorData);
+          // Clear storage and redirect
+          localStorage.clear();
+          window.location.href = '/login';
         }
       } catch (error) {
-        console.error('Token refresh failed:', error);
-        // Redirect to login or handle auth failure
-        window.location.href = '/admin-login';
+        console.error('❌ Token refresh error:', error);
+        // Clear storage and redirect to login
+        localStorage.clear();
+        window.location.href = '/login';
       }
     } else {
-      // No refresh token available, redirect to login
-      window.location.href = '/admin-login';
+      console.warn('⚠️ No refresh token available');
+      // No refresh token available, clear storage and redirect to login
+      localStorage.clear();
+      window.location.href = '/login';
     }
   }
   

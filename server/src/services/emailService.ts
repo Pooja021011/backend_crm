@@ -2,6 +2,7 @@ import Imap from 'node-imap';
 import { simpleParser } from 'mailparser';
 import nodemailer from 'nodemailer';
 import { settingsRepository } from '../repositories/settingsRepository.js';
+import { communicationResponseService } from './communicationResponseService.js';
 
 interface ImapConfig {
   host: string;
@@ -63,6 +64,7 @@ export const emailService = {
     replyTo?: string;
     inReplyTo?: string;
     references?: string;
+    leadId?: string;
   }) => {
     const userSettings = await settingsRepository.getUserEmailSettings(userId);
     if (!userSettings || !userSettings.email) {
@@ -83,6 +85,25 @@ export const emailService = {
     };
 
     const result = await transporter.sendMail(mailOptions);
+    
+    // Log email to Communication table if leadId is provided
+    if (emailData.leadId) {
+      try {
+        const { communicationRepository } = await import('../repositories/communicationRepository.js');
+        await communicationRepository.create(emailData.leadId, {
+          type: 'EMAIL',
+          direction: 'OUTBOUND',
+          subject: emailData.subject,
+          body: emailData.text || emailData.html || '',
+          occurredAt: new Date(),
+          createdById: userId
+        });
+      } catch (error) {
+        console.error('Failed to log email to communication table:', error);
+        // Don't fail the email send if logging fails
+      }
+    }
+    
     return {
       success: true,
       messageId: result.messageId,
@@ -344,6 +365,11 @@ export const emailService = {
           emails.sort((a, b) => b.date.getTime() - a.date.getTime());
 
           console.log(`Total emails fetched: ${emails.length} (INBOX only)`);
+          
+          // Log emails to Communication table (async, don't block)
+          emailService.logFetchedEmailsToCommunications(userId, emails).catch(err => {
+            console.error('Failed to log emails to communications:', err);
+          });
           
           handleSuccess();
         } catch (error) {
@@ -804,6 +830,63 @@ ${process.env.APP_NAME || 'Real Estate CRM'} Team
     } catch (error: any) {
       console.error('Error sending OTP email:', error);
       throw new Error('Failed to send OTP email');
+    }
+  },
+  
+  /**
+   * Log fetched emails to Communication table
+   * Matches emails to leads by email address
+   */
+  logFetchedEmailsToCommunications: async (userId: string, emails: EmailMessage[]): Promise<void> => {
+    const { emailMatchingService } = await import('./emailMatchingService.js');
+    const { communicationRepository } = await import('../repositories/communicationRepository.js');
+    
+    for (const email of emails) {
+      try {
+        // Try to match email to a lead
+        const leadId = await emailMatchingService.findLeadByMultipleEmails([
+          email.from,
+          email.to,
+          email.cc,
+          email.bcc
+        ].filter(Boolean));
+        
+        if (leadId) {
+          // Check if this email is already logged (by messageId)
+          const existing = await prisma.communication.findFirst({
+            where: {
+              leadId,
+              type: 'EMAIL',
+              subject: email.subject,
+              occurredAt: email.date
+            }
+          });
+          
+          if (!existing) {
+            // Log as INBOUND email
+            await communicationRepository.create(leadId, {
+              type: 'EMAIL',
+              direction: 'INBOUND',
+              subject: email.subject,
+              body: email.body || email.html || '',
+              occurredAt: email.date,
+              createdById: userId
+            });
+            
+            console.log(`✅ Logged email to lead ${leadId}: ${email.subject}`);
+            
+            // NEW: Auto-update lead status based on communication
+            await communicationResponseService.handleCommunicationEvent(
+              leadId,
+              'INBOUND',
+              'EMAIL'
+            ).catch(err => console.error('Failed to handle communication event:', err));
+          }
+        }
+      } catch (error) {
+        console.error(`Failed to log email "${email.subject}":`, error);
+        // Continue processing other emails
+      }
     }
   }
 };

@@ -493,7 +493,7 @@ export const UnderwritingCalculator: React.FC<UnderwritingCalculatorProps> = ({ 
                   <div><Label className="text-[10px] text-slate-500">Realtor Fees</Label><Input type="number" value={inputs.realtorFees || ''} onChange={(e) => handleInputChange('realtorFees', e.target.value)} placeholder="0" className="h-6 text-xs" /></div>
                   <div><Label className="text-[10px] text-slate-500">Other Costs</Label><Input type="number" value={inputs.otherCosts || ''} onChange={(e) => handleInputChange('otherCosts', e.target.value)} placeholder="0" className="h-6 text-xs" /></div>
                 </div>
-                <Button onClick={calculateScenario} disabled={isCalculating} className="w-full h-7 text-xs mt-2"><TrendingUp className="h-3 w-3 mr-1" />{isCalculating ? '...' : 'Calculate'}</Button>
+                <Button onClick={calculateScenario} disabled={isCalculating} className="h-5 text-[9px] bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md inline-flex items-center justify-center mt-2"><TrendingUp className="w-2.5 h-2.5 mr-0.5" />{isCalculating ? '...' : 'Calculate'}</Button>
               </div>
               <div>
                 <div className="flex items-center gap-1 mb-1"><span className="text-xs font-medium text-slate-600">Results</span></div>
@@ -504,7 +504,7 @@ export const UnderwritingCalculator: React.FC<UnderwritingCalculatorProps> = ({ 
                   <div className="p-1.5 bg-muted rounded"><div className="text-[10px] text-muted-foreground">Cash on Cash</div><div className="text-sm font-semibold">{Number(outputs?.cashOnCash ?? 0).toFixed(2)}%</div></div>
                   <div className="p-1.5 bg-muted rounded"><div className="text-[10px] text-muted-foreground">Profit Margin</div><div className="text-sm font-semibold">{Number(outputs?.profitMargin ?? 0).toFixed(2)}%</div></div>
                 </div>
-                {selectedScenario ? (<Button onClick={updateScenario} variant="outline" className="w-full h-7 text-xs mt-2">Update</Button>) : (<Button onClick={() => setShowNewScenarioDialog(true)} className="w-full h-7 text-xs mt-2">Save</Button>)}
+                {selectedScenario ? (<Button onClick={updateScenario} variant="outline" className="h-5 text-[9px] px-2 py-1 rounded-md inline-flex items-center justify-center mt-2">Update</Button>) : (<Button onClick={() => setShowNewScenarioDialog(true)} className="h-5 text-[9px] bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md inline-flex items-center justify-center mt-2">Save</Button>)}
               </div>
             </div>
           </TabsContent>

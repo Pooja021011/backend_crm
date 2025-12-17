@@ -13,13 +13,14 @@ interface RehabBudgetCalculatorProps {
   sqft?: number;
   bathrooms?: number;
   readOnly?: boolean;
+  onTotalChange?: (total: number) => void;
 }
 
 interface ToggledItems {
   [key: string]: boolean;
 }
 
-export function RehabBudgetCalculatorCompact({ leadId, sqft = 0, bathrooms = 1, readOnly = false }: RehabBudgetCalculatorProps) {
+export function RehabBudgetCalculatorCompact({ leadId, sqft = 0, bathrooms = 1, readOnly = false, onTotalChange }: RehabBudgetCalculatorProps) {
   const { toast } = useToast();
   const [expanded, setExpanded] = useState(false);
   
@@ -48,6 +49,13 @@ export function RehabBudgetCalculatorCompact({ leadId, sqft = 0, bathrooms = 1, 
       calculateBudget();
     }
   }, [finishLevel, toggledItems, numberOfBathrooms, numberOfWindows, propertySquareFeet]);
+
+  // Notify parent when total changes
+  useEffect(() => {
+    if (onTotalChange && calculation.totalCost > 0) {
+      onTotalChange(calculation.totalCost);
+    }
+  }, [calculation.totalCost, onTotalChange]);
 
   const fetchSavedBudget = async () => {
     try {
@@ -268,6 +276,7 @@ export function RehabBudgetCalculatorCompact({ leadId, sqft = 0, bathrooms = 1, 
             {renderCheckbox('bathroomShower', 'B-Shower')}
             {renderCheckbox('bathroomToilet', 'B-Toilet')}
             {renderCheckbox('bathroomFixtures', 'B-Fixtures')}
+            {renderCheckbox('drywall', 'Drywall')}
             {renderCheckbox('flooring', 'Flooring')}
             {renderCheckbox('paintInterior', 'Paint-Int')}
             {renderCheckbox('paintExterior', 'Paint-Ext')}
@@ -276,6 +285,7 @@ export function RehabBudgetCalculatorCompact({ leadId, sqft = 0, bathrooms = 1, 
             {renderCheckbox('insulation', 'Insulation')}
             {renderCheckbox('smartHome', 'Smart Home')}
             {renderCheckbox('landscaping', 'Landscaping')}
+            {renderCheckbox('miscellaneous', 'Miscellaneous')}
           </div>
 
           {/* Summary */}

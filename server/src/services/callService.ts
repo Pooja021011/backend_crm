@@ -3,6 +3,7 @@ import { logger } from '../config/logger.js';
 import { prisma } from '../config/db.js';
 import { communicationRepository } from '../repositories/communicationRepository.js';
 import { smsSettingsRepository } from '../repositories/smsSettingsRepository.js';
+import { communicationResponseService } from './communicationResponseService.js';
 
 // Initialize Twilio client
 // #region agent log
@@ -95,6 +96,13 @@ export const callService = {
           occurredAt: new Date(),
           createdById: callRequest.userId,
         });
+        
+        // NEW: Auto-update lead status based on communication
+        await communicationResponseService.handleCommunicationEvent(
+          callRequest.leadId,
+          'OUTBOUND',
+          'CALL'
+        ).catch(err => logger.error('Failed to handle communication event', { err }));
       }
 
       return {
@@ -157,6 +165,13 @@ export const callService = {
               userId: userSmsSettings.userId,
               callSid 
             });
+            
+            // NEW: Auto-update lead status based on communication
+            await communicationResponseService.handleCommunicationEvent(
+              lead.id,
+              'INBOUND',
+              'CALL'
+            ).catch(err => logger.error('Failed to handle communication event', { err }));
           } else {
             logger.info('No lead found for incoming call phone number', { from });
           }

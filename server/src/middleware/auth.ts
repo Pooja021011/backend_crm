@@ -20,6 +20,28 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+// Middleware that accepts token from query params (for img src tags)
+export function authenticateWithQuery(req: Request, res: Response, next: NextFunction) {
+  // Try header first
+  const auth = req.headers.authorization;
+  let token = auth?.startsWith('Bearer ') ? auth.substring(7) : undefined;
+  
+  // If no header token, try query param
+  if (!token) {
+    token = req.query.token as string;
+  }
+  
+  if (!token) return res.status(401).json({ error: 'Unauthorized' });
+  
+  try {
+    const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as AuthUser & { iat: number; exp: number };
+    (req as any).user = { id: decoded.id, roles: decoded.roles } satisfies AuthUser;
+    return next();
+  } catch {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+}
+
 // Alias for backward compatibility
 export const authMiddleware = authenticate;
 
