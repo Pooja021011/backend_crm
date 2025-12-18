@@ -169,8 +169,8 @@ export function UnderwritingCalculator({
             <Label className="text-[10px] font-semibold text-blue-700 mb-1 block">INPUTS</Label>
             <div className="grid grid-cols-4 gap-2">
               {/* ARV - EDITABLE */}
-              <div>
-                <Label className="text-[10px] text-slate-600">ARV *</Label>
+              <div className="flex flex-col">
+                <Label className="text-[10px] text-slate-600 mb-1 h-4">ARV *</Label>
                 <Input
                   type="number"
                   value={arv || ''}
@@ -182,8 +182,8 @@ export function UnderwritingCalculator({
               </div>
 
               {/* REHAB COST - READ-ONLY (from Rehab Calculator) */}
-              <div>
-                <Label className="text-[10px] text-slate-600 flex items-center gap-1">
+              <div className="flex flex-col">
+                <Label className="text-[10px] text-slate-600 mb-1 h-4 flex items-center gap-1">
                   Rehab Cost <Lock className="w-2.5 h-2.5 text-slate-400" />
                 </Label>
                 <Input
@@ -196,8 +196,8 @@ export function UnderwritingCalculator({
               </div>
 
               {/* TAXES - EDITABLE */}
-              <div>
-                <Label className="text-[10px] text-slate-600">Annual Taxes *</Label>
+              <div className="flex flex-col">
+                <Label className="text-[10px] text-slate-600 mb-1 h-4">Annual Taxes *</Label>
                 <Input
                   type="number"
                   value={taxes || ''}
@@ -209,8 +209,8 @@ export function UnderwritingCalculator({
               </div>
 
               {/* TIMELINE - EDITABLE */}
-              <div>
-                <Label className="text-[10px] text-slate-600">Timeline (months) *</Label>
+              <div className="flex flex-col">
+                <Label className="text-[10px] text-slate-600 mb-1 h-4">Timeline (months) *</Label>
                 <Input
                   type="number"
                   value={timeline || ''}
