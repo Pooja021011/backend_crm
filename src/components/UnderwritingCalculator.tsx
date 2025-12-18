@@ -246,11 +246,6 @@ export function UnderwritingCalculator({
               </div>
             </div>
           </div>
-
-          {/* INFO NOTE */}
-          <div className="text-[9px] text-slate-500 italic p-1 bg-slate-50 rounded">
-            💡 This calculator is visible only to Admin, Manager, and Acquisitions roles.
-          </div>
         </div>
       )}
     </div>

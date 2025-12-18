@@ -262,11 +262,6 @@ export function ProjectionsSheet({
 
       {expanded && (
         <div className="space-y-2 mt-2">
-          {/* INFO NOTE */}
-          <div className="text-[9px] text-blue-600 italic p-1.5 bg-blue-50 border border-blue-200 rounded">
-            📊 This is a complete projection sheet. All values are calculated automatically and are READ-ONLY.
-          </div>
-
           <div className="grid grid-cols-3 gap-2">
             {/* LEFT COLUMN: ACQUISITION */}
             <div className="space-y-1">
