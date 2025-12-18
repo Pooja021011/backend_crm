@@ -10,7 +10,7 @@ export const cryptoUtil = {
 };
 
 export const tokenUtil = {
-  signAccess(payload: { id: string; roles: string[] }, ttl = '15m') {
+  signAccess(payload: { id: string; roles: string[] }, ttl = '7d') {
     return jwt.sign(payload, env.JWT_ACCESS_SECRET, { expiresIn: ttl });
   },
   signRefresh(payload: { id: string; roles: string[] }, ttl = '30d') {

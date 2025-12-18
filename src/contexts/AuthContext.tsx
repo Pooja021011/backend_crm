@@ -109,6 +109,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     initializeAuth();
   }, []);
 
+  // Auto-refresh token every 6 days (before 7-day expiration)
+  useEffect(() => {
+    if (!user) return;
+
+    // Refresh token every 6 days (518400000 ms)
+    const refreshInterval = setInterval(async () => {
+      console.log('🔄 Proactive token refresh (scheduled)');
+      const success = await refreshToken();
+      if (!success) {
+        console.warn('⚠️ Scheduled token refresh failed, logging out');
+        logout();
+      }
+    }, 6 * 24 * 60 * 60 * 1000); // 6 days
+
+    return () => clearInterval(refreshInterval);
+  }, [user]);
+
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
       setIsLoading(true);
@@ -197,10 +214,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const logout = async () => {
     try {
+      const refreshTokenStored = localStorage.getItem('refreshToken');
       // Call logout endpoint to invalidate refresh token
-      await fetch(`${API_BASE}/auth/logout`, {
+      await httpFetch(`${API_BASE}/auth/logout`, {
         method: 'POST',
-        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ refreshToken: refreshTokenStored }),
       });
     } catch (error) {
       console.error('Logout error:', error);
