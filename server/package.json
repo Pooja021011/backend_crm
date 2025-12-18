@@ -21,7 +21,9 @@
     "db:deploy": "npx prisma migrate deploy && npx prisma generate && pm2 restart all --update-env",
     "db:reset": "prisma migrate reset --force && npm run prisma:generate && pm2 restart all",
     "db:fresh": "rm -rf node_modules/@prisma node_modules/.prisma && npm install",
-    "server:restart": "pm2 restart all --update-env"
+    "server:restart": "pm2 restart all --update-env",
+    "test:docusign": "node test-docusign.js",
+    "test:docusign:send": "node test-docusign.js"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
