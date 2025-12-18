@@ -47,7 +47,6 @@ import { useTwilioDevice } from '@/hooks/useTwilioDevice';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { CompsManager } from '@/components/CompsManager';
 import { LeadTimeline } from '@/components/LeadTimeline';
-import { UnderwritingCalculator } from '@/components/UnderwritingCalculator';
 import { LeadOwnerSection } from '@/components/LeadOwnerSection';
 import { 
   AppointmentCompletePopup,
@@ -56,8 +55,11 @@ import {
 } from '@/components/StageTransitionPopups';
 import { PropertyInfoCard } from '@/components/PropertyInfoCard';
 import { RehabBudgetCalculatorCompact } from '@/components/RehabBudgetCalculatorCompact';
-import { UnderwritingSectionCompact } from '@/components/UnderwritingSectionCompact';
-import { ProjectionsSection } from '@/components/ProjectionsSection';
+import { UnderwritingCalculator } from '@/components/UnderwritingCalculator';
+import { ProjectionsSheet } from '@/components/ProjectionsSheet';
+import { UnifiedCommunicationFeed } from '@/components/UnifiedCommunicationFeed';
+import { PhoneInput } from '@/components/PhoneInput';
+import { validatePhoneNumber } from '@/utils/phoneValidation';
 
 interface Contact {
   id?: string;
@@ -202,6 +204,12 @@ const LeadEdit: React.FC = () => {
   
   // Underwriting scenarios
   const [underwritingScenarios, setUnderwritingScenarios] = useState<any[]>([]);
+  
+  // Underwriting values (for passing to Projections)
+  const [underwritingArv, setUnderwritingArv] = useState(0);
+  const [underwritingTaxes, setUnderwritingTaxes] = useState(1000);
+  const [underwritingTimeline, setUnderwritingTimeline] = useState(6);
+  const [finalOffer, setFinalOffer] = useState(0);
   
   // Files
   const [files, setFiles] = useState<any[]>([]);
@@ -740,6 +748,26 @@ const LeadEdit: React.FC = () => {
   };
 
   const handleSave = async () => {
+    // Validate phone numbers before saving
+    const invalidPhones: string[] = [];
+    contacts.forEach((contact, index) => {
+      if (contact.phone) {
+        const validation = validatePhoneNumber(contact.phone);
+        if (!validation.isValid) {
+          invalidPhones.push(`Contact ${index + 1}: ${contact.name || 'Unnamed'}`);
+        }
+      }
+    });
+
+    if (invalidPhones.length > 0) {
+      toast({
+        title: 'Invalid Phone Numbers',
+        description: `Please add country code to: ${invalidPhones.join(', ')}`,
+        variant: 'destructive'
+      });
+      return;
+    }
+
     setSaving(true);
     try {
       // Prepare property details for customFields
@@ -1011,13 +1039,15 @@ const LeadEdit: React.FC = () => {
       const response = await makeApiCall(`${API_BASE}/leads/${id}/communications`);
       if (response.ok) {
         const data = await response.json();
-        // Filter to show only calls, SMS, and emails (not notes)
-        const comms = (data.data || []).filter((c: any) => 
-          ['CALL', 'SMS', 'EMAIL'].includes(c.type)
-        ).sort((a: any, b: any) => 
-          new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime() // Sort latest first (newest at top)
+        // Include ALL communication types: CALL, SMS, EMAIL, and NOTE
+        const comms = (data.data || []).sort((a: any, b: any) => 
+          new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime() // Sort by timestamp (newest first)
         );
         setCommunications(comms);
+        
+        // Also set notes for backward compatibility (if needed elsewhere)
+        const notesList = comms.filter((c: any) => c.type === 'NOTE');
+        setNotes(notesList);
       }
     } catch (error) {
       console.error('Error loading communications:', error);
@@ -1790,15 +1820,39 @@ const LeadEdit: React.FC = () => {
             </div>
             <Button size="sm" variant="ghost" className="h-5 text-[10px] px-2" onClick={addContact}><Plus className="w-2.5 h-2.5 mr-0.5" />Add</Button>
           </div>
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             {contacts.map((contact, index) => (
               <div key={index} className="flex items-center gap-2 p-1.5 bg-slate-50 rounded border border-slate-100">
-                <Input value={contact.name} onChange={(e) => updateContact(index, 'name', e.target.value)} placeholder="Name" className="h-6 text-xs flex-1" />
-                <Input value={contact.phone} onChange={(e) => updateContact(index, 'phone', e.target.value)} placeholder="Phone" className="h-6 text-xs flex-1" />
-                <Input value={contact.email} onChange={(e) => updateContact(index, 'email', e.target.value)} placeholder="Email" type="email" className="h-6 text-xs flex-1" />
-                {contact.phone && <a href={`tel:${contact.phone.replace(/\D/g, '')}`} className="text-emerald-600 hover:text-emerald-700"><Phone className="w-3 h-3" /></a>}
-                {contact.email && <a href={`mailto:${contact.email}`} className="text-emerald-600 hover:text-emerald-700"><Mail className="w-3 h-3" /></a>}
-                <Button variant="ghost" size="sm" onClick={() => removeContact(index)} className="h-5 w-5 p-0"><X className="w-3 h-3" /></Button>
+                <Input 
+                  value={contact.name} 
+                  onChange={(e) => updateContact(index, 'name', e.target.value)} 
+                  placeholder="Name" 
+                  className="h-8 text-xs w-32" 
+                />
+                <div className="flex-1">
+                  <PhoneInput
+                    value={contact.phone}
+                    onChange={(value) => updateContact(index, 'phone', value)}
+                    placeholder="Phone number"
+                    required={false}
+                    label=""
+                  />
+                </div>
+                <Input 
+                  value={contact.email} 
+                  onChange={(e) => updateContact(index, 'email', e.target.value)} 
+                  placeholder="Email" 
+                  type="email" 
+                  className="h-9 text-xs flex-1" 
+                />
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => removeContact(index)} 
+                  className="h-8 w-8 p-0 hover:bg-red-100 flex-shrink-0"
+                >
+                  <X className="w-3.5 h-3.5 text-red-500" />
+                </Button>
               </div>
             ))}
           </div>
@@ -1989,7 +2043,7 @@ const LeadEdit: React.FC = () => {
                   } : undefined}
                 />
 
-                {/* 3. Rehab Information (Full Calculator with toggles) */}
+                {/* 3. Rehab Budget Calculator */}
                 <RehabBudgetCalculatorCompact 
                   leadId={id!}
                   sqft={parseInt(sqft) || 0}
@@ -1998,23 +2052,31 @@ const LeadEdit: React.FC = () => {
                   onTotalChange={(total) => setRehabBudget(total.toString())}
                 />
 
-                {/* 4. Underwriting Information - Visible to Admin, Manager, ACQ only */}
+                {/* 4. Underwriting Calculator - Role-Based (Admin, Manager, ACQ only) */}
                 {user?.roles && (user.roles.includes('ADMIN') || user.roles.includes('MANAGER') || user.roles.includes('ACQ')) && (
-                  <UnderwritingSectionCompact 
+                  <UnderwritingCalculator 
                     leadId={id!}
                     rehabCost={parseInt(rehabBudget) || 0}
                     readOnly={false}
+                    onValuesChange={(values) => {
+                      setUnderwritingArv(values.arv);
+                      setUnderwritingTaxes(values.taxes);
+                      setUnderwritingTimeline(values.timeline);
+                      setFinalOffer(values.finalOffer);
+                    }}
                     key={`underwriting-${rehabBudget}`}
                   />
                 )}
 
-                {/* 5. Projections Section - Visible to all users (Editable) */}
-                <ProjectionsSection 
+                {/* 5. Projections Sheet - Visible to ALL users (Read-only) */}
+                <ProjectionsSheet 
                   leadId={id!}
-                  purchasePrice={parseInt(askingPrice) || 0}
+                  finalOffer={finalOffer}
                   rehabCost={parseInt(rehabBudget) || 0}
-                  arv={parseInt(estimatedValue) || 0}
-                  readOnly={false}
+                  arv={underwritingArv}
+                  taxes={underwritingTaxes}
+                  timeline={underwritingTimeline}
+                  key={`projections-${rehabBudget}-${underwritingArv}-${underwritingTaxes}-${underwritingTimeline}`}
                 />
               </TabsContent>
 
@@ -2229,387 +2291,32 @@ const LeadEdit: React.FC = () => {
           {/* Right side - Communication Section (4 columns) */}
           <div className="col-span-4">
             <div className="sticky top-2 border border-slate-200 rounded-lg bg-white p-2">
-              <div className="flex items-center gap-1 mb-2">
-                <MessageSquare className="w-3 h-3 text-slate-500" />
-                <span className="text-xs font-medium text-slate-600">Communications</span>
-              </div>
-              {/* Tasks */}
-              <div className="mb-2">
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-1">
-                    <CheckSquare className="w-2.5 h-2.5 text-slate-500" />
-                    <span className="text-[10px] font-medium text-slate-600">Tasks ({tasks.length})</span>
-                  </div>
-                  {/* Only show Add Task if can edit lead OR is admin/manager */}
-                  {(canEditLead || user?.roles?.includes('ADMIN') || user?.roles?.includes('MANAGER')) && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => openTaskDialog()}
-                      className="h-5 px-1.5 text-[10px]"
-                    >
-                      <Plus className="w-3 h-3" />
-                    </Button>
-                  )}
-                </div>
-                
-                {loadingTasks ? (
-                  <div className="p-1.5 bg-slate-50 rounded text-[10px] text-slate-500 flex items-center justify-center">
-                    <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                    Loading...
-                  </div>
-                ) : tasks.length === 0 ? (
-                  <div className="p-1.5 bg-slate-50 rounded text-[10px] text-slate-500">
-                    No tasks yet
-                  </div>
-                ) : (
-                  <div className="space-y-1 max-h-48 overflow-y-auto">
-                    {tasks.map((task) => {
-                      const isOverdue = new Date(task.dueAt) < new Date() && task.status === 'OPEN';
-                      const assignedUser = agents.find(a => a.id === task.assignedToId);
-                      const isMyTask = task.assignedToId === user?.id;
-                      const canToggleTask = hasTaskAccess && (isMyTask || canEditLead);
-                      const canEditTask = canEditLead || isMyTask;
-                      
-                      return (
-                        <div
-                          key={task.id}
-                          className={`p-1.5 rounded text-[10px] border ${
-                            task.status === 'DONE'
-                              ? 'bg-green-50 border-green-200'
-                              : isOverdue
-                              ? 'bg-red-50 border-red-200'
-                              : 'bg-slate-50 border-slate-200'
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-1 mb-0.5">
-                            <div className="flex items-start gap-1 flex-1 min-w-0">
-                              <button
-                                onClick={() => handleToggleTaskStatus(task)}
-                                disabled={!canToggleTask}
-                                className={`flex-shrink-0 mt-0.5 ${!canToggleTask ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                title={!canToggleTask ? 'Only task assignee or lead owner can toggle status' : ''}
-                              >
-                                {task.status === 'DONE' ? (
-                                  <CheckSquare className="w-3 h-3 text-green-600 fill-green-600" />
-                                ) : (
-                                  <CheckSquare className="w-3 h-3 text-slate-400" />
-                                )}
-                              </button>
-                              <div className="flex-1 min-w-0">
-                                <p className={`font-medium break-words ${
-                                  task.status === 'DONE' ? 'line-through text-slate-500' : 'text-slate-700'
-                                }`}>
-                                  {task.title}
-                                  {isMyTask && <span className="ml-1 text-[8px] bg-purple-100 text-purple-700 px-1 py-0.5 rounded">Your Task</span>}
-                                </p>
-                                {task.description && (
-                                  <p className="text-slate-600 line-clamp-2 mt-0.5">
-                                    {task.description}
-                                  </p>
-                                )}
-                                <div className="flex items-center gap-2 mt-0.5 text-[9px] text-slate-500">
-                                  <span className={isOverdue ? 'text-red-600 font-medium' : ''}>
-                                    <Calendar className="w-2.5 h-2.5 inline mr-0.5" />
-                                    {new Date(task.dueAt).toLocaleDateString()}
-                                  </span>
-                                  {assignedUser && (
-                                    <span>
-                                      <User className="w-2.5 h-2.5 inline mr-0.5" />
-                                      {assignedUser.firstName}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                            {/* Show edit/delete only if can edit lead or is task assignee */}
-                            {canEditTask && (
-                              <div className="flex gap-0.5 flex-shrink-0">
-                                <button
-                                  onClick={() => openTaskDialog(task)}
-                                  className="p-0.5 hover:bg-slate-200 rounded"
-                                  title="Edit"
-                                >
-                                  <Edit2 className="w-2.5 h-2.5 text-slate-500" />
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteTask(task.id)}
-                                  disabled={deletingTaskId === task.id}
-                                  className="p-0.5 hover:bg-red-100 rounded"
-                                  title="Delete"
-                                >
-                                  {deletingTaskId === task.id ? (
-                                    <Loader2 className="w-2.5 h-2.5 text-red-500 animate-spin" />
-                                  ) : (
-                                    <Trash2 className="w-2.5 h-2.5 text-red-500" />
-                                  )}
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-              
-              {/* Call History & Actions */}
-              <div className="mb-2">
-                <div className="flex items-center gap-1 mb-1">
-                  <Phone className="w-2.5 h-2.5 text-purple-600" />
-                  <span className="text-[10px] font-medium text-slate-600">Call History</span>
-                </div>
-                
-                {/* Call History List */}
-                <div className="space-y-1 max-h-32 overflow-y-auto mb-1">
-                  {loadingCommunications ? (
-                    <div className="p-1.5 bg-slate-50 rounded text-[10px] text-slate-500 flex items-center justify-center">
-                      <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                      Loading...
-                    </div>
-                  ) : communications.filter(c => c.type === 'CALL').length === 0 ? (
-                    <div className="text-[10px] text-slate-500 text-center py-1.5 bg-slate-50 rounded">
-                      No call history
-                    </div>
-                  ) : (
-                    <>
-                      {communications.filter(c => c.type === 'CALL').map((comm) => (
-                        <div key={comm.id} className="p-1.5 bg-slate-50 rounded text-[10px] border border-slate-200">
-                          <div className="flex items-center justify-between mb-0.5">
-                            <div className="flex items-center gap-1">
-                              <Phone className="w-2.5 h-2.5 text-purple-600" />
-                              <span className={`text-[9px] px-1 py-0.5 rounded ${
-                                comm.direction === 'INBOUND' 
-                                  ? 'bg-green-100 text-green-700' 
-                                  : 'bg-blue-100 text-blue-700'
-                              }`}>
-                                {comm.direction === 'INBOUND' ? 'Received' : 'Sent'}
-                              </span>
-                            </div>
-                            <span className="text-slate-400 text-[9px]">
-                              {new Date(comm.occurredAt).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
-                            </span>
-                          </div>
-                          {comm.body && (
-                            <p className="text-slate-600 line-clamp-1 mt-0.5">{comm.body}</p>
-                          )}
-                        </div>
-                      ))}
-                    </>
-                  )}
-                </div>
-                
-                {/* Make Call Button - Always visible */}
-                <Button
-                  onClick={handleMakeCall}
-                  disabled={makingCall || (callStatus?.status && callStatus.status !== 'idle')}
-                  className="h-5 text-[9px] bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed px-2 py-1 rounded-md inline-flex items-center justify-center"
-                  title={!hasValidPhone() ? 'Please add a phone number in the contacts section' : 'Click to make a call'}
-                >
-                  {makingCall ? (
-                    <><Loader2 className="w-2.5 h-2.5 mr-0.5 animate-spin" />Connecting...</>
-                  ) : (
-                    <><PhoneCall className="w-2.5 h-2.5 mr-0.5" />Make Call</>
-                  )}
-                </Button>
-                
-                {/* Hang Up Button - Only show when call is active */}
-                {callStatus?.status && callStatus.status !== 'idle' && callStatus.status !== 'disconnected' && (
-                  <div className="flex items-center gap-1 mt-1">
-                    <div className="flex-1 p-1.5 bg-purple-50 border border-purple-200 rounded text-[10px] flex items-center gap-1.5">
-                      <PhoneCall className="w-3 h-3 text-purple-600 animate-pulse" />
-                      <span className="text-purple-700 font-medium">
-                        {callStatus.status === 'connecting' && 'Connecting...'}
-                        {callStatus.status === 'ringing' && 'Ringing...'}
-                        {callStatus.status === 'connected' && 'In progress'}
-                      </span>
-                    </div>
-                    <Button
-                      size="sm"
-                      onClick={hangUp}
-                      className="h-5 px-2 text-[9px] bg-red-600 hover:bg-red-700 text-white"
-                    >
-                      <PhoneOff className="w-2.5 h-2.5 mr-1" />
-                      Hang Up
-                    </Button>
-                  </div>
-                )}
-              </div>
-
-              {/* SMS History & Actions */}
-              <div className="mb-2">
-                <div className="flex items-center gap-1 mb-1">
-                  <MessageSquare className="w-2.5 h-2.5 text-green-600" />
-                  <span className="text-[10px] font-medium text-slate-600">SMS History</span>
-                </div>
-                
-                {/* SMS History List */}
-                <div className="space-y-1 max-h-32 overflow-y-auto mb-1">
-                  {loadingCommunications ? (
-                    <div className="p-1.5 bg-slate-50 rounded text-[10px] text-slate-500 flex items-center justify-center">
-                      <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                      Loading...
-                    </div>
-                  ) : communications.filter(c => c.type === 'SMS').length === 0 ? (
-                    <div className="text-[10px] text-slate-500 text-center py-1.5 bg-slate-50 rounded">
-                      No SMS history
-                    </div>
-                  ) : (
-                    <>
-                      {communications.filter(c => c.type === 'SMS').map((comm) => (
-                        <div key={comm.id} className="p-1.5 bg-slate-50 rounded text-[10px] border border-slate-200">
-                          <div className="flex items-center justify-between mb-0.5">
-                            <div className="flex items-center gap-1">
-                              <MessageSquare className="w-2.5 h-2.5 text-green-600" />
-                              <span className={`text-[9px] px-1 py-0.5 rounded ${
-                                comm.direction === 'INBOUND' 
-                                  ? 'bg-green-100 text-green-700' 
-                                  : 'bg-blue-100 text-blue-700'
-                              }`}>
-                                {comm.direction === 'INBOUND' ? 'Received' : 'Sent'}
-                              </span>
-                            </div>
-                            <span className="text-slate-400 text-[9px]">
-                              {new Date(comm.occurredAt).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
-                            </span>
-                          </div>
-                          {comm.body && (
-                            <p className="text-slate-600 line-clamp-2 mt-0.5">{comm.body}</p>
-                          )}
-                        </div>
-                      ))}
-                    </>
-                  )}
-                </div>
-                
-                {/* Send SMS */}
-                <div className="space-y-1">
-                  <Textarea
-                    value={smsText}
-                    onChange={(e) => setSmsText(e.target.value)}
-                    placeholder="Type SMS message..."
-                    className="min-h-[50px] text-[10px] resize-none"
-                    disabled={sendingSMS}
-                  />
-                  <Button
-                    onClick={handleSendSMS}
-                    disabled={sendingSMS || !smsText.trim()}
-                    className="h-5 text-[9px] bg-green-600 hover:bg-green-700 px-2 py-1 rounded-md inline-flex items-center justify-center"
-                  >
-                    {sendingSMS ? (
-                      <><Loader2 className="w-2.5 h-2.5 mr-0.5 animate-spin" />Sending...</>
-                    ) : (
-                      <><Send className="w-2.5 h-2.5 mr-0.5" />Send SMS</>
-                    )}
-                  </Button>
-                </div>
-              </div>
-
-              {/* Email History & Actions */}
-              <div className="mb-2">
-                <div className="flex items-center gap-1 mb-1">
-                  <Mail className="w-2.5 h-2.5 text-blue-600" />
-                  <span className="text-[10px] font-medium text-slate-600">Email History</span>
-                </div>
-                
-                {/* Email History List */}
-                <div className="space-y-1 max-h-32 overflow-y-auto mb-1">
-                  {loadingCommunications ? (
-                    <div className="p-1.5 bg-slate-50 rounded text-[10px] text-slate-500 flex items-center justify-center">
-                      <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                      Loading...
-                    </div>
-                  ) : communications.filter(c => c.type === 'EMAIL').length === 0 ? (
-                    <div className="text-[10px] text-slate-500 text-center py-1.5 bg-slate-50 rounded">
-                      No email history
-                    </div>
-                  ) : (
-                    <>
-                      {communications.filter(c => c.type === 'EMAIL').map((comm) => (
-                        <div key={comm.id} className="p-1.5 bg-slate-50 rounded text-[10px] border border-slate-200">
-                          <div className="flex items-center justify-between mb-0.5">
-                            <div className="flex items-center gap-1">
-                              <Mail className="w-2.5 h-2.5 text-blue-600" />
-                              <span className={`text-[9px] px-1 py-0.5 rounded ${
-                                comm.direction === 'INBOUND' 
-                                  ? 'bg-blue-100 text-blue-700' 
-                                  : 'bg-purple-100 text-purple-700'
-                              }`}>
-                                {comm.direction === 'INBOUND' ? 'Received' : 'Sent'}
-                              </span>
-                            </div>
-                            <span className="text-slate-400 text-[9px]">
-                              {new Date(comm.occurredAt).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
-                            </span>
-                          </div>
-                          {comm.subject && (
-                            <p className="text-slate-700 font-medium line-clamp-1 mt-0.5">{comm.subject}</p>
-                          )}
-                          {comm.body && (
-                            <p className="text-slate-600 line-clamp-2 mt-0.5">{comm.body}</p>
-                          )}
-                        </div>
-                      ))}
-                    </>
-                  )}
-                </div>
-                
-                {/* Send Email */}
-                <div className="space-y-1">
-                  <Input
-                    value={emailSubject}
-                    onChange={(e) => setEmailSubject(e.target.value)}
-                    placeholder="Email subject..."
-                    className="h-7 text-[10px]"
-                    disabled={sendingEmail}
-                  />
-                  <Textarea
-                    value={emailBody}
-                    onChange={(e) => setEmailBody(e.target.value)}
-                    placeholder="Type email message..."
-                    className="min-h-[50px] text-[10px] resize-none"
-                    disabled={sendingEmail}
-                  />
-                  <Button
-                    onClick={handleSendEmail}
-                    disabled={sendingEmail || !emailSubject.trim() || !emailBody.trim()}
-                    className="h-5 text-[9px] bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md inline-flex items-center justify-center"
-                  >
-                    {sendingEmail ? (
-                      <><Loader2 className="w-2.5 h-2.5 mr-0.5 animate-spin" />Sending...</>
-                    ) : (
-                      <><Mail className="w-2.5 h-2.5 mr-0.5" />Send Email</>
-                    )}
-                  </Button>
-                </div>
-              </div>
-              
-              {/* Timeline */}
-              <div className="mb-2">
-                <div className="flex items-center gap-1 mb-1">
-                  <Clock className="w-2.5 h-2.5 text-slate-500" />
-                  <span className="text-[10px] font-medium text-slate-600">Activity</span>
-                </div>
-                <div className="space-y-1 max-h-32 overflow-y-auto">
-                  {notes.length > 0 ? notes.map((note) => (
-                    <div key={note.id} className="p-1.5 bg-slate-50 rounded text-[10px]">
-                      <div className="flex justify-between mb-0.5">
-                        <span className="font-medium text-slate-700">{note.user?.firstName}</span>
-                        <span className="text-slate-400">{formatDate(note.createdAt)}</span>
-                      </div>
-                      <p className="text-slate-600 line-clamp-2">{note.body}</p>
-                    </div>
-                  )) : (<div className="text-[10px] text-slate-500 text-center py-2">No activity</div>)}
-                </div>
-              </div>
-              {/* Add Note */}
-              <div>
-                <Textarea value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Add note..." className="min-h-[50px] text-xs" disabled={addingNote} />
-                <Button className="mt-1 h-5 text-[9px] bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md inline-flex items-center justify-center" onClick={handleAddNote} disabled={addingNote || !noteText.trim()}>
-                  <Plus className="w-2.5 h-2.5 mr-0.5" />{addingNote ? '...' : 'Add'}
-                </Button>
-              </div>
+              {/* Unified Communication Feed (includes Tasks, Calls, SMS, Emails, Notes) */}
+              <UnifiedCommunicationFeed
+                communications={communications}
+                tasks={tasks}
+                loadingCommunications={loadingCommunications}
+                smsText={smsText}
+                setSmsText={setSmsText}
+                sendingSMS={sendingSMS}
+                onSendSMS={handleSendSMS}
+                emailSubject={emailSubject}
+                setEmailSubject={setEmailSubject}
+                emailBody={emailBody}
+                setEmailBody={setEmailBody}
+                sendingEmail={sendingEmail}
+                onSendEmail={handleSendEmail}
+                makingCall={makingCall}
+                onMakeCall={handleMakeCall}
+                callStatus={callStatus}
+                onHangUp={hangUp}
+                hasValidPhone={hasValidPhone()}
+                noteText={noteText}
+                setNoteText={setNoteText}
+                onOpenTaskDialog={() => openTaskDialog()}
+                addingNote={addingNote}
+                onAddNote={handleAddNote}
+              />
             </div>
           </div>
         </div>

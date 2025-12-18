@@ -657,33 +657,29 @@ model Deal {
 }
 
 // Comparable sales (internal DB)
-model Comparable {
-  id        String   @id @default(uuid())
-  address   String
-  city      String
-  state     String
-  zip       String
-  beds      Int?
-  baths     Int?
-  sqft      Int?
-  yearBuilt Int?
-  salePrice Int?
-  pricePerSqft Int?
-  dom       Int?
-  dateSold  DateTime?
-  images    String[]
-  createdAt DateTime @default(now())
-  leadComps LeadComparable[]
-}
-
-// Link comparables to leads
+// Lead-specific comparables (no global database)
 model LeadComparable {
   id           String     @id @default(uuid())
   leadId       String
-  comparableId String
   lead         Lead       @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  comparable   Comparable @relation(fields: [comparableId], references: [id])
+  
+  // Property details
+  address      String
+  city         String
+  state        String
+  zip          String
+  beds         Int?
+  baths        Int?
+  sqft         Int?
+  yearBuilt    Int?
+  salePrice    Int?
+  pricePerSqft Int?
+  dom          Int?
+  dateSold     DateTime?
+  images       String[]
+  
   addedAt      DateTime   @default(now())
+  createdAt    DateTime   @default(now())
 
   @@index([leadId])
 }

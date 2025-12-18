@@ -46,7 +46,9 @@ export const compsController = {
 
   async createComparable(req: Request, res: Response): Promise<void> {
     try {
-      const comparable = await compsService.createComparable(req.body);
+      const { leadId } = req.params;
+      const comparableData = { ...req.body, leadId };
+      const comparable = await compsService.createComparable(comparableData);
       res.status(201).json(comparable);
     } catch (error) {
       logger.error('Error creating comparable: ' + (error as Error).message);
@@ -56,28 +58,6 @@ export const compsController = {
       } else {
         res.status(500).json({ error: 'Failed to create comparable' });
       }
-    }
-  },
-
-  async addCompToLead(req: Request, res: Response): Promise<void> {
-    try {
-      const { leadId, comparableId } = req.params;
-      const leadComp = await compsService.addComparableToLead(leadId, comparableId);
-      res.status(201).json(leadComp);
-    } catch (error) {
-      logger.error('Error adding comparable to lead: ' + (error as Error).message);
-      res.status(500).json({ error: 'Failed to add comparable to lead' });
-    }
-  },
-
-  async removeCompFromLead(req: Request, res: Response): Promise<void> {
-    try {
-      const { leadId, comparableId } = req.params;
-      await compsService.removeComparableFromLead(leadId, comparableId);
-      res.status(204).send();
-    } catch (error) {
-      logger.error('Error removing comparable from lead: ' + (error as Error).message);
-      res.status(500).json({ error: 'Failed to remove comparable from lead' });
     }
   },
 

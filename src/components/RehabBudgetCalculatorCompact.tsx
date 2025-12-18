@@ -44,6 +44,12 @@ export function RehabBudgetCalculatorCompact({ leadId, sqft = 0, bathrooms = 1, 
     fetchSavedBudget();
   }, [leadId]);
 
+  // Update property values when props change
+  useEffect(() => {
+    setPropertySquareFeet(sqft);
+    setNumberOfBathrooms(bathrooms);
+  }, [sqft, bathrooms]);
+
   useEffect(() => {
     if (propertySquareFeet > 0) {
       calculateBudget();
@@ -52,7 +58,7 @@ export function RehabBudgetCalculatorCompact({ leadId, sqft = 0, bathrooms = 1, 
 
   // Notify parent when total changes
   useEffect(() => {
-    if (onTotalChange && calculation.totalCost > 0) {
+    if (onTotalChange) {
       onTotalChange(calculation.totalCost);
     }
   }, [calculation.totalCost, onTotalChange]);
@@ -210,17 +216,7 @@ export function RehabBudgetCalculatorCompact({ leadId, sqft = 0, bathrooms = 1, 
       {expanded && (
         <div className="space-y-1 mt-2">
           {/* Configuration */}
-          <div className="grid grid-cols-4 gap-1 p-1 bg-slate-50 rounded">
-            <div>
-              <Label className="text-[10px] text-slate-500">SqFt</Label>
-              <Input
-                type="number"
-                value={propertySquareFeet}
-                onChange={(e) => setPropertySquareFeet(Number(e.target.value))}
-                disabled={readOnly}
-                className="h-6 text-xs"
-              />
-            </div>
+          <div className="grid grid-cols-2 gap-1 p-1 bg-slate-50 rounded">
             <div>
               <Label className="text-[10px] text-slate-500">Finish Level</Label>
               <Select value={finishLevel} onValueChange={(value: any) => setFinishLevel(value)} disabled={readOnly}>
@@ -235,17 +231,6 @@ export function RehabBudgetCalculatorCompact({ leadId, sqft = 0, bathrooms = 1, 
               </Select>
             </div>
             <div>
-              <Label className="text-[10px] text-slate-500">Baths</Label>
-              <Input
-                type="number"
-                value={numberOfBathrooms}
-                onChange={(e) => setNumberOfBathrooms(Number(e.target.value))}
-                disabled={readOnly}
-                className="h-6 text-xs"
-                min={1}
-              />
-            </div>
-            <div>
               <Label className="text-[10px] text-slate-500">Windows</Label>
               <Input
                 type="number"
@@ -256,6 +241,14 @@ export function RehabBudgetCalculatorCompact({ leadId, sqft = 0, bathrooms = 1, 
                 min={1}
               />
             </div>
+          </div>
+          
+          {/* Property Info Display (Read-only) */}
+          <div className="flex gap-2 text-[10px] text-slate-500 bg-slate-50 p-1 rounded">
+            <span>SqFt: <span className="font-medium text-slate-700">{propertySquareFeet || 'N/A'}</span></span>
+            <span>•</span>
+            <span>Baths: <span className="font-medium text-slate-700">{numberOfBathrooms || 'N/A'}</span></span>
+            <span className="text-[9px] italic ml-auto">(from property info)</span>
           </div>
 
           {/* Toggleable Items - Compact Grid */}

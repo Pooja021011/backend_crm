@@ -33,10 +33,10 @@ import {
 import { cn } from "@/lib/utils";
 import { 
   validateEmail, 
-  validatePhoneNumber, 
-  validateName, 
-  formatPhoneNumber 
+  validateName
 } from "@/utils/validation";
+import { validatePhoneNumber } from "@/utils/phoneValidation";
+import { PhoneInput } from "@/components/PhoneInput";
 import { API_BASE } from "@/config/api";
 
 const AddBuyerLead = () => {
@@ -338,17 +338,18 @@ const AddBuyerLead = () => {
               />
 
               {/* Phone Number */}
-              <ValidatedInput
-                label="Primary Phone Number"
-                name="phoneNumber"
-                value={formData.phoneNumber}
-                onValueChange={(value) => handleInputChange('phoneNumber', value)}
-                validator={validatePhoneNumber}
-                formatter={formatPhoneNumber}
-                placeholder="(555) 123-4567"
-                required
-                icon={<Phone className="w-4 h-4" />}
-              />
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-700">
+                  Primary Phone Number *
+                </Label>
+                <PhoneInput
+                  label=""
+                  value={formData.phoneNumber}
+                  onChange={(value) => handleInputChange('phoneNumber', value)}
+                  placeholder="Phone number"
+                  required={false}
+                />
+              </div>
 
               {/* Email */}
               <ValidatedInput

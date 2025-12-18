@@ -62,12 +62,6 @@ const Metrics = () => {
   
   // Pipeline Overview Data
   const [pipelineView, setPipelineView] = useState<'funnel' | 'timeline'>('funnel');
-  const [pipelineType, setPipelineType] = useState<'acquisitions' | 'dispositions'>('acquisitions');
-  
-  // Dispositions Pipeline Dynamic Data
-  const [dispPipelineLoading, setDispPipelineLoading] = useState(false);
-  const [dispPipelineFunnel, setDispPipelineFunnel] = useState<any>(null);
-  const [dispPipelineTimeline, setDispPipelineTimeline] = useState<any>(null);
   
   // Communications Overview Data
   const [commViewScope, setCommViewScope] = useState<'personal' | 'team'>('personal');
@@ -296,48 +290,6 @@ const Metrics = () => {
     };
     load();
   }, [user?.id]);
-
-  // Fetch Dispositions Pipeline Funnel Data
-  useEffect(() => {
-    if (activeTab === 'pipeline' && pipelineType === 'dispositions' && pipelineView === 'funnel') {
-      const fetchDispPipelineFunnel = async () => {
-        setDispPipelineLoading(true);
-        try {
-          const res = await makeApiCall(`${API_BASE}/metrics/dispositions/pipeline/funnel?period=${selectedPeriod}`);
-          const json = await res.json();
-          if (json.success) {
-            setDispPipelineFunnel(json.data);
-          }
-        } catch (error) {
-          console.error('Failed to fetch dispositions pipeline funnel:', error);
-        } finally {
-          setDispPipelineLoading(false);
-        }
-      };
-      fetchDispPipelineFunnel();
-    }
-  }, [activeTab, pipelineType, pipelineView, selectedPeriod]);
-
-  // Fetch Dispositions Pipeline Timeline Data
-  useEffect(() => {
-    if (activeTab === 'pipeline' && pipelineType === 'dispositions' && pipelineView === 'timeline') {
-      const fetchDispPipelineTimeline = async () => {
-        setDispPipelineLoading(true);
-        try {
-          const res = await makeApiCall(`${API_BASE}/metrics/dispositions/pipeline/timeline?period=${selectedPeriod}`);
-          const json = await res.json();
-          if (json.success) {
-            setDispPipelineTimeline(json.data);
-          }
-        } catch (error) {
-          console.error('Failed to fetch dispositions pipeline timeline:', error);
-        } finally {
-          setDispPipelineLoading(false);
-        }
-      };
-      fetchDispPipelineTimeline();
-    }
-  }, [activeTab, pipelineType, pipelineView, selectedPeriod]);
 
   // Lead Sources dynamic component
   const DynamicLeadSources: React.FC = () => {
@@ -2227,31 +2179,7 @@ const Metrics = () => {
               <h2 className="text-xl font-semibold">Pipeline Overview</h2>
             </div>
             
-            <div className="flex justify-between items-center">
-              {/* Pipeline Type Selector */}
-              <div className="flex bg-blue-100 rounded-lg p-1">
-                <button
-                  onClick={() => setPipelineType('acquisitions')}
-                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                    pipelineType === 'acquisitions'
-                      ? 'bg-white text-blue-900 shadow-sm'
-                      : 'text-blue-700 hover:text-blue-900'
-                  }`}
-                >
-                  Acquisitions Pipeline
-                </button>
-                <button
-                  onClick={() => setPipelineType('dispositions')}
-                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                    pipelineType === 'dispositions'
-                      ? 'bg-white text-blue-900 shadow-sm'
-                      : 'text-blue-700 hover:text-blue-900'
-                  }`}
-                >
-                  Dispositions Pipeline
-                </button>
-              </div>
-
+            <div className="flex justify-end items-center">
               <div className="flex items-center space-x-4">
                 {/* View Toggle */}
                 <div className="flex bg-gray-100 rounded-lg p-1">
@@ -2292,20 +2220,17 @@ const Metrics = () => {
             </div>
           </div>
 
-              {/* Conditional View Rendering Based on Pipeline Type */}
-              {pipelineType === 'acquisitions' ? (
+              {/* Acquisitions Pipeline */}
+              {pipelineView === 'funnel' ? (
                 <>
-                  {/* Acquisitions Pipeline */}
-                  {pipelineView === 'funnel' ? (
-                    <>
-                      {/* Enhanced Pipeline Funnel Chart */}
-                      <EnhancedPipelineFunnel selectedPeriod={selectedPeriod} />
-                      
-                      {/* Pipeline Table for additional details */}
-                      <PipelineTable selectedPeriod={selectedPeriod} />
-                    </>
-                  ) : (
-                    <>
+                  {/* Enhanced Pipeline Funnel Chart */}
+                  <EnhancedPipelineFunnel selectedPeriod={selectedPeriod} />
+                  
+                  {/* Pipeline Table for additional details */}
+                  <PipelineTable selectedPeriod={selectedPeriod} />
+                </>
+              ) : (
+                <>
                       {/* Enhanced Timeline Chart */}
                       <EnhancedPipelineTimeline selectedPeriod={selectedPeriod} />
                       
@@ -2414,232 +2339,6 @@ const Metrics = () => {
                       )}
                     </>
                   )}
-                </>
-              ) : (
-                <>
-                  {/* Dispositions Pipeline */}
-                  {pipelineView === 'funnel' ? (
-                    <>
-                      {/* Dispositions Pipeline Funnel */}
-                      <Card className="p-6">
-                        <CardHeader>
-                          <CardTitle className="flex items-center space-x-2">
-                            <Target className="h-5 w-5" />
-                            <span>Dispositions Pipeline Funnel</span>
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          {dispPipelineLoading ? (
-                            <div className="text-center py-8">
-                              <div className="text-gray-500">Loading pipeline data...</div>
-                            </div>
-                          ) : dispPipelineFunnel && dispPipelineFunnel.stages ? (
-                            <div className="overflow-x-auto">
-                              <div className="min-w-[1000px] pb-4">
-                                <div className="flex items-end justify-evenly gap-6 px-4">
-                                  {dispPipelineFunnel.stages.map((stage: any, index: number) => {
-                                    const maxCount = Math.max(1, ...dispPipelineFunnel.stages.map((s: any) => s.count));
-                                    const height = (stage.count / maxCount) * 200;
-                                    const barWidth = 50;
-
-                                    return (
-                                      <div key={stage.stageId} className="flex flex-col items-center flex-1 max-w-[120px]">
-                                        {/* Count - Above bar */}
-                                        <div className="text-xl font-bold text-gray-900 mb-2">{stage.count}</div>
-                                        
-                                        {/* Bar Shape with white circle on top */}
-                                        <div className="relative flex flex-col items-center mb-2">
-                                          <div 
-                                            className={`${stage.stageColor || 'bg-gradient-to-b from-blue-400 to-blue-600'} relative transition-all duration-300 hover:opacity-90 shadow-lg rounded-t-lg rounded-b-sm`}
-                                            style={{ 
-                                              width: `${barWidth}px`, 
-                                              height: `${Math.max(80, height)}px`
-                                            }}
-                                          >
-                                            {/* White circle on top of bar */}
-                                            <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-white rounded-full border-2 border-gray-300 shadow-sm"></div>
-                                            
-                                            {/* Gradient overlay for better visual appeal */}
-                                            <div className="absolute inset-0 bg-gradient-to-b from-white/20 to-transparent rounded-t-lg rounded-b-sm" />
-                                          </div>
-                                        </div>
-                                        
-                                        {/* Conversion Rate Badge - Below bar */}
-                                        <div className="bg-gray-800 text-white text-[10px] font-bold px-2 py-1 rounded-full mb-1">
-                                          {stage.conversionRate}%
-                                        </div>
-                                        
-                                        {/* Stage Label - Fixed height for alignment */}
-                                        <div className="h-[40px] flex items-center justify-center text-[10px] text-gray-600 text-center leading-tight max-w-[100px]">
-                                          {stage.stageName}
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="text-center py-8">
-                              <div className="text-gray-500">No pipeline data available</div>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-
-                      {/* Dispositions Pipeline Table */}
-                      <Card className="p-6">
-                        <CardHeader>
-                          <CardTitle className="flex items-center space-x-2">
-                            <BarChart3 className="h-5 w-5" />
-                            <span>Dispositions Pipeline Details</span>
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          {dispPipelineLoading ? (
-                            <div className="text-center py-8">
-                              <div className="text-gray-500">Loading pipeline data...</div>
-                            </div>
-                          ) : dispPipelineFunnel && dispPipelineFunnel.stages ? (
-                            <div className="overflow-x-auto">
-                              <table className="w-full">
-                                <thead className="bg-gray-50 border-b">
-                                  <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stage</th>
-                                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Count</th>
-                                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Conversion Rate</th>
-                                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Avg. Time in Stage</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                  {dispPipelineFunnel.stages.map((stage: any, index: number) => {
-                                    const isLastStage = index === dispPipelineFunnel.stages.length - 1;
-
-                                    return (
-                                      <tr key={stage.stageId} className="hover:bg-gray-50">
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                          <div className="flex items-center">
-                                            <span className={`w-3 h-3 ${stage.stageColor || 'bg-gray-500'} rounded-full mr-2`}></span>
-                                            <span className="text-sm font-medium text-gray-900">{stage.stageName}</span>
-                                          </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-900">
-                                          {stage.count}
-                                        </td>
-                                        <td className={`px-6 py-4 whitespace-nowrap text-center text-sm ${isLastStage ? 'text-green-600 font-semibold' : 'text-gray-900'}`}>
-                                          {stage.conversionRate}%
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-500">
-                                          {stage.avgTimeInStage > 0 ? `${stage.avgTimeInStage} days` : '-'}
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                          ) : (
-                            <div className="text-center py-8">
-                              <div className="text-gray-500">No pipeline data available</div>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </>
-                  ) : (
-                    <>
-                      {/* Dispositions Timeline View */}
-                      <Card className="p-6">
-                        <CardHeader>
-                          <CardTitle className="flex items-center space-x-2">
-                            <Clock className="h-5 w-5" />
-                            <span>Dispositions Timeline Metrics</span>
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          {dispPipelineLoading ? (
-                            <div className="text-center py-8">
-                              <div className="text-gray-500">Loading timeline data...</div>
-                            </div>
-                          ) : dispPipelineTimeline && dispPipelineTimeline.transitions ? (
-                            <div className="overflow-x-auto">
-                              <table className="w-full">
-                                <thead className="bg-gray-50 border-b">
-                                  <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                      <div className="flex items-center gap-2">
-                                        <Activity className="h-4 w-4" />
-                                        <span>Transition</span>
-                                      </div>
-                                    </th>
-                                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                      <div className="flex items-center justify-center gap-2">
-                                        <Clock className="h-4 w-4" />
-                                        <span>Average Time</span>
-                                      </div>
-                                    </th>
-                                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                      <div className="flex items-center justify-center gap-2">
-                                        <TrendingUp className="h-4 w-4" />
-                                        <span>Best Time</span>
-                                      </div>
-                                    </th>
-                                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                      <div className="flex items-center justify-center gap-2">
-                                        <TrendingDown className="h-4 w-4" />
-                                        <span>Worst Time</span>
-                                      </div>
-                                    </th>
-                                  </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                  {dispPipelineTimeline.transitions.map((transition: any, index: number) => (
-                                    <tr key={index} className="hover:bg-gray-50">
-                                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                        {transition.fromStage} → {transition.toStage}
-                                      </td>
-                                      <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-900">
-                                        {transition.avgTime > 0 ? `${transition.avgTime} days` : '-'}
-                                      </td>
-                                      <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-green-600">
-                                        {transition.bestTime > 0 ? `${transition.bestTime} days` : '-'}
-                                      </td>
-                                      <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-red-600">
-                                        {transition.worstTime > 0 ? `${transition.worstTime} days` : '-'}
-                                      </td>
-                                    </tr>
-                                  ))}
-                                  {dispPipelineTimeline.totalPipelineTime && (
-                                    <tr className="hover:bg-gray-50 bg-blue-50">
-                                      <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 flex items-center gap-2">
-                                        <Target className="h-4 w-4" />
-                                        <span>Total: {dispPipelineTimeline.totalPipelineTime.fromStage} → {dispPipelineTimeline.totalPipelineTime.toStage}</span>
-                                      </td>
-                                      <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-bold text-gray-900">
-                                        {dispPipelineTimeline.totalPipelineTime.avgTime > 0 ? `${dispPipelineTimeline.totalPipelineTime.avgTime} days` : '-'}
-                                      </td>
-                                      <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-bold text-green-600">
-                                        {dispPipelineTimeline.totalPipelineTime.bestTime > 0 ? `${dispPipelineTimeline.totalPipelineTime.bestTime} days` : '-'}
-                                      </td>
-                                      <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-bold text-red-600">
-                                        {dispPipelineTimeline.totalPipelineTime.worstTime > 0 ? `${dispPipelineTimeline.totalPipelineTime.worstTime} days` : '-'}
-                                      </td>
-                                    </tr>
-                                  )}
-                                </tbody>
-                              </table>
-                            </div>
-                          ) : (
-                            <div className="text-center py-8">
-                              <div className="text-gray-500">No timeline data available</div>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </>
-                  )}
-                </>
-              )}
             </>
           )}
         </div>

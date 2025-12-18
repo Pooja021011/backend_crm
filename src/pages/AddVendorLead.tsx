@@ -28,11 +28,11 @@ import {
 import { cn } from "@/lib/utils";
 import { 
   validateEmail, 
-  validatePhoneNumber, 
   validateName, 
-  validateCompanyName,
-  formatPhoneNumber 
+  validateCompanyName
 } from "@/utils/validation";
+import { validatePhoneNumber } from "@/utils/phoneValidation";
+import { PhoneInput } from "@/components/PhoneInput";
 import { API_BASE } from "@/config/api";
 
 const AddVendorLead = () => {
@@ -320,30 +320,36 @@ const AddVendorLead = () => {
               </div>
 
               {/* Phone Number */}
-              <ValidatedInput
-                label="Primary Phone Number"
-                name="phoneNumber"
-                value={formData.phoneNumber}
-                onValueChange={(value) => handleInputChange('phoneNumber', value)}
-                validator={validatePhoneNumber}
-                formatter={formatPhoneNumber}
-                placeholder="(555) 123-4567"
-                required
-                icon={<Phone className="w-4 h-4" />}
-              />
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-700">
+                  Primary Phone Number *
+                </Label>
+                <PhoneInput
+                  label=""
+                  value={formData.phoneNumber}
+                  onChange={(value) => handleInputChange('phoneNumber', value)}
+                  placeholder="Phone number"
+                  required={false}
+                />
+              </div>
 
               {/* Email */}
-              <ValidatedInput
-                label="Primary Email"
-                name="emailAddress"
-                type="email"
-                value={formData.emailAddress}
-                onValueChange={(value) => handleInputChange('emailAddress', value)}
-                validator={validateEmail}
-                placeholder="email@example.com"
-                required
-                icon={<Mail className="w-4 h-4" />}
-              />
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-700">
+                  Primary Email *
+                </Label>
+                <ValidatedInput
+                  label=""
+                  name="emailAddress"
+                  type="email"
+                  value={formData.emailAddress}
+                  onValueChange={(value) => handleInputChange('emailAddress', value)}
+                  validator={validateEmail}
+                  placeholder="email@example.com"
+                  required
+                  icon={<Mail className="w-4 h-4" />}
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">

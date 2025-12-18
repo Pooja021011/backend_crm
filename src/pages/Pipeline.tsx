@@ -32,7 +32,6 @@ const Pipeline = () => {
   const navigate = useNavigate();
   const [needsAttentionView, setNeedsAttentionView] = useState(false);
   const [transactionPipelineView, setTransactionPipelineView] = useState(false);
-  const [dispositionsView, setDispositionsView] = useState(false);
   const [selectedLeadSource, setSelectedLeadSource] = useState<string>('all');
   const [leadSources, setLeadSources] = useState<any[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -217,7 +216,7 @@ const Pipeline = () => {
     if (pipelineAccess) {
       loadPipelineData();
     }
-  }, [transactionPipelineView, needsAttentionView, dispositionsView, selectedLeadSource, currentPipeline, pipelineAccess]);
+  }, [transactionPipelineView, needsAttentionView, selectedLeadSource, currentPipeline, pipelineAccess]);
 
   const loadPipelineAccess = async () => {
     try {
@@ -277,28 +276,77 @@ const Pipeline = () => {
         return;
       }
 
-      // Determine which pipeline to load based on toggles and role
+      // Determine which pipeline(s) to load based on role
+      const isAdminOrManager = user?.roles?.includes('ADMIN') || user?.roles?.includes('MANAGER');
+      const isAcqOnly = user?.roles?.includes('ACQ') && !isAdminOrManager;
+      const isDispOnly = user?.roles?.includes('DISP') && !isAdminOrManager;
+      
       let pipelineKey = overridePipeline || currentPipeline;
+      
+      // Transaction pipeline toggle (if available)
       if (transactionPipelineView && pipelineAccess?.allowedPipelines?.includes('TRANSACTION')) {
         pipelineKey = 'TRANSACTION';
-      } else if (dispositionsView && pipelineAccess?.allowedPipelines?.includes('DISPOSITIONS')) {
-        pipelineKey = 'DISPOSITIONS';
       }
 
-      console.log('📊 Loading pipeline:', pipelineKey, 'for user roles:', user?.roles);
+      console.log('📊 Loading pipeline for user roles:', user?.roles);
+      console.log('📊 isAdminOrManager:', isAdminOrManager, 'isAcqOnly:', isAcqOnly, 'isDispOnly:', isDispOnly);
 
-      // Load pipeline stages
-      const stagesResponse = await makeApiCall(`${API_BASE}/pipeline/${pipelineKey}/stages`);
-      if (stagesResponse.ok) {
-        const stagesData = await stagesResponse.json();
-        console.log('📊 Received stages:', stagesData.data?.length || 0, 'stages');
-        console.log('📊 Stage names:', stagesData.data?.map((s: any) => s.name));
-        console.log('📊 Stage IDs:', stagesData.data?.map((s: any) => ({ name: s.name, id: s.id })));
-        setPipelineStages(stagesData.data || sampleStages);
-      } else {
-        console.log('❌ Failed to load stages, status:', stagesResponse.status);
-        setPipelineStages(sampleStages);
+      // Load pipeline stages based on role
+      let allStages: any[] = [];
+      
+      if (transactionPipelineView && pipelineAccess?.allowedPipelines?.includes('TRANSACTION')) {
+        // Load Transaction pipeline
+        const stagesResponse = await makeApiCall(`${API_BASE}/pipeline/TRANSACTION/stages`);
+        if (stagesResponse.ok) {
+          const stagesData = await stagesResponse.json();
+          allStages = stagesData.data || [];
+        }
+      } else if (isAdminOrManager) {
+        // Admin & Manager: Load both Acquisitions + Dispositions stages
+        console.log('📊 Loading combined Acquisitions + Dispositions pipeline');
+        
+        const [acqResponse, dispResponse] = await Promise.all([
+          makeApiCall(`${API_BASE}/pipeline/ACQUISITIONS/stages`),
+          makeApiCall(`${API_BASE}/pipeline/DISPOSITIONS/stages`)
+        ]);
+        
+        let acqStages: any[] = [];
+        let dispStages: any[] = [];
+        
+        if (acqResponse.ok) {
+          const acqData = await acqResponse.json();
+          acqStages = acqData.data || [];
+        }
+        
+        if (dispResponse.ok) {
+          const dispData = await dispResponse.json();
+          dispStages = dispData.data || [];
+        }
+        
+        // Combine stages, maintaining order
+        allStages = [...acqStages, ...dispStages].sort((a, b) => a.orderIndex - b.orderIndex);
+        console.log('📊 Combined stages:', allStages.length, 'stages');
+      } else if (isAcqOnly) {
+        // ACQ users: Only Acquisitions pipeline
+        console.log('📊 Loading Acquisitions pipeline only');
+        const stagesResponse = await makeApiCall(`${API_BASE}/pipeline/ACQUISITIONS/stages`);
+        if (stagesResponse.ok) {
+          const stagesData = await stagesResponse.json();
+          allStages = stagesData.data || [];
+        }
+      } else if (isDispOnly) {
+        // DISP users: Only Dispositions pipeline
+        console.log('📊 Loading Dispositions pipeline only');
+        const stagesResponse = await makeApiCall(`${API_BASE}/pipeline/DISPOSITIONS/stages`);
+        if (stagesResponse.ok) {
+          const stagesData = await stagesResponse.json();
+          allStages = stagesData.data || [];
+        }
       }
+      
+      console.log('📊 Final stages:', allStages.length, 'stages');
+      console.log('📊 Stage names:', allStages.map((s: any) => s.name));
+      setPipelineStages(allStages.length > 0 ? allStages : sampleStages);
 
       // Load pipeline leads with role-based filtering
       const filters = new URLSearchParams();
@@ -315,14 +363,59 @@ const Pipeline = () => {
         filters.append('sourceId', selectedLeadSource);
       }
 
-      // Try enhanced pipeline leads first
-      const leadsResponse = await makeApiCall(`${API_BASE}/pipeline/${pipelineKey}/enhanced-leads?${filters}`);
+      // Load leads based on role
+      let leadsResponse;
+      let allLeadsData: any[] = [];
       
-      if (leadsResponse.ok) {
-        const leadsData = await leadsResponse.json();
+      if (transactionPipelineView && pipelineAccess?.allowedPipelines?.includes('TRANSACTION')) {
+        // Load Transaction pipeline leads
+        leadsResponse = await makeApiCall(`${API_BASE}/pipeline/TRANSACTION/enhanced-leads?${filters}`);
+        if (leadsResponse.ok) {
+          const leadsData = await leadsResponse.json();
+          allLeadsData = leadsData.data || [];
+        }
+      } else if (isAdminOrManager) {
+        // Admin & Manager: Load leads from both pipelines
+        console.log('📊 Loading leads from both Acquisitions + Dispositions');
         
-        // Transform API data to match our component interface
-        const transformedLeads = (leadsData.data || []).map((lead: any) => {
+        const [acqLeadsResponse, dispLeadsResponse] = await Promise.all([
+          makeApiCall(`${API_BASE}/pipeline/ACQUISITIONS/enhanced-leads?${filters}`),
+          makeApiCall(`${API_BASE}/pipeline/DISPOSITIONS/enhanced-leads?${filters}`)
+        ]);
+        
+        let acqLeads: any[] = [];
+        let dispLeads: any[] = [];
+        
+        if (acqLeadsResponse.ok) {
+          const acqData = await acqLeadsResponse.json();
+          acqLeads = acqData.data || [];
+        }
+        
+        if (dispLeadsResponse.ok) {
+          const dispData = await dispLeadsResponse.json();
+          dispLeads = dispData.data || [];
+        }
+        
+        allLeadsData = [...acqLeads, ...dispLeads];
+        console.log('📊 Combined leads:', allLeadsData.length, 'leads');
+      } else if (isAcqOnly) {
+        // ACQ users: Only Acquisitions leads
+        leadsResponse = await makeApiCall(`${API_BASE}/pipeline/ACQUISITIONS/enhanced-leads?${filters}`);
+        if (leadsResponse.ok) {
+          const leadsData = await leadsResponse.json();
+          allLeadsData = leadsData.data || [];
+        }
+      } else if (isDispOnly) {
+        // DISP users: Only Dispositions leads
+        leadsResponse = await makeApiCall(`${API_BASE}/pipeline/DISPOSITIONS/enhanced-leads?${filters}`);
+        if (leadsResponse.ok) {
+          const leadsData = await leadsResponse.json();
+          allLeadsData = leadsData.data || [];
+        }
+      }
+      
+      // Transform API data to match our component interface
+      const transformedLeads = allLeadsData.map((lead: any) => {
           // Handle address - backend returns string, but we need to handle both formats
           let addressDisplay = 'No address';
           if (typeof lead.address === 'string') {
@@ -371,9 +464,9 @@ const Pipeline = () => {
         
         setLeads(transformedLeads);
         setNeedsAttentionCount(transformedLeads.filter((l: any) => l.status === 'urgent').length);
-      } else {
         
-        // Fallback to basic leads API
+        // Fallback to basic leads API if no leads found
+        if (transformedLeads.length === 0) {
         const basicLeadsResponse = await makeApiCall(`${API_BASE}/leads`);
         console.log('Basic leads response status:', basicLeadsResponse.status);
         
@@ -575,9 +668,21 @@ const Pipeline = () => {
   const getActivePipelineName = () => {
     if (transactionPipelineView && pipelineAccess?.allowedPipelines?.includes('TRANSACTION')) {
       return 'Transaction';
-    } else if (dispositionsView && pipelineAccess?.allowedPipelines?.includes('DISPOSITIONS')) {
+    }
+    
+    // Check user role to determine pipeline name
+    const isAdminOrManager = user?.roles?.includes('ADMIN') || user?.roles?.includes('MANAGER');
+    const isAcqOnly = user?.roles?.includes('ACQ') && !isAdminOrManager;
+    const isDispOnly = user?.roles?.includes('DISP') && !isAdminOrManager;
+    
+    if (isAdminOrManager) {
+      return 'Acquisitions + Dispositions';
+    } else if (isAcqOnly) {
+      return 'Acquisitions';
+    } else if (isDispOnly) {
       return 'Dispositions';
     }
+    
     return currentPipeline.charAt(0) + currentPipeline.slice(1).toLowerCase();
   };
 
@@ -612,17 +717,6 @@ const Pipeline = () => {
               onCheckedChange={setTransactionPipelineView}
               />
               <Label htmlFor="transaction-pipeline">Transaction Pipeline</Label>
-            </div>
-          )}
-
-          {pipelineAccess?.availableToggles?.includes('DISPOSITIONS_TOGGLE') && (
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="dispositions-view"
-                checked={dispositionsView}
-                onCheckedChange={setDispositionsView}
-              />
-              <Label htmlFor="dispositions-view">Dispositions View</Label>
             </div>
           )}
 

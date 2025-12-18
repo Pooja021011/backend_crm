@@ -32,14 +32,14 @@ import {
 import { cn } from "@/lib/utils";
 import { 
   validateEmail, 
-  validatePhoneNumber, 
   validateName, 
   validateAddress,
   validateCity,
   validateState,
-  validateZipCode,
-  formatPhoneNumber 
+  validateZipCode
 } from "@/utils/validation";
+import { validatePhoneNumber } from "@/utils/phoneValidation";
+import { PhoneInput } from "@/components/PhoneInput";
 
 const AddSellerLead = () => {
   const navigate = useNavigate();
@@ -149,7 +149,7 @@ const AddSellerLead = () => {
         error = validateName(value, 'Last name');
         break;
       case 'phoneNumber':
-        error = validatePhoneNumber(value);
+        error = validatePhoneNumber(value) ? '' : 'Please enter a valid phone number with country code';
         break;
       case 'emailAddress':
         error = validateEmail(value);
@@ -411,17 +411,18 @@ const AddSellerLead = () => {
               />
 
               {/* Phone Number */}
-              <ValidatedInput
-                label="Phone Number"
-                name="phoneNumber"
-                value={formData.phoneNumber}
-                onValueChange={(value) => handleInputChange('phoneNumber', value)}
-                validator={validatePhoneNumber}
-                formatter={formatPhoneNumber}
-                placeholder="(555) 123-4567"
-                required
-                icon={<Phone className="w-4 h-4" />}
-              />
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-700">
+                  Phone Number *
+                </Label>
+                <PhoneInput
+                  label=""
+                  value={formData.phoneNumber}
+                  onChange={(value) => handleInputChange('phoneNumber', value)}
+                  placeholder="Phone number"
+                  required={false}
+                />
+              </div>
 
               {/* Email Address */}
               <ValidatedInput

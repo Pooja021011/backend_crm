@@ -1,5 +1,5 @@
 import { compsRepository, CreateComparableData, ComparableSearchFilters } from '../repositories/compsRepository';
-import { Comparable, LeadComparable } from '@prisma/client';
+import { LeadComparable } from '@prisma/client';
 
 export interface CompsAnalysis {
   averagePrice: number;
@@ -19,28 +19,20 @@ export interface CompsAnalysis {
 }
 
 export const compsService = {
-  async getComparablesByLeadId(leadId: string): Promise<(LeadComparable & { comparable: Comparable })[]> {
+  async getComparablesByLeadId(leadId: string): Promise<LeadComparable[]> {
     return compsRepository.getComparablesByLeadId(leadId);
   },
 
-  async searchComparables(filters: ComparableSearchFilters, limit?: number): Promise<Comparable[]> {
+  async searchComparables(filters: ComparableSearchFilters, limit?: number): Promise<LeadComparable[]> {
     return compsRepository.searchComparables(filters, limit);
   },
 
-  async createComparable(data: CreateComparableData): Promise<Comparable> {
+  async createComparable(data: CreateComparableData): Promise<LeadComparable> {
     this.validateComparableData(data);
     return compsRepository.createComparable(data);
   },
 
-  async addComparableToLead(leadId: string, comparableId: string): Promise<LeadComparable> {
-    return compsRepository.addComparableToLead(leadId, comparableId);
-  },
-
-  async removeComparableFromLead(leadId: string, comparableId: string): Promise<void> {
-    return compsRepository.removeComparableFromLead(leadId, comparableId);
-  },
-
-  async updateComparable(id: string, data: Partial<CreateComparableData>): Promise<Comparable> {
+  async updateComparable(id: string, data: Partial<CreateComparableData>): Promise<LeadComparable> {
     if (Object.keys(data).length > 0) {
       this.validateComparableData(data);
     }
@@ -52,21 +44,21 @@ export const compsService = {
   },
 
   async analyzeComps(leadId: string): Promise<CompsAnalysis> {
-    const leadComps = await compsRepository.getComparablesByLeadId(leadId);
-    const comparables = leadComps.map(lc => lc.comparable).filter(c => c.salePrice && c.salePrice > 0);
+    const comparables = await compsRepository.getComparablesByLeadId(leadId);
+    const validComps = comparables.filter(c => c.salePrice && c.salePrice > 0);
 
-    if (comparables.length === 0) {
+    if (validComps.length === 0) {
       throw new Error('No valid comparables found for analysis');
     }
 
-    const prices = comparables.map(c => c.salePrice!);
-    const pricesPerSqft = comparables
+    const prices = validComps.map(c => c.salePrice!);
+    const pricesPerSqft = validComps
       .filter(c => c.pricePerSqft && c.pricePerSqft > 0)
       .map(c => c.pricePerSqft!);
-    const doms = comparables
+    const doms = validComps
       .filter(c => c.dom !== null && c.dom !== undefined)
       .map(c => c.dom!);
-    const sqfts = comparables
+    const sqfts = validComps
       .filter(c => c.sqft && c.sqft > 0)
       .map(c => c.sqft!);
 
@@ -88,7 +80,7 @@ export const compsService = {
       pricePerSqftAverage,
       pricePerSqftMedian,
       averageDom,
-      totalComps: comparables.length,
+      totalComps: validComps.length,
       priceRange: {
         min: Math.min(...prices),
         max: Math.max(...prices)
@@ -100,13 +92,13 @@ export const compsService = {
     };
   },
 
-  async autoFetchComps(leadId: string, searchRadius: number = 1): Promise<Comparable[]> {
+  async autoFetchComps(leadId: string, searchRadius: number = 1): Promise<LeadComparable[]> {
     // TODO: Implement auto-fetch from external APIs (MLS, Zillow, etc.)
     // For now, this is a placeholder that would integrate with real estate data APIs
     throw new Error('Auto-fetch comparables not yet implemented - requires MLS/API integration');
   },
 
-  async suggestComps(leadAddress: { city: string; state: string; zip?: string }, beds?: number, baths?: number, sqft?: number): Promise<Comparable[]> {
+  async suggestComps(leadAddress: { city: string; state: string; zip?: string }, beds?: number, baths?: number, sqft?: number): Promise<LeadComparable[]> {
     const filters: ComparableSearchFilters = {
       city: leadAddress.city,
       state: leadAddress.state,

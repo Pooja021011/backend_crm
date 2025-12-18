@@ -1,8 +1,9 @@
-import { PrismaClient, Comparable, LeadComparable } from '@prisma/client';
+import { PrismaClient, LeadComparable } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
 export interface CreateComparableData {
+  leadId: string;
   address: string;
   city: string;
   state: string;
@@ -35,19 +36,16 @@ export interface ComparableSearchFilters {
 }
 
 export const compsRepository = {
-  async getComparablesByLeadId(leadId: string): Promise<(LeadComparable & { comparable: Comparable })[]> {
+  async getComparablesByLeadId(leadId: string): Promise<LeadComparable[]> {
     return prisma.leadComparable.findMany({
       where: { leadId },
-      include: {
-        comparable: true
-      },
       orderBy: {
         addedAt: 'desc'
       }
     });
   },
 
-  async searchComparables(filters: ComparableSearchFilters, limit: number = 50): Promise<Comparable[]> {
+  async searchComparables(filters: ComparableSearchFilters, limit: number = 50): Promise<LeadComparable[]> {
     const where: any = {};
 
     if (filters.city) where.city = { contains: filters.city, mode: 'insensitive' };
@@ -84,7 +82,7 @@ export const compsRepository = {
       if (filters.soldBefore) where.dateSold.lte = filters.soldBefore;
     }
 
-    return prisma.comparable.findMany({
+    return prisma.leadComparable.findMany({
       where,
       orderBy: {
         dateSold: 'desc'
@@ -93,61 +91,42 @@ export const compsRepository = {
     });
   },
 
-  async createComparable(data: CreateComparableData): Promise<Comparable> {
+  async createComparable(data: CreateComparableData): Promise<LeadComparable> {
     // Calculate price per sqft if not provided
     const pricePerSqft = data.pricePerSqft || 
       (data.salePrice && data.sqft && data.sqft > 0 ? Math.round(data.salePrice / data.sqft) : undefined);
 
-    return prisma.comparable.create({
+    return prisma.leadComparable.create({
       data: {
-        ...data,
+        leadId: data.leadId,
+        address: data.address,
+        city: data.city,
+        state: data.state,
+        zip: data.zip,
+        beds: data.beds,
+        baths: data.baths,
+        sqft: data.sqft,
+        yearBuilt: data.yearBuilt,
+        salePrice: data.salePrice,
         pricePerSqft,
+        dom: data.dom,
+        dateSold: data.dateSold,
         images: data.images || []
       }
     });
   },
 
-  async addComparableToLead(leadId: string, comparableId: string): Promise<LeadComparable> {
-    // Check if already exists
-    const existing = await prisma.leadComparable.findFirst({
-      where: {
-        leadId,
-        comparableId
-      }
-    });
-
-    if (existing) {
-      return existing;
-    }
-
-    return prisma.leadComparable.create({
-      data: {
-        leadId,
-        comparableId
-      }
-    });
-  },
-
-  async removeComparableFromLead(leadId: string, comparableId: string): Promise<void> {
-    await prisma.leadComparable.deleteMany({
-      where: {
-        leadId,
-        comparableId
-      }
-    });
-  },
-
-  async getComparableById(id: string): Promise<Comparable | null> {
-    return prisma.comparable.findUnique({
+  async getComparableById(id: string): Promise<LeadComparable | null> {
+    return prisma.leadComparable.findUnique({
       where: { id }
     });
   },
 
-  async updateComparable(id: string, data: Partial<CreateComparableData>): Promise<Comparable> {
+  async updateComparable(id: string, data: Partial<CreateComparableData>): Promise<LeadComparable> {
     // Recalculate price per sqft if price or sqft changed
     const updates: any = { ...data };
     if ((data.salePrice !== undefined || data.sqft !== undefined) && !data.pricePerSqft) {
-      const current = await prisma.comparable.findUnique({ where: { id } });
+      const current = await prisma.leadComparable.findUnique({ where: { id } });
       if (current) {
         const newPrice = data.salePrice !== undefined ? data.salePrice : current.salePrice;
         const newSqft = data.sqft !== undefined ? data.sqft : current.sqft;
@@ -157,20 +136,14 @@ export const compsRepository = {
       }
     }
 
-    return prisma.comparable.update({
+    return prisma.leadComparable.update({
       where: { id },
       data: updates
     });
   },
 
   async deleteComparable(id: string): Promise<void> {
-    // First remove all lead associations
-    await prisma.leadComparable.deleteMany({
-      where: { comparableId: id }
-    });
-
-    // Then delete the comparable
-    await prisma.comparable.delete({
+    await prisma.leadComparable.delete({
       where: { id }
     });
   }

@@ -12,8 +12,9 @@ import { Home, Plus, Search, TrendingUp, Calendar, MapPin, Trash2, ExternalLink 
 import { useToast } from '../hooks/use-toast';
 import { API_BASE, makeApiCall } from '../config/api';
 
-interface Comparable {
+interface LeadComparable {
   id: string;
+  leadId: string;
   address: string;
   city: string;
   state: string;
@@ -27,15 +28,8 @@ interface Comparable {
   dom?: number;
   dateSold?: string;
   images: string[];
-  createdAt: string;
-}
-
-interface LeadComparable {
-  id: string;
-  leadId: string;
-  comparableId: string;
-  comparable: Comparable;
   addedAt: string;
+  createdAt: string;
 }
 
 interface CompsAnalysis {
@@ -67,7 +61,7 @@ interface CompsManagerProps {
 
 export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress }) => {
   const [leadComps, setLeadComps] = useState<LeadComparable[]>([]);
-  const [searchResults, setSearchResults] = useState<Comparable[]>([]);
+  const [searchResults, setSearchResults] = useState<LeadComparable[]>([]);
   const [analysis, setAnalysis] = useState<CompsAnalysis | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
@@ -244,29 +238,7 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
     }
   };
 
-  const addCompToLead = async (comparableId: string) => {
-    try {
-      const response = await makeApiCall(`${API_BASE}/comps/leads/${leadId}/comparables/${comparableId}`, {
-        method: 'POST'
-      });
-
-      if (response.ok) {
-        await loadLeadComps();
-        toast({
-          title: "Success",
-          description: "Comparable added to lead"
-        });
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to add comparable",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const removeCompFromLead = async (comparableId: string) => {
+  const deleteComparable = async (comparableId: string) => {
     try {
       const response = await makeApiCall(`${API_BASE}/comps/leads/${leadId}/comparables/${comparableId}`, {
         method: 'DELETE'
@@ -276,7 +248,7 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
         await loadLeadComps();
         toast({
           title: "Success",
-          description: "Comparable removed from lead"
+          description: "Comparable removed"
         });
       }
     } catch (error) {
@@ -301,14 +273,13 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
         dateSold: newComp.dateSold ? new Date(newComp.dateSold).toISOString() : undefined
       };
 
-      const response = await makeApiCall(`${API_BASE}/comps/create`, {
+      const response = await makeApiCall(`${API_BASE}/comps/leads/${leadId}/comparables`, {
         method: 'POST',
         body: JSON.stringify(compData)
       });
 
       if (response.ok) {
-        const newComparable = await response.json();
-        await addCompToLead(newComparable.id);
+        await loadLeadComps();
         setShowAddCompDialog(false);
         setNewComp({
           address: '',
@@ -412,19 +383,19 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {leadComps.map(({ id, comparable }) => (
-                      <TableRow key={id} className="text-[10px]">
+                    {leadComps.map((comp) => (
+                      <TableRow key={comp.id} className="text-[10px]">
                         <TableCell className="py-1 px-1">
-                          <div className="font-medium">{comparable.address}</div>
-                          <div className="text-slate-400">{comparable.city}, {comparable.state}</div>
+                          <div className="font-medium">{comp.address}</div>
+                          <div className="text-slate-400">{comp.city}, {comp.state}</div>
                         </TableCell>
-                        <TableCell className="py-1 px-1">{comparable.beds || '-'}/{comparable.baths || '-'}</TableCell>
-                        <TableCell className="py-1 px-1">{comparable.sqft?.toLocaleString() || '-'}</TableCell>
-                        <TableCell className="py-1 px-1">{formatCurrency(comparable.salePrice)}</TableCell>
-                        <TableCell className="py-1 px-1">{formatCurrency(comparable.pricePerSqft)}</TableCell>
-                        <TableCell className="py-1 px-1">{comparable.dom || '-'}</TableCell>
-                        <TableCell className="py-1 px-1">{formatDate(comparable.dateSold)}</TableCell>
-                        <TableCell className="py-1 px-1"><Button size="sm" variant="ghost" className="h-4 w-4 p-0" onClick={() => removeCompFromLead(comparable.id)}><Trash2 className="h-2.5 w-2.5" /></Button></TableCell>
+                        <TableCell className="py-1 px-1">{comp.beds || '-'}/{comp.baths || '-'}</TableCell>
+                        <TableCell className="py-1 px-1">{comp.sqft?.toLocaleString() || '-'}</TableCell>
+                        <TableCell className="py-1 px-1">{formatCurrency(comp.salePrice)}</TableCell>
+                        <TableCell className="py-1 px-1">{formatCurrency(comp.pricePerSqft)}</TableCell>
+                        <TableCell className="py-1 px-1">{comp.dom || '-'}</TableCell>
+                        <TableCell className="py-1 px-1">{formatDate(comp.dateSold)}</TableCell>
+                        <TableCell className="py-1 px-1"><Button size="sm" variant="ghost" className="h-4 w-4 p-0" onClick={() => deleteComparable(comp.id)}><Trash2 className="h-2.5 w-2.5" /></Button></TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -488,13 +459,7 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
                       <TableCell>{formatCurrency(comp.pricePerSqft)}</TableCell>
                       <TableCell>{formatDate(comp.dateSold)}</TableCell>
                       <TableCell>
-                        <Button
-                          size="sm"
-                          onClick={() => addCompToLead(comp.id)}
-                          disabled={leadComps.some(lc => lc.comparable.id === comp.id)}
-                        >
-                          {leadComps.some(lc => lc.comparable.id === comp.id) ? 'Added' : 'Add'}
-                        </Button>
+                        <span className="text-xs text-muted-foreground">Reference</span>
                       </TableCell>
                     </TableRow>
                   ))}
