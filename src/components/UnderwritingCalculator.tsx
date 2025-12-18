@@ -193,7 +193,6 @@ export function UnderwritingCalculator({
                   className="h-7 text-xs bg-slate-100 cursor-not-allowed text-slate-600 font-medium"
                   readOnly
                 />
-                <span className="text-[8px] text-slate-500 italic">(auto from rehab calculator)</span>
               </div>
 
               {/* TAXES - EDITABLE */}
