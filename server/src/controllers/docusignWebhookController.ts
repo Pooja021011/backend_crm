@@ -125,7 +125,7 @@ export const docusignWebhookController = {
     try {
       logger.info('Contract completed (signed)', { leadId, envelopeId });
 
-      // Update lead to UNDER_CONTRACT status
+      // Find "Under Contract" lead status
       const underContractStatus = await prisma.leadStatus.findFirst({
         where: { 
           name: { 
@@ -135,16 +135,32 @@ export const docusignWebhookController = {
         }
       });
 
+      // Find "Under Contract" pipeline stage
+      const underContractStage = await prisma.pipelineStage.findFirst({
+        where: { 
+          name: { 
+            contains: 'Under Contract', 
+            mode: 'insensitive' 
+          } 
+        }
+      });
+
+      // Update lead with both status AND pipeline stage
       await prisma.lead.update({
         where: { id: leadId },
         data: {
           leadStatusId: underContractStatus?.id,
+          pipelineStageId: underContractStage?.id,
+          stageEnteredAt: new Date(),
           contractStatus: 'COMPLETED',
           contractSignedAt: new Date()
         }
       });
 
-      logger.info('Lead status updated to UNDER_CONTRACT', { leadId });
+      logger.info('Lead status and pipeline stage updated to UNDER_CONTRACT', { 
+        leadId,
+        pipelineStageId: underContractStage?.id 
+      });
 
     } catch (error: any) {
       logger.error('Error handling completed envelope', { 
