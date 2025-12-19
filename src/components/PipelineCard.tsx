@@ -135,7 +135,7 @@ export const PipelineCard = ({ lead, isDragging, onViewDetails }: PipelineCardPr
         <div className="flex items-center justify-between text-[11px] text-gray-500 pt-0.5 border-t border-gray-100">
           <div className="flex items-center gap-0.5">
             <Calendar className="w-2.5 h-2.5" />
-            <span>{safeDateFormat(lead.dateCreated, 'MMM dd')}</span>
+            <span>{safeDateFormat(lead.statusChangedDate, 'MMM dd')}</span>
           </div>
           <div className="flex items-center gap-0.5">
             <Clock className="w-2.5 h-2.5" />
