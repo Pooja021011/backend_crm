@@ -49,6 +49,26 @@ export const leadRepository = {
       return stage;
     };
 
+    // Get default lead status (New Lead)
+    const getDefaultLeadStatus = async () => {
+      const status = await prisma.leadStatus.findFirst({
+        where: {
+          name: {
+            contains: 'New Lead',
+            mode: 'insensitive'
+          }
+        }
+      });
+      
+      if (!status) {
+        console.warn('No "New Lead" status found, lead will be created without status');
+        return null;
+      }
+      
+      console.log(`Found default lead status: ${status.name}`);
+      return status;
+    };
+
     if (input.type === 'SELLER') {
       const { address, seller, marketId, assignedUserId } = input;
       let { pipelineStageId } = input;
@@ -63,12 +83,16 @@ export const leadRepository = {
         await validatePipelineStage(pipelineStageId);
       }
       
+      // Get default lead status
+      const defaultStatus = await getDefaultLeadStatus();
+      
       return prisma.lead.create({
         data: {
           leadType: 'SELLER',
           marketId: marketId || null,
           assignedUserId: assignedUserId || null,
           pipelineStageId: pipelineStageId,
+          leadStatusId: defaultStatus?.id || null,
           stageEnteredAt: new Date(),
           createdById: createdById || null,
           address: { create: address },
@@ -93,12 +117,16 @@ export const leadRepository = {
         await validatePipelineStage(pipelineStageId);
       }
       
+      // Get default lead status
+      const defaultStatus = await getDefaultLeadStatus();
+      
       const lead = await prisma.lead.create({
         data: {
           leadType: 'BUYER',
           marketId: marketId || null,
           assignedUserId: assignedUserId || null,
           pipelineStageId: pipelineStageId,
+          leadStatusId: defaultStatus?.id || null,
           stageEnteredAt: new Date(),
           createdById: createdById || null,
           buyer: { create: buyer },
@@ -124,12 +152,16 @@ export const leadRepository = {
         await validatePipelineStage(pipelineStageId);
       }
       
+      // Get default lead status
+      const defaultStatus = await getDefaultLeadStatus();
+      
       return prisma.lead.create({
         data: {
           leadType: 'VENDOR',
           marketId: marketId || null,
           assignedUserId: assignedUserId || null,
           pipelineStageId: pipelineStageId,
+          leadStatusId: defaultStatus?.id || null,
           stageEnteredAt: new Date(),
           createdById: createdById || null,
           vendor: { create: vendor },
