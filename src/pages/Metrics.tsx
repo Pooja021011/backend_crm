@@ -178,6 +178,22 @@ const Metrics = () => {
   const isDisp = user?.roles?.includes('DISP');
   const isTC = user?.roles?.includes('TC');
 
+  // Set default tab based on user role
+  useEffect(() => {
+    if (!user) return;
+    
+    // Only set default tab on first load
+    if (activeTab === 'company') {
+      if (isACQ && !isAdmin && !isExecutive && !isManager) {
+        setActiveTab('acquisitions');
+      } else if (isDisp && !isAdmin && !isExecutive && !isManager && !isACQ) {
+        setActiveTab('dispositions-team');
+      } else if (isTC && !isAdmin && !isExecutive && !isManager && !isACQ && !isDisp) {
+        setActiveTab('transaction-coordinator');
+      }
+    }
+  }, [user, isACQ, isDisp, isTC, isAdmin, isExecutive, isManager]);
+
   // Helper function to convert period to date range
   const getDateRangeFromPeriod = (period: string) => {
     const now = new Date();
