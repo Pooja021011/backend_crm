@@ -31,15 +31,24 @@ export function ProjectionsSheet({
   const ORIGINATION_FEE = 1.99; // 1.99%
 
   // Fixed costs
-  const TITLE_INSURANCE = 1000;
   const RECORDING_FEES = 300;
   const MISC_CLOSING = 500;
-  const UTILITIES = 1800;
-  const INSURANCE = 294;
+  const UTILITIES_PER_MONTH = 300; // $300 per month
   const TITLE_COST_EXIT = 2000;
   const MISC_EXIT_CLOSING = 500;
   const UNDERWRITING_FEE = 0;
   const APPRAISAL_FEE = 0;
+  
+  // Dynamic Title Insurance based on purchase price (Google Sheet formula)
+  const getTitleInsurance = (price: number) => {
+    if (price <= 30000) return 570;
+    if (price <= 40000) return 640;
+    if (price <= 50000) return 710;
+    if (price <= 60000) return 775;
+    if (price <= 70000) return 840;
+    if (price <= 80000) return 910;
+    return 1000;
+  };
 
   const [projections, setProjections] = useState({
     // ACQUISITION
@@ -107,52 +116,68 @@ export function ProjectionsSheet({
 
   const calculateProjections = () => {
     /**
-     * FORMULAS VERIFIED AGAINST GOOGLE SHEET
-     * Test Case: Purchase=$84,000, Rehab=$60,000, ARV=$200,000, Taxes=$1,000, Timeline=6mo
+     * FORMULAS MATCHED TO GOOGLE SHEET "Underwriting for Developer"
      * 
-     * Loan Amount = (Purchase × 80%) + Rehab = ($84,000 × 0.80) + $60,000 = $127,200 ✓
-     * Loan Payments = (Purchase + Rehab) × 80% × Interest × (Timeline/12) = $144,000 × 0.80 × 0.1099 × 0.5 = $6,330.24 ✓
-     * Origination = Loan Amount × 1.99% = $127,200 × 0.0199 = $2,531.28 ✓
-     * Transfer Tax = Purchase × 0.20% ÷ 2 = $84,000 × 0.002 ÷ 2 = $84 ✓
-     * Agent Commission = ARV × 6% = $200,000 × 0.06 = $10,000 ✓
-     * Spread = (Purchase + Rehab) / ARV × 100 = $144,000 / $200,000 = 72% ✓
-     * ROI = Profit / Total OOP × 100 ✓
+     * Purchase Price = Final Offer + $25,000
+     * Loan Amount = (Purchase × 80%) + Rehab
+     * Loan Payments = (Purchase + Rehab) × 80% × Interest × (Timeline/12)
+     * Origination = Loan Amount × 1.99%
+     * Transfer Tax = Purchase × 0.20% ÷ 2 (if split)
+     * Title Insurance = Dynamic based on purchase price tiers
+     * Holding Taxes = (Annual Taxes / 12) × Timeline
+     * Utilities = $300 × Timeline
+     * Insurance = Timeline × ((Purchase × 0.007) / 12)
+     * Agent Commission = ARV × 5%
+     * Exit Transfer Tax = ARV × 0.20% ÷ 2 (if split)
+     * Purchase OOP = (Purchase + Rehab) - Loan Amount
+     * Spread = (Purchase + Rehab) / ARV × 100
+     * ROI = Profit / Total OOP × 100
      */
     
     // ACQUISITION
-    const purchasePrice = finalOffer;
+    // Purchase Price = Final Offer + $25,000 (Google Sheet: ='Final Offer'!D11+25000)
+    const purchasePrice = finalOffer + 25000;
     const totalAcquisitionCost = purchasePrice + rehabCost;
 
     // CLOSING COST
+    // Transfer Tax: =IF(C12=TRUE,(C6*(C11/2)),(C6*C11))
     const transferTax = SPLIT_TRANSFER 
       ? (purchasePrice * (TRANSFER_TAX_RATE / 2)) 
       : (purchasePrice * TRANSFER_TAX_RATE);
-    const totalClosingCost = transferTax + TITLE_INSURANCE + RECORDING_FEES + MISC_CLOSING;
+    const titleInsurance = getTitleInsurance(purchasePrice);
+    const totalClosingCost = transferTax + titleInsurance + RECORDING_FEES + MISC_CLOSING;
 
     // FINANCING COST
-    // Loan Amount = (Purchase Price × 80%) + Rehab Cost
+    // Loan Amount: =IF(C14=true,(((C6*C15)+C7)),(0))
     const loanAmount = (purchasePrice * (LOAN_PERCENTAGE / 100)) + rehabCost;
-    // Loan Payments = (Purchase + Rehab) × 80% × Interest × (Timeline / 12)
+    // Loan Payments: =IF(C14=true,(((C6+C7)*C15)*C16*C10/12),(0))
     const loanPayments = (purchasePrice + rehabCost) * (LOAN_PERCENTAGE / 100) * (LOAN_INTEREST / 100) * (timeline / 12);
+    // Origination Points: =IF(C14=TRUE,(G19*C17),(0))
     const originationPoints = loanAmount * (ORIGINATION_FEE / 100);
     const totalFinancingCost = loanPayments + originationPoints + UNDERWRITING_FEE + APPRAISAL_FEE;
 
     // HOLDING COST
+    // Taxes: =(C9/12)*C10
     const holdingTaxes = (taxes / 12) * timeline;
-    const totalHoldingCost = holdingTaxes + UTILITIES + INSURANCE;
+    // Utilities: =300*C10
+    const utilities = UTILITIES_PER_MONTH * timeline;
+    // Insurance: =(C10)*((C6*0.007)/12)
+    const insurance = timeline * ((purchasePrice * 0.007) / 12);
+    const totalHoldingCost = holdingTaxes + utilities + insurance;
 
     // EXIT COST
     const salePrice = arv;
-    const agentCommission = salePrice * 0.06; // 6% of ARV
+    // Agent Commission: =C8*0.05 (5% not 6%!)
+    const agentCommission = salePrice * 0.05;
+    // Exit Transfer Tax: =IF(C13=TRUE,(C8*(C11/2)),(C8*C11))
     const exitTransferTax = EXIT_SPLIT_TRANSFER 
       ? (salePrice * (TRANSFER_TAX_RATE / 2)) 
       : (salePrice * TRANSFER_TAX_RATE);
     const totalExitCost = agentCommission + TITLE_COST_EXIT + exitTransferTax + MISC_EXIT_CLOSING;
 
     // OUT OF POCKET
-    // Purchase OOP = Purchase Price - (Purchase Price × Loan %)
-    const purchaseLoanPortion = purchasePrice * (LOAN_PERCENTAGE / 100);
-    const purchaseOOP = purchasePrice - purchaseLoanPortion;
+    // Purchase OOP: =((C6+C7)-G19) - (Purchase + Rehab) - Loan Amount
+    const purchaseOOP = (purchasePrice + rehabCost) - loanAmount;
     const closingOOP = totalClosingCost;
     const financeOOP = originationPoints;
     const holdingOOP = totalHoldingCost;
@@ -182,7 +207,7 @@ export function ProjectionsSheet({
       totalAcquisitionCost,
       
       transferTax,
-      titleInsurance: TITLE_INSURANCE,
+      titleInsurance,
       recordingFees: RECORDING_FEES,
       miscClosing: MISC_CLOSING,
       totalClosingCost,
@@ -195,8 +220,8 @@ export function ProjectionsSheet({
       totalFinancingCost,
       
       holdingTaxes,
-      utilities: UTILITIES,
-      insurance: INSURANCE,
+      utilities,
+      insurance,
       totalHoldingCost,
       
       agentCommission,

@@ -49,6 +49,7 @@ const navigationItems = [
       { title: "Lead Distribution", url: "/settings?tab=lead-distribution", icon: Users, adminOnly: true },
       { title: "Google Sheets", url: "/settings?tab=google-sheets", icon: FileSpreadsheet, adminOnly: true },
       { title: "Lead Statuses", url: "/settings?tab=lead-statuses", icon: Tags, adminOnly: true },
+      { title: "Lead Sources", url: "/settings?tab=lead-sources", icon: Tags, adminOnly: true },
       { title: "Marketing Platforms", url: "/settings?tab=marketing-platforms", icon: Building2, adminOnly: true },
       { title: "Pipeline", url: "/settings?tab=pipeline", icon: TrendingUp, adminOnly: true },
     ]

@@ -555,30 +555,15 @@ const LeadEdit: React.FC = () => {
 
   const loadLeadSources = async () => {
     try {
-      // Settings-driven so options are editable in Settings
       const response = await makeApiCall(`${API_BASE}/settings/lead-sources`);
       if (response.ok) {
         const data = await response.json();
-        const raw = (data.data || []).filter((s: any) => s?.active !== false);
-        const order = ['Mailer', 'SMS', 'Call', 'Foreclosure', 'Other'];
-        const orderIndex = new Map(order.map((name, idx) => [name.toLowerCase(), idx]));
-        raw.sort((a: any, b: any) => {
-          const ai = orderIndex.get(String(a?.name || '').toLowerCase()) ?? 999;
-          const bi = orderIndex.get(String(b?.name || '').toLowerCase()) ?? 999;
-          return ai - bi;
-        });
-        setLeadSources(raw);
+        // Show all active sources from the database
+        const apiSources = (data.data || []).filter((s: any) => s?.active !== false);
+        setLeadSources(apiSources);
       }
     } catch (error) {
       console.error('Error loading lead sources:', error);
-      // Fallback to default sources
-      setLeadSources([
-        { id: 'mailer', name: 'Mailer' },
-        { id: 'sms', name: 'SMS' },
-        { id: 'call', name: 'Call' },
-        { id: 'foreclosure', name: 'Foreclosure' },
-        { id: 'other', name: 'Other' },
-      ]);
     }
   };
 
@@ -587,27 +572,12 @@ const LeadEdit: React.FC = () => {
       const response = await makeApiCall(`${API_BASE}/lead-statuses`);
       if (response.ok) {
         const data = await response.json();
-        const desired = ['Inactive', 'Pipeline', 'Long Term Follow Up', 'Closed', 'Dead', 'Wrong Number'];
-        const normalize = (s: unknown) => String(s || '').trim().toLowerCase();
-        const desiredSet = new Set(desired.map(normalize));
-        const all = data.data || [];
-        const filtered = all.filter((s: any) => desiredSet.has(normalize(s?.name)));
-        const sorted = desired
-          .map((name) => filtered.find((s: any) => normalize(s?.name) === normalize(name)))
-          .filter(Boolean);
-        setLeadStatuses(sorted.length ? sorted : all);
+        // Show all active statuses from the database
+        const apiStatuses = (data.data || []).filter((s: any) => s?.active !== false);
+        setLeadStatuses(apiStatuses);
       }
     } catch (error) {
       console.error('Error loading lead statuses:', error);
-      // Fallback to default statuses
-      setLeadStatuses([
-        { id: 'inactive', name: 'Inactive' },
-        { id: 'pipeline', name: 'Pipeline' },
-        { id: 'long-term-follow-up', name: 'Long Term Follow Up' },
-        { id: 'closed', name: 'Closed' },
-        { id: 'dead', name: 'Dead' },
-        { id: 'wrong-number', name: 'Wrong Number' }
-      ]);
     }
   };
 
@@ -2317,7 +2287,6 @@ const LeadEdit: React.FC = () => {
                   arv={underwritingArv}
                   taxes={underwritingTaxes}
                   timeline={underwritingTimeline}
-                  key={`projections-${rehabBudget}-${underwritingArv}-${underwritingTaxes}-${underwritingTimeline}`}
                 />
               </TabsContent>
 

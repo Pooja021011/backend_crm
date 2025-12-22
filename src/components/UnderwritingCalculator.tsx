@@ -80,8 +80,8 @@ export function UnderwritingCalculator({
       return;
     }
 
-    // FORMULA: (ARV × 72%) - Rehab Cost - $25,000
-    const calculatedOffer = (arv * 0.72) - rehabCost - 25000;
+    // FORMULA: (ARV × 72%) - Rehab Cost (matches Google Sheet 'Final Offer' tab)
+    const calculatedOffer = (arv * 0.72) - rehabCost;
     const finalOfferValue = Math.max(0, Math.round(calculatedOffer));
     setFinalOffer(finalOfferValue);
     

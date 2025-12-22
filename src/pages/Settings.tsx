@@ -69,6 +69,7 @@ import { PipelineSettings } from "@/components/PipelineSettings";
 import { LeadDistributionSettings } from "@/components/LeadDistributionSettings";
 import { GoogleSheetsConfig } from "@/components/GoogleSheetsConfig";
 import { LeadStatusSettings } from "@/components/LeadStatusSettings";
+import { LeadSourceSettings } from "@/components/LeadSourceSettings";
 import { safeDateFormat } from "@/utils/validation";
 
 type EmailSettings = {
@@ -1742,6 +1743,32 @@ const Settings = () => {
                 </Card>
               ) : (
                 <LeadStatusSettings />
+              )}
+            </div>
+          )}
+
+          {/* Lead Source Settings Tab - Only show when activeTab is 'lead-sources' */}
+          {activeTab === 'lead-sources' && (
+            <div className="space-y-8">
+              {!isAdminOrManager ? (
+                <Card>
+                  <CardContent className="flex items-center justify-center py-12">
+                    <div className="text-center max-w-md">
+                      <div className="mb-4">
+                        <Shield className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                      </div>
+                      <h3 className="text-xl font-semibold mb-2">Access Denied</h3>
+                      <p className="text-muted-foreground mb-4">
+                        You don't have the required permissions to access this page.
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Please contact your administrator if you believe this is an error.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <LeadSourceSettings />
               )}
             </div>
           )}
