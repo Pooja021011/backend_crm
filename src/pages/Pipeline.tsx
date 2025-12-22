@@ -323,8 +323,11 @@ const Pipeline = () => {
           dispStages = dispData.data || [];
         }
         
-        // Combine stages, maintaining order
-        allStages = [...acqStages, ...dispStages].sort((a, b) => a.orderIndex - b.orderIndex);
+        // Combine stages with explicit grouping:
+        // show ALL Acquisitions stages first (sorted), then append ALL Dispositions stages (sorted)
+        const acqSorted = [...acqStages].sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
+        const dispSorted = [...dispStages].sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
+        allStages = [...acqSorted, ...dispSorted];
         console.log('📊 Combined stages:', allStages.length, 'stages');
       } else if (isAcqOnly) {
         // ACQ users: Only Acquisitions pipeline
@@ -444,13 +447,10 @@ const Pipeline = () => {
             id: lead.id,
             address: addressDisplay,
             sellerName: ownerName,
-            // enhanced-leads returns buyerName as a string; fall back to nested buyer object
-            buyerName: lead.buyerName || (lead.buyer ? `${lead.buyer.firstName} ${lead.buyer.lastName}` : undefined),
-
-            // enhanced-leads uses dateCreated/statusChangedDate; regular lead shape uses createdAt/stageEnteredAt/updatedAt
-            dateCreated: lead.dateCreated || lead.createdAt,
-            statusChangedDate: lead.statusChangedDate || lead.stageEnteredAt || lead.updatedAt,
-            lastContactDate: lead.lastContactDate || lead.lastContactAt || lead.updatedAt,
+            buyerName: lead.buyer ? `${lead.buyer.firstName} ${lead.buyer.lastName}` : undefined,
+            dateCreated: lead.createdAt,
+            statusChangedDate: lead.stageEnteredAt || lead.updatedAt,
+            lastContactDate: lead.lastContactAt || lead.updatedAt,
             priceReduction: lead.priceReduction || false,
             clearToClose: lead.clearToClose || false,
             originalPrice: lead.deal?.contractPrice || 0,
@@ -458,8 +458,7 @@ const Pipeline = () => {
             // Use the stage field from backend API, fallback to pipelineStage.id
             stage: lead.stage || lead.pipelineStage?.id || 'unknown-stage',
             stageName: lead.stageName || lead.pipelineStage?.name || 'Unknown Stage',
-            // enhanced-leads returns assignedAgent as a string; fall back to nested assignedUser object
-            assignedAgent: lead.assignedAgent || (lead.assignedUser ? `${lead.assignedUser.firstName} ${lead.assignedUser.lastName}` : undefined),
+            assignedAgent: lead.assignedUser ? `${lead.assignedUser.firstName} ${lead.assignedUser.lastName}` : undefined,
             leadType: lead.leadType,
             status: lead.needsAttention ? 'urgent' : 'active',
             customFields: lead.customFields // Keep customFields for validation popups

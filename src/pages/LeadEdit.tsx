@@ -47,7 +47,6 @@ import { useTwilioDevice } from '@/hooks/useTwilioDevice';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { CompsManager } from '@/components/CompsManager';
 import { LeadTimeline } from '@/components/LeadTimeline';
-import { LeadOwnerSection } from '@/components/LeadOwnerSection';
 import { 
   AppointmentCompletePopup,
   DueDiligencePopup,
@@ -68,39 +67,51 @@ interface Contact {
   email: string;
 }
 
+interface LeadParty {
+  firstName: string;
+  lastName: string;
+  phone?: string;
+  email?: string;
+  [key: string]: any;
+}
+
+interface LeadOwner {
+  id: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email: string;
+  isPrimary: boolean;
+  order: number;
+}
+
 interface LeadData {
   id: string;
-  address: {
-    address1: string;
-    city: string;
-    state: string;
-    zipCode: string;
-  };
-  seller: {
-    firstName: string;
-    lastName: string;
-    phone?: string;
-    email?: string;
-  };
-  leadSource?: string;
-  leadStatus?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  stageEnteredAt?: string;
+  lastContactAt?: string;
+  leadType?: 'SELLER' | 'BUYER' | 'VENDOR' | string;
   pipelineStageId?: string;
   assignedUserId?: string;
   dispositionAgentId?: string;
+  leadSource?: any;
+  leadStatus?: any;
+  customFields?: Record<string, any>;
+  address?: {
+    address1?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+    // Some places in the UI still reference `zip`
+    zip?: string;
+    [key: string]: any;
+  };
+  seller?: LeadParty;
+  buyer?: LeadParty;
+  vendor?: LeadParty;
   contacts: Contact[];
-  propertyType?: string;
-  sqft?: number;
-  lotSize?: string;
-  bedrooms?: number;
-  bathrooms?: number;
-  yearBuilt?: number;
-  roofType?: string;
-  roofAge?: number;
-  hvacType?: string;
-  hvacAge?: number;
-  waterHeaterAge?: number;
-  waterType?: string;
-  sewerType?: string;
+  [key: string]: any;
 }
 
 const LeadEdit: React.FC = () => {
@@ -118,6 +129,14 @@ const LeadEdit: React.FC = () => {
   const [pipelineStages, setPipelineStages] = useState<any[]>([]);
   const [leadSources, setLeadSources] = useState<any[]>([]);
   const [leadStatuses, setLeadStatuses] = useState<any[]>([]);
+  const [leadOwners, setLeadOwners] = useState<LeadOwner[]>([]);
+  const [showAddOwnerInline, setShowAddOwnerInline] = useState(false);
+  const [newOwnerInline, setNewOwnerInline] = useState({
+    firstName: '',
+    lastName: '',
+    phone: '',
+    email: '',
+  });
   
   // Permission state
   const [canEditLead, setCanEditLead] = useState(false);
@@ -157,7 +176,7 @@ const LeadEdit: React.FC = () => {
   const [sqft, setSqft] = useState('');
   const [lotSize, setLotSize] = useState('');
   const [bedrooms, setBedrooms] = useState('');
-  const [bathrooms, setBathrooms] = useState('');
+  const [bathrooms, setBathrooms] = useState('0');
   const [yearBuilt, setYearBuilt] = useState('');
   
   // Additional property info
@@ -338,6 +357,7 @@ const LeadEdit: React.FC = () => {
     loadPipelineStages();
     loadLeadSources();
     loadLeadStatuses();
+    loadOwners();
     loadNotes();
     loadComparables();
     loadUnderwritingScenarios();
@@ -395,7 +415,8 @@ const LeadEdit: React.FC = () => {
         setSqft(customFields.sqft?.toString() || '');
         setLotSize(customFields.lotSize || '');
         setBedrooms(customFields.bedrooms?.toString() || '');
-        setBathrooms(customFields.bathrooms?.toString() || '');
+        // If baths is unknown/not set, keep it as 0 (rehab can also be 0 and remains synced)
+        setBathrooms(customFields.bathrooms?.toString() || '0');
         setYearBuilt(customFields.yearBuilt?.toString() || '');
         
         // Set additional property info from customFields
@@ -483,22 +504,80 @@ const LeadEdit: React.FC = () => {
     }
   };
 
-  const loadLeadSources = async () => {
+  const loadOwners = async () => {
+    if (!id) return;
     try {
-      const response = await makeApiCall(`${API_BASE}/leads/sources`);
+      const response = await makeApiCall(`${API_BASE}/leads/${id}/owners`);
       if (response.ok) {
         const data = await response.json();
-        setLeadSources(data.data || []);
+        setLeadOwners(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error loading lead owners:', error);
+    }
+  };
+
+  const handleInlineAddOwner = async () => {
+    if (!id) return;
+    if (!newOwnerInline.firstName || !newOwnerInline.lastName || !newOwnerInline.phone || !newOwnerInline.email) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please fill in all owner fields',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      const response = await makeApiCall(`${API_BASE}/leads/${id}/owners`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newOwnerInline),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to add owner');
+      }
+
+      toast({ title: 'Success', description: 'Owner added successfully' });
+      setNewOwnerInline({ firstName: '', lastName: '', phone: '', email: '' });
+      setShowAddOwnerInline(false);
+      await loadOwners();
+    } catch (error) {
+      console.error('Error adding owner:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to add owner',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const loadLeadSources = async () => {
+    try {
+      // Settings-driven so options are editable in Settings
+      const response = await makeApiCall(`${API_BASE}/settings/lead-sources`);
+      if (response.ok) {
+        const data = await response.json();
+        const raw = (data.data || []).filter((s: any) => s?.active !== false);
+        const order = ['Mailer', 'SMS', 'Call', 'Foreclosure', 'Other'];
+        const orderIndex = new Map(order.map((name, idx) => [name.toLowerCase(), idx]));
+        raw.sort((a: any, b: any) => {
+          const ai = orderIndex.get(String(a?.name || '').toLowerCase()) ?? 999;
+          const bi = orderIndex.get(String(b?.name || '').toLowerCase()) ?? 999;
+          return ai - bi;
+        });
+        setLeadSources(raw);
       }
     } catch (error) {
       console.error('Error loading lead sources:', error);
       // Fallback to default sources
       setLeadSources([
-        { id: 'cold-call', name: 'Cold Call' },
-        { id: 'sms', name: 'SMS' },
         { id: 'mailer', name: 'Mailer' },
-        { id: 'online', name: 'Online' },
-        { id: 'other', name: 'Other' }
+        { id: 'sms', name: 'SMS' },
+        { id: 'call', name: 'Call' },
+        { id: 'foreclosure', name: 'Foreclosure' },
+        { id: 'other', name: 'Other' },
       ]);
     }
   };
@@ -508,14 +587,23 @@ const LeadEdit: React.FC = () => {
       const response = await makeApiCall(`${API_BASE}/lead-statuses`);
       if (response.ok) {
         const data = await response.json();
-        setLeadStatuses(data.data || []);
+        const desired = ['Inactive', 'Pipeline', 'Long Term Follow Up', 'Closed', 'Dead', 'Wrong Number'];
+        const normalize = (s: unknown) => String(s || '').trim().toLowerCase();
+        const desiredSet = new Set(desired.map(normalize));
+        const all = data.data || [];
+        const filtered = all.filter((s: any) => desiredSet.has(normalize(s?.name)));
+        const sorted = desired
+          .map((name) => filtered.find((s: any) => normalize(s?.name) === normalize(name)))
+          .filter(Boolean);
+        setLeadStatuses(sorted.length ? sorted : all);
       }
     } catch (error) {
       console.error('Error loading lead statuses:', error);
       // Fallback to default statuses
       setLeadStatuses([
+        { id: 'inactive', name: 'Inactive' },
         { id: 'pipeline', name: 'Pipeline' },
-        { id: 'follow-up', name: 'Follow Up' },
+        { id: 'long-term-follow-up', name: 'Long Term Follow Up' },
         { id: 'closed', name: 'Closed' },
         { id: 'dead', name: 'Dead' },
         { id: 'wrong-number', name: 'Wrong Number' }
@@ -1678,6 +1766,22 @@ const LeadEdit: React.FC = () => {
     );
   }
 
+  const primaryOwner = leadOwners.find((o) => o.isPrimary) || leadOwners[0];
+  const fallbackOwnerName =
+    lead.seller?.firstName && lead.seller?.lastName
+      ? `${lead.seller.firstName} ${lead.seller.lastName}`
+      : lead.buyer?.firstName && lead.buyer?.lastName
+        ? `${lead.buyer.firstName} ${lead.buyer.lastName}`
+        : lead.vendor?.firstName && lead.vendor?.lastName
+          ? `${lead.vendor.firstName} ${lead.vendor.lastName}`
+          : 'No Owner';
+
+  const ownerName = primaryOwner ? `${primaryOwner.firstName} ${primaryOwner.lastName}` : fallbackOwnerName;
+  const ownerEmail = primaryOwner?.email || lead.seller?.email || lead.buyer?.email || lead.vendor?.email || '';
+  const ownerPhone = primaryOwner?.phone || lead.seller?.phone || lead.buyer?.phone || lead.vendor?.phone || '';
+  const ownerContactLine = [ownerEmail, ownerPhone].filter(Boolean).join(' • ');
+  const additionalOwners = leadOwners.filter((o) => !primaryOwner || o.id !== primaryOwner.id);
+
   return (
     <DashboardLayout>
       <div className="space-y-2">
@@ -1724,88 +1828,312 @@ const LeadEdit: React.FC = () => {
           </div>
         )}
 
-        {/* Top Section - Address, Owner, and Lead Info Combined */}
+        {/* Section 1 - Address + Owner */}
         <div className="border border-slate-200 rounded-lg bg-white p-3">
-          <div className="grid grid-cols-12 gap-4 items-center">
+          <div className="grid grid-cols-12 gap-4 items-start">
             {/* Address */}
-            <div className="col-span-3">
+            <div className="col-span-12 md:col-span-6">
               <div className="flex items-center gap-1 mb-0.5">
                 <Home className="w-3 h-3 text-slate-500" />
                 <span className="text-[10px] text-slate-500 uppercase">Address</span>
               </div>
               <p className="text-sm font-semibold text-slate-900 truncate">{lead.address?.address1 || 'No Address'}</p>
-              <p className="text-[10px] text-slate-500">{lead.address?.city && lead.address?.state ? `${lead.address.city}, ${lead.address.state} ${lead.address.zipCode || ''}` : ''}</p>
+              <p className="text-[10px] text-slate-500 truncate">
+                {lead.address?.city && lead.address?.state ? `${lead.address.city}, ${lead.address.state} ${lead.address.zipCode || ''}` : ''}
+              </p>
             </div>
-            {/* Owner with Email & Phone */}
-            <div className="col-span-2">
+
+            {/* Owner */}
+            <div className="col-span-12 md:col-span-6">
               <div className="flex items-center gap-1 mb-0.5">
                 <User className="w-3 h-3 text-slate-500" />
                 <span className="text-[10px] text-slate-500 uppercase">Owner</span>
               </div>
-              <p className="text-sm font-semibold text-slate-900 truncate">
-                {lead.seller?.firstName && lead.seller?.lastName ? `${lead.seller.firstName} ${lead.seller.lastName}` : lead.buyer?.firstName && lead.buyer?.lastName ? `${lead.buyer.firstName} ${lead.buyer.lastName}` : lead.vendor?.firstName && lead.vendor?.lastName ? `${lead.vendor.firstName} ${lead.vendor.lastName}` : 'No Owner'}
-              </p>
-              <div className="text-[10px] text-slate-600 space-y-0.5 mt-1">
-                {(lead.seller?.email || lead.buyer?.email || lead.vendor?.email) && (
-                  <div className="flex items-center gap-1">
-                    <Mail className="w-2.5 h-2.5 text-slate-400" />
-                    <span className="truncate">{lead.seller?.email || lead.buyer?.email || lead.vendor?.email}</span>
-                  </div>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold text-slate-900 truncate flex-1">{ownerName}</p>
+                {canEditLead && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0"
+                    onClick={() => setShowAddOwnerInline(true)}
+                    title="Add owner"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </Button>
                 )}
-                {(lead.seller?.phone || lead.buyer?.phone || lead.vendor?.phone) && (
-                  <div className="flex items-center gap-1">
-                    <Phone className="w-2.5 h-2.5 text-slate-400" />
-                    <span>{lead.seller?.phone || lead.buyer?.phone || lead.vendor?.phone}</span>
-                  </div>
+              </div>
+              <p className="text-[10px] text-slate-500 truncate">{ownerContactLine}</p>
+
+              {/* Multiple owners list (always visible) */}
+              <div className="mt-2 space-y-1">
+                {leadOwners.length === 0 ? (
+                  <p className="text-[10px] text-slate-500">No additional owners yet</p>
+                ) : (
+                  leadOwners.map((o) => {
+                    const line = [o.email, o.phone].filter(Boolean).join(' • ');
+                    return (
+                      <div key={o.id} className="text-[10px] text-slate-700">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{o.firstName} {o.lastName}</span>
+                          {o.isPrimary && <Badge className="h-4 text-[9px] px-1 py-0 bg-slate-100 text-slate-700">Primary</Badge>}
+                        </div>
+                        {line && <div className="text-[10px] text-slate-500 truncate">{line}</div>}
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>
-            {/* Lead Source */}
-            <div className="col-span-1">
-              <Label className="text-[10px] text-slate-500">Source</Label>
-              <Select value={leadSource} onValueChange={setLeadSource} disabled={!canEditLead}>
-                <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Source" /></SelectTrigger>
+
+            {/* Inline Add Owner (full-width, auto-opened by + button) */}
+            {showAddOwnerInline && (
+              <div className="col-span-12">
+                <div className="flex items-center gap-2 p-1.5 bg-slate-50 rounded border border-slate-100">
+                  <Input
+                    className="h-6 text-xs w-32"
+                    value={newOwnerInline.firstName}
+                    onChange={(e) => setNewOwnerInline({ ...newOwnerInline, firstName: e.target.value })}
+                    placeholder="First Name"
+                  />
+                  <Input
+                    className="h-6 text-xs w-32"
+                    value={newOwnerInline.lastName}
+                    onChange={(e) => setNewOwnerInline({ ...newOwnerInline, lastName: e.target.value })}
+                    placeholder="Last Name"
+                  />
+                  <div className="flex-1">
+                    <PhoneInput
+                      label=""
+                      value={newOwnerInline.phone}
+                      onChange={(value) => setNewOwnerInline({ ...newOwnerInline, phone: value })}
+                      placeholder="Phone"
+                      required={false}
+                      disabled={!canEditLead}
+                    />
+                  </div>
+                  <Input
+                    className="h-6 text-xs flex-1"
+                    type="email"
+                    value={newOwnerInline.email}
+                    onChange={(e) => setNewOwnerInline({ ...newOwnerInline, email: e.target.value })}
+                    placeholder="Email"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-6 text-xs px-3"
+                    onClick={handleInlineAddOwner}
+                  >
+                    Add
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setShowAddOwnerInline(false);
+                      setNewOwnerInline({ firstName: '', lastName: '', phone: '', email: '' });
+                    }}
+                    className="h-6 w-6 p-0 hover:bg-red-100 flex-shrink-0"
+                  >
+                    <X className="w-3.5 h-3.5 text-red-500" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Section 2 - Property Information (full width) */}
+        <div className="border border-slate-200 rounded-lg bg-white p-3">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Home className="w-3.5 h-3.5 text-slate-500" />
+            <span className="text-xs font-medium text-slate-600">Property Information</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            <div>
+              <Label className="text-[10px] text-slate-500">Type</Label>
+              <Select value={propertyType} onValueChange={setPropertyType} disabled={!canEditLead}>
+                <SelectTrigger className="h-6 text-xs"><SelectValue placeholder="Type" /></SelectTrigger>
                 <SelectContent>
-                  {leadSources.length > 0 ? leadSources.map((source) => (<SelectItem key={source.id} value={source.name}>{source.name}</SelectItem>)) : (<><SelectItem value="Cold Call">Cold Call</SelectItem><SelectItem value="SMS">SMS</SelectItem><SelectItem value="Mailer">Mailer</SelectItem><SelectItem value="Online">Online</SelectItem><SelectItem value="Other">Other</SelectItem></>)}
+                  <SelectItem value="Single Family">Single Family</SelectItem>
+                  <SelectItem value="Multi Family">Multi Family</SelectItem>
+                  <SelectItem value="Land">Land</SelectItem>
+                  <SelectItem value="Commercial">Commercial</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            {/* Lead Status */}
-            <div className="col-span-2">
-              <Label className="text-[10px] text-slate-500">Status</Label>
-              <Select value={leadStatus} onValueChange={setLeadStatus} disabled={!canEditLead}>
-                <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
-                <SelectContent>
-                  {leadStatuses.length > 0 ? leadStatuses.map((status) => (<SelectItem key={status.id} value={status.id}>{status.name}</SelectItem>)) : (<><SelectItem value="Pipeline">Pipeline</SelectItem><SelectItem value="Follow Up">Follow Up</SelectItem><SelectItem value="Closed">Closed</SelectItem><SelectItem value="Dead">Dead</SelectItem></>)}
-                </SelectContent>
-              </Select>
+            <div>
+              <Label className="text-[10px] text-slate-500">SqFt</Label>
+              <Input type="number" value={sqft} onChange={(e) => setSqft(e.target.value)} placeholder="SqFt" className="h-6 text-xs" disabled={!canEditLead} />
             </div>
-            {/* Pipeline Status */}
-            <div className="col-span-2">
-              <Label className="text-[10px] text-slate-500">Pipeline</Label>
-              <Select value={pipelineStatus} onValueChange={handlePipelineStatusChange} disabled={!canEditLead}>
-                <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Stage" /></SelectTrigger>
-                <SelectContent>{pipelineStages.map((stage) => (<SelectItem key={stage.id} value={stage.id}>{stage.name}</SelectItem>))}</SelectContent>
-              </Select>
+            <div>
+              <Label className="text-[10px] text-slate-500">Lot</Label>
+              <Input value={lotSize} onChange={(e) => setLotSize(e.target.value)} placeholder="Acres" className="h-6 text-xs" disabled={!canEditLead} />
             </div>
-            {/* Agents */}
-            <div className="col-span-2">
-              <Label className="text-[10px] text-slate-500">ACQ / DISP Agent</Label>
-              <div className="flex gap-1">
-                <Select value={acquisitionsAgent || 'unassigned'} onValueChange={(value) => setAcquisitionsAgent(value === 'unassigned' ? '' : value)} disabled={!canEditLead}>
-                  <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="ACQ" /></SelectTrigger>
+            <div>
+              <Label className="text-[10px] text-slate-500">Beds</Label>
+              <Input type="number" value={bedrooms} onChange={(e) => setBedrooms(e.target.value)} placeholder="Beds" className="h-6 text-xs" disabled={!canEditLead} />
+            </div>
+            <div>
+              <Label className="text-[10px] text-slate-500">Baths</Label>
+              <Input type="number" step="0.5" value={bathrooms} onChange={(e) => setBathrooms(e.target.value)} placeholder="Baths" className="h-6 text-xs" disabled={!canEditLead} />
+            </div>
+            <div>
+              <Label className="text-[10px] text-slate-500">Year</Label>
+              <Input type="number" value={yearBuilt} onChange={(e) => setYearBuilt(e.target.value)} placeholder="Year" className="h-6 text-xs" disabled={!canEditLead} />
+            </div>
+          </div>
+        </div>
+
+        {/* Section 3 - Lead dropdowns (left) + Timeline (right) */}
+        <div className="grid grid-cols-12 gap-3">
+          <div className="col-span-12 lg:col-span-6 border border-slate-200 rounded-lg bg-white p-2">
+            <div className="flex items-center gap-1.5 mb-2">
+              <FileText className="w-3.5 h-3.5 text-slate-500" />
+              <span className="text-xs font-medium text-slate-600">Lead Details</span>
+            </div>
+
+            <div className="space-y-2">
+              <div>
+                <Label className="text-[10px] text-slate-500">Source</Label>
+                <Select value={leadSource} onValueChange={setLeadSource} disabled={!canEditLead}>
+                  <SelectTrigger className="h-6 text-xs"><SelectValue placeholder="Source" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="unassigned">None</SelectItem>
-                    {agents.filter(a => { const roles = Array.isArray(a.roles) ? a.roles : []; return roles.includes('ACQ') || roles.some((r: any) => r.role?.name === 'ACQ' || r.name === 'ACQ'); }).map((agent) => (<SelectItem key={agent.id} value={agent.id}>{agent.firstName}</SelectItem>))}
+                    {leadSources.map((source) => (
+                      <SelectItem key={source.id} value={source.name}>
+                        {source.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
-                <Select value={dispositionsAgent || 'unassigned'} onValueChange={(value) => setDispositionsAgent(value === 'unassigned' ? '' : value)} disabled={!canEditLead}>
-                  <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="DISP" /></SelectTrigger>
+              </div>
+
+              <div>
+                <Label className="text-[10px] text-slate-500">Lead Status</Label>
+                <Select value={leadStatus} onValueChange={setLeadStatus} disabled={!canEditLead}>
+                  <SelectTrigger className="h-6 text-xs"><SelectValue placeholder="Lead Status" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="unassigned">None</SelectItem>
-                    {agents.filter(a => { const roles = Array.isArray(a.roles) ? a.roles : []; return roles.includes('DISP') || roles.some((r: any) => r.role?.name === 'DISP' || r.name === 'DISP'); }).map((agent) => (<SelectItem key={agent.id} value={agent.id}>{agent.firstName}</SelectItem>))}
+                    {leadStatuses.map((status) => (
+                      <SelectItem key={status.id} value={status.id}>
+                        {status.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div>
+                <Label className="text-[10px] text-slate-500">Pipeline Status</Label>
+                <Select value={pipelineStatus} onValueChange={handlePipelineStatusChange} disabled={!canEditLead}>
+                  <SelectTrigger className="h-6 text-xs"><SelectValue placeholder="Pipeline Status" /></SelectTrigger>
+                  <SelectContent>
+                    {pipelineStages.map((stage) => (
+                      <SelectItem key={stage.id} value={stage.id}>
+                        {stage.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label className="text-[10px] text-slate-500">ACQ Agent</Label>
+                <Select
+                  value={acquisitionsAgent || 'unassigned'}
+                  onValueChange={(value) => setAcquisitionsAgent(value === 'unassigned' ? '' : value)}
+                  disabled={!canEditLead}
+                >
+                  <SelectTrigger className="h-6 text-xs"><SelectValue placeholder="ACQ Agent" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unassigned">None</SelectItem>
+                    {agents
+                      .filter((a) => a?.status === 'active')
+                      .filter((a) => {
+                        const roles = Array.isArray(a.roles) ? a.roles : [];
+                        return roles.includes('ACQ') || roles.some((r: any) => r.role?.name === 'ACQ' || r.name === 'ACQ');
+                      })
+                      .map((agent) => (
+                        <SelectItem key={agent.id} value={agent.id}>
+                          {agent.firstName} {agent.lastName}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label className="text-[10px] text-slate-500">DISP Agent</Label>
+                <Select
+                  value={dispositionsAgent || 'unassigned'}
+                  onValueChange={(value) => setDispositionsAgent(value === 'unassigned' ? '' : value)}
+                  disabled={!canEditLead}
+                >
+                  <SelectTrigger className="h-6 text-xs"><SelectValue placeholder="DISP Agent" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unassigned">None</SelectItem>
+                    {agents
+                      .filter((a) => a?.status === 'active')
+                      .filter((a) => {
+                        const roles = Array.isArray(a.roles) ? a.roles : [];
+                        return roles.includes('DISP') || roles.some((r: any) => r.role?.name === 'DISP' || r.name === 'DISP');
+                      })
+                      .map((agent) => (
+                        <SelectItem key={agent.id} value={agent.id}>
+                          {agent.firstName} {agent.lastName}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          <div className="col-span-12 lg:col-span-6 space-y-3">
+            <LeadTimeline
+              leadId={id!}
+              leadCreatedAt={lead.createdAt}
+              deal={deal}
+              customFields={{
+                ...lead.customFields,
+                estimatedValue: estimatedValue ? parseInt(estimatedValue) : lead.customFields?.estimatedValue,
+                askingPrice: askingPrice ? parseInt(askingPrice) : lead.customFields?.askingPrice,
+                appointmentDate: appointmentDate || lead.customFields?.appointmentDate,
+                rehabBudget: rehabBudget ? parseInt(rehabBudget) : lead.customFields?.rehabBudget,
+              }}
+              onRefresh={() => {
+                loadLead();
+                loadDeal();
+              }}
+            />
+
+            {/* Valuation & Schedule - Moved here to fill white space */}
+            <div className="border border-slate-200 rounded-lg bg-white p-3">
+              <div className="flex items-center gap-1.5 mb-2">
+                <DollarSign className="w-3.5 h-3.5 text-slate-500" />
+                <span className="text-xs font-medium text-slate-600">Valuation & Schedule</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <Label className="text-[10px] text-slate-500">Est. Value (ARV)</Label>
+                  <div className="relative">
+                    <DollarSign className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-slate-400" />
+                    <Input type="number" value={estimatedValue} onChange={(e) => setEstimatedValue(e.target.value)} placeholder="ARV" className="h-6 text-xs pl-6" disabled={!canEditLead} />
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-[10px] text-slate-500">Asking Price</Label>
+                  <div className="relative">
+                    <DollarSign className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-slate-400" />
+                    <Input type="number" value={askingPrice} onChange={(e) => setAskingPrice(e.target.value)} placeholder="Price" className="h-6 text-xs pl-6" disabled={!canEditLead} />
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-[10px] text-slate-500">Appointment</Label>
+                  <Input type="date" value={appointmentDate} onChange={(e) => setAppointmentDate(e.target.value)} className="h-6 text-xs" disabled={!canEditLead} />
+                </div>
               </div>
             </div>
           </div>
@@ -1827,7 +2155,7 @@ const LeadEdit: React.FC = () => {
                   value={contact.name} 
                   onChange={(e) => updateContact(index, 'name', e.target.value)} 
                   placeholder="Name" 
-                  className="h-8 text-xs w-32" 
+                  className="h-6 text-xs w-32" 
                 />
                 <div className="flex-1">
                   <PhoneInput
@@ -1843,13 +2171,13 @@ const LeadEdit: React.FC = () => {
                   onChange={(e) => updateContact(index, 'email', e.target.value)} 
                   placeholder="Email" 
                   type="email" 
-                  className="h-9 text-xs flex-1" 
+                  className="h-6 text-xs flex-1" 
                 />
                 <Button 
                   variant="ghost" 
                   size="sm" 
                   onClick={() => removeContact(index)} 
-                  className="h-8 w-8 p-0 hover:bg-red-100 flex-shrink-0"
+                  className="h-6 w-6 p-0 hover:bg-red-100 flex-shrink-0"
                 >
                   <X className="w-3.5 h-3.5 text-red-500" />
                 </Button>
@@ -1858,56 +2186,10 @@ const LeadEdit: React.FC = () => {
           </div>
         </div>
 
-        {/* Lead Timeline Section */}
-        <LeadTimeline
-          leadId={id!}
-          leadCreatedAt={lead.createdAt}
-          deal={deal}
-          customFields={{
-            ...lead.customFields,
-            estimatedValue: estimatedValue ? parseInt(estimatedValue) : lead.customFields?.estimatedValue,
-            askingPrice: askingPrice ? parseInt(askingPrice) : lead.customFields?.askingPrice,
-            appointmentDate: appointmentDate || lead.customFields?.appointmentDate,
-            rehabBudget: rehabBudget ? parseInt(rehabBudget) : lead.customFields?.rehabBudget,
-          }}
-          onRefresh={() => {
-            loadLead();
-            loadDeal();
-          }}
-        />
-
-        {/* Valuation & Property Info - Combined Compact Section */}
-        <div className="grid grid-cols-2 gap-3">
-          {/* Valuation Section */}
-          <div className="border border-slate-200 rounded-lg bg-white p-3">
-            <div className="flex items-center gap-1.5 mb-2">
-              <DollarSign className="w-3.5 h-3.5 text-slate-500" />
-              <span className="text-xs font-medium text-slate-600">Valuation & Schedule</span>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <div>
-                <Label className="text-[10px] text-slate-500">Est. Value (ARV)</Label>
-                <div className="relative">
-                  <DollarSign className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-slate-400" />
-                  <Input type="number" value={estimatedValue} onChange={(e) => setEstimatedValue(e.target.value)} placeholder="ARV" className="h-7 text-xs pl-6" />
-                </div>
-              </div>
-              <div>
-                <Label className="text-[10px] text-slate-500">Asking Price</Label>
-                <div className="relative">
-                  <DollarSign className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-slate-400" />
-                  <Input type="number" value={askingPrice} onChange={(e) => setAskingPrice(e.target.value)} placeholder="Price" className="h-7 text-xs pl-6" />
-                </div>
-              </div>
-              <div>
-                <Label className="text-[10px] text-slate-500">Appointment</Label>
-                <Input type="date" value={appointmentDate} onChange={(e) => setAppointmentDate(e.target.value)} className="h-7 text-xs" />
-              </div>
-            </div>
-          </div>
-
-          {/* Offer Information - Show if offer data exists */}
-          {(lead?.customFields?.offerMadePrice || lead?.customFields?.maxAllowableOffer || lead?.customFields?.offerMadeResponse) && (
+        {/* Offer Information - Show if offer data exists */}
+        {(lead?.customFields?.offerMadePrice || lead?.customFields?.maxAllowableOffer || lead?.customFields?.offerMadeResponse) && (
+          <div className="grid grid-cols-1 gap-3">
+            {/* Offer Information */}
             <div className="border border-slate-200 rounded-lg bg-white p-3">
               <div className="flex items-center gap-1.5 mb-2">
                 <DollarSign className="w-3.5 h-3.5 text-green-600" />
@@ -1933,7 +2215,7 @@ const LeadEdit: React.FC = () => {
                       type="number" 
                       value={lead?.customFields?.offerMadePrice || ''} 
                       readOnly
-                      className="h-7 text-xs pl-6 bg-slate-50" 
+                      className="h-6 text-xs pl-6 bg-slate-50" 
                     />
                   </div>
                 </div>
@@ -1945,7 +2227,7 @@ const LeadEdit: React.FC = () => {
                       type="number" 
                       value={lead?.customFields?.maxAllowableOffer || ''} 
                       readOnly
-                      className="h-7 text-xs pl-6 bg-slate-50" 
+                      className="h-6 text-xs pl-6 bg-slate-50" 
                     />
                   </div>
                 </div>
@@ -1954,55 +2236,13 @@ const LeadEdit: React.FC = () => {
                   <Input 
                     value={lead?.customFields?.offerMadeResponse || 'N/A'} 
                     readOnly
-                    className="h-7 text-xs bg-slate-50 font-medium" 
+                    className="h-6 text-xs bg-slate-50 font-medium" 
                   />
                 </div>
               </div>
             </div>
-          )}
-
-          {/* Property Information */}
-          <div className="border border-slate-200 rounded-lg bg-white p-3">
-            <div className="flex items-center gap-1.5 mb-2">
-              <Home className="w-3.5 h-3.5 text-slate-500" />
-              <span className="text-xs font-medium text-slate-600">Property Information</span>
-            </div>
-            <div className="grid grid-cols-6 gap-2">
-              <div>
-                <Label className="text-[10px] text-slate-500">Type</Label>
-                <Select value={propertyType} onValueChange={setPropertyType}>
-                  <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Type" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Single Family">Single Family</SelectItem>
-                    <SelectItem value="Multi Family">Multi Family</SelectItem>
-                    <SelectItem value="Land">Land</SelectItem>
-                    <SelectItem value="Commercial">Commercial</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-[10px] text-slate-500">SqFt</Label>
-                <Input type="number" value={sqft} onChange={(e) => setSqft(e.target.value)} placeholder="SqFt" className="h-7 text-xs" />
-              </div>
-              <div>
-                <Label className="text-[10px] text-slate-500">Lot</Label>
-                <Input value={lotSize} onChange={(e) => setLotSize(e.target.value)} placeholder="Acres" className="h-7 text-xs" />
-              </div>
-              <div>
-                <Label className="text-[10px] text-slate-500">Beds</Label>
-                <Input type="number" value={bedrooms} onChange={(e) => setBedrooms(e.target.value)} placeholder="Beds" className="h-7 text-xs" />
-              </div>
-              <div>
-                <Label className="text-[10px] text-slate-500">Baths</Label>
-                <Input type="number" step="0.5" value={bathrooms} onChange={(e) => setBathrooms(e.target.value)} placeholder="Baths" className="h-7 text-xs" />
-              </div>
-              <div>
-                <Label className="text-[10px] text-slate-500">Year</Label>
-                <Input type="number" value={yearBuilt} onChange={(e) => setYearBuilt(e.target.value)} placeholder="Year" className="h-7 text-xs" />
-              </div>
-            </div>
           </div>
-        </div>
+        )}
 
         {/* Tabs Section */}
         <div className="grid grid-cols-12 gap-2">
@@ -2020,8 +2260,8 @@ const LeadEdit: React.FC = () => {
               <TabsContent value="acquisitions" className="space-y-2 mt-2">
                 {/* 1. Additional Property Information */}
                 <div className="border border-slate-200 rounded-lg bg-white p-2">
-                  <span className="text-xs font-medium text-slate-600 block mb-1">Additional Property Information</span>
-                  <div className="grid grid-cols-7 gap-1">
+                  <span className="text-xs font-medium text-slate-600 block mb-2">Additional Property Information</span>
+                  <div className="grid grid-cols-7 gap-2">
                     <div><Label className="text-[10px] text-slate-500">Roof</Label><Input value={roofType} onChange={(e) => setRoofType(e.target.value)} placeholder="Type" className="h-6 text-xs" /></div>
                     <div><Label className="text-[10px] text-slate-500">Roof Age</Label><Input type="number" value={roofAge} onChange={(e) => setRoofAge(e.target.value)} placeholder="Yrs" className="h-6 text-xs" /></div>
                     <div><Label className="text-[10px] text-slate-500">HVAC</Label><Input value={hvacType} onChange={(e) => setHvacType(e.target.value)} placeholder="Type" className="h-6 text-xs" /></div>
@@ -2047,9 +2287,10 @@ const LeadEdit: React.FC = () => {
                 <RehabBudgetCalculatorCompact 
                   leadId={id!}
                   sqft={parseInt(sqft) || 0}
-                  bathrooms={parseInt(bathrooms) || 1}
+                  bathrooms={Math.max(0, Math.ceil(parseFloat(bathrooms) || 0))}
                   readOnly={false}
                   onTotalChange={(total) => setRehabBudget(total.toString())}
+                  onBathroomsChange={(n) => setBathrooms(String(n))}
                 />
 
                 {/* 4. Underwriting Calculator - Role-Based (Admin, Manager, ACQ only) */}
@@ -2083,22 +2324,22 @@ const LeadEdit: React.FC = () => {
               {/* Transactions Tab */}
               <TabsContent value="transactions" className="mt-2">
                 <div className="border border-slate-200 rounded-lg bg-white p-2">
-                  <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-medium text-slate-600">Transaction Details</span>
-                    {!editingDeal && <Button size="sm" variant="ghost" className="h-5 text-[10px] px-2" onClick={() => setEditingDeal(true)}><Edit2 className="w-2.5 h-2.5 mr-0.5" />{deal ? 'Edit' : 'Create'}</Button>}
+                    {!editingDeal && <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => setEditingDeal(true)}><Edit2 className="w-3 h-3 mr-1" />{deal ? 'Edit' : 'Create'}</Button>}
                   </div>
                   {editingDeal ? (
                     <div className="space-y-2">
                       <div className="grid grid-cols-5 gap-2">
-                        <div><Label className="text-[10px] text-slate-500">Contract Price</Label><Input type="number" value={contractPrice} onChange={(e) => setContractPrice(e.target.value)} placeholder="$" className="h-6 text-xs" /></div>
-                        <div><Label className="text-[10px] text-slate-500">Sold Price</Label><Input type="number" value={soldPrice} onChange={(e) => setSoldPrice(e.target.value)} placeholder="$" className="h-6 text-xs" /></div>
-                        <div><Label className="text-[10px] text-slate-500">Net Profit</Label><Input type="number" value={netProfit} onChange={(e) => setNetProfit(e.target.value)} placeholder="$" className="h-6 text-xs" /></div>
-                        <div><Label className="text-[10px] text-slate-500">Contracted</Label><Input type="date" value={contractedAt} onChange={(e) => setContractedAt(e.target.value)} className="h-6 text-xs" /></div>
-                        <div><Label className="text-[10px] text-slate-500">Closed</Label><Input type="date" value={closedAt} onChange={(e) => setClosedAt(e.target.value)} className="h-6 text-xs" /></div>
+                        <div><Label className="text-xs text-slate-500">Contract Price</Label><Input type="number" value={contractPrice} onChange={(e) => setContractPrice(e.target.value)} placeholder="$" className="h-7 text-xs" /></div>
+                        <div><Label className="text-xs text-slate-500">Sold Price</Label><Input type="number" value={soldPrice} onChange={(e) => setSoldPrice(e.target.value)} placeholder="$" className="h-7 text-xs" /></div>
+                        <div><Label className="text-xs text-slate-500">Net Profit</Label><Input type="number" value={netProfit} onChange={(e) => setNetProfit(e.target.value)} placeholder="$" className="h-7 text-xs" /></div>
+                        <div><Label className="text-xs text-slate-500">Contracted</Label><Input type="date" value={contractedAt} onChange={(e) => setContractedAt(e.target.value)} className="h-7 text-xs" /></div>
+                        <div><Label className="text-xs text-slate-500">Closed</Label><Input type="date" value={closedAt} onChange={(e) => setClosedAt(e.target.value)} className="h-7 text-xs" /></div>
                       </div>
-                      <div className="flex gap-1 justify-end">
-                        <Button variant="outline" size="sm" className="h-6 text-xs px-2" onClick={cancelDealEdit}>Cancel</Button>
-                        <Button size="sm" className="h-6 text-xs px-2" onClick={saveDeal}><Save className="w-2.5 h-2.5 mr-0.5" />Save
+                      <div className="flex gap-2 justify-end">
+                        <Button variant="outline" size="sm" className="h-7 text-xs px-2" onClick={cancelDealEdit}>Cancel</Button>
+                        <Button size="sm" className="h-7 text-xs px-2" onClick={saveDeal}><Save className="w-3 h-3 mr-1" />Save
                           </Button>
                         </div>
                       </div>
@@ -2119,50 +2360,50 @@ const LeadEdit: React.FC = () => {
               {/* Dispositions Tab */}
               <TabsContent value="dispositions" className="mt-2">
                 <div className="border border-slate-200 rounded-lg bg-white p-2">
-                  <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-medium text-slate-600">Buyer Offers</span>
                     {!creatingOffer && !creatingBuyer && (
-                      <div className="flex gap-1">
-                        <Button size="sm" variant="ghost" className="h-5 text-[10px] px-1" onClick={() => setCreatingBuyer(true)}><User className="w-2.5 h-2.5 mr-0.5" />Buyer</Button>
-                        <Button size="sm" variant="ghost" className="h-5 text-[10px] px-1" onClick={() => setCreatingOffer(true)}><Plus className="w-2.5 h-2.5 mr-0.5" />Offer</Button>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => setCreatingBuyer(true)}><User className="w-3 h-3 mr-1" />Buyer</Button>
+                        <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => setCreatingOffer(true)}><Plus className="w-3 h-3 mr-1" />Offer</Button>
                       </div>
                     )}
                   </div>
                   {creatingBuyer && (
                     <div className="mb-2 p-2 border border-slate-200 rounded bg-slate-50">
-                      <div className="grid grid-cols-5 gap-1 mb-1">
-                        <Input placeholder="First" value={newBuyerFirstName} onChange={(e) => setNewBuyerFirstName(e.target.value)} className="h-6 text-xs" />
-                        <Input placeholder="Last" value={newBuyerLastName} onChange={(e) => setNewBuyerLastName(e.target.value)} className="h-6 text-xs" />
-                        <Input type="email" placeholder="Email" value={newBuyerEmail} onChange={(e) => setNewBuyerEmail(e.target.value)} className="h-6 text-xs" />
-                        <Input type="tel" placeholder="Phone" value={newBuyerPhone} onChange={(e) => setNewBuyerPhone(e.target.value)} className="h-6 text-xs" />
+                      <div className="grid grid-cols-5 gap-2 mb-2">
+                        <Input placeholder="First" value={newBuyerFirstName} onChange={(e) => setNewBuyerFirstName(e.target.value)} className="h-7 text-xs" />
+                        <Input placeholder="Last" value={newBuyerLastName} onChange={(e) => setNewBuyerLastName(e.target.value)} className="h-7 text-xs" />
+                        <Input type="email" placeholder="Email" value={newBuyerEmail} onChange={(e) => setNewBuyerEmail(e.target.value)} className="h-7 text-xs" />
+                        <Input type="tel" placeholder="Phone" value={newBuyerPhone} onChange={(e) => setNewBuyerPhone(e.target.value)} className="h-7 text-xs" />
                         <Select value={newBuyerSegmentation} onValueChange={setNewBuyerSegmentation}>
-                          <SelectTrigger className="h-6 text-xs"><SelectValue placeholder="Seg" /></SelectTrigger>
+                          <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Seg" /></SelectTrigger>
                           <SelectContent><SelectItem value="hot">Hot</SelectItem><SelectItem value="warm">Warm</SelectItem><SelectItem value="cold">Cold</SelectItem><SelectItem value="vip">VIP</SelectItem></SelectContent>
                         </Select>
                       </div>
-                      <div className="flex gap-1 justify-end">
-                        <Button variant="outline" size="sm" className="h-5 text-[10px] px-2" onClick={() => { setCreatingBuyer(false); setNewBuyerFirstName(''); setNewBuyerLastName(''); setNewBuyerEmail(''); setNewBuyerPhone(''); setNewBuyerSegmentation(''); }}>Cancel</Button>
-                        <Button size="sm" className="h-5 text-[10px] px-2" onClick={createNewBuyer}>Create</Button>
+                      <div className="flex gap-2 justify-end">
+                        <Button variant="outline" size="sm" className="h-7 text-xs px-2" onClick={() => { setCreatingBuyer(false); setNewBuyerFirstName(''); setNewBuyerLastName(''); setNewBuyerEmail(''); setNewBuyerPhone(''); setNewBuyerSegmentation(''); }}>Cancel</Button>
+                        <Button size="sm" className="h-7 text-xs px-2" onClick={createNewBuyer}>Create</Button>
                       </div>
                     </div>
                   )}
                   {creatingOffer && (
                     <div className="mb-2 p-2 border border-slate-200 rounded bg-slate-50">
-                      <div className="grid grid-cols-4 gap-1 mb-1">
+                      <div className="grid grid-cols-4 gap-2 mb-2">
                         <Select value={selectedBuyer} onValueChange={setSelectedBuyer}>
-                          <SelectTrigger className="h-6 text-xs"><SelectValue placeholder="Buyer" /></SelectTrigger>
+                          <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Buyer" /></SelectTrigger>
                           <SelectContent>{buyers.map((buyer) => (<SelectItem key={buyer.id} value={buyer.id}>{buyer.firstName} {buyer.lastName}</SelectItem>))}</SelectContent>
                         </Select>
-                        <Input type="number" placeholder="Amount" value={offerAmount} onChange={(e) => setOfferAmount(e.target.value)} className="h-6 text-xs" />
+                        <Input type="number" placeholder="Amount" value={offerAmount} onChange={(e) => setOfferAmount(e.target.value)} className="h-7 text-xs" />
                         <Select value={offerStatus} onValueChange={setOfferStatus}>
-                          <SelectTrigger className="h-6 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
                           <SelectContent><SelectItem value="PENDING">Pending</SelectItem><SelectItem value="ACCEPTED">Accepted</SelectItem><SelectItem value="REJECTED">Rejected</SelectItem><SelectItem value="COUNTERED">Countered</SelectItem></SelectContent>
                         </Select>
-                        <Input placeholder="Notes" value={offerNotes} onChange={(e) => setOfferNotes(e.target.value)} className="h-6 text-xs" />
+                        <Input placeholder="Notes" value={offerNotes} onChange={(e) => setOfferNotes(e.target.value)} className="h-7 text-xs" />
                       </div>
-                      <div className="flex gap-1 justify-end">
-                        <Button variant="outline" size="sm" className="h-5 text-[10px] px-2" onClick={() => { setCreatingOffer(false); setSelectedBuyer(''); setOfferAmount(''); setOfferStatus('PENDING'); setOfferNotes(''); }}>Cancel</Button>
-                        <Button size="sm" className="h-5 text-[10px] px-2" onClick={createBuyerOffer}>Create</Button>
+                      <div className="flex gap-2 justify-end">
+                        <Button variant="outline" size="sm" className="h-7 text-xs px-2" onClick={() => { setCreatingOffer(false); setSelectedBuyer(''); setOfferAmount(''); setOfferStatus('PENDING'); setOfferNotes(''); }}>Cancel</Button>
+                        <Button size="sm" className="h-7 text-xs px-2" onClick={createBuyerOffer}>Create</Button>
                       </div>
                     </div>
                   )}
@@ -2396,23 +2637,23 @@ const LeadEdit: React.FC = () => {
               variant="outline"
               onClick={closeTaskDialog}
               disabled={savingTask}
-              className="h-5 text-[9px] px-2 py-1 rounded-md inline-flex items-center justify-center"
+              className="h-8 text-sm px-3"
             >
               Cancel
             </Button>
             <Button
               onClick={handleTaskSubmit}
               disabled={savingTask || !taskForm.title || !taskForm.dueAt}
-              className="h-5 text-[9px] bg-purple-600 hover:bg-purple-700 px-2 py-1 rounded-md inline-flex items-center justify-center"
+              className="h-8 text-sm bg-purple-600 hover:bg-purple-700 px-3"
             >
               {savingTask ? (
                 <>
-                  <Loader2 className="w-2.5 h-2.5 mr-0.5 animate-spin" />
+                  <Loader2 className="w-4 h-4 mr-1 animate-spin" />
                   Saving...
                 </>
               ) : (
                 <>
-                  <Save className="w-2.5 h-2.5 mr-0.5" />
+                  <Save className="w-4 h-4 mr-1" />
                   {editingTask ? 'Update Task' : 'Create Task'}
                 </>
               )}

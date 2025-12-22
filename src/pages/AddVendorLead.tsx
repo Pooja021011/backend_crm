@@ -229,54 +229,23 @@ const AddVendorLead = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button 
-              variant="ghost" 
-              onClick={() => navigate('/leads')}
-              className="gap-2 text-gray-600 hover:text-gray-900"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back to Leads
-            </Button>
-            <div className="h-6 w-px bg-gray-300" />
-            <h1 className="text-xl font-semibold text-gray-900">Add Vendor Lead</h1>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            <Button 
-              variant="outline" 
-              onClick={() => navigate('/leads')}
-              className="text-gray-600 hover:text-gray-900"
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleSubmit}
-              disabled={!isFormValid() || isLoading}
-              className="gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
-            >
-              {isLoading ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  Add Lead
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
+    <div className="space-y-6">
+      {/* Page Header */}
+      <div className="flex items-center gap-4">
+        <Button 
+          variant="ghost" 
+          onClick={() => navigate('/leads')}
+          className="gap-2"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to Leads
+        </Button>
+        <div className="h-6 w-px bg-gray-300" />
+        <h1 className="text-2xl font-bold text-gray-900">Add Vendor Lead</h1>
       </div>
 
       {/* Form Content */}
-      <div className="container mx-auto px-6 py-8 max-w-4xl">
+      <div>
         <form onSubmit={handleSubmit} className="space-y-8">
           
           {/* Contact Info Section */}

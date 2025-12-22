@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
@@ -29,9 +29,16 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
   const [countryCode, setCountryCode] = useState('+1');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [internalError, setInternalError] = useState('');
+  const isInternalChange = useRef(false);
 
-  // Parse existing value on mount or when value changes
+  // Parse existing value on mount or when value changes externally
   useEffect(() => {
+    // Skip if this change came from within the component
+    if (isInternalChange.current) {
+      isInternalChange.current = false;
+      return;
+    }
+
     if (value) {
       // Check if value has country code
       if (value.startsWith('+')) {
@@ -43,6 +50,9 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
       } else {
         setPhoneNumber(value.replace(/[^\d]/g, ''));
       }
+    } else {
+      // Clear phone number if value is empty
+      setPhoneNumber('');
     }
   }, [value]);
 
@@ -63,6 +73,9 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
       setInternalError('');
     }
 
+    // Mark this as an internal change
+    isInternalChange.current = true;
+    
     // Pass formatted value to parent
     onChange(validation.formatted || fullNumber);
   };
@@ -73,6 +86,9 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
     // Update full number with new country code
     const fullNumber = newCode + phoneNumber.replace(/[^\d]/g, '');
     const validation = validatePhoneNumber(fullNumber, newCode);
+    
+    // Mark this as an internal change
+    isInternalChange.current = true;
     
     onChange(validation.formatted || fullNumber);
   };
@@ -90,7 +106,7 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
       <div className="flex gap-2">
         {/* Country Code Selector */}
         <Select value={countryCode} onValueChange={handleCountryCodeChange} disabled={disabled}>
-          <SelectTrigger className="w-[120px] h-10 border-gray-300 focus:border-blue-500 focus:ring-blue-500/20">
+          <SelectTrigger className="w-[120px] h-6 border-gray-300 focus:border-blue-500 focus:ring-blue-500/20">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -113,7 +129,7 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
             onChange={(e) => handlePhoneChange(e.target.value)}
             placeholder={placeholder}
             disabled={disabled}
-            className={`h-10 border-gray-300 focus:border-blue-500 focus:ring-blue-500/20 ${displayError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
+            className={`h-6 border-gray-300 focus:border-blue-500 focus:ring-blue-500/20 ${displayError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
           />
         </div>
       </div>

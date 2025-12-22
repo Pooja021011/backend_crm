@@ -363,16 +363,27 @@ export const useLeads = (): LeadsHookReturn => {
         return { success: 0, errors: ['CSV file is empty or contains no data rows'] };
       }
 
-      const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+      const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, '').replace(/\*/g, ''));
       const dataRows = lines.slice(1);
       
       let successCount = 0;
       const errors: string[] = [];
 
+      // Helper function to find header value case-insensitively
+      const getFieldValue = (data: Record<string, string>, fieldName: string): string => {
+        const key = Object.keys(data).find(k => k.toLowerCase().replace(/\s/g, '') === fieldName.toLowerCase().replace(/\s/g, ''));
+        return key ? data[key] : '';
+      };
+
       for (let i = 0; i < dataRows.length; i++) {
         try {
           const rowData = dataRows[i].split(',').map(cell => cell.trim().replace(/"/g, ''));
           const rowIndex = i + 2; // +2 because we skip header and arrays are 0-indexed
+          
+          // Skip empty rows
+          if (rowData.every(cell => !cell)) {
+            continue;
+          }
           
           // Create a data object from headers and row data
           const data: Record<string, string> = {};
@@ -380,9 +391,20 @@ export const useLeads = (): LeadsHookReturn => {
             data[header] = rowData[index] || '';
           });
 
+          // Get required fields using flexible matching
+          const firstName = getFieldValue(data, 'firstname') || getFieldValue(data, 'first name');
+          const lastName = getFieldValue(data, 'lastname') || getFieldValue(data, 'last name');
+          const email = getFieldValue(data, 'email');
+          const phone = getFieldValue(data, 'phone');
+
           // Validate required fields
-          if (!data['First Name'] || !data['Last Name'] || !data['Email'] || !data['Phone']) {
-            errors.push(`Row ${rowIndex}: Missing required fields (First Name, Last Name, Email, Phone)`);
+          if (!firstName || !lastName || !email || !phone) {
+            const missing = [];
+            if (!firstName) missing.push('First Name');
+            if (!lastName) missing.push('Last Name');
+            if (!email) missing.push('Email');
+            if (!phone) missing.push('Phone');
+            errors.push(`Row ${rowIndex}: Missing required fields (${missing.join(', ')})`);
             continue;
           }
 
@@ -390,44 +412,54 @@ export const useLeads = (): LeadsHookReturn => {
           let leadData: any;
           
           if (type === 'SELLER') {
+            const address = getFieldValue(data, 'address');
             leadData = {
               type: 'SELLER',
+              assignedUserId: user?.id, // Assign to the user who is importing
               seller: {
-                firstName: data['First Name'],
-                lastName: data['Last Name'],
-                phone: data['Phone'],
-                email: data['Email'],
-                motivation: data['Motivation'] || 'Medium'
+                firstName,
+                lastName,
+                phone,
+                email,
+                motivation: getFieldValue(data, 'motivation') || 'Medium'
               },
-              address: data['Address'] ? {
-                address1: data['Address'],
-                city: data['City'] || '',
-                state: data['State'] || '',
-                zip: data['ZIP'] || ''
-              } : undefined
+              address: address ? {
+                address1: address,
+                city: getFieldValue(data, 'city') || '',
+                state: getFieldValue(data, 'state') || '',
+                zip: getFieldValue(data, 'zip') || ''
+              } : undefined,
+              notes: getFieldValue(data, 'notes') || undefined,
+              leadSource: getFieldValue(data, 'lead source') || getFieldValue(data, 'leadsource') || undefined
             };
           } else if (type === 'BUYER') {
+            const vipValue = getFieldValue(data, 'vip');
             leadData = {
               type: 'BUYER',
+              assignedUserId: user?.id, // Assign to the user who is importing
               buyer: {
-                firstName: data['First Name'],
-                lastName: data['Last Name'],
-                phone: data['Phone'],
-                email: data['Email'],
-                vip: data['VIP']?.toLowerCase() === 'true' || data['VIP']?.toLowerCase() === 'yes'
-              }
+                firstName,
+                lastName,
+                phone,
+                email,
+                vip: vipValue?.toLowerCase() === 'true' || vipValue?.toLowerCase() === 'yes'
+              },
+              notes: getFieldValue(data, 'notes') || undefined,
+              leadSource: getFieldValue(data, 'lead source') || getFieldValue(data, 'leadsource') || undefined
             };
           } else if (type === 'VENDOR') {
             leadData = {
               type: 'VENDOR',
+              assignedUserId: user?.id, // Assign to the user who is importing
               vendor: {
-                firstName: data['First Name'],
-                lastName: data['Last Name'],
-                phone: data['Phone'],
-                email: data['Email'],
-                company: data['Company'] || '',
-                serviceType: data['Service Type'] || 'Other'
-              }
+                firstName,
+                lastName,
+                phone,
+                email,
+                company: getFieldValue(data, 'company') || '',
+                serviceType: getFieldValue(data, 'service type') || getFieldValue(data, 'servicetype') || getFieldValue(data, 'industry') || 'Other'
+              },
+              notes: getFieldValue(data, 'notes') || undefined
             };
           }
 

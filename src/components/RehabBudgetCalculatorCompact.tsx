@@ -14,13 +14,21 @@ interface RehabBudgetCalculatorProps {
   bathrooms?: number;
   readOnly?: boolean;
   onTotalChange?: (total: number) => void;
+  onBathroomsChange?: (bathrooms: number) => void;
 }
 
 interface ToggledItems {
   [key: string]: boolean;
 }
 
-export function RehabBudgetCalculatorCompact({ leadId, sqft = 0, bathrooms = 1, readOnly = false, onTotalChange }: RehabBudgetCalculatorProps) {
+export function RehabBudgetCalculatorCompact({
+  leadId,
+  sqft = 0,
+  bathrooms = 0,
+  readOnly = false,
+  onTotalChange,
+  onBathroomsChange,
+}: RehabBudgetCalculatorProps) {
   const { toast } = useToast();
   const [expanded, setExpanded] = useState(false);
   
@@ -55,6 +63,12 @@ export function RehabBudgetCalculatorCompact({ leadId, sqft = 0, bathrooms = 1, 
       calculateBudget();
     }
   }, [finishLevel, toggledItems, numberOfBathrooms, numberOfWindows, propertySquareFeet]);
+
+  const handleBathroomsChange = (value: number) => {
+    const next = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+    setNumberOfBathrooms(next);
+    onBathroomsChange?.(next);
+  };
 
   // Notify parent when total changes
   useEffect(() => {
@@ -162,18 +176,44 @@ export function RehabBudgetCalculatorCompact({ leadId, sqft = 0, bathrooms = 1, 
     }).format(value);
   };
 
-  const renderCheckbox = (key: string, label: string) => (
-    <div className="flex items-center space-x-1">
-      <Checkbox
-        id={key}
-        checked={toggledItems[key]}
-        onCheckedChange={() => handleToggle(key)}
-        disabled={readOnly}
-        className="h-3 w-3"
-      />
-      <Label htmlFor={key} className="text-[10px] font-normal cursor-pointer">
-        {label}
-      </Label>
+  const getItemCost = (key: string): number => {
+    return (calculation.itemizedCosts && calculation.itemizedCosts[key]) ? calculation.itemizedCosts[key] : 0;
+  };
+
+  const renderLineItem = (key: string, label: string) => {
+    const checked = !!toggledItems[key];
+    const cost = getItemCost(key);
+    return (
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <Checkbox
+            id={key}
+            checked={checked}
+            onCheckedChange={() => handleToggle(key)}
+            disabled={readOnly}
+            className="h-3 w-3"
+          />
+          <Label htmlFor={key} className="text-[10px] font-normal cursor-pointer truncate">
+            {label}
+          </Label>
+        </div>
+        <span className={`text-[10px] font-medium tabular-nums ${checked ? 'text-slate-700' : 'text-slate-400'}`}>
+          {formatCurrency(cost)}
+        </span>
+      </div>
+    );
+  };
+
+  const renderGroup = (title: string, items: Array<{ key: string; label: string }>) => (
+    <div className="rounded border border-slate-200 bg-white p-2">
+      <div className="text-[10px] font-semibold text-slate-700 mb-1 uppercase tracking-wide">{title}</div>
+      <div className="space-y-1">
+        {items.map((it) => (
+          <div key={it.key}>
+            {renderLineItem(it.key, it.label)}
+          </div>
+        ))}
+      </div>
     </div>
   );
 
@@ -216,7 +256,7 @@ export function RehabBudgetCalculatorCompact({ leadId, sqft = 0, bathrooms = 1, 
       {expanded && (
         <div className="space-y-1 mt-2">
           {/* Configuration */}
-          <div className="grid grid-cols-2 gap-1 p-1 bg-slate-50 rounded">
+          <div className="grid grid-cols-3 gap-2 p-2 bg-slate-50 rounded">
             <div>
               <Label className="text-[10px] text-slate-500">Finish Level</Label>
               <Select value={finishLevel} onValueChange={(value: any) => setFinishLevel(value)} disabled={readOnly}>
@@ -241,44 +281,81 @@ export function RehabBudgetCalculatorCompact({ leadId, sqft = 0, bathrooms = 1, 
                 min={1}
               />
             </div>
+            <div>
+              <Label className="text-[10px] text-slate-500">Bathrooms</Label>
+              <Input
+                type="number"
+                value={numberOfBathrooms}
+                onChange={(e) => handleBathroomsChange(Number(e.target.value))}
+                disabled={readOnly}
+                className="h-6 text-xs"
+                min={0}
+              />
+            </div>
           </div>
           
           {/* Property Info Display (Read-only) */}
           <div className="flex gap-2 text-[10px] text-slate-500 bg-slate-50 p-1 rounded">
             <span>SqFt: <span className="font-medium text-slate-700">{propertySquareFeet || 'N/A'}</span></span>
-            <span>•</span>
-            <span>Baths: <span className="font-medium text-slate-700">{numberOfBathrooms || 'N/A'}</span></span>
-            <span className="text-[9px] italic ml-auto">(from property info)</span>
           </div>
 
-          {/* Toggleable Items - Compact Grid */}
-          <div className="grid grid-cols-4 gap-x-2 gap-y-0.5 text-[10px]">
-            {renderCheckbox('permits', 'Permits')}
-            {renderCheckbox('demolition', 'Demo')}
-            {renderCheckbox('foundation', 'Foundation')}
-            {renderCheckbox('roof', 'Roof')}
-            {renderCheckbox('framing', 'Framing')}
-            {renderCheckbox('hvac', 'HVAC')}
-            {renderCheckbox('electrical', 'Electrical')}
-            {renderCheckbox('plumbing', 'Plumbing')}
-            {renderCheckbox('kitchenCabinets', 'K-Cabinets')}
-            {renderCheckbox('kitchenCountertops', 'K-Counters')}
-            {renderCheckbox('kitchenAppliances', 'K-Appliances')}
-            {renderCheckbox('kitchenSink', 'K-Sink')}
-            {renderCheckbox('bathroomVanity', 'B-Vanity')}
-            {renderCheckbox('bathroomShower', 'B-Shower')}
-            {renderCheckbox('bathroomToilet', 'B-Toilet')}
-            {renderCheckbox('bathroomFixtures', 'B-Fixtures')}
-            {renderCheckbox('drywall', 'Drywall')}
-            {renderCheckbox('flooring', 'Flooring')}
-            {renderCheckbox('paintInterior', 'Paint-Int')}
-            {renderCheckbox('paintExterior', 'Paint-Ext')}
-            {renderCheckbox('windows', 'Windows')}
-            {renderCheckbox('entryDoor', 'Entry Door')}
-            {renderCheckbox('insulation', 'Insulation')}
-            {renderCheckbox('smartHome', 'Smart Home')}
-            {renderCheckbox('landscaping', 'Landscaping')}
-            {renderCheckbox('miscellaneous', 'Miscellaneous')}
+          {/* Item Layout - 4 Rows */}
+          <div className="space-y-2">
+            {/* Row 1 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {renderGroup('Planning', [
+                { key: 'permits', label: 'Permits' },
+                { key: 'demolition', label: 'Demo' },
+              ])}
+              {renderGroup('Structure', [
+                { key: 'foundation', label: 'Foundation' },
+                { key: 'roof', label: 'Roof' },
+                { key: 'framing', label: 'Framing' },
+                { key: 'windows', label: 'Windows' },
+                { key: 'entryDoor', label: 'Entry Door' },
+              ])}
+            </div>
+
+            {/* Row 2 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {renderGroup('Mechanicals', [
+                { key: 'hvac', label: 'HVAC' },
+                { key: 'electrical', label: 'Electrical' },
+                { key: 'plumbing', label: 'Plumbing' },
+              ])}
+              {renderGroup('Interior', [
+                { key: 'drywall', label: 'Drywall' },
+                { key: 'insulation', label: 'Insulation' },
+                { key: 'paintInterior', label: 'Paint - Interior' },
+                { key: 'paintExterior', label: 'Paint - Exterior' },
+                { key: 'flooring', label: 'Flooring' },
+              ])}
+            </div>
+
+            {/* Row 3 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {renderGroup('Kitchen', [
+                { key: 'kitchenCabinets', label: 'Cabinets' },
+                { key: 'kitchenCountertops', label: 'Counters' },
+                { key: 'kitchenAppliances', label: 'Appliances' },
+                { key: 'kitchenSink', label: 'Sink' },
+              ])}
+              {renderGroup('Bathrooms', [
+                { key: 'bathroomVanity', label: 'Vanity' },
+                { key: 'bathroomShower', label: 'Shower' },
+                { key: 'bathroomToilet', label: 'Toilet' },
+                { key: 'bathroomFixtures', label: 'Fixtures' },
+              ])}
+            </div>
+
+            {/* Row 4 */}
+            <div className="grid grid-cols-1">
+              {renderGroup('Miscellaneous', [
+                { key: 'smartHome', label: 'Smart Home' },
+                { key: 'landscaping', label: 'Landscaping' },
+                { key: 'miscellaneous', label: 'Miscellaneous' },
+              ])}
+            </div>
           </div>
 
           {/* Summary */}

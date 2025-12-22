@@ -26,6 +26,8 @@ export function UnderwritingCalculator({
   const [arv, setArv] = useState(0);
   const [taxes, setTaxes] = useState(1000);
   const [timeline, setTimeline] = useState(6); // months
+  const [arvDisplay, setArvDisplay] = useState('');
+  const [taxesDisplay, setTaxesDisplay] = useState('');
 
   // CALCULATED OUTPUT
   const [finalOffer, setFinalOffer] = useState(0);
@@ -53,8 +55,12 @@ export function UnderwritingCalculator({
         const data = await response.json();
         if (data.data && data.data.length > 0) {
           const latest = data.data[0];
-          setArv(latest.arv || 0);
-          setTaxes(latest.taxes || 1000);
+          const loadedArv = latest.arv || 0;
+          const loadedTaxes = latest.taxes || 0;
+          setArv(loadedArv);
+          setTaxes(loadedTaxes);
+          setArvDisplay(loadedArv ? formatCurrency(loadedArv) : '');
+          setTaxesDisplay(loadedTaxes ? formatCurrency(loadedTaxes) : '');
           setTimeline(latest.timeline || 6);
         }
       }
@@ -126,6 +132,12 @@ export function UnderwritingCalculator({
     }).format(value);
   };
 
+  const parseCurrencyInput = (raw: string): number => {
+    // Keep digits only; treat empty as 0
+    const digits = raw.replace(/[^\d]/g, '');
+    return digits ? Number(digits) : 0;
+  };
+
   if (loading) return null;
 
   return (
@@ -134,9 +146,11 @@ export function UnderwritingCalculator({
         <div className="flex items-center gap-1">
           <Calculator className="w-3 h-3 text-slate-500" />
           <span className="text-xs font-medium text-slate-600">Underwriting Calculator</span>
-          <span className="text-xs text-emerald-600 font-semibold ml-2">
-            Final Offer: {formatCurrency(finalOffer)}
-          </span>
+          {!expanded && (
+            <span className="text-xs text-emerald-600 font-semibold ml-2">
+              Final Offer: {formatCurrency(finalOffer)}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1">
           {!readOnly && (
@@ -169,54 +183,64 @@ export function UnderwritingCalculator({
             <Label className="text-[10px] font-semibold text-blue-700 mb-1 block">INPUTS</Label>
             <div className="grid grid-cols-4 gap-2">
               {/* ARV - EDITABLE */}
-              <div className="flex flex-col">
-                <Label className="text-[10px] text-slate-600 mb-1 h-4">ARV *</Label>
+              <div>
+                <Label className="text-[10px] text-slate-600">ARV *</Label>
                 <Input
-                  type="number"
-                  value={arv || ''}
-                  onChange={(e) => setArv(Number(e.target.value) || 0)}
+                  type="text"
+                  inputMode="numeric"
+                  value={arvDisplay}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    setArvDisplay(raw);
+                    setArv(parseCurrencyInput(raw));
+                  }}
+                  onBlur={() => setArvDisplay(arv ? formatCurrency(arv) : '')}
                   disabled={readOnly}
-                  className="h-7 text-xs"
+                  className="h-6 text-xs"
                   placeholder="Enter ARV"
                 />
               </div>
 
               {/* REHAB COST - READ-ONLY (from Rehab Calculator) */}
-              <div className="flex flex-col">
-                <Label className="text-[10px] text-slate-600 mb-1 h-4 flex items-center gap-1">
-                  Rehab Cost <Lock className="w-2.5 h-2.5 text-slate-400" />
-                </Label>
+              <div>
+                <Label className="text-[10px] text-slate-600">Rehab Cost</Label>
                 <Input
                   type="text"
                   value={rehabCost ? `$${rehabCost.toLocaleString()}` : '$0'}
                   disabled={true}
-                  className="h-7 text-xs bg-slate-100 cursor-not-allowed text-slate-600 font-medium"
+                  className="h-6 text-xs bg-slate-100 cursor-not-allowed text-slate-600 font-medium"
                   readOnly
                 />
               </div>
 
               {/* TAXES - EDITABLE */}
-              <div className="flex flex-col">
-                <Label className="text-[10px] text-slate-600 mb-1 h-4">Annual Taxes *</Label>
+              <div>
+                <Label className="text-[10px] text-slate-600">Annual Taxes *</Label>
                 <Input
-                  type="number"
-                  value={taxes || ''}
-                  onChange={(e) => setTaxes(Number(e.target.value) || 0)}
+                  type="text"
+                  inputMode="numeric"
+                  value={taxesDisplay}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    setTaxesDisplay(raw);
+                    setTaxes(parseCurrencyInput(raw));
+                  }}
+                  onBlur={() => setTaxesDisplay(taxes ? formatCurrency(taxes) : '')}
                   disabled={readOnly}
-                  className="h-7 text-xs"
+                  className="h-6 text-xs"
                   placeholder="1000"
                 />
               </div>
 
               {/* TIMELINE - EDITABLE */}
-              <div className="flex flex-col">
-                <Label className="text-[10px] text-slate-600 mb-1 h-4">Timeline (months) *</Label>
+              <div>
+                <Label className="text-[10px] text-slate-600">Timeline (months) *</Label>
                 <Input
                   type="number"
                   value={timeline || ''}
                   onChange={(e) => setTimeline(Number(e.target.value) || 0)}
                   disabled={readOnly}
-                  className="h-7 text-xs"
+                  className="h-6 text-xs"
                   placeholder="6"
                   min={1}
                 />
@@ -226,24 +250,9 @@ export function UnderwritingCalculator({
 
           {/* FINAL OFFER CALCULATION */}
           <div className="p-2 bg-emerald-50 border border-emerald-200 rounded">
-            <Label className="text-[10px] font-semibold text-emerald-700 mb-1 block">FINAL OFFER CALCULATION</Label>
-            <div className="text-[10px] space-y-0.5">
-              <div className="flex justify-between">
-                <span className="text-slate-600">ARV × 72%:</span>
-                <span className="font-medium">{formatCurrency(arv * 0.72)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-600">- Rehab Cost:</span>
-                <span className="font-medium">-{formatCurrency(rehabCost)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-600">- Fixed Cost:</span>
-                <span className="font-medium">-{formatCurrency(25000)}</span>
-              </div>
-              <div className="flex justify-between font-bold border-t pt-0.5 mt-0.5">
-                <span className="text-emerald-700">FINAL OFFER:</span>
-                <span className="text-emerald-700">{formatCurrency(finalOffer)}</span>
-              </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-semibold text-emerald-700">Final Offer</span>
+              <span className="text-[12px] font-bold text-emerald-700 tabular-nums">{formatCurrency(finalOffer)}</span>
             </div>
           </div>
         </div>

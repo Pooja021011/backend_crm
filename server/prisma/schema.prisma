@@ -669,7 +669,7 @@ model LeadComparable {
   state        String
   zip          String
   beds         Int?
-  baths        Int?
+  baths        Float?
   sqft         Int?
   yearBuilt    Int?
   salePrice    Int?

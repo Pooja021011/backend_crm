@@ -262,11 +262,13 @@ export function ProjectionsSheet({
 
       {expanded && (
         <div className="space-y-2 mt-2">
-          <div className="grid grid-cols-3 gap-2">
-            {/* LEFT COLUMN: ACQUISITION */}
-            <div className="space-y-1">
-              <div className="p-1.5 bg-purple-50 border border-purple-200 rounded">
-                <div className="font-semibold text-purple-700 mb-1 text-[11px]">ACQUISITION</div>
+          {/* 3 even rows (each row stretches to the same height across columns) */}
+          <div className="space-y-2">
+            {/* Row 1 */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-2 lg:items-stretch">
+              {/* ACQUISITION */}
+              <div className="p-2 bg-slate-50 border border-slate-200 rounded h-full">
+                <div className="font-semibold text-slate-700 mb-1 text-[11px]">ACQUISITION</div>
                 <div className="text-[10px] space-y-0.5">
                   <div className="flex justify-between">
                     <span className="text-slate-600">Purchase Price:</span>
@@ -283,66 +285,8 @@ export function ProjectionsSheet({
                 </div>
               </div>
 
-              <div className="p-1.5 bg-slate-50 border border-slate-200 rounded">
-                <div className="font-semibold text-slate-700 mb-1 text-[11px]">CLOSING COST</div>
-                <div className="text-[10px] space-y-0.5">
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Transfer Tax:</span>
-                    <span>{formatCurrency(projections.transferTax)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Title Insurance:</span>
-                    <span>{formatCurrency(projections.titleInsurance)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Recording Fees:</span>
-                    <span>{formatCurrency(projections.recordingFees)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Misc. Closing*:</span>
-                    <span>{formatCurrency(projections.miscClosing)}</span>
-                  </div>
-                  <div className="flex justify-between font-bold border-t pt-0.5 mt-0.5">
-                    <span>Total Cost:</span>
-                    <span>{formatCurrency(projections.totalClosingCost)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-1.5 bg-slate-50 border border-slate-200 rounded">
-                <div className="font-semibold text-slate-700 mb-1 text-[11px]">FINANCING COST</div>
-                <div className="text-[10px] space-y-0.5">
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Loan Amount:</span>
-                    <span>{formatCurrency(projections.loanAmount)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Loan Payments:</span>
-                    <span>{formatCurrency(projections.loanPayments)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Origination Points:</span>
-                    <span>{formatCurrency(projections.originationPoints)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Underwriting Fee:</span>
-                    <span>{formatCurrency(projections.underwritingFee)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Appraisal Fee:</span>
-                    <span>{formatCurrency(projections.appraisalFee)}</span>
-                  </div>
-                  <div className="flex justify-between font-bold border-t pt-0.5 mt-0.5">
-                    <span>Total Cost:</span>
-                    <span>{formatCurrency(projections.totalFinancingCost)}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* MIDDLE COLUMN: HOLDING & EXIT */}
-            <div className="space-y-1">
-              <div className="p-1.5 bg-slate-50 border border-slate-200 rounded">
+              {/* HOLDING COST */}
+              <div className="p-2 bg-slate-50 border border-slate-200 rounded h-full">
                 <div className="font-semibold text-slate-700 mb-1 text-[11px]">HOLDING COST</div>
                 <div className="text-[10px] space-y-0.5">
                   <div className="flex justify-between">
@@ -364,66 +308,8 @@ export function ProjectionsSheet({
                 </div>
               </div>
 
-              <div className="p-1.5 bg-slate-50 border border-slate-200 rounded">
-                <div className="font-semibold text-slate-700 mb-1 text-[11px]">EXIT COST</div>
-                <div className="text-[10px] space-y-0.5">
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Agent Commission:</span>
-                    <span>{formatCurrency(projections.agentCommission)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Title:</span>
-                    <span>{formatCurrency(projections.titleCostExit)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Transfer Tax:</span>
-                    <span>{formatCurrency(projections.exitTransferTax)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Misc. Closing*:</span>
-                    <span>{formatCurrency(projections.miscExitClosing)}</span>
-                  </div>
-                  <div className="flex justify-between font-bold border-t pt-0.5 mt-0.5">
-                    <span>Total Cost:</span>
-                    <span>{formatCurrency(projections.totalExitCost)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-1.5 bg-amber-50 border border-amber-200 rounded">
-                <div className="font-semibold text-amber-700 mb-1 text-[11px]">OUT OF POCKET</div>
-                <div className="text-[10px] space-y-0.5">
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Purchase OOP:</span>
-                    <span>{formatCurrency(projections.purchaseOOP)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Closing OOP:</span>
-                    <span>{formatCurrency(projections.closingOOP)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Finance OOP:</span>
-                    <span>{formatCurrency(projections.financeOOP)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Holding OOP:</span>
-                    <span>{formatCurrency(projections.holdingOOP)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Exit Cost:</span>
-                    <span>{formatCurrency(projections.exitCostOOP)}</span>
-                  </div>
-                  <div className="flex justify-between font-bold border-t pt-0.5 mt-0.5 text-amber-700">
-                    <span>Total Cost:</span>
-                    <span>{formatCurrency(projections.totalOOP)}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* RIGHT COLUMN: COST SUMMARY & OUTLOOK */}
-            <div className="space-y-1">
-              <div className="p-1.5 bg-slate-50 border border-slate-200 rounded">
+              {/* COST SUMMARY */}
+              <div className="p-2 bg-slate-50 border border-slate-200 rounded h-full">
                 <div className="font-semibold text-slate-700 mb-1 text-[11px]">COST</div>
                 <div className="text-[10px] space-y-0.5">
                   <div className="flex justify-between">
@@ -452,27 +338,151 @@ export function ProjectionsSheet({
                   </div>
                 </div>
               </div>
+            </div>
 
-              <div className="p-1.5 bg-green-50 border border-green-200 rounded">
-                <div className="font-semibold text-green-700 mb-1 text-[11px]">INCOME</div>
+            {/* Row 2 */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-2 lg:items-stretch">
+              {/* CLOSING COST */}
+              <div className="p-2 bg-slate-50 border border-slate-200 rounded h-full">
+                <div className="font-semibold text-slate-700 mb-1 text-[11px]">CLOSING COST</div>
+                <div className="text-[10px] space-y-0.5">
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Transfer Tax:</span>
+                    <span>{formatCurrency(projections.transferTax)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Title Insurance:</span>
+                    <span>{formatCurrency(projections.titleInsurance)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Recording Fees:</span>
+                    <span>{formatCurrency(projections.recordingFees)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Misc. Closing*:</span>
+                    <span>{formatCurrency(projections.miscClosing)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold border-t pt-0.5 mt-0.5">
+                    <span>Total Cost:</span>
+                    <span>{formatCurrency(projections.totalClosingCost)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* EXIT COST */}
+              <div className="p-2 bg-slate-50 border border-slate-200 rounded h-full">
+                <div className="font-semibold text-slate-700 mb-1 text-[11px]">EXIT COST</div>
+                <div className="text-[10px] space-y-0.5">
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Agent Commission:</span>
+                    <span>{formatCurrency(projections.agentCommission)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Title:</span>
+                    <span>{formatCurrency(projections.titleCostExit)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Transfer Tax:</span>
+                    <span>{formatCurrency(projections.exitTransferTax)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Misc. Closing*:</span>
+                    <span>{formatCurrency(projections.miscExitClosing)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold border-t pt-0.5 mt-0.5">
+                    <span>Total Cost:</span>
+                    <span>{formatCurrency(projections.totalExitCost)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* INCOME (gray, per request) */}
+              <div className="p-2 bg-slate-50 border border-slate-200 rounded h-full">
+                <div className="font-semibold text-slate-700 mb-1 text-[11px]">INCOME</div>
                 <div className="text-[10px] space-y-0.5">
                   <div className="flex justify-between">
                     <span className="text-slate-600">Sale Price:</span>
                     <span>{formatCurrency(projections.salePrice)}</span>
                   </div>
-                  <div className="flex justify-between font-bold border-t pt-0.5 mt-0.5 text-green-700">
+                  <div className="flex justify-between font-bold border-t pt-0.5 mt-0.5">
                     <span>Total Income:</span>
                     <span>{formatCurrency(projections.totalIncome)}</span>
                   </div>
                 </div>
               </div>
+            </div>
 
-              <div className="p-2 bg-gradient-to-br from-emerald-50 to-blue-50 border-2 border-emerald-300 rounded">
-                <div className="font-bold text-emerald-700 mb-1 text-xs">OUTLOOK</div>
+            {/* Row 3 */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-2 lg:items-stretch">
+              {/* FINANCING COST */}
+              <div className="p-2 bg-slate-50 border border-slate-200 rounded h-full">
+                <div className="font-semibold text-slate-700 mb-1 text-[11px]">FINANCING COST</div>
+                <div className="text-[10px] space-y-0.5">
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Loan Amount:</span>
+                    <span>{formatCurrency(projections.loanAmount)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Loan Payments:</span>
+                    <span>{formatCurrency(projections.loanPayments)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Origination Points:</span>
+                    <span>{formatCurrency(projections.originationPoints)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Underwriting Fee:</span>
+                    <span>{formatCurrency(projections.underwritingFee)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Appraisal Fee:</span>
+                    <span>{formatCurrency(projections.appraisalFee)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold border-t pt-0.5 mt-0.5">
+                    <span>Total Cost:</span>
+                    <span>{formatCurrency(projections.totalFinancingCost)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* OUT OF POCKET (blue) */}
+              <div className="p-2 bg-blue-50 border border-blue-200 rounded h-full">
+                <div className="font-semibold text-blue-700 mb-1 text-[11px]">OUT OF POCKET</div>
+                <div className="text-[10px] space-y-0.5">
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Purchase OOP:</span>
+                    <span>{formatCurrency(projections.purchaseOOP)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Closing OOP:</span>
+                    <span>{formatCurrency(projections.closingOOP)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Finance OOP:</span>
+                    <span>{formatCurrency(projections.financeOOP)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Holding OOP:</span>
+                    <span>{formatCurrency(projections.holdingOOP)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Exit Cost:</span>
+                    <span>{formatCurrency(projections.exitCostOOP)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold border-t pt-0.5 mt-0.5 text-blue-700">
+                    <span>Total Cost:</span>
+                    <span>{formatCurrency(projections.totalOOP)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* OUTLOOK (green + slightly bigger) */}
+              <div className="p-3 bg-green-50 border-2 border-green-300 rounded h-full min-h-[120px]">
+                <div className="font-bold text-green-700 mb-2 text-xs">OUTLOOK</div>
                 <div className="text-[11px] space-y-1">
                   <div className="flex justify-between">
                     <span className="text-slate-700 font-medium">Profit:</span>
-                    <span className="font-bold text-emerald-700">{formatCurrency(projections.profit)}</span>
+                    <span className="font-bold text-green-700">{formatCurrency(projections.profit)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-700 font-medium">Spread:</span>

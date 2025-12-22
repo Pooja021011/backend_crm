@@ -1057,35 +1057,37 @@ const Leads = () => {
                   </DropdownMenuContent>
                 </DropdownMenu>
                 
-                {/* Export Dropdown */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="gap-2">
-                      <Download className="w-4 h-4" />
-                      Export
-                      <ChevronDown className="w-3 h-3" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent>
-                    <DropdownMenuItem onClick={handleExportCSV}>
-                      <Download className="w-4 h-4 mr-2" />
-                      Export All ({getCurrentLeads.length})
-                    </DropdownMenuItem>
-                    {selectedItems.length > 0 && (
-                      <DropdownMenuItem onClick={() => {
-                        const selectedLeads = getCurrentLeads.filter(lead => selectedItems.includes(lead.id));
-                        exportLeadsToCSV(selectedLeads, activeTab);
-                        toast({
-                          title: "Export Successful",
-                          description: `Exported ${selectedLeads.length} selected leads.`,
-                        });
-                      }}>
+                {/* Export Dropdown - Admin/Manager Only */}
+                {(isAdmin || isManager) && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="gap-2">
+                        <Download className="w-4 h-4" />
+                        Export
+                        <ChevronDown className="w-3 h-3" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuItem onClick={handleExportCSV}>
                         <Download className="w-4 h-4 mr-2" />
-                        Export Selected ({selectedItems.length})
+                        Export All ({getCurrentLeads.length})
                       </DropdownMenuItem>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                      {selectedItems.length > 0 && (
+                        <DropdownMenuItem onClick={() => {
+                          const selectedLeads = getCurrentLeads.filter(lead => selectedItems.includes(lead.id));
+                          exportLeadsToCSV(selectedLeads, activeTab);
+                          toast({
+                            title: "Export Successful",
+                            description: `Exported ${selectedLeads.length} selected leads.`,
+                          });
+                        }}>
+                          <Download className="w-4 h-4 mr-2" />
+                          Export Selected ({selectedItems.length})
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
                 
                 {/* Sort Dropdown */}
                 <DropdownMenu>

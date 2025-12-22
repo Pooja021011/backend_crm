@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Badge } from './ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { TabsContent } from './ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
@@ -32,23 +32,6 @@ interface LeadComparable {
   createdAt: string;
 }
 
-interface CompsAnalysis {
-  averagePrice: number;
-  medianPrice: number;
-  pricePerSqftAverage: number;
-  pricePerSqftMedian: number;
-  averageDom: number;
-  totalComps: number;
-  priceRange: {
-    min: number;
-    max: number;
-  };
-  sqftRange: {
-    min: number;
-    max: number;
-  };
-}
-
 interface CompsManagerProps {
   leadId: string;
   leadAddress?: {
@@ -62,7 +45,6 @@ interface CompsManagerProps {
 export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress }) => {
   const [leadComps, setLeadComps] = useState<LeadComparable[]>([]);
   const [searchResults, setSearchResults] = useState<LeadComparable[]>([]);
-  const [analysis, setAnalysis] = useState<CompsAnalysis | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
   const [showAddCompDialog, setShowAddCompDialog] = useState(false);
@@ -140,11 +122,6 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
       if (response.ok) {
         const data = await response.json();
         setLeadComps(data);
-        
-        // Load analysis if we have comps
-        if (data.length > 0) {
-          loadAnalysis();
-        }
       }
     } catch (error) {
       toast({
@@ -154,19 +131,6 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
       });
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const loadAnalysis = async () => {
-    try {
-      const response = await makeApiCall(`${API_BASE}/comps/leads/${leadId}/analysis`);
-
-      if (response.ok) {
-        const data = await response.json();
-        setAnalysis(data);
-      }
-    } catch (error) {
-      // Analysis might fail if no valid comps, that's okay
     }
   };
 
@@ -270,7 +234,8 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
         yearBuilt: newComp.yearBuilt ? parseInt(newComp.yearBuilt) : undefined,
         salePrice: newComp.salePrice ? parseInt(newComp.salePrice) : undefined,
         dom: newComp.dom ? parseInt(newComp.dom) : undefined,
-        dateSold: newComp.dateSold ? new Date(newComp.dateSold).toISOString() : undefined
+        // Backend will coerce this to a Date; send as YYYY-MM-DD for clarity
+        dateSold: newComp.dateSold || undefined
       };
 
       const response = await makeApiCall(`${API_BASE}/comps/leads/${leadId}/comparables`, {
@@ -278,31 +243,34 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
         body: JSON.stringify(compData)
       });
 
-      if (response.ok) {
-        await loadLeadComps();
-        setShowAddCompDialog(false);
-        setNewComp({
-          address: '',
-          city: leadAddress?.city || '',
-          state: leadAddress?.state || '',
-          zip: leadAddress?.zip || '',
-          beds: '',
-          baths: '',
-          sqft: '',
-          yearBuilt: '',
-          salePrice: '',
-          dom: '',
-          dateSold: ''
-        });
-        toast({
-          title: "Success",
-          description: "Comparable property created successfully"
-        });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err?.error || err?.message || `Failed to create comparable (HTTP ${response.status})`);
       }
+
+      await loadLeadComps();
+      setShowAddCompDialog(false);
+      setNewComp({
+        address: '',
+        city: leadAddress?.city || '',
+        state: leadAddress?.state || '',
+        zip: leadAddress?.zip || '',
+        beds: '',
+        baths: '',
+        sqft: '',
+        yearBuilt: '',
+        salePrice: '',
+        dom: '',
+        dateSold: ''
+      });
+      toast({
+        title: "Success",
+        description: "Comparable property created successfully"
+      });
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to create comparable",
+        description: error instanceof Error ? error.message : "Failed to create comparable",
         variant: "destructive"
       });
     }
@@ -358,68 +326,43 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
         </CardTitle>
       </CardHeader>
       <CardContent className="p-3 pt-2">
-        <Tabs defaultValue="comparables" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 h-7">
-            <TabsTrigger value="comparables" className="text-xs py-1">Comps ({leadComps.length})</TabsTrigger>
-            <TabsTrigger value="analysis" className="text-xs py-1">Analysis</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="comparables" className="mt-2">
-            {leadComps.length === 0 ? (
-              <div className="text-center py-3 text-[10px] text-muted-foreground">No comps yet</div>
-            ) : (
-              <div className="overflow-x-auto max-h-40">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="text-[10px]">
-                      <TableHead className="py-1 px-1">Address</TableHead>
-                      <TableHead className="py-1 px-1">Beds/Baths</TableHead>
-                      <TableHead className="py-1 px-1">Sq Ft</TableHead>
-                      <TableHead className="py-1 px-1">Sale Price</TableHead>
-                      <TableHead className="py-1 px-1">Price/Sq Ft</TableHead>
-                      <TableHead className="py-1 px-1">DOM</TableHead>
-                      <TableHead className="py-1 px-1">Date Sold</TableHead>
-                      <TableHead className="py-1 px-1"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {leadComps.map((comp) => (
-                      <TableRow key={comp.id} className="text-[10px]">
-                        <TableCell className="py-1 px-1">
-                          <div className="font-medium">{comp.address}</div>
-                          <div className="text-slate-400">{comp.city}, {comp.state}</div>
-                        </TableCell>
-                        <TableCell className="py-1 px-1">{comp.beds || '-'}/{comp.baths || '-'}</TableCell>
-                        <TableCell className="py-1 px-1">{comp.sqft?.toLocaleString() || '-'}</TableCell>
-                        <TableCell className="py-1 px-1">{formatCurrency(comp.salePrice)}</TableCell>
-                        <TableCell className="py-1 px-1">{formatCurrency(comp.pricePerSqft)}</TableCell>
-                        <TableCell className="py-1 px-1">{comp.dom || '-'}</TableCell>
-                        <TableCell className="py-1 px-1">{formatDate(comp.dateSold)}</TableCell>
-                        <TableCell className="py-1 px-1"><Button size="sm" variant="ghost" className="h-4 w-4 p-0" onClick={() => deleteComparable(comp.id)}><Trash2 className="h-2.5 w-2.5" /></Button></TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="analysis" className="mt-2">
-            {!analysis ? (
-              <div className="text-center py-3 text-[10px] text-muted-foreground">Add comps to see analysis</div>
-            ) : (
-              <div className="grid grid-cols-4 gap-1">
-                <div className="p-1.5 bg-muted rounded"><div className="text-[9px] text-muted-foreground">Avg Price</div><div className="text-xs font-semibold">{formatCurrency(analysis.averagePrice)}</div></div>
-                <div className="p-1.5 bg-muted rounded"><div className="text-[9px] text-muted-foreground">Median</div><div className="text-xs font-semibold">{formatCurrency(analysis.medianPrice)}</div></div>
-                <div className="p-1.5 bg-muted rounded"><div className="text-[9px] text-muted-foreground">$/SqFt</div><div className="text-xs font-semibold">{formatCurrency(analysis.pricePerSqftAverage)}</div></div>
-                <div className="p-1.5 bg-muted rounded"><div className="text-[9px] text-muted-foreground">Avg DOM</div><div className="text-xs font-semibold">{analysis.averageDom}d</div></div>
-                <div className="p-1.5 bg-muted rounded col-span-2"><div className="text-[9px] text-muted-foreground">Price Range</div><div className="text-xs font-semibold">{formatCurrency(analysis.priceRange.min)} - {formatCurrency(analysis.priceRange.max)}</div></div>
-                <div className="p-1.5 bg-muted rounded"><div className="text-[9px] text-muted-foreground">Comps</div><div className="text-xs font-semibold">{analysis.totalComps}</div></div>
-                <div className="p-1.5 bg-muted rounded"><div className="text-[9px] text-muted-foreground">Med $/SqFt</div><div className="text-xs font-semibold">{formatCurrency(analysis.pricePerSqftMedian)}</div></div>
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
+        {leadComps.length === 0 ? (
+          <div className="text-center py-3 text-[10px] text-muted-foreground">No comps yet</div>
+        ) : (
+          <div className="overflow-x-auto max-h-40">
+            <Table>
+              <TableHeader>
+                <TableRow className="text-[10px]">
+                  <TableHead className="py-1 px-1">Address</TableHead>
+                  <TableHead className="py-1 px-1">Beds/Baths</TableHead>
+                  <TableHead className="py-1 px-1">Sq Ft</TableHead>
+                  <TableHead className="py-1 px-1">Sale Price</TableHead>
+                  <TableHead className="py-1 px-1">Price/Sq Ft</TableHead>
+                  <TableHead className="py-1 px-1">DOM</TableHead>
+                  <TableHead className="py-1 px-1">Date Sold</TableHead>
+                  <TableHead className="py-1 px-1"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {leadComps.map((comp) => (
+                  <TableRow key={comp.id} className="text-[10px]">
+                    <TableCell className="py-1 px-1">
+                      <div className="font-medium">{comp.address}</div>
+                      <div className="text-slate-400">{comp.city}, {comp.state}</div>
+                    </TableCell>
+                    <TableCell className="py-1 px-1">{comp.beds || '-'}/{comp.baths || '-'}</TableCell>
+                    <TableCell className="py-1 px-1">{comp.sqft?.toLocaleString() || '-'}</TableCell>
+                    <TableCell className="py-1 px-1">{formatCurrency(comp.salePrice)}</TableCell>
+                    <TableCell className="py-1 px-1">{formatCurrency(comp.pricePerSqft)}</TableCell>
+                    <TableCell className="py-1 px-1">{comp.dom || '-'}</TableCell>
+                    <TableCell className="py-1 px-1">{formatDate(comp.dateSold)}</TableCell>
+                    <TableCell className="py-1 px-1"><Button size="sm" variant="ghost" className="h-4 w-4 p-0" onClick={() => deleteComparable(comp.id)}><Trash2 className="h-2.5 w-2.5" /></Button></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
 
         {/* Search Results Dialog */}
         <Dialog open={showSearchDialog} onOpenChange={setShowSearchDialog}>

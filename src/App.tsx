@@ -96,17 +96,23 @@ const App = () => (
             } />
             <Route path="/leads/add-seller" element={
               <ProtectedRoute requiredRoles={['ADMIN', 'MANAGER', 'ACQ']}>
-                <AddSellerLead />
+                <DashboardLayout>
+                  <AddSellerLead />
+                </DashboardLayout>
               </ProtectedRoute>
             } />
             <Route path="/leads/add-buyer" element={
               <ProtectedRoute>
-                <AddBuyerLead />
+                <DashboardLayout>
+                  <AddBuyerLead />
+                </DashboardLayout>
               </ProtectedRoute>
             } />
             <Route path="/leads/add-vendor" element={
               <ProtectedRoute>
-                <AddVendorLead />
+                <DashboardLayout>
+                  <AddVendorLead />
+                </DashboardLayout>
               </ProtectedRoute>
             } />
             <Route path="/agents" element={

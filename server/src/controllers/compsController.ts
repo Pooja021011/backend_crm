@@ -2,6 +2,26 @@ import { Request, Response } from 'express';
 import { compsService } from '../services/compsService';
 import { logger } from '../config/logger';
 
+const normalizeComparableBody = (body: any) => {
+  const normalized = { ...body };
+
+  // Coerce numeric fields if they come as strings
+  for (const key of ['beds', 'baths', 'sqft', 'yearBuilt', 'salePrice', 'pricePerSqft', 'dom'] as const) {
+    if (normalized[key] !== undefined && normalized[key] !== null && typeof normalized[key] === 'string') {
+      const n = Number(normalized[key]);
+      normalized[key] = Number.isFinite(n) ? n : undefined;
+    }
+  }
+
+  // Coerce dateSold to Date if provided; drop if invalid
+  if (normalized.dateSold) {
+    const d = new Date(normalized.dateSold);
+    normalized.dateSold = Number.isNaN(d.getTime()) ? undefined : d;
+  }
+
+  return normalized;
+};
+
 export const compsController = {
   async listLeadComps(req: Request, res: Response): Promise<void> {
     try {
@@ -47,7 +67,7 @@ export const compsController = {
   async createComparable(req: Request, res: Response): Promise<void> {
     try {
       const { leadId } = req.params;
-      const comparableData = { ...req.body, leadId };
+      const comparableData = { ...normalizeComparableBody(req.body), leadId };
       const comparable = await compsService.createComparable(comparableData);
       res.status(201).json(comparable);
     } catch (error) {
@@ -64,7 +84,7 @@ export const compsController = {
   async updateComparable(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      const comparable = await compsService.updateComparable(id, req.body);
+      const comparable = await compsService.updateComparable(id, normalizeComparableBody(req.body));
       res.json(comparable);
     } catch (error) {
       logger.error('Error updating comparable: ' + (error as Error).message);

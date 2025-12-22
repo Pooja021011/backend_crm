@@ -98,7 +98,8 @@ export const compsRepository = {
 
     return prisma.leadComparable.create({
       data: {
-        leadId: data.leadId,
+        // Use relation connect (Prisma checked input requires `lead`, not raw leadId)
+        lead: { connect: { id: data.leadId } },
         address: data.address,
         city: data.city,
         state: data.state,
