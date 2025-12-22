@@ -176,24 +176,13 @@ async function upsertMarketsAndCounties() {
 }
 
 async function upsertLeadSources() {
+  // Client requirement: Only these 5 lead sources
   const leadSources = [
-    "Website",
-    "Referral",
-    "Social Media",
-    "Cold Call",
-    "Direct Mail",
-    "Networking Event",
-    "Online Advertisement",
-    "Walk-in",
-    "Google Ads",
-    "Facebook Ads",
-    "Yellow Pages",
-    "Radio",
-    "TV",
-    "Newspaper",
-    "Real Estate Agent",
-    "Wholesaler",
-    "Bird Dog"
+    "Mailer",
+    "SMS",
+    "Call",
+    "Foreclosure",
+    "Other"
   ];
 
   for (const sourceName of leadSources) {
@@ -275,70 +264,55 @@ async function upsertDocCategories() {
 }
 
 async function upsertLeadStatuses() {
+  // Client requirement: Only these 6 lead statuses
   const DEFAULT_STATUSES = [
     {
-      name: "New Lead",
-      description: "Newly acquired lead, awaiting initial contact",
-      color: "#3B82F6",
+      name: "Inactive",
+      description: "Lead is currently inactive",
+      color: "#6B7280",
       orderIndex: 0,
       active: true,
       isDefault: true,
     },
     {
-      name: "Contacted",
-      description: "Initial contact has been made",
-      color: "#10B981",
+      name: "Pipeline",
+      description: "Lead is in the pipeline",
+      color: "#3B82F6",
       orderIndex: 1,
       active: true,
       isDefault: true,
     },
     {
-      name: "Qualified",
-      description: "Lead has been qualified and shows strong interest",
-      color: "#8B5CF6",
+      name: "Long Term Follow Up",
+      description: "Lead requires long-term follow-up",
+      color: "#F59E0B",
       orderIndex: 2,
       active: true,
       isDefault: true,
     },
     {
-      name: "In Negotiation",
-      description: "Currently negotiating terms and conditions",
-      color: "#F59E0B",
-      orderIndex: 3,
-      active: true,
-      isDefault: false,
-    },
-    {
-      name: "Contract Sent",
-      description: "Contract has been sent to the lead",
-      color: "#06B6D4",
-      orderIndex: 4,
-      active: true,
-      isDefault: false,
-    },
-    {
-      name: "Closed Won",
-      description: "Deal successfully closed",
+      name: "Closed",
+      description: "Lead has been closed successfully",
       color: "#10B981",
-      orderIndex: 5,
+      orderIndex: 3,
       active: true,
       isDefault: true,
     },
     {
-      name: "Closed Lost",
-      description: "Deal was lost or lead is no longer interested",
+      name: "Dead",
+      description: "Lead is no longer viable",
       color: "#EF4444",
-      orderIndex: 6,
+      orderIndex: 4,
       active: true,
-      isDefault: false,
+      isDefault: true,
     },
     {
-      name: "On Hold",
-      description: "Lead is temporarily on hold",
-      color: "#6B7280",
-      orderIndex: 7,
+      name: "Wrong Number",
+      description: "Contact information is incorrect",
+      color: "#8B5CF6",
+      orderIndex: 5,
       active: true,
-      isDefault: false,
+      isDefault: true,
     },
   ];
 
