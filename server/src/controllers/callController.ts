@@ -336,5 +336,68 @@ export const callController = {
       logger.error('Error in TwiML Voice controller', { error: error.message });
       res.status(500).send('Error processing call');
     }
+  },
+
+  /**
+   * TwiML for incoming calls - route to browser client
+   */
+  async twimlIncoming(req: Request, res: Response) {
+    try {
+      logger.info('TwiML Incoming endpoint called', { body: req.body });
+
+      const from = req.body.From;
+      const to = req.body.To;
+
+      // Find which user should receive this call based on the destination number
+      const smsSettingsRepository = await import('../repositories/smsSettingsRepository.js');
+      const userSettings = await smsSettingsRepository.smsSettingsRepository.findByPhoneNumber(to);
+
+      if (userSettings && userSettings.user) {
+        // Route call to the user's browser client
+        const clientIdentity = userSettings.user.email || userSettings.userId;
+        
+        logger.info('Routing incoming call to browser client', { 
+          from, 
+          to, 
+          clientIdentity 
+        });
+
+        // TwiML to route call to browser
+        const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Dial>
+    <Client>${clientIdentity}</Client>
+  </Dial>
+  <Say voice="alice">The user is not available. Please try again later.</Say>
+</Response>`;
+
+        res.type('text/xml');
+        res.send(twiml);
+      } else {
+        // No user found for this number - play message
+        logger.warn('No user found for incoming call destination', { to });
+        
+        const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="alice">Thank you for calling. This number is not currently assigned. Goodbye.</Say>
+  <Hangup/>
+</Response>`;
+
+        res.type('text/xml');
+        res.send(twiml);
+      }
+    } catch (error: any) {
+      logger.error('Error in TwiML Incoming controller', { error: error.message });
+      
+      // Fallback TwiML
+      const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="alice">We're sorry, but we're experiencing technical difficulties. Please try again later.</Say>
+  <Hangup/>
+</Response>`;
+      
+      res.type('text/xml');
+      res.send(twiml);
+    }
   }
 };

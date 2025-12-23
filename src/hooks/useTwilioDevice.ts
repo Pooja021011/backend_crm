@@ -9,6 +9,13 @@ export interface CallStatus {
   error?: string;
 }
 
+export interface IncomingCallInfo {
+  call: Call;
+  from: string;
+  callSid: string;
+  customParameters?: Record<string, string>;
+}
+
 export const useTwilioDevice = () => {
   const [device, setDevice] = useState<Device | null>(null);
   const [activeCall, setActiveCall] = useState<Call | null>(null);
@@ -16,7 +23,9 @@ export const useTwilioDevice = () => {
     status: 'idle',
     duration: 0,
   });
+  const [incomingCall, setIncomingCall] = useState<IncomingCallInfo | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
   const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
 
@@ -87,8 +96,29 @@ export const useTwilioDevice = () => {
       });
 
       newDevice.on('incoming', (call) => {
-        console.log('Incoming call:', call);
-        // Handle incoming calls if needed
+        console.log('📞 Incoming call received:', call);
+        
+        // Get call parameters
+        const params = call.parameters;
+        const from = params.From || 'Unknown';
+        const callSid = call.parameters.CallSid || '';
+        
+        console.log('Incoming call from:', from, 'CallSid:', callSid);
+        
+        // Set incoming call state
+        setIncomingCall({
+          call,
+          from,
+          callSid,
+          customParameters: params
+        });
+        
+        // Play browser notification sound (optional)
+        toast({
+          title: '📞 Incoming Call',
+          description: `Call from ${from}`,
+          duration: 10000,
+        });
       });
 
       // Register the device
@@ -271,12 +301,111 @@ export const useTwilioDevice = () => {
   // Mute/unmute
   const toggleMute = useCallback(() => {
     if (activeCall) {
-      const isMuted = activeCall.isMuted();
-      activeCall.mute(!isMuted);
-      return !isMuted;
+      const currentMuteState = activeCall.isMuted();
+      activeCall.mute(!currentMuteState);
+      setIsMuted(!currentMuteState);
+      return !currentMuteState;
     }
     return false;
   }, [activeCall]);
+
+  // Answer incoming call
+  const answerCall = useCallback(async () => {
+    if (!incomingCall) return;
+
+    try {
+      console.log('📞 Answering incoming call');
+      
+      const call = incomingCall.call;
+      
+      // Accept the call
+      call.accept();
+      
+      // Set as active call
+      setActiveCall(call);
+      setIncomingCall(null);
+      setCallStatus({ status: 'connected', duration: 0 });
+      
+      // Start duration counter
+      let seconds = 0;
+      durationIntervalRef.current = setInterval(() => {
+        seconds++;
+        setCallStatus(prev => ({ ...prev, duration: seconds }));
+      }, 1000);
+
+      // Setup call event listeners
+      call.on('disconnect', () => {
+        console.log('Call disconnected');
+        setCallStatus({ status: 'disconnected', duration: 0 });
+        setActiveCall(null);
+        
+        if (durationIntervalRef.current) {
+          clearInterval(durationIntervalRef.current);
+          durationIntervalRef.current = null;
+        }
+
+        toast({
+          title: 'Call Ended',
+          description: 'The call has been disconnected',
+        });
+      });
+
+      call.on('error', (error) => {
+        console.error('Call error:', error);
+        setCallStatus({ 
+          status: 'idle', 
+          duration: 0,
+          error: error.message 
+        });
+        setActiveCall(null);
+        
+        if (durationIntervalRef.current) {
+          clearInterval(durationIntervalRef.current);
+          durationIntervalRef.current = null;
+        }
+
+        toast({
+          title: 'Call Error',
+          description: error.message || 'An error occurred during the call',
+          variant: 'destructive',
+        });
+      });
+
+      toast({
+        title: 'Call Connected',
+        description: 'You are now connected',
+      });
+
+    } catch (error: any) {
+      console.error('Error answering call:', error);
+      setIncomingCall(null);
+      
+      toast({
+        title: 'Failed to Answer',
+        description: error.message || 'Could not answer the call',
+        variant: 'destructive',
+      });
+    }
+  }, [incomingCall, toast]);
+
+  // Reject incoming call
+  const rejectCall = useCallback(() => {
+    if (!incomingCall) return;
+
+    try {
+      console.log('📞 Rejecting incoming call');
+      incomingCall.call.reject();
+      setIncomingCall(null);
+      
+      toast({
+        title: 'Call Rejected',
+        description: 'The incoming call was rejected',
+      });
+    } catch (error: any) {
+      console.error('Error rejecting call:', error);
+      setIncomingCall(null);
+    }
+  }, [incomingCall, toast]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -298,11 +427,15 @@ export const useTwilioDevice = () => {
     device,
     activeCall,
     callStatus,
+    incomingCall,
     isInitializing,
+    isMuted,
     initializeDevice,
     makeCall,
     hangUp,
     toggleMute,
+    answerCall,
+    rejectCall,
   };
 };
 

@@ -14,6 +14,7 @@ router.use(authenticate);
 router.get('/sources', (req, res, next) => pipelineController.getLeadSources(req, res).catch(next));
 
 router.get('/', (req, res, next) => leadController.list(req, res).catch(next));
+router.get('/search', (req, res, next) => leadController.searchByPhone(req, res).catch(next));
 router.post('/', (req, res, next) => leadController.create(req, res).catch(next));
 router.get('/:id', (req, res, next) => leadController.get(req, res).catch(next));
 router.patch('/:id', (req, res, next) => leadController.update(req, res).catch(next));

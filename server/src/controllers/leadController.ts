@@ -44,6 +44,27 @@ export const leadController = {
     res.json({ data: leads, skip: q.skip ?? 0, take: q.take ?? 20 });
   },
 
+  async searchByPhone(req: Request, res: Response) {
+    const { phone } = req.query;
+    
+    if (!phone || typeof phone !== 'string') {
+      return res.status(400).json({ error: 'Phone number is required' });
+    }
+
+    try {
+      const lead = await leadService.findByPhoneNumber(phone);
+      
+      if (lead) {
+        res.json({ lead });
+      } else {
+        res.json({ lead: null });
+      }
+    } catch (error: any) {
+      console.error('Error searching lead by phone:', error);
+      res.status(500).json({ error: 'Failed to search lead' });
+    }
+  },
+
   async delete(req: Request, res: Response) {
     const lead = await leadService.get(req.params.id);
     if (!lead) return res.status(404).json({ error: 'Lead not found' });

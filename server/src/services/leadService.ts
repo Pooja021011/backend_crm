@@ -90,5 +90,37 @@ export const leadService = {
   deleteTask: (taskId: string) => taskRepository.delete(taskId),
 
   suggestions: (q: string) => leadRepository.suggestions(q),
+
+  async findByPhoneNumber(phoneNumber: string): Promise<any> {
+    try {
+      // Search in lead detail tables (seller, buyer, vendor) for phone numbers
+      const lead = await prisma.lead.findFirst({
+        where: {
+          OR: [
+            { seller: { phone: phoneNumber } },
+            { seller: { phone: phoneNumber.replace(/\D/g, '') } },
+            { seller: { phone: phoneNumber.replace(/^\+1/, '') } },
+            { buyer: { phone: phoneNumber } },
+            { buyer: { phone: phoneNumber.replace(/\D/g, '') } },
+            { buyer: { phone: phoneNumber.replace(/^\+1/, '') } },
+            { vendor: { phone: phoneNumber } },
+            { vendor: { phone: phoneNumber.replace(/\D/g, '') } },
+            { vendor: { phone: phoneNumber.replace(/^\+1/, '') } },
+          ]
+        },
+        include: {
+          seller: true,
+          buyer: true,
+          vendor: true,
+          address: true,
+        }
+      });
+      
+      return lead;
+    } catch (error: any) {
+      console.error('Error finding lead by phone number', { error: error.message, phoneNumber });
+      return null;
+    }
+  },
 };
 

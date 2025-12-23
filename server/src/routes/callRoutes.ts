@@ -7,7 +7,7 @@ const router = Router();
 // All call routes require authentication except webhooks
 router.use((req, res, next) => {
   // Skip auth for webhook endpoints and TwiML
-  if (req.path === '/webhook' || req.path === '/twiml' || req.path === '/twiml-voice') {
+  if (req.path === '/webhook' || req.path === '/twiml' || req.path === '/twiml-voice' || req.path === '/twiml-incoming') {
     return next();
   }
   return authenticate(req, res, next);
@@ -56,6 +56,11 @@ router.post('/twiml', (req, res, next) =>
 // TwiML endpoint for browser-based voice calls (no auth required)
 router.post('/twiml-voice', (req, res, next) => 
   callController.twimlVoice(req, res).catch(next)
+);
+
+// TwiML endpoint for incoming calls - routes to browser (no auth required)
+router.post('/twiml-incoming', (req, res, next) => 
+  callController.twimlIncoming(req, res).catch(next)
 );
 
 export default router;
