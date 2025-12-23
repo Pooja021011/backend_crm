@@ -10,7 +10,9 @@ import {
   Mail, 
   FileText, 
   PhoneCall, 
-  PhoneOff, 
+  PhoneOff,
+  Mic,
+  MicOff,
   Send, 
   Loader2,
   User,
@@ -65,8 +67,11 @@ interface UnifiedCommunicationFeedProps {
   onMakeCall: () => void;
   callStatus?: {
     status: string;
+    duration?: number;
   };
   onHangUp: () => void;
+  onToggleMute?: () => void;
+  isMuted?: boolean;
   hasValidPhone: boolean;
   
   // Note props
@@ -97,6 +102,8 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
   onMakeCall,
   callStatus,
   onHangUp,
+  onToggleMute,
+  isMuted,
   hasValidPhone,
   noteText,
   setNoteText,
@@ -300,23 +307,54 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
       <div className="border-t border-slate-200 pt-2 bg-white">
         {/* Call Status Banner - Above Buttons */}
         {callStatus?.status && callStatus.status !== 'idle' && callStatus.status !== 'disconnected' && (
-          <div className="mb-2 p-2 bg-purple-50 border border-purple-200 rounded flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <PhoneCall className="w-4 h-4 text-purple-600 animate-pulse" />
-              <span className="text-sm text-purple-700 font-medium">
-                {callStatus.status === 'connecting' && 'Connecting...'}
-                {callStatus.status === 'ringing' && 'Ringing...'}
-                {callStatus.status === 'connected' && 'Call in progress'}
-              </span>
+          <div className="mb-2 p-2 bg-purple-50 border border-purple-200 rounded">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <PhoneCall className="w-4 h-4 text-purple-600 animate-pulse" />
+                <span className="text-sm text-purple-700 font-medium">
+                  {callStatus.status === 'connecting' && 'Connecting...'}
+                  {callStatus.status === 'ringing' && 'Ringing...'}
+                  {callStatus.status === 'connected' && 'Call in progress'}
+                </span>
+              </div>
+              {callStatus.status === 'connected' && callStatus.duration !== undefined && (
+                <span className="text-xs text-purple-600 font-mono">
+                  {Math.floor(callStatus.duration / 60)}:{(callStatus.duration % 60).toString().padStart(2, '0')}
+                </span>
+              )}
             </div>
-            <Button
-              onClick={onHangUp}
-              size="sm"
-              className="h-7 px-3 text-xs bg-red-600 hover:bg-red-700"
-            >
-              <PhoneOff className="w-3 h-3 mr-1" />
-              Hang Up
-            </Button>
+            {callStatus.status === 'connected' && (
+              <div className="flex gap-2">
+                {onToggleMute && (
+                  <Button
+                    onClick={onToggleMute}
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-3 text-xs flex-1"
+                  >
+                    {isMuted ? (
+                      <>
+                        <MicOff className="w-3 h-3 mr-1" />
+                        Unmute
+                      </>
+                    ) : (
+                      <>
+                        <Mic className="w-3 h-3 mr-1" />
+                        Mute
+                      </>
+                    )}
+                  </Button>
+                )}
+                <Button
+                  onClick={onHangUp}
+                  size="sm"
+                  className="h-7 px-3 text-xs bg-red-600 hover:bg-red-700 flex-1"
+                >
+                  <PhoneOff className="w-3 h-3 mr-1" />
+                  Hang Up
+                </Button>
+              </div>
+            )}
           </div>
         )}
         

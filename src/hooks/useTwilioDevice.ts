@@ -27,7 +27,27 @@ export const useTwilioDevice = () => {
   const [isInitializing, setIsInitializing] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const ringtoneRef = useRef<HTMLAudioElement | null>(null);
   const { toast } = useToast();
+
+  // Initialize ringtone
+  useEffect(() => {
+    // Create ringtone audio element
+    const ringtone = new Audio();
+    // Using a data URI for a simple ringtone (beep sound)
+    // This is a short sine wave beep that repeats
+    ringtone.src = 'data:audio/wav;base64,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';
+    ringtone.loop = true;
+    ringtone.volume = 0.5;
+    ringtoneRef.current = ringtone;
+
+    return () => {
+      if (ringtoneRef.current) {
+        ringtoneRef.current.pause();
+        ringtoneRef.current = null;
+      }
+    };
+  }, []);
 
   // Initialize Twilio Device
   const initializeDevice = useCallback(async () => {
@@ -105,6 +125,13 @@ export const useTwilioDevice = () => {
         
         console.log('Incoming call from:', from, 'CallSid:', callSid);
         
+        // Play ringtone
+        if (ringtoneRef.current) {
+          ringtoneRef.current.play().catch(err => {
+            console.error('Failed to play ringtone:', err);
+          });
+        }
+        
         // Set incoming call state
         setIncomingCall({
           call,
@@ -113,7 +140,7 @@ export const useTwilioDevice = () => {
           customParameters: params
         });
         
-        // Play browser notification sound (optional)
+        // Show toast notification
         toast({
           title: '📞 Incoming Call',
           description: `Call from ${from}`,
@@ -316,7 +343,29 @@ export const useTwilioDevice = () => {
     try {
       console.log('📞 Answering incoming call');
       
+      // Stop ringtone
+      if (ringtoneRef.current) {
+        ringtoneRef.current.pause();
+        ringtoneRef.current.currentTime = 0;
+      }
+      
       const call = incomingCall.call;
+      
+      // Log to backend that call was answered
+      try {
+        await makeApiCall(`${API_BASE}/calls/log-answer`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            callSid: incomingCall.callSid,
+            from: incomingCall.from,
+            action: 'answered'
+          })
+        });
+      } catch (logError) {
+        console.error('Failed to log call answer:', logError);
+        // Continue anyway - don't block the call
+      }
       
       // Accept the call
       call.accept();
@@ -389,11 +438,34 @@ export const useTwilioDevice = () => {
   }, [incomingCall, toast]);
 
   // Reject incoming call
-  const rejectCall = useCallback(() => {
+  const rejectCall = useCallback(async () => {
     if (!incomingCall) return;
 
     try {
       console.log('📞 Rejecting incoming call');
+      
+      // Stop ringtone
+      if (ringtoneRef.current) {
+        ringtoneRef.current.pause();
+        ringtoneRef.current.currentTime = 0;
+      }
+      
+      // Log to backend that call was rejected
+      try {
+        await makeApiCall(`${API_BASE}/calls/log-reject`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            callSid: incomingCall.callSid,
+            from: incomingCall.from,
+            action: 'rejected'
+          })
+        });
+      } catch (logError) {
+        console.error('Failed to log call rejection:', logError);
+        // Continue anyway
+      }
+      
       incomingCall.call.reject();
       setIncomingCall(null);
       

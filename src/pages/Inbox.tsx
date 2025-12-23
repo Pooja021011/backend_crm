@@ -44,6 +44,8 @@ import {
   MessageSquare, 
   Phone, 
   PhoneOff,
+  Mic,
+  MicOff,
   Clock, 
   CheckSquare, 
   Users,
@@ -70,7 +72,7 @@ import {
 const Inbox = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { makeCall: makeBrowserCall, hangUp, callStatus, isInitializing } = useTwilioDevice();
+  const { makeCall: makeBrowserCall, hangUp, callStatus, isInitializing, toggleMute, isMuted } = useTwilioDevice();
   
   const [activeTab, setActiveTab] = useState("emails");
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
@@ -2747,6 +2749,24 @@ const Inbox = () => {
           
           {callStatus.status === 'connected' && (
             <div className="flex gap-2">
+              <Button
+                onClick={toggleMute}
+                variant="outline"
+                size="sm"
+                className="flex-1"
+              >
+                {isMuted ? (
+                  <>
+                    <MicOff className="w-4 h-4 mr-2" />
+                    Unmute
+                  </>
+                ) : (
+                  <>
+                    <Mic className="w-4 h-4 mr-2" />
+                    Mute
+                  </>
+                )}
+              </Button>
               <Button
                 onClick={hangUp}
                 variant="destructive"

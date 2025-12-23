@@ -28,6 +28,16 @@ router.get('/history', (req, res, next) =>
   callController.getCallHistory(req, res).catch(next)
 );
 
+// Log call answer action
+router.post('/log-answer', (req, res, next) => 
+  callController.logCallAnswer(req, res).catch(next)
+);
+
+// Log call reject action
+router.post('/log-reject', (req, res, next) => 
+  callController.logCallReject(req, res).catch(next)
+);
+
 // Get call status
 router.get('/status/:callControlId', (req, res, next) => 
   callController.getCallStatus(req, res).catch(next)

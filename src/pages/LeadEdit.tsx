@@ -194,7 +194,7 @@ const LeadEdit: React.FC = () => {
   const [addingNote, setAddingNote] = useState(false);
   
   // Communication features
-  const { makeCall: makeBrowserCall, hangUp, callStatus, isInitializing } = useTwilioDevice();
+  const { makeCall: makeBrowserCall, hangUp, callStatus, isInitializing, toggleMute, isMuted } = useTwilioDevice();
   const [communications, setCommunications] = useState<any[]>([]);
   const [loadingCommunications, setLoadingCommunications] = useState(false);
   const [smsText, setSmsText] = useState('');
@@ -2520,6 +2520,8 @@ const LeadEdit: React.FC = () => {
                 onMakeCall={handleMakeCall}
                 callStatus={callStatus}
                 onHangUp={hangUp}
+                onToggleMute={toggleMute}
+                isMuted={isMuted}
                 hasValidPhone={hasValidPhone()}
                 noteText={noteText}
                 setNoteText={setNoteText}

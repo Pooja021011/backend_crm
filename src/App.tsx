@@ -65,9 +65,7 @@ const App = () => (
             } />
             <Route path="/leads/:id/edit" element={
               <ProtectedRoute>
-                <DashboardLayout>
-                  <LeadEdit />
-                </DashboardLayout>
+                <LeadEdit />
               </ProtectedRoute>
             } />
             <Route path="/pipeline" element={

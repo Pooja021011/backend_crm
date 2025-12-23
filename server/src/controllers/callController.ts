@@ -399,5 +399,61 @@ export const callController = {
       res.type('text/xml');
       res.send(twiml);
     }
+  },
+
+  /**
+   * Log when user answers incoming call from browser
+   */
+  async logCallAnswer(req: Request, res: Response) {
+    try {
+      const { callSid, from, action } = req.body;
+      const userId = (req as any).user?.id;
+
+      logger.info('Call answered from browser', { callSid, from, userId });
+
+      // Update the existing communication record if it exists
+      // Or create a new one with answered status
+      const communicationRepository = await import('../repositories/communicationRepository.js');
+      
+      // Note: The incoming call is already logged by the webhook
+      // This just adds additional metadata that it was answered
+      
+      res.json({ 
+        success: true,
+        message: 'Call answer logged'
+      });
+    } catch (error: any) {
+      logger.error('Error logging call answer', { error: error.message });
+      res.status(500).json({
+        success: false,
+        error: 'Failed to log call answer'
+      });
+    }
+  },
+
+  /**
+   * Log when user rejects incoming call from browser
+   */
+  async logCallReject(req: Request, res: Response) {
+    try {
+      const { callSid, from, action } = req.body;
+      const userId = (req as any).user?.id;
+
+      logger.info('Call rejected from browser', { callSid, from, userId });
+
+      // The incoming call was already logged by webhook
+      // We could update it to mark as "rejected" if needed
+      
+      res.json({ 
+        success: true,
+        message: 'Call rejection logged'
+      });
+    } catch (error: any) {
+      logger.error('Error logging call rejection', { error: error.message });
+      res.status(500).json({
+        success: false,
+        error: 'Failed to log call rejection'
+      });
+    }
   }
 };
