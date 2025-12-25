@@ -105,6 +105,65 @@ const Leads = () => {
     return names || '-';
   };
   
+  // Helper to get first available phone number from all sources
+  const getLeadPhone = (lead: any): string => {
+    // Check contacts first
+    if (lead.contacts && lead.contacts.length > 0) {
+      const contactPhone = lead.contacts[0]?.phone?.trim();
+      if (contactPhone) return contactPhone;
+    }
+    
+    // Check lead owners
+    if (lead.leadOwners && lead.leadOwners.length > 0) {
+      const ownerPhone = lead.leadOwners.find((o: any) => o.phone)?.phone?.trim();
+      if (ownerPhone) return ownerPhone;
+    }
+    
+    // Check seller/buyer/vendor
+    const sellerPhone = lead.seller?.phone?.trim();
+    if (sellerPhone) return sellerPhone;
+    
+    const buyerPhone = lead.buyer?.phone?.trim();
+    if (buyerPhone) return buyerPhone;
+    
+    const vendorPhone = lead.vendor?.phone?.trim();
+    if (vendorPhone) return vendorPhone;
+    
+    return 'N/A';
+  };
+  
+  // Helper to get first available email from all sources
+  const getLeadEmail = (lead: any): string => {
+    // Check contacts first
+    if (lead.contacts && lead.contacts.length > 0) {
+      const contactEmail = lead.contacts[0]?.email?.trim();
+      if (contactEmail) return contactEmail;
+    }
+    
+    // Check lead owners
+    if (lead.leadOwners && lead.leadOwners.length > 0) {
+      const ownerEmail = lead.leadOwners.find((o: any) => o.email)?.email?.trim();
+      if (ownerEmail) return ownerEmail;
+    }
+    
+    // Check seller/buyer/vendor
+    const sellerEmail = lead.seller?.email?.trim();
+    if (sellerEmail) return sellerEmail;
+    
+    const buyerEmail = lead.buyer?.email?.trim();
+    if (buyerEmail) return buyerEmail;
+    
+    const vendorEmail = lead.vendor?.email?.trim();
+    if (vendorEmail) return vendorEmail;
+    
+    return 'N/A';
+  };
+  
+  // Helper to check if lead has any phone number
+  const hasPhoneNumber = (lead: any): boolean => {
+    return getLeadPhone(lead) !== 'N/A';
+  };
+  
   // Set default tab based on user role
   const getDefaultTab = (): LeadType => {
     const userRoles = user?.roles?.map((r: any) => {
@@ -1327,11 +1386,11 @@ const Leads = () => {
                         <TableCell>
                           <div className="flex items-center gap-1 text-gray-600">
                             <Phone className="w-2.5 h-2.5 flex-shrink-0" />
-                            <span className="truncate">{lead.seller?.phone || 'N/A'}</span>
+                            <span className="truncate">{getLeadPhone(lead)}</span>
                           </div>
                           <div className="flex items-center gap-1 text-gray-500">
                             <Mail className="w-2.5 h-2.5 flex-shrink-0" />
-                            <span className="truncate">{lead.seller?.email || 'N/A'}</span>
+                            <span className="truncate">{getLeadEmail(lead)}</span>
                           </div>
                         </TableCell>
                         <TableCell>
@@ -1446,11 +1505,11 @@ const Leads = () => {
                         <TableCell>
                           <div className="flex items-center gap-1 text-gray-600">
                             <Phone className="w-2.5 h-2.5 flex-shrink-0" />
-                            <span className="truncate">{lead.buyer?.phone}</span>
+                            <span className="truncate">{getLeadPhone(lead)}</span>
                           </div>
                           <div className="flex items-center gap-1 text-gray-500">
                             <Mail className="w-2.5 h-2.5 flex-shrink-0" />
-                            <span className="truncate">{lead.buyer?.email}</span>
+                            <span className="truncate">{getLeadEmail(lead)}</span>
                           </div>
                         </TableCell>
                         <TableCell className="text-gray-600">
@@ -1583,11 +1642,11 @@ const Leads = () => {
                         <TableCell>
                           <div className="flex items-center gap-1 text-gray-600">
                             <Phone className="w-2.5 h-2.5 flex-shrink-0" />
-                            <span className="truncate">{lead.vendor?.phone}</span>
+                            <span className="truncate">{getLeadPhone(lead)}</span>
                           </div>
                           <div className="flex items-center gap-1 text-gray-500">
                             <Mail className="w-2.5 h-2.5 flex-shrink-0" />
-                            <span className="truncate">{lead.vendor?.email}</span>
+                            <span className="truncate">{getLeadEmail(lead)}</span>
                           </div>
                         </TableCell>
                         <TableCell>

@@ -204,6 +204,16 @@ const LeadEdit: React.FC = () => {
   const [emailBody, setEmailBody] = useState('');
   const [sendingEmail, setSendingEmail] = useState(false);
   
+  // Phone number selector for multiple numbers
+  const [showPhoneSelector, setShowPhoneSelector] = useState(false);
+  const [availablePhoneNumbers, setAvailablePhoneNumbers] = useState<Array<{
+    number: string;
+    label: string;
+    type: string;
+    isPrimary?: boolean;
+  }>>([]);
+  const [selectedPhoneNumber, setSelectedPhoneNumber] = useState<string>('');
+  
   // Lead source specific data
   const [leadSourceData, setLeadSourceData] = useState<any>({});
   
@@ -485,9 +495,7 @@ const LeadEdit: React.FC = () => {
             email: leadData.vendor.email || ''
           });
         }
-        if (initialContacts.length === 0) {
-          initialContacts.push({ name: '', phone: '', email: '' });
-        }
+        // Don't add empty contact - let user add manually if needed
         setContacts(initialContacts);
       }
     } catch (error) {
@@ -991,43 +999,77 @@ const LeadEdit: React.FC = () => {
   };
 
   const saveContacts = async () => {
-    if (contacts.length === 0) return;
-    
     try {
       // Get the first contact (primary contact)
       const primaryContact = contacts[0];
-      if (!primaryContact) return;
       
       // Prepare the update based on lead type
       const contactUpdate: any = {};
       
-      if (lead?.leadType === 'SELLER' && lead?.seller) {
-        contactUpdate.seller = {
-          firstName: primaryContact.name.split(' ')[0] || primaryContact.name,
-          lastName: primaryContact.name.split(' ').slice(1).join(' ') || '',
-          phone: primaryContact.phone,
-          email: primaryContact.email,
-          motivation: lead.seller.motivation,
-          notes: lead.seller.notes
-        };
-      } else if (lead?.leadType === 'BUYER' && lead?.buyer) {
-        contactUpdate.buyer = {
-          firstName: primaryContact.name.split(' ')[0] || primaryContact.name,
-          lastName: primaryContact.name.split(' ').slice(1).join(' ') || '',
-          phone: primaryContact.phone,
-          email: primaryContact.email,
-          vip: lead.buyer.vip,
-          blacklisted: lead.buyer.blacklisted
-        };
-      } else if (lead?.leadType === 'VENDOR' && lead?.vendor) {
-        contactUpdate.vendor = {
-          firstName: primaryContact.name.split(' ')[0] || primaryContact.name,
-          lastName: primaryContact.name.split(' ').slice(1).join(' ') || '',
-          phone: primaryContact.phone,
-          email: primaryContact.email,
-          companyName: lead.vendor.companyName,
-          serviceType: lead.vendor.serviceType
-        };
+      if (lead?.leadType === 'SELLER') {
+        if (primaryContact && primaryContact.name) {
+          // Update seller if primary contact exists
+          contactUpdate.seller = {
+            firstName: primaryContact.name.split(' ')[0] || primaryContact.name,
+            lastName: primaryContact.name.split(' ').slice(1).join(' ') || '',
+            phone: primaryContact.phone,
+            email: primaryContact.email,
+            motivation: lead.seller?.motivation || null,
+            notes: lead.seller?.notes || null
+          };
+        } else {
+          // If no contacts, clear seller data
+          contactUpdate.seller = {
+            firstName: '',
+            lastName: '',
+            phone: '',
+            email: '',
+            motivation: lead.seller?.motivation || null,
+            notes: lead.seller?.notes || null
+          };
+        }
+      } else if (lead?.leadType === 'BUYER') {
+        if (primaryContact && primaryContact.name) {
+          contactUpdate.buyer = {
+            firstName: primaryContact.name.split(' ')[0] || primaryContact.name,
+            lastName: primaryContact.name.split(' ').slice(1).join(' ') || '',
+            phone: primaryContact.phone,
+            email: primaryContact.email,
+            vip: lead.buyer?.vip || false,
+            blacklisted: lead.buyer?.blacklisted || false
+          };
+        } else {
+          // If no contacts, clear buyer data
+          contactUpdate.buyer = {
+            firstName: '',
+            lastName: '',
+            phone: '',
+            email: '',
+            vip: lead.buyer?.vip || false,
+            blacklisted: lead.buyer?.blacklisted || false
+          };
+        }
+      } else if (lead?.leadType === 'VENDOR') {
+        if (primaryContact && primaryContact.name) {
+          contactUpdate.vendor = {
+            firstName: primaryContact.name.split(' ')[0] || primaryContact.name,
+            lastName: primaryContact.name.split(' ').slice(1).join(' ') || '',
+            phone: primaryContact.phone,
+            email: primaryContact.email,
+            companyName: lead.vendor?.companyName || null,
+            serviceType: lead.vendor?.serviceType || null
+          };
+        } else {
+          // If no contacts, clear vendor data
+          contactUpdate.vendor = {
+            firstName: '',
+            lastName: '',
+            phone: '',
+            email: '',
+            companyName: lead.vendor?.companyName || null,
+            serviceType: lead.vendor?.serviceType || null
+          };
+        }
       }
       
       if (Object.keys(contactUpdate).length > 0) {
@@ -1175,6 +1217,67 @@ const LeadEdit: React.FC = () => {
     return phoneNumber;
   };
 
+  // Get all available phone numbers from contacts, owners, and seller
+  const getAllPhoneNumbers = () => {
+    if (!lead) return [];
+    
+    const phones: Array<{number: string; label: string; type: string; isPrimary?: boolean}> = [];
+    
+    // Add all contacts
+    lead.contacts?.forEach((contact: any, index: number) => {
+      if (contact.phone?.trim()) {
+        const firstName = contact.firstName || '';
+        const lastName = contact.lastName || '';
+        const name = `${firstName} ${lastName}`.trim() || `Contact ${index + 1}`;
+        phones.push({
+          number: contact.phone.trim(),
+          label: `${name} (Contact)`,
+          type: 'contact',
+          isPrimary: index === 0
+        });
+      }
+    });
+    
+    // Add all owners
+    leadOwners?.forEach((owner: LeadOwner, index: number) => {
+      if (owner.phone?.trim()) {
+        phones.push({
+          number: owner.phone.trim(),
+          label: `${owner.firstName} ${owner.lastName} (Owner)`,
+          type: 'owner',
+          isPrimary: owner.isPrimary
+        });
+      }
+    });
+    
+    // Add seller
+    if (lead.seller?.phone?.trim()) {
+      const sellerName = `${lead.seller.firstName || ''} ${lead.seller.lastName || ''}`.trim() || 'Seller';
+      phones.push({
+        number: lead.seller.phone.trim(),
+        label: `${sellerName} (Seller)`,
+        type: 'seller'
+      });
+    }
+    
+    // Add buyer
+    if (lead.buyer?.phone?.trim()) {
+      const buyerName = `${lead.buyer.firstName || ''} ${lead.buyer.lastName || ''}`.trim() || 'Buyer';
+      phones.push({
+        number: lead.buyer.phone.trim(),
+        label: `${buyerName} (Buyer)`,
+        type: 'buyer'
+      });
+    }
+    
+    // Remove duplicates by phone number
+    const uniquePhones = phones.filter((phone, index, self) =>
+      index === self.findIndex((p) => p.number === phone.number)
+    );
+    
+    return uniquePhones;
+  };
+
   const getLeadEmail = () => {
     if (!lead) {
       console.log('❌ No lead data available');
@@ -1200,13 +1303,33 @@ const LeadEdit: React.FC = () => {
 
   // Helper to check if phone number is valid
   const hasValidPhone = () => {
-    const phone = getLeadPhoneNumber();
-    return phone && phone.length > 0;
+    const allPhones = getAllPhoneNumbers();
+    return allPhones.length > 0;
   };
 
   // Make a call
   const handleMakeCall = async () => {
-    const phoneNumber = getLeadPhoneNumber();
+    const allPhones = getAllPhoneNumbers();
+    
+    // If no phones available
+    if (allPhones.length === 0) {
+      toast({
+        title: 'Error',
+        description: 'No phone number found for this lead',
+        variant: 'destructive'
+      });
+      return;
+    }
+    
+    // If multiple phones and none selected, show selector
+    if (allPhones.length > 1 && !selectedPhoneNumber) {
+      setAvailablePhoneNumbers(allPhones);
+      setShowPhoneSelector(true);
+      return;
+    }
+    
+    // Use selected number or first available
+    const phoneNumber = selectedPhoneNumber || allPhones[0]?.number;
     
     if (!phoneNumber) {
       toast({
@@ -1238,6 +1361,50 @@ const LeadEdit: React.FC = () => {
       }
       
       // Refresh communications
+      await loadCommunications();
+      
+      toast({
+        title: 'Call Started',
+        description: 'Call connected successfully'
+      });
+      
+    } catch (error: any) {
+      console.error('❌ Error making call:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to make call",
+        variant: "destructive",
+      });
+    } finally {
+      setMakingCall(false);
+    }
+  };
+
+  // Handle phone selection from dialog
+  const handlePhoneSelected = async (phoneNumber: string) => {
+    setSelectedPhoneNumber(phoneNumber);
+    setShowPhoneSelector(false);
+    
+    // Make the call immediately
+    setMakingCall(true);
+    try {
+      console.log('🔵 Making browser call to:', phoneNumber, 'leadId:', id);
+      
+      await makeBrowserCall(phoneNumber);
+      
+      // Store call in database for history
+      try {
+        await makeApiCall(`${API_BASE}/calls/make`, {
+          method: 'POST',
+          body: JSON.stringify({ 
+            to: phoneNumber,
+            leadId: id 
+          })
+        });
+      } catch (dbError) {
+        console.error('Failed to store call in database:', dbError);
+      }
+      
       await loadCommunications();
       
       toast({
@@ -2157,7 +2324,8 @@ const LeadEdit: React.FC = () => {
             <Button size="sm" variant="ghost" className="h-5 text-[10px] px-2" onClick={addContact}><Plus className="w-2.5 h-2.5 mr-0.5" />Add</Button>
           </div>
           <div className="space-y-1.5">
-            {contacts.map((contact, index) => (
+            {contacts.length > 0 ? (
+              contacts.map((contact, index) => (
               <div key={index} className="flex items-center gap-2 p-1.5 bg-slate-50 rounded border border-slate-100">
                 <Input 
                   value={contact.name} 
@@ -2190,7 +2358,8 @@ const LeadEdit: React.FC = () => {
                   <X className="w-3.5 h-3.5 text-red-500" />
                 </Button>
               </div>
-            ))}
+            ))
+            ) : null}
           </div>
         </div>
 
@@ -2899,6 +3068,56 @@ const LeadEdit: React.FC = () => {
           }
         }}
       />
+      
+      {/* Phone Number Selector Dialog */}
+      <Dialog open={showPhoneSelector} onOpenChange={setShowPhoneSelector}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Phone className="w-5 h-5 text-purple-600" />
+              Select Phone Number
+            </DialogTitle>
+            <DialogDescription>
+              Multiple phone numbers found. Choose which one to call.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-2 py-4">
+            {availablePhoneNumbers.map((phone, index) => (
+              <button
+                key={index}
+                onClick={() => handlePhoneSelected(phone.number)}
+                className="w-full p-4 text-left border-2 border-gray-200 rounded-lg hover:border-purple-500 hover:bg-purple-50 transition-all group"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-gray-900">{phone.label}</span>
+                      {phone.isPrimary && (
+                        <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded">
+                          Primary
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-sm text-gray-600 mt-1 font-mono">{phone.number}</div>
+                    <div className="text-xs text-gray-500 mt-1 capitalize">{phone.type}</div>
+                  </div>
+                  <Phone className="w-5 h-5 text-gray-400 group-hover:text-purple-600 transition-colors" />
+                </div>
+              </button>
+            ))}
+          </div>
+          
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowPhoneSelector(false)}
+            >
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 };
