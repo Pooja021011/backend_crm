@@ -213,6 +213,8 @@ const LeadEdit: React.FC = () => {
     isPrimary?: boolean;
   }>>([]);
   const [selectedPhoneNumber, setSelectedPhoneNumber] = useState<string>('');
+  const [selectedSMSPhone, setSelectedSMSPhone] = useState<string>(''); // For SMS phone selection
+  const [selectedEmail, setSelectedEmail] = useState<string>(''); // For email selection
   
   // Lead source specific data
   const [leadSourceData, setLeadSourceData] = useState<any>({});
@@ -1306,6 +1308,92 @@ const LeadEdit: React.FC = () => {
     return uniquePhones;
   };
 
+  // Get all available email addresses from contacts, owners, seller, buyer, vendor
+  const getAllEmailAddresses = () => {
+    if (!lead) return [];
+    
+    const emails: Array<{email: string; label: string; type: string; isPrimary?: boolean}> = [];
+    
+    // First, check contacts from customFields (saved multiple contacts)
+    const savedContacts = lead.customFields?.contacts || [];
+    if (Array.isArray(savedContacts) && savedContacts.length > 0) {
+      savedContacts.forEach((contact: any, index: number) => {
+        if (contact.email?.trim()) {
+          emails.push({
+            email: contact.email.trim(),
+            label: `${contact.name || `Contact ${index + 1}`} (Contact)`,
+            type: 'contact',
+            isPrimary: index === 0
+          });
+        }
+      });
+    }
+    
+    // Also check lead.contacts if available (from database)
+    lead.contacts?.forEach((contact: any, index: number) => {
+      if (contact.email?.trim()) {
+        const firstName = contact.firstName || '';
+        const lastName = contact.lastName || '';
+        const name = `${firstName} ${lastName}`.trim() || `Contact ${index + 1}`;
+        emails.push({
+          email: contact.email.trim(),
+          label: `${name} (Contact)`,
+          type: 'contact',
+          isPrimary: index === 0
+        });
+      }
+    });
+    
+    // Add all owners
+    leadOwners?.forEach((owner: LeadOwner, index: number) => {
+      if (owner.email?.trim()) {
+        emails.push({
+          email: owner.email.trim(),
+          label: `${owner.firstName} ${owner.lastName} (Owner)`,
+          type: 'owner',
+          isPrimary: owner.isPrimary
+        });
+      }
+    });
+    
+    // Add seller
+    if (lead.seller?.email?.trim()) {
+      const sellerName = `${lead.seller.firstName || ''} ${lead.seller.lastName || ''}`.trim() || 'Seller';
+      emails.push({
+        email: lead.seller.email.trim(),
+        label: `${sellerName} (Seller)`,
+        type: 'seller'
+      });
+    }
+    
+    // Add buyer
+    if (lead.buyer?.email?.trim()) {
+      const buyerName = `${lead.buyer.firstName || ''} ${lead.buyer.lastName || ''}`.trim() || 'Buyer';
+      emails.push({
+        email: lead.buyer.email.trim(),
+        label: `${buyerName} (Buyer)`,
+        type: 'buyer'
+      });
+    }
+    
+    // Add vendor
+    if (lead.vendor?.email?.trim()) {
+      const vendorName = `${lead.vendor.firstName || ''} ${lead.vendor.lastName || ''}`.trim() || 'Vendor';
+      emails.push({
+        email: lead.vendor.email.trim(),
+        label: `${vendorName} (Vendor)`,
+        type: 'vendor'
+      });
+    }
+    
+    // Remove duplicates by email address
+    const uniqueEmails = emails.filter((email, index, self) =>
+      index === self.findIndex((e) => e.email === email.email)
+    );
+    
+    return uniqueEmails;
+  };
+
   const getLeadEmail = () => {
     if (!lead) {
       console.log('❌ No lead data available');
@@ -1463,7 +1551,20 @@ const LeadEdit: React.FC = () => {
       return;
     }
 
-    const phoneNumber = getLeadPhoneNumber();
+    const allPhones = getAllPhoneNumbers();
+    
+    // If no phones available
+    if (allPhones.length === 0) {
+      toast({
+        title: 'Error',
+        description: 'No phone number found for this lead',
+        variant: 'destructive'
+      });
+      return;
+    }
+    
+    // Use selected SMS phone or first available
+    const phoneNumber = selectedSMSPhone || allPhones[0]?.number;
     
     if (!phoneNumber) {
       toast({
@@ -1522,7 +1623,20 @@ const LeadEdit: React.FC = () => {
       return;
     }
 
-    const emailAddress = getLeadEmail();
+    const allEmails = getAllEmailAddresses();
+    
+    // If no emails available
+    if (allEmails.length === 0) {
+      toast({
+        title: 'Error',
+        description: 'No email address found for this lead',
+        variant: 'destructive'
+      });
+      return;
+    }
+    
+    // Use selected email or first available
+    const emailAddress = selectedEmail || allEmails[0]?.email;
     
     if (!emailAddress) {
       toast({
@@ -2757,12 +2871,18 @@ const LeadEdit: React.FC = () => {
                 setSmsText={setSmsText}
                 sendingSMS={sendingSMS}
                 onSendSMS={handleSendSMS}
+                availablePhoneNumbers={getAllPhoneNumbers()}
+                selectedSMSPhone={selectedSMSPhone}
+                onSMSPhoneChange={setSelectedSMSPhone}
                 emailSubject={emailSubject}
                 setEmailSubject={setEmailSubject}
                 emailBody={emailBody}
                 setEmailBody={setEmailBody}
                 sendingEmail={sendingEmail}
                 onSendEmail={handleSendEmail}
+                availableEmailAddresses={getAllEmailAddresses()}
+                selectedEmail={selectedEmail}
+                onEmailChange={setSelectedEmail}
                 makingCall={makingCall}
                 onMakeCall={handleMakeCall}
                 callStatus={callStatus}

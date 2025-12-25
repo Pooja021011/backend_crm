@@ -4,6 +4,7 @@ import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Label } from './ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { 
   Phone, 
   MessageSquare, 
@@ -53,6 +54,14 @@ interface UnifiedCommunicationFeedProps {
   setSmsText: (text: string) => void;
   sendingSMS: boolean;
   onSendSMS: () => void;
+  availablePhoneNumbers?: Array<{
+    number: string;
+    label: string;
+    type: string;
+    isPrimary?: boolean;
+  }>;
+  selectedSMSPhone?: string;
+  onSMSPhoneChange?: (phone: string) => void;
   
   // Email props
   emailSubject: string;
@@ -61,6 +70,14 @@ interface UnifiedCommunicationFeedProps {
   setEmailBody: (body: string) => void;
   sendingEmail: boolean;
   onSendEmail: () => void;
+  availableEmailAddresses?: Array<{
+    email: string;
+    label: string;
+    type: string;
+    isPrimary?: boolean;
+  }>;
+  selectedEmail?: string;
+  onEmailChange?: (email: string) => void;
   
   // Call props
   makingCall: boolean;
@@ -92,12 +109,18 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
   setSmsText,
   sendingSMS,
   onSendSMS,
+  availablePhoneNumbers = [],
+  selectedSMSPhone,
+  onSMSPhoneChange,
   emailSubject,
   setEmailSubject,
   emailBody,
   setEmailBody,
   sendingEmail,
   onSendEmail,
+  availableEmailAddresses = [],
+  selectedEmail,
+  onEmailChange,
   makingCall,
   onMakeCall,
   callStatus,
@@ -431,6 +454,39 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {/* Phone Number Selector - Show if multiple numbers available */}
+            {availablePhoneNumbers && availablePhoneNumbers.length > 1 && (
+              <div>
+                <Label htmlFor="sms-phone">Phone Number</Label>
+                <Select value={selectedSMSPhone} onValueChange={onSMSPhoneChange}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select phone number..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availablePhoneNumbers.map((phone, idx) => (
+                      <SelectItem key={idx} value={phone.number}>
+                        <div className="flex items-center gap-2">
+                          <Phone className="w-3 h-3" />
+                          <div className="flex flex-col">
+                            <span className="font-medium">{phone.label}</span>
+                            <span className="text-xs text-gray-500">{phone.number}</span>
+                          </div>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            
+            {/* Show selected phone if only one number */}
+            {availablePhoneNumbers && availablePhoneNumbers.length === 1 && (
+              <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded flex items-center gap-2">
+                <Phone className="w-4 h-4" />
+                <span>{availablePhoneNumbers[0].number}</span>
+              </div>
+            )}
+            
             <div>
               <Label htmlFor="sms-message">Message</Label>
               <Textarea
@@ -479,6 +535,39 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {/* Email Address Selector - Show if multiple emails available */}
+            {availableEmailAddresses && availableEmailAddresses.length > 1 && (
+              <div>
+                <Label htmlFor="email-address">Email Address</Label>
+                <Select value={selectedEmail} onValueChange={onEmailChange}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select email address..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableEmailAddresses.map((email, idx) => (
+                      <SelectItem key={idx} value={email.email}>
+                        <div className="flex items-center gap-2">
+                          <Mail className="w-3 h-3" />
+                          <div className="flex flex-col">
+                            <span className="font-medium">{email.label}</span>
+                            <span className="text-xs text-gray-500">{email.email}</span>
+                          </div>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            
+            {/* Show selected email if only one email */}
+            {availableEmailAddresses && availableEmailAddresses.length === 1 && (
+              <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded flex items-center gap-2">
+                <Mail className="w-4 h-4" />
+                <span>{availableEmailAddresses[0].email}</span>
+              </div>
+            )}
+            
             <div>
               <Label htmlFor="email-subject">Subject</Label>
               <Input
@@ -511,7 +600,7 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
               </Button>
               <Button
                 onClick={handleSendEmail}
-                disabled={sendingEmail || !emailSubject.trim() || !emailBody.trim()}
+                disabled={sendingEmail || !emailSubject.trim() || !emailBody.trim() || !selectedEmail}
                 className="bg-blue-600 hover:bg-blue-700"
               >
                 {sendingEmail ? (
