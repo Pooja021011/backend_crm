@@ -3266,14 +3266,14 @@ const Metrics = () => {
                       stroke="currentColor"
                       strokeWidth="8"
                       fill="transparent"
-                      strokeDasharray={`${(28/40) * 251.2} 251.2`}
+                      strokeDasharray={`${Math.min(((dispositionsData?.totalPropertiesInPipeline || 0) / 40) * 251.2, 251.2)} 251.2`}
                       className="text-blue-500"
                       strokeLinecap="round"
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
                     <span className="text-2xl font-bold text-gray-900">
-                      {dispLoading ? '...' : (dispositionsData?.propertiesSoldPercentage || 0).toFixed(0)}%
+                      {dispLoading ? '...' : (dispositionsData?.totalPropertiesInPipeline || 0)}
                     </span>
                   </div>
                 </div>
