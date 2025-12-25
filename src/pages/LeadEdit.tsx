@@ -472,28 +472,35 @@ const LeadEdit: React.FC = () => {
         if (customFields.underwritingRehabCost) setUnderwritingRehabCost(customFields.underwritingRehabCost);
         if (customFields.finalOffer) setFinalOffer(customFields.finalOffer);
         
-        // Load contacts from lead
+        // Load contacts from customFields first (multiple contacts), then fallback to seller/buyer/vendor
         const initialContacts = [];
-        if (leadData.seller) {
-          initialContacts.push({
-            name: `${leadData.seller.firstName} ${leadData.seller.lastName}`,
-            phone: leadData.seller.phone || '',
-            email: leadData.seller.email || ''
-          });
-        }
-        if (leadData.buyer) {
-          initialContacts.push({
-            name: `${leadData.buyer.firstName} ${leadData.buyer.lastName}`,
-            phone: leadData.buyer.phone || '',
-            email: leadData.buyer.email || ''
-          });
-        }
-        if (leadData.vendor) {
-          initialContacts.push({
-            name: `${leadData.vendor.firstName} ${leadData.vendor.lastName}`,
-            phone: leadData.vendor.phone || '',
-            email: leadData.vendor.email || ''
-          });
+        
+        // Check if there are saved contacts in customFields
+        if (customFields.contacts && Array.isArray(customFields.contacts) && customFields.contacts.length > 0) {
+          initialContacts.push(...customFields.contacts);
+        } else {
+          // Fallback to seller/buyer/vendor if no contacts in customFields
+          if (leadData.seller) {
+            initialContacts.push({
+              name: `${leadData.seller.firstName} ${leadData.seller.lastName}`,
+              phone: leadData.seller.phone || '',
+              email: leadData.seller.email || ''
+            });
+          }
+          if (leadData.buyer) {
+            initialContacts.push({
+              name: `${leadData.buyer.firstName} ${leadData.buyer.lastName}`,
+              phone: leadData.buyer.phone || '',
+              email: leadData.buyer.email || ''
+            });
+          }
+          if (leadData.vendor) {
+            initialContacts.push({
+              name: `${leadData.vendor.firstName} ${leadData.vendor.lastName}`,
+              phone: leadData.vendor.phone || '',
+              email: leadData.vendor.email || ''
+            });
+          }
         }
         // Don't add empty contact - let user add manually if needed
         setContacts(initialContacts);
@@ -1072,6 +1079,12 @@ const LeadEdit: React.FC = () => {
         }
       }
       
+      // Also save ALL contacts to customFields for multi-contact support
+      contactUpdate.customFields = {
+        ...lead?.customFields,
+        contacts: contacts.filter(c => c.name || c.phone || c.email) // Only save non-empty contacts
+      };
+      
       if (Object.keys(contactUpdate).length > 0) {
         const response = await makeApiCall(`${API_BASE}/leads/${id}`, {
           method: 'PATCH',
@@ -1223,7 +1236,22 @@ const LeadEdit: React.FC = () => {
     
     const phones: Array<{number: string; label: string; type: string; isPrimary?: boolean}> = [];
     
-    // Add all contacts
+    // First, check contacts from customFields (saved multiple contacts)
+    const savedContacts = lead.customFields?.contacts || [];
+    if (Array.isArray(savedContacts) && savedContacts.length > 0) {
+      savedContacts.forEach((contact: any, index: number) => {
+        if (contact.phone?.trim()) {
+          phones.push({
+            number: contact.phone.trim(),
+            label: `${contact.name || `Contact ${index + 1}`} (Contact)`,
+            type: 'contact',
+            isPrimary: index === 0
+          });
+        }
+      });
+    }
+    
+    // Also check lead.contacts if available (from database)
     lead.contacts?.forEach((contact: any, index: number) => {
       if (contact.phone?.trim()) {
         const firstName = contact.firstName || '';
