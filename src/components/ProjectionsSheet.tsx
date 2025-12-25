@@ -179,10 +179,11 @@ export function ProjectionsSheet({
     // Purchase OOP: =((C6+C7)-G19) - (Purchase + Rehab) - Loan Amount
     const purchaseOOP = (purchasePrice + rehabCost) - loanAmount;
     const closingOOP = totalClosingCost;
-    const financeOOP = originationPoints;
+    const financeOOP = totalFinancingCost; // Total Cost from Financing Cost section
     const holdingOOP = totalHoldingCost;
     const exitCostOOP = totalExitCost;
-    const totalOOP = purchaseOOP + closingOOP + financeOOP + holdingOOP + exitCostOOP;
+    // Total OOP: =SUM(J19:J22) - Does NOT include Exit Cost (J23)
+    const totalOOP = purchaseOOP + closingOOP + financeOOP + holdingOOP;
 
     // COST SUMMARY
     const acquisitionsCost = totalAcquisitionCost;
@@ -199,7 +200,8 @@ export function ProjectionsSheet({
     const profit = totalIncome - allIn;
     // Spread = (Purchase + Rehab) / ARV × 100 (shows what % of ARV is the acquisition cost)
     const spread = salePrice > 0 ? ((purchasePrice + rehabCost) / salePrice) * 100 : 0;
-    const roi = totalOOP > 0 ? (profit / totalOOP) * 100 : 0;
+    // ROI = Profit / All In × 100 (M22/M17 in Google Sheet)
+    const roi = allIn > 0 ? (profit / allIn) * 100 : 0;
 
     setProjections({
       purchasePrice,

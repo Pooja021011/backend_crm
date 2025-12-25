@@ -15,6 +15,10 @@ interface RehabBudgetCalculatorProps {
   readOnly?: boolean;
   onTotalChange?: (total: number) => void;
   onBathroomsChange?: (bathrooms: number) => void;
+  onDataChange?: (data: { finishLevel: string; toggledItems: ToggledItems; numberOfWindows: number }) => void;
+  initialFinishLevel?: 'low_end' | 'mid_range' | 'high_end';
+  initialToggledItems?: ToggledItems;
+  initialNumberOfWindows?: number;
 }
 
 interface ToggledItems {
@@ -28,16 +32,20 @@ export function RehabBudgetCalculatorCompact({
   readOnly = false,
   onTotalChange,
   onBathroomsChange,
+  onDataChange,
+  initialFinishLevel = 'mid_range',
+  initialToggledItems = {},
+  initialNumberOfWindows = 10,
 }: RehabBudgetCalculatorProps) {
   const { toast } = useToast();
   const [expanded, setExpanded] = useState(false);
   
-  const [finishLevel, setFinishLevel] = useState<'low_end' | 'mid_range' | 'high_end'>('mid_range');
+  const [finishLevel, setFinishLevel] = useState<'low_end' | 'mid_range' | 'high_end'>(initialFinishLevel);
   const [numberOfBathrooms, setNumberOfBathrooms] = useState(bathrooms);
-  const [numberOfWindows, setNumberOfWindows] = useState(10);
+  const [numberOfWindows, setNumberOfWindows] = useState(initialNumberOfWindows);
   const [propertySquareFeet, setPropertySquareFeet] = useState(sqft);
   
-  const [toggledItems, setToggledItems] = useState<ToggledItems>({});
+  const [toggledItems, setToggledItems] = useState<ToggledItems>(initialToggledItems);
   const [calculation, setCalculation] = useState({
     itemizedCosts: {} as { [key: string]: number },
     subtotal: 0,
@@ -45,12 +53,19 @@ export function RehabBudgetCalculatorCompact({
     totalCost: 0
   });
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // Changed to false since we're using props
   const [saving, setSaving] = useState(false);
 
+  // Notify parent of data changes
   useEffect(() => {
-    fetchSavedBudget();
-  }, [leadId]);
+    if (onDataChange) {
+      onDataChange({
+        finishLevel,
+        toggledItems,
+        numberOfWindows
+      });
+    }
+  }, [finishLevel, toggledItems, numberOfWindows, onDataChange]);
 
   // Update property values when props change
   useEffect(() => {
@@ -76,36 +91,6 @@ export function RehabBudgetCalculatorCompact({
       onTotalChange(calculation.totalCost);
     }
   }, [calculation.totalCost, onTotalChange]);
-
-  const fetchSavedBudget = async () => {
-    try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`${API_BASE}/leads/${leadId}/rehab-budget`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.data) {
-          const budget = data.data;
-          if (budget.finishLevel) setFinishLevel(budget.finishLevel);
-          if (budget.toggledItems) setToggledItems(budget.toggledItems);
-          if (budget.subtotal) {
-            setCalculation({
-              itemizedCosts: {},
-              subtotal: budget.subtotal,
-              contingencyAmount: budget.contingencyAmount,
-              totalCost: budget.totalCost
-            });
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching saved budget:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const calculateBudget = async () => {
     try {
@@ -229,28 +214,14 @@ export function RehabBudgetCalculatorCompact({
             {formatCurrency(calculation.totalCost)}
           </span>
         </div>
-        <div className="flex items-center gap-1">
-          {!readOnly && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-5 text-[10px] px-1"
-              onClick={handleSave}
-              disabled={saving}
-            >
-              <Save className="w-2.5 h-2.5 mr-0.5" />
-              {saving ? 'Saving...' : 'Save'}
-            </Button>
-          )}
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-5 text-[10px] px-1"
-            onClick={() => setExpanded(!expanded)}
-          >
-            {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-          </Button>
-        </div>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-5 text-[10px] px-1"
+          onClick={() => setExpanded(!expanded)}
+        >
+          {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+        </Button>
       </div>
 
       {expanded && (

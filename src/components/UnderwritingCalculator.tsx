@@ -10,84 +10,88 @@ interface UnderwritingCalculatorProps {
   leadId: string;
   rehabCost: number; // Auto-filled from Rehab Calculator
   readOnly?: boolean;
-  onValuesChange?: (values: { arv: number; taxes: number; timeline: number; finalOffer: number }) => void;
+  onValuesChange?: (values: { arv: number; taxes: number; timeline: number; finalOffer: number; rehabCost: number }) => void;
+  // Initial values from customFields
+  initialArv?: number;
+  initialTaxes?: number;
+  initialTimeline?: number;
 }
 
 export function UnderwritingCalculator({ 
   leadId, 
   rehabCost,
   readOnly = false,
-  onValuesChange
+  onValuesChange,
+  initialArv = 0,
+  initialTaxes = 1000,
+  initialTimeline = 6
 }: UnderwritingCalculatorProps) {
   const { toast } = useToast();
   const [expanded, setExpanded] = useState(false);
   
-  // ONLY 3 EDITABLE FIELDS
-  const [arv, setArv] = useState(0);
-  const [taxes, setTaxes] = useState(1000);
-  const [timeline, setTimeline] = useState(6); // months
-  const [arvDisplay, setArvDisplay] = useState('');
-  const [taxesDisplay, setTaxesDisplay] = useState('');
+  // Helper functions defined first
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: 0
+    }).format(value);
+  };
+
+  const parseCurrencyInput = (raw: string): number => {
+    // Keep digits only; treat empty as 0
+    const digits = raw.replace(/[^\d]/g, '');
+    return digits ? Number(digits) : 0;
+  };
+  
+  // EDITABLE FIELDS (including Rehab Cost for testing)
+  const [arv, setArv] = useState(initialArv);
+  const [rehabCostValue, setRehabCostValue] = useState(rehabCost);
+  const [taxes, setTaxes] = useState(initialTaxes);
+  const [timeline, setTimeline] = useState(initialTimeline); // months
+  const [arvDisplay, setArvDisplay] = useState(initialArv ? formatCurrency(initialArv) : '');
+  const [rehabCostDisplay, setRehabCostDisplay] = useState('');
+  const [taxesDisplay, setTaxesDisplay] = useState(initialTaxes ? formatCurrency(initialTaxes) : '');
 
   // CALCULATED OUTPUT
   const [finalOffer, setFinalOffer] = useState(0);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetchSavedData();
+    // No longer fetching from API - using initial values from props
+    setLoading(false);
   }, [leadId]);
+
+  // Update rehabCostValue when rehabCost prop changes
+  useEffect(() => {
+    setRehabCostValue(rehabCost);
+    setRehabCostDisplay(rehabCost ? formatCurrency(rehabCost) : '');
+  }, [rehabCost]);
 
   // Calculate Final Offer when inputs change
   useEffect(() => {
     calculateFinalOffer();
-  }, [arv, rehabCost]);
-
-  const fetchSavedData = async () => {
-    try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`${API_BASE}/leads/${leadId}/underwriting`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.data && data.data.length > 0) {
-          const latest = data.data[0];
-          const loadedArv = latest.arv || 0;
-          const loadedTaxes = latest.taxes || 0;
-          setArv(loadedArv);
-          setTaxes(loadedTaxes);
-          setArvDisplay(loadedArv ? formatCurrency(loadedArv) : '');
-          setTaxesDisplay(loadedTaxes ? formatCurrency(loadedTaxes) : '');
-          setTimeline(latest.timeline || 6);
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching saved data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [arv, rehabCostValue]);
 
   const calculateFinalOffer = () => {
     if (arv === 0) {
       setFinalOffer(0);
       if (onValuesChange) {
-        onValuesChange({ arv: 0, taxes, timeline, finalOffer: 0 });
+        onValuesChange({ arv: 0, taxes, timeline, finalOffer: 0, rehabCost: rehabCostValue });
       }
       return;
     }
 
-    // FORMULA: (ARV × 72%) - Rehab Cost (matches Google Sheet 'Final Offer' tab)
-    const calculatedOffer = (arv * 0.72) - rehabCost;
+    // FORMULA: (ARV × 72%) - Rehab Cost - $25,000 (matches Google Sheet 'Final Offer' tab)
+    const calculatedOffer = (arv * 0.72) - rehabCostValue - 25000;
     const finalOfferValue = Math.max(0, Math.round(calculatedOffer));
     setFinalOffer(finalOfferValue);
     
-    // Notify parent of value changes
+    // Notify parent of value changes (including rehabCost)
     if (onValuesChange) {
-      onValuesChange({ arv, taxes, timeline, finalOffer: finalOfferValue });
+      onValuesChange({ arv, taxes, timeline, finalOffer: finalOfferValue, rehabCost: rehabCostValue });
     }
   };
 
@@ -108,7 +112,7 @@ export function UnderwritingCalculator({
         },
         body: JSON.stringify({
           arv,
-          rehabCost, // Save for reference, but it's auto-filled
+          rehabCost: rehabCostValue, // Save the editable value
           taxes,
           timeline
         })
@@ -122,20 +126,6 @@ export function UnderwritingCalculator({
     } finally {
       setSaving(false);
     }
-  };
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      maximumFractionDigits: 0
-    }).format(value);
-  };
-
-  const parseCurrencyInput = (raw: string): number => {
-    // Keep digits only; treat empty as 0
-    const digits = raw.replace(/[^\d]/g, '');
-    return digits ? Number(digits) : 0;
   };
 
   if (loading) return null;
@@ -152,28 +142,14 @@ export function UnderwritingCalculator({
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1">
-          {!readOnly && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-5 text-[10px] px-1"
-              onClick={handleSave}
-              disabled={saving}
-            >
-              <Save className="w-2.5 h-2.5 mr-0.5" />
-              {saving ? 'Saving...' : 'Save'}
-            </Button>
-          )}
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-5 text-[10px] px-1"
-            onClick={() => setExpanded(!expanded)}
-          >
-            {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-          </Button>
-        </div>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-5 text-[10px] px-1"
+          onClick={() => setExpanded(!expanded)}
+        >
+          {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+        </Button>
       </div>
 
       {expanded && (
@@ -201,12 +177,12 @@ export function UnderwritingCalculator({
                 />
               </div>
 
-              {/* REHAB COST - READ-ONLY (from Rehab Calculator) */}
+              {/* REHAB COST - READ-ONLY (auto-filled from Rehab Calculator) */}
               <div>
                 <Label className="text-[10px] text-slate-600">Rehab Cost</Label>
                 <Input
                   type="text"
-                  value={rehabCost ? `$${rehabCost.toLocaleString()}` : '$0'}
+                  value={rehabCostValue ? `$${rehabCostValue.toLocaleString()}` : '$0'}
                   disabled={true}
                   className="h-6 text-xs bg-slate-100 cursor-not-allowed text-slate-600 font-medium"
                   readOnly

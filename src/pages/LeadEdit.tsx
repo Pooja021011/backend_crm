@@ -217,6 +217,9 @@ const LeadEdit: React.FC = () => {
   // Rehab information
   const [rehabBudget, setRehabBudget] = useState('');
   const [rehabItems, setRehabItems] = useState<any[]>([]);
+  const [rehabFinishLevel, setRehabFinishLevel] = useState<'low_end' | 'mid_range' | 'high_end'>('mid_range');
+  const [rehabToggledItems, setRehabToggledItems] = useState<any>({});
+  const [rehabNumberOfWindows, setRehabNumberOfWindows] = useState(10);
   
   // Comparables
   const [comparables, setComparables] = useState<any[]>([]);
@@ -228,6 +231,7 @@ const LeadEdit: React.FC = () => {
   const [underwritingArv, setUnderwritingArv] = useState(0);
   const [underwritingTaxes, setUnderwritingTaxes] = useState(1000);
   const [underwritingTimeline, setUnderwritingTimeline] = useState(6);
+  const [underwritingRehabCost, setUnderwritingRehabCost] = useState(0);
   const [finalOffer, setFinalOffer] = useState(0);
   
   // Files
@@ -438,7 +442,25 @@ const LeadEdit: React.FC = () => {
         // Load rehab information from customFields
         setRehabBudget(customFields.rehabBudget?.toString() || '');
         setRehabItems(customFields.rehabItems || []);
+        if (customFields.rehabFinishLevel) setRehabFinishLevel(customFields.rehabFinishLevel);
+        if (customFields.rehabToggledItems) setRehabToggledItems(customFields.rehabToggledItems);
+        if (customFields.rehabNumberOfWindows) setRehabNumberOfWindows(customFields.rehabNumberOfWindows);
         setLeadSourceData(customFields.leadSourceData || {});
+        
+        // Load Underwriting Calculator values from customFields
+        console.log('📖 Loading underwriting values from customFields:', {
+          underwritingArv: customFields.underwritingArv,
+          underwritingTaxes: customFields.underwritingTaxes,
+          underwritingTimeline: customFields.underwritingTimeline,
+          underwritingRehabCost: customFields.underwritingRehabCost,
+          finalOffer: customFields.finalOffer
+        });
+        
+        if (customFields.underwritingArv) setUnderwritingArv(customFields.underwritingArv);
+        if (customFields.underwritingTaxes) setUnderwritingTaxes(customFields.underwritingTaxes);
+        if (customFields.underwritingTimeline) setUnderwritingTimeline(customFields.underwritingTimeline);
+        if (customFields.underwritingRehabCost) setUnderwritingRehabCost(customFields.underwritingRehabCost);
+        if (customFields.finalOffer) setFinalOffer(customFields.finalOffer);
         
         // Load contacts from lead
         const initialContacts = [];
@@ -848,10 +870,26 @@ const LeadEdit: React.FC = () => {
         appointmentDate: appointmentDate || null,
         rehabBudget: rehabBudget ? parseInt(rehabBudget) : null,
         rehabItems: rehabItems || [],
-        leadSourceData: leadSourceData || {}
+        rehabFinishLevel: rehabFinishLevel || null,
+        rehabToggledItems: rehabToggledItems || {},
+        rehabNumberOfWindows: rehabNumberOfWindows || null,
+        leadSourceData: leadSourceData || {},
+        // Underwriting Calculator values
+        underwritingArv: underwritingArv || null,
+        underwritingTaxes: underwritingTaxes || null,
+        underwritingTimeline: underwritingTimeline || null,
+        underwritingRehabCost: underwritingRehabCost || null,
+        finalOffer: finalOffer || null
       };
 
-      console.log('Saving customFields:', propertyDetails);
+      console.log('💾 Saving customFields:', propertyDetails);
+      console.log('💾 Underwriting values:', {
+        underwritingArv,
+        underwritingTaxes,
+        underwritingTimeline,
+        underwritingRehabCost,
+        finalOffer
+      });
 
       // Prepare lead updates - store property details in customFields
       const updates: any = {
@@ -2259,8 +2297,16 @@ const LeadEdit: React.FC = () => {
                   sqft={parseInt(sqft) || 0}
                   bathrooms={Math.max(0, Math.ceil(parseFloat(bathrooms) || 0))}
                   readOnly={false}
+                  initialFinishLevel={rehabFinishLevel}
+                  initialToggledItems={rehabToggledItems}
+                  initialNumberOfWindows={rehabNumberOfWindows}
                   onTotalChange={(total) => setRehabBudget(total.toString())}
                   onBathroomsChange={(n) => setBathrooms(String(n))}
+                  onDataChange={(data) => {
+                    setRehabFinishLevel(data.finishLevel as 'low_end' | 'mid_range' | 'high_end');
+                    setRehabToggledItems(data.toggledItems);
+                    setRehabNumberOfWindows(data.numberOfWindows);
+                  }}
                 />
 
                 {/* 4. Underwriting Calculator - Role-Based (Admin, Manager, ACQ only) */}
@@ -2269,10 +2315,14 @@ const LeadEdit: React.FC = () => {
                     leadId={id!}
                     rehabCost={parseInt(rehabBudget) || 0}
                     readOnly={false}
+                    initialArv={underwritingArv}
+                    initialTaxes={underwritingTaxes}
+                    initialTimeline={underwritingTimeline}
                     onValuesChange={(values) => {
                       setUnderwritingArv(values.arv);
                       setUnderwritingTaxes(values.taxes);
                       setUnderwritingTimeline(values.timeline);
+                      setUnderwritingRehabCost(values.rehabCost);
                       setFinalOffer(values.finalOffer);
                     }}
                     key={`underwriting-${rehabBudget}`}
@@ -2283,7 +2333,7 @@ const LeadEdit: React.FC = () => {
                 <ProjectionsSheet 
                   leadId={id!}
                   finalOffer={finalOffer}
-                  rehabCost={parseInt(rehabBudget) || 0}
+                  rehabCost={underwritingRehabCost || parseInt(rehabBudget) || 0}
                   arv={underwritingArv}
                   taxes={underwritingTaxes}
                   timeline={underwritingTimeline}
