@@ -952,17 +952,17 @@ const Metrics = () => {
         
         const data = json?.data || {};
         setDispositionsData({
-          totalPropertiesInPipeline: data.pipelineMetrics?.totalInPipeline || 0,
-          totalPropertiesSold: data.pipelineMetrics?.totalSold || 0,
-          propertiesSoldPercentage: data.pipelineMetrics?.soldPercentage || 0,
-          projectedProfit: data.financialMetrics?.projectedProfit || 0,
-          totalDealsClosed: data.financialMetrics?.totalDealsClosed || 0,
-          closedProfit: data.financialMetrics?.closedProfit || 0,
-          buyersAdded: data.buyerMetrics?.buyersAdded || 0,
+          totalPropertiesInPipeline: data.pipeline?.totalProperties || 0,
+          totalPropertiesSold: data.pipeline?.propertiesSold || 0,
+          propertiesSoldPercentage: data.pipeline?.propertiesSoldRate || 0,
+          projectedProfit: data.financial?.projectedProfit || 0,
+          totalDealsClosed: data.financial?.dealsClosed || 0,
+          closedProfit: data.financial?.closedProfit || 0,
+          buyersAdded: data.buyers?.buyersAdded || 0,
           leadsMishandled: {
-            count: data.qualityMetrics?.mishandledLeads || 0,
-            riskLevel: data.qualityMetrics?.riskLevel || 'low',
-            details: data.qualityMetrics?.riskDetails || 'No issues detected'
+            count: data.quality?.leadsRiskCount || 0,
+            riskLevel: data.quality?.leadsRiskLevel || 'low',
+            details: data.quality?.riskReason || 'No issues detected'
           }
         });
       } catch (e) {
@@ -3308,7 +3308,7 @@ const Metrics = () => {
                       stroke="currentColor"
                       strokeWidth="8"
                       fill="transparent"
-                      strokeDasharray={`${(7/10) * 251.2} 251.2`}
+                      strokeDasharray={`${((dispositionsData?.propertiesSoldPercentage || 0) / 100) * 251.2} 251.2`}
                       className="text-green-500"
                       strokeLinecap="round"
                     />
