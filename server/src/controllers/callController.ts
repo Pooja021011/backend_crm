@@ -3,6 +3,7 @@ import { callService } from '../services/callService.js';
 import { logger } from '../config/logger.js';
 import { communicationRepository } from '../repositories/communicationRepository.js';
 import { communicationResponseService } from '../services/communicationResponseService.js';
+import { prisma } from '../config/db.js';
 import twilio from 'twilio';
 
 const AccessToken = twilio.jwt.AccessToken;
@@ -418,12 +419,46 @@ export const callController = {
         return res.send(twiml);
       }
 
+      // Determine callerId per-agent (each agent can have their own Twilio number in settings)
+      // Default fallback is env TWILIO_PHONE_NUMBER (instance-wide).
+      let callerId = process.env.TWILIO_PHONE_NUMBER || '';
+
+      // For browser calls, req.body.From is usually "client:<identity>"
+      const fromParam = typeof req.body.From === 'string' ? req.body.From : '';
+      const identity = fromParam.startsWith('client:') ? fromParam.replace('client:', '') : '';
+
+      if (identity) {
+        try {
+          const user = await prisma.user.findUnique({
+            where: { email: identity },
+            select: {
+              id: true,
+              smsSettings: { select: { phoneNumber: true, active: true } },
+            },
+          });
+
+          const agentNumber = user?.smsSettings?.active ? user.smsSettings.phoneNumber : null;
+          if (agentNumber) callerId = agentNumber;
+
+          logger.info('Resolved callerId for browser call', {
+            identity,
+            userId: user?.id,
+            callerId,
+          });
+        } catch (e: any) {
+          logger.warn('Failed to resolve callerId for browser call; using fallback', {
+            identity,
+            error: e?.message || String(e),
+          });
+        }
+      }
+
       // Regular phone call - dial the number
       logger.info('Placing call to phone number:', to);
       
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Dial callerId="${process.env.TWILIO_PHONE_NUMBER}">
+  <Dial callerId="${callerId || process.env.TWILIO_PHONE_NUMBER}">
     <Number>${to}</Number>
   </Dial>
   <Say voice="alice">The call could not be completed. Please try again.</Say>
