@@ -4,7 +4,7 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { IncomingCallPopup } from "@/components/IncomingCallPopup";
 import { ActiveCallWidget } from "@/components/ActiveCallWidget";
-import { TwilioProvider, useTwilioContext } from "@/contexts/TwilioContext";
+import { useTwilioContext } from "@/contexts/TwilioContext";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -76,9 +76,5 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
 }
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
-  return (
-    <TwilioProvider>
-      <DashboardLayoutContent>{children}</DashboardLayoutContent>
-    </TwilioProvider>
-  );
+  return <DashboardLayoutContent>{children}</DashboardLayoutContent>;
 }
