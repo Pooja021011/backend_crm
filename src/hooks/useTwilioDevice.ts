@@ -27,6 +27,7 @@ export const useTwilioDevice = () => {
   const [isInitializing, setIsInitializing] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [currentCallNumber, setCurrentCallNumber] = useState<string>(''); // Track current call number
+  const isOutgoingCallRef = useRef(false); // Track if we initiated the call (using ref for event handlers)
   const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const ringtoneRef = useRef<HTMLAudioElement | null>(null);
   const { toast } = useToast();
@@ -119,12 +120,51 @@ export const useTwilioDevice = () => {
       newDevice.on('incoming', (call) => {
         console.log('📞 Incoming call received:', call);
         
+        // Check if this is an outgoing call callback (we initiated it)
+        if (isOutgoingCallRef.current) {
+          console.log('✅ This is an outgoing call callback - not showing popup');
+          // Set as active call directly without showing incoming popup
+          setActiveCall(call);
+          setCallStatus({ status: 'connecting', duration: 0 });
+          
+          // Setup call event listeners for outgoing call
+          call.on('accept', () => {
+            console.log('Outgoing call accepted');
+            setCallStatus({ status: 'connected', duration: 0 });
+            
+            // Start duration counter
+            let seconds = 0;
+            durationIntervalRef.current = setInterval(() => {
+              seconds++;
+              setCallStatus(prev => ({ ...prev, duration: seconds }));
+            }, 1000);
+          });
+          
+          call.on('disconnect', () => {
+            console.log('Outgoing call disconnected');
+            setCallStatus({ status: 'disconnected', duration: 0 });
+            setActiveCall(null);
+            setCurrentCallNumber('');
+            isOutgoingCallRef.current = false; // Reset flag
+            
+            if (durationIntervalRef.current) {
+              clearInterval(durationIntervalRef.current);
+              durationIntervalRef.current = null;
+            }
+          });
+          
+          // Auto-accept for outgoing calls
+          call.accept();
+          return; // Don't show incoming popup
+        }
+        
+        // This is a real incoming call - show the popup
         // Get call parameters
         const params = call.parameters;
         const from = params.From || 'Unknown';
         const callSid = call.parameters.CallSid || '';
         
-        console.log('Incoming call from:', from, 'CallSid:', callSid);
+        console.log('📞 Real incoming call from:', from, 'CallSid:', callSid);
         
         // Play ringtone
         if (ringtoneRef.current) {
@@ -196,6 +236,9 @@ export const useTwilioDevice = () => {
         }
       }
 
+      // Mark this as an outgoing call BEFORE making the call
+      isOutgoingCallRef.current = true;
+      
       setCallStatus({ status: 'connecting', duration: 0 });
       setCurrentCallNumber(phoneNumber); // Store the number being called
 
@@ -231,6 +274,7 @@ export const useTwilioDevice = () => {
         setCallStatus({ status: 'disconnected', duration: 0 });
         setActiveCall(null);
         setCurrentCallNumber(''); // Clear stored number
+        isOutgoingCallRef.current = false; // Reset outgoing flag
         
         // Clear duration counter
         if (durationIntervalRef.current) {
@@ -249,6 +293,7 @@ export const useTwilioDevice = () => {
         setCallStatus({ status: 'idle', duration: 0 });
         setActiveCall(null);
         setCurrentCallNumber(''); // Clear stored number
+        isOutgoingCallRef.current = false; // Reset outgoing flag
         
         if (durationIntervalRef.current) {
           clearInterval(durationIntervalRef.current);
@@ -261,6 +306,7 @@ export const useTwilioDevice = () => {
         setCallStatus({ status: 'idle', duration: 0 });
         setActiveCall(null);
         setCurrentCallNumber(''); // Clear stored number
+        isOutgoingCallRef.current = false; // Reset outgoing flag
         
         if (durationIntervalRef.current) {
           clearInterval(durationIntervalRef.current);
@@ -282,6 +328,8 @@ export const useTwilioDevice = () => {
           error: error.message 
         });
         setActiveCall(null);
+        setCurrentCallNumber('');
+        isOutgoingCallRef.current = false; // Reset outgoing flag
         
         if (durationIntervalRef.current) {
           clearInterval(durationIntervalRef.current);
@@ -396,6 +444,7 @@ export const useTwilioDevice = () => {
         setCallStatus({ status: 'disconnected', duration: 0 });
         setActiveCall(null);
         setCurrentCallNumber(''); // Clear stored number
+        isOutgoingCallRef.current = false; // Reset flag (just in case)
         
         if (durationIntervalRef.current) {
           clearInterval(durationIntervalRef.current);
@@ -416,6 +465,8 @@ export const useTwilioDevice = () => {
           error: error.message 
         });
         setActiveCall(null);
+        setCurrentCallNumber('');
+        isOutgoingCallRef.current = false; // Reset outgoing flag
         
         if (durationIntervalRef.current) {
           clearInterval(durationIntervalRef.current);
