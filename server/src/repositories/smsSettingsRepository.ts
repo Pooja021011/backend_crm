@@ -91,7 +91,7 @@ export const smsSettingsRepository = {
   async findByPhoneNumber(phoneNumber: string) {
     const normalized = normalizeToE164(phoneNumber);
     const rawDigits = phoneNumber?.replace(/\D/g, '');
-    return await prisma.userSmsSettings.findFirst({
+    const directMatch = await prisma.userSmsSettings.findFirst({
       where: { 
         active: true,
         OR: [
@@ -111,5 +111,30 @@ export const smsSettingsRepository = {
         },
       },
     });
+
+    if (directMatch) return directMatch;
+
+    // Fallback: handle DB values saved with spaces/dashes/parentheses by normalizing in JS
+    const candidates = await prisma.userSmsSettings.findMany({
+      where: { active: true, phoneNumber: { not: null } },
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+      take: 200,
+    });
+
+    const incomingNorm = normalizeToE164(phoneNumber);
+    if (!incomingNorm) return null;
+
+    return (
+      candidates.find((c) => normalizeToE164(c.phoneNumber ?? undefined) === incomingNorm) ?? null
+    );
   },
 };
