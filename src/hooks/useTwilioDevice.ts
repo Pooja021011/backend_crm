@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Device, Call } from '@twilio/voice-sdk';
 import { API_BASE, makeApiCall } from '@/config/api';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 export interface CallStatus {
   status: 'idle' | 'connecting' | 'ringing' | 'connected' | 'disconnected';
@@ -17,6 +18,7 @@ export interface IncomingCallInfo {
 }
 
 export const useTwilioDevice = () => {
+  const { user, isAuthenticated } = useAuth();
   const [device, setDevice] = useState<Device | null>(null);
   const [activeCall, setActiveCall] = useState<Call | null>(null);
   const [callStatus, setCallStatus] = useState<CallStatus>({
@@ -28,9 +30,41 @@ export const useTwilioDevice = () => {
   const [isMuted, setIsMuted] = useState(false);
   const [currentCallNumber, setCurrentCallNumber] = useState<string>(''); // Track current call number
   const isOutgoingCallRef = useRef(false); // Track if we initiated the call (using ref for event handlers)
+  const lastIdentityRef = useRef<string>(''); // Track which user identity this Device was created for
   const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const ringtoneRef = useRef<HTMLAudioElement | null>(null);
   const { toast } = useToast();
+
+  const currentIdentityKey = user?.email || user?.id || '';
+
+  // If user changes (admin -> agent, agent -> admin), destroy the old Device so we re-register with correct identity.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (!currentIdentityKey) return;
+
+    // If device exists but identity changed, teardown to force fresh token + registration
+    if (device && lastIdentityRef.current && lastIdentityRef.current !== currentIdentityKey) {
+      try {
+        console.log('🔄 Twilio identity changed. Reinitializing device.', {
+          from: lastIdentityRef.current,
+          to: currentIdentityKey,
+        });
+        device.unregister();
+        device.destroy();
+      } catch (e) {
+        // ignore teardown errors
+      }
+
+      setDevice(null);
+      setActiveCall(null);
+      setIncomingCall(null);
+      setCallStatus({ status: 'idle', duration: 0 });
+      setIsMuted(false);
+      setCurrentCallNumber('');
+      isOutgoingCallRef.current = false;
+      lastIdentityRef.current = '';
+    }
+  }, [currentIdentityKey, isAuthenticated, device]);
 
   // Initialize ringtone
   useEffect(() => {
@@ -53,7 +87,8 @@ export const useTwilioDevice = () => {
 
   // Initialize Twilio Device
   const initializeDevice = useCallback(async () => {
-    if (device) return device;
+    // If device exists but was created for a different user, ignore and recreate.
+    if (device && (!lastIdentityRef.current || lastIdentityRef.current === currentIdentityKey)) return device;
 
     setIsInitializing(true);
     try {
@@ -66,6 +101,7 @@ export const useTwilioDevice = () => {
 
       const data = await response.json();
       const token = data.token;
+      lastIdentityRef.current = currentIdentityKey || data.identity || '';
 
       // Test microphone access first before creating Device
       console.log('🎤 Testing microphone access...');
