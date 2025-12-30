@@ -462,7 +462,8 @@ export const callController = {
 
       // Find which user should receive this call based on the destination number
       const smsSettingsRepository = await import('../repositories/smsSettingsRepository.js');
-      const userSettings = await smsSettingsRepository.smsSettingsRepository.findByPhoneNumber(to);
+      const toNormalized = typeof to === 'string' ? to.replace(/[\s\(\)\-]/g, '') : to;
+      const userSettings = await smsSettingsRepository.smsSettingsRepository.findByPhoneNumber(toNormalized);
 
       if (userSettings && userSettings.user) {
         // Route call to the user's browser client
@@ -495,7 +496,7 @@ export const callController = {
         res.send(twiml);
       } else {
         // No user found for this number - play message
-        logger.warn('No user found for incoming call destination', { to });
+        logger.warn('No user found for incoming call destination', { to, toNormalized });
         
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
