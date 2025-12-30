@@ -10,7 +10,7 @@ export const communicationRepository = {
       },
       orderBy: { occurredAt: 'desc' },
     }),
-  create: (leadId: string, data: { type: string; direction: string; subject?: string; body?: string; occurredAt: Date; createdById?: string; attachmentFileIds?: string[] }) =>
+  create: (leadId: string, data: { type: string; direction: string; subject?: string; body?: string; occurredAt: Date; createdById?: string; attachmentFileIds?: string[]; metadata?: any }) =>
     prisma.communication.create({
       data: {
         leadId,
@@ -20,6 +20,7 @@ export const communicationRepository = {
         body: data.body || null,
         occurredAt: data.occurredAt,
         createdById: data.createdById || null,
+        metadata: data.metadata || null,
         attachments: data.attachmentFileIds?.length ? { create: data.attachmentFileIds.map((id) => ({ file: { connect: { id } } })) } : undefined,
       }
     }),

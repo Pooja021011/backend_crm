@@ -606,6 +606,7 @@ model Communication {
   subject     String?
   body        String?
   externalId  String?
+  metadata    Json?      // Store call metadata (status, duration, callSid, etc.)
   occurredAt  DateTime
   createdById String?
   createdBy   User?      @relation("CreatedByUser", fields: [createdById], references: [id])

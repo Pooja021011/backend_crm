@@ -134,7 +134,9 @@ export const callService = {
         CallSid: callSid, 
         CallStatus: callStatus,
         CallDuration: callDuration,
-        Direction: direction 
+        Direction: direction,
+        DialCallStatus: dialCallStatus,  // Child call status (browser answered or not)
+        DialCallDuration: dialCallDuration // Child call duration
       } = webhookData;
 
       // Handle incoming call initiated
@@ -149,7 +151,7 @@ export const callService = {
           const lead = await this.findLeadByPhoneNumber(from);
           
           if (lead) {
-            // Store incoming call in communication history
+            // Store incoming call in communication history with metadata
             await communicationRepository.create(lead.id, {
               type: 'CALL',
               direction: 'INBOUND',
@@ -157,6 +159,12 @@ export const callService = {
               body: `Inbound call received from ${from}`,
               occurredAt: new Date(),
               createdById: userSmsSettings.userId,
+              metadata: {
+                callSid,
+                status: 'ringing',
+                from,
+                to
+              }
             });
             
             logger.info('Incoming call stored in communication history', { 
@@ -180,14 +188,77 @@ export const callService = {
         }
       }
       
-      // Handle call status updates (answered, completed, etc.)
-      if (callStatus === 'in-progress' || callStatus === 'completed' || callStatus === 'failed') {
-        logger.info('Call status update', { 
+      // Handle call completion - CRITICAL for missed call tracking
+      if (callStatus === 'completed' && direction === 'inbound') {
+        logger.info('Call completed - checking if answered', { 
           callStatus,
           callSid,
+          dialCallStatus,
           duration: callDuration 
         });
-        // TODO: Update communication record with call duration for metrics
+
+        // Find user by phone number
+        const userSmsSettings = await smsSettingsRepository.findByPhoneNumber(to);
+        
+        if (userSmsSettings) {
+          const lead = await this.findLeadByPhoneNumber(from);
+          
+          if (lead) {
+            // Find existing communication by callSid
+            const existingComm = await prisma.communication.findFirst({
+              where: {
+                leadId: lead.id,
+                type: 'CALL',
+                direction: 'INBOUND',
+                metadata: {
+                  path: ['callSid'],
+                  equals: callSid
+                }
+              }
+            });
+
+            if (existingComm) {
+              // Check if call was answered or missed
+              const wasMissed = dialCallStatus === 'no-answer' || 
+                                dialCallStatus === 'busy' || 
+                                dialCallStatus === 'failed' ||
+                                dialCallStatus === 'canceled';
+
+              const finalStatus = wasMissed ? 'missed' : 'completed';
+              const duration = dialCallDuration ? parseInt(dialCallDuration) : 0;
+
+              // Update communication with final status
+              await prisma.communication.update({
+                where: { id: existingComm.id },
+                data: {
+                  subject: wasMissed 
+                    ? `⚠️ MISSED CALL from ${from}` 
+                    : `✅ Answered call from ${from}`,
+                  body: wasMissed 
+                    ? `Missed incoming call - Agent not available. Reason: ${dialCallStatus}` 
+                    : `Call answered successfully. Duration: ${duration}s`,
+                  metadata: {
+                    callSid,
+                    status: finalStatus,
+                    dialCallStatus,
+                    duration,
+                    from,
+                    to,
+                    completedAt: new Date().toISOString()
+                  }
+                }
+              });
+
+              logger.info('Call status updated', { 
+                leadId: lead.id,
+                callSid,
+                finalStatus,
+                dialCallStatus,
+                duration
+              });
+            }
+          }
+        }
       }
     } catch (error: any) {
       logger.error('Failed to process incoming call webhook', { error: error.message });
@@ -390,8 +461,8 @@ export const callService = {
           phoneNumber: phoneNumber || 'Unknown',
           contactName: contactName,
           direction: comm.direction,
-          status: 'completed', // Default status, can be enhanced later
-          duration: 0, // Duration not tracked yet, can be added later
+          status: (comm.metadata as any)?.status || 'completed', // Read from metadata
+          duration: (comm.metadata as any)?.duration || 0, // Read from metadata
           timestamp: comm.occurredAt.toISOString(),
           callId: comm.id,
           leadId: comm.leadId,
