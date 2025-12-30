@@ -314,27 +314,82 @@ export const callController = {
    */
   async twimlVoice(req: Request, res: Response) {
     try {
-      logger.info('TwiML Voice endpoint called', { body: req.body });
+      logger.info('TwiML Voice endpoint called', { 
+        body: req.body,
+        query: req.query 
+      });
 
-      const to = req.body.To;
+      // Get the 'To' parameter from body or query
+      let to = req.body.To || req.query.To;
 
-      if (!to) {
-        return res.status(400).send('To number required');
+      // Clean up the phone number (remove spaces, parentheses, dashes)
+      if (to) {
+        to = to.replace(/[\s\(\)\-]/g, '');
+        logger.info('Cleaned To number:', to);
       }
 
-      // TwiML for browser calling
+      // Check if this is a client-to-client call
+      if (to && to.startsWith('client:')) {
+        const clientIdentity = to.replace('client:', '');
+        logger.info('Browser-to-browser call detected', { 
+          targetClient: clientIdentity 
+        });
+
+        const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Dial timeout="30">
+    <Client>${clientIdentity}</Client>
+  </Dial>
+  <Say voice="alice">The user is not available. Please try again later.</Say>
+</Response>`;
+
+        res.type('text/xml');
+        return res.send(twiml);
+      }
+
+      // If no 'To' parameter, return error TwiML (not HTTP 400!)
+      if (!to) {
+        logger.warn('No To parameter provided');
+        
+        const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="alice">Invalid call parameters. Please try again.</Say>
+  <Hangup/>
+</Response>`;
+
+        res.type('text/xml');
+        return res.send(twiml);
+      }
+
+      // Regular phone call - dial the number
+      logger.info('Placing call to phone number:', to);
+      
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Dial callerId="${process.env.TWILIO_PHONE_NUMBER}">
     <Number>${to}</Number>
   </Dial>
+  <Say voice="alice">The call could not be completed. Please try again.</Say>
 </Response>`;
 
       res.type('text/xml');
       res.send(twiml);
+      
     } catch (error: any) {
-      logger.error('Error in TwiML Voice controller', { error: error.message });
-      res.status(500).send('Error processing call');
+      logger.error('Error in TwiML Voice controller', { 
+        error: error.message,
+        stack: error.stack 
+      });
+      
+      // Return valid TwiML even on error (never return HTTP 500)
+      const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="alice">We're sorry, but we're experiencing technical difficulties. Please try again later.</Say>
+  <Hangup/>
+</Response>`;
+      
+      res.type('text/xml');
+      res.send(twiml);
     }
   },
 
