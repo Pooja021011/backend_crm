@@ -12,8 +12,12 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
   const token = auth?.startsWith('Bearer ') ? auth.substring(7) : undefined;
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
   try {
-    const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as AuthUser & { iat: number; exp: number };
-    (req as any).user = { id: decoded.id, roles: decoded.roles } satisfies AuthUser;
+    const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as any;
+    (req as any).user = { 
+      id: decoded.id, 
+      roles: decoded.roles,
+      email: decoded.email  // Add email from JWT token
+    };
     return next();
   } catch {
     return res.status(401).json({ error: 'Unauthorized' });
