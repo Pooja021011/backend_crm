@@ -71,22 +71,8 @@ export const LeadActions: React.FC<LeadActionsProps> = ({ lead, onLeadUpdated })
         const cleanPhone = phoneNumber.replace(/\D/g, '');
         const formattedPhone = cleanPhone.startsWith('1') ? `+${cleanPhone}` : `+1${cleanPhone}`;
         
-        // Log the call to backend first
-        try {
-          await makeApiCall(`${API_BASE}/calls/make`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              to: formattedPhone,
-              leadId: lead.id
-            })
-          });
-        } catch (apiError) {
-          console.error('Failed to log call to backend:', apiError);
-          // Continue with browser call anyway
-        }
-        
-        // Make browser-to-phone call using Twilio
+        // Make browser-to-phone call using Twilio Client SDK
+        // This will handle logging to backend automatically
         await makeCall(formattedPhone);
         
         toast({
