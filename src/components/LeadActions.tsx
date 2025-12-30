@@ -28,8 +28,10 @@ import {
 } from "lucide-react";
 import { SendEmailDialog } from "./SendEmailDialog";
 import { useLeads } from "@/hooks/useLeads";
+import { useTwilioDevice } from "@/hooks/useTwilioDevice";
 import { useToast } from "@/hooks/use-toast";
 import type { Lead } from "@/hooks/useLeads";
+import { API_BASE, makeApiCall } from "@/config/api";
 
 interface LeadActionsProps {
   lead: Lead;
@@ -41,6 +43,7 @@ export const LeadActions: React.FC<LeadActionsProps> = ({ lead, onLeadUpdated })
   const [showEmailDialog, setShowEmailDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const { deleteLead } = useLeads();
+  const { makeCall } = useTwilioDevice(); // Use Twilio browser calling
   const { toast } = useToast();
 
   const handleDelete = async () => {
@@ -60,12 +63,44 @@ export const LeadActions: React.FC<LeadActionsProps> = ({ lead, onLeadUpdated })
     }
   };
 
-  const handleCall = () => {
+  const handleCall = async () => {
     const phoneNumber = lead.seller?.phone || lead.buyer?.phone || lead.vendor?.phone;
     if (phoneNumber) {
-      // Remove non-numeric characters and format for tel: link
-      const cleanPhone = phoneNumber.replace(/\D/g, '');
-      window.location.href = `tel:+1${cleanPhone}`;
+      try {
+        // Format phone number to E.164 format
+        const cleanPhone = phoneNumber.replace(/\D/g, '');
+        const formattedPhone = cleanPhone.startsWith('1') ? `+${cleanPhone}` : `+1${cleanPhone}`;
+        
+        // Log the call to backend first
+        try {
+          await makeApiCall(`${API_BASE}/calls/make`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: formattedPhone,
+              leadId: lead.id
+            })
+          });
+        } catch (apiError) {
+          console.error('Failed to log call to backend:', apiError);
+          // Continue with browser call anyway
+        }
+        
+        // Make browser-to-phone call using Twilio
+        await makeCall(formattedPhone);
+        
+        toast({
+          title: "Call Initiated",
+          description: `Calling ${getLeadName()}...`,
+        });
+      } catch (error: any) {
+        console.error('Failed to initiate call:', error);
+        toast({
+          title: "Call Failed",
+          description: error.message || "Could not place the call",
+          variant: "destructive",
+        });
+      }
     }
   };
 
