@@ -4,13 +4,13 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { IncomingCallPopup } from "@/components/IncomingCallPopup";
 import { ActiveCallWidget } from "@/components/ActiveCallWidget";
-import { useTwilioDevice } from "@/hooks/useTwilioDevice";
+import { TwilioProvider, useTwilioContext } from "@/contexts/TwilioContext";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
-export function DashboardLayout({ children }: DashboardLayoutProps) {
+function DashboardLayoutContent({ children }: DashboardLayoutProps) {
   const { 
     incomingCall, 
     answerCall, 
@@ -21,8 +21,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     hangUp,
     toggleMute,
     isMuted,
-    currentCallNumber // Get the current call number
-  } = useTwilioDevice();
+    currentCallNumber
+  } = useTwilioContext();
 
   // Initialize Twilio device when component mounts
   useEffect(() => {
@@ -72,5 +72,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         )}
       </div>
     </SidebarProvider>
+  );
+}
+
+export function DashboardLayout({ children }: DashboardLayoutProps) {
+  return (
+    <TwilioProvider>
+      <DashboardLayoutContent>{children}</DashboardLayoutContent>
+    </TwilioProvider>
   );
 }

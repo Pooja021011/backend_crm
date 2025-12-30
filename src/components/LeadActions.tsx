@@ -28,10 +28,9 @@ import {
 } from "lucide-react";
 import { SendEmailDialog } from "./SendEmailDialog";
 import { useLeads } from "@/hooks/useLeads";
-import { useTwilioDevice } from "@/hooks/useTwilioDevice";
+import { useTwilioContext } from "@/contexts/TwilioContext";
 import { useToast } from "@/hooks/use-toast";
 import type { Lead } from "@/hooks/useLeads";
-import { API_BASE, makeApiCall } from "@/config/api";
 
 interface LeadActionsProps {
   lead: Lead;
@@ -43,7 +42,7 @@ export const LeadActions: React.FC<LeadActionsProps> = ({ lead, onLeadUpdated })
   const [showEmailDialog, setShowEmailDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const { deleteLead } = useLeads();
-  const { makeCall } = useTwilioDevice(); // Use Twilio browser calling
+  const { makeCall } = useTwilioContext(); // Use shared Twilio context
   const { toast } = useToast();
 
   const handleDelete = async () => {
@@ -71,8 +70,7 @@ export const LeadActions: React.FC<LeadActionsProps> = ({ lead, onLeadUpdated })
         const cleanPhone = phoneNumber.replace(/\D/g, '');
         const formattedPhone = cleanPhone.startsWith('1') ? `+${cleanPhone}` : `+1${cleanPhone}`;
         
-        // Make browser-to-phone call using Twilio Client SDK
-        // This will handle logging to backend automatically
+        // Make browser-to-phone call using shared Twilio Device instance
         await makeCall(formattedPhone);
         
         toast({
