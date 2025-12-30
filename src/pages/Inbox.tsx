@@ -11,7 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { API_BASE, makeApiCall } from "@/config/api";
 import { useToast } from "@/hooks/use-toast";
-import { useTwilioDevice } from "@/hooks/useTwilioDevice";
+import { useTwilioContext } from "@/contexts/TwilioContext";
 
 // CSS styles for email content
 const emailContentStyles = `
@@ -72,7 +72,7 @@ import {
 const Inbox = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { makeCall: makeBrowserCall, hangUp, callStatus, isInitializing, toggleMute, isMuted } = useTwilioDevice();
+  const { makeCall: makeBrowserCall, hangUp, callStatus, isInitializing, toggleMute, isMuted } = useTwilioContext();
   
   const [activeTab, setActiveTab] = useState("emails");
   const [selectedItems, setSelectedItems] = useState<string[]>([]);

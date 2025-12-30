@@ -43,7 +43,7 @@ import { differenceInHours, differenceInDays } from 'date-fns';
 import { API_BASE, makeApiCall } from '@/config/api';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { useTwilioDevice } from '@/hooks/useTwilioDevice';
+import { useTwilioContext } from '@/contexts/TwilioContext';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { CompsManager } from '@/components/CompsManager';
 import { LeadTimeline } from '@/components/LeadTimeline';
@@ -194,7 +194,7 @@ const LeadEdit: React.FC = () => {
   const [addingNote, setAddingNote] = useState(false);
   
   // Communication features
-  const { makeCall: makeBrowserCall, hangUp, callStatus, isInitializing, toggleMute, isMuted } = useTwilioDevice();
+  const { makeCall: makeBrowserCall, hangUp, callStatus, isInitializing, toggleMute, isMuted } = useTwilioContext();
   const [communications, setCommunications] = useState<any[]>([]);
   const [loadingCommunications, setLoadingCommunications] = useState(false);
   const [smsText, setSmsText] = useState('');
