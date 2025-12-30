@@ -18,7 +18,7 @@ export const authService = {
     if (!ok) throw Object.assign(new Error('Invalid credentials'), { status: 401 });
 
     const roles = user.roles.map((ur) => ur.role.name as RoleName);
-    const accessToken = tokenUtil.signAccess({ id: user.id, roles });
+    const accessToken = tokenUtil.signAccess({ id: user.id, roles, email: user.email });
     const refreshToken = tokenUtil.signRefresh({ id: user.id, roles });
 
     await tokenRepository.create(user.id, hashToken(refreshToken), new Date(Date.now() + 30 * 24 * 3600 * 1000));
@@ -41,7 +41,7 @@ export const authService = {
     if (!user) throw Object.assign(new Error('User not found'), { status: 404 });
 
     const roles = user.roles.map((ur) => ur.role.name as RoleName);
-    const accessToken = tokenUtil.signAccess({ id: user.id, roles });
+    const accessToken = tokenUtil.signAccess({ id: user.id, roles, email: user.email });
     
     // Include roles in the user object for frontend
     const userWithRoles = {
