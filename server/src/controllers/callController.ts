@@ -41,6 +41,12 @@ export const callController = {
         ttl: 3600 // 1 hour
       });
 
+      console.log('🔑 GENERATING TWILIO TOKEN:', {
+        userId,
+        userEmail,
+        identity: userEmail || userId
+      });
+
       // Create voice grant
       const voiceGrant = new VoiceGrant({
         outgoingApplicationSid: twimlAppSid,
@@ -410,6 +416,14 @@ export const callController = {
       if (userSettings && userSettings.user) {
         // Route call to the user's browser client
         const clientIdentity = userSettings.user.email || userSettings.userId;
+        
+        console.log('🔍 INCOMING CALL ROUTING:', {
+          from,
+          to,
+          clientIdentity,
+          userEmail: userSettings.user.email,
+          userId: userSettings.userId
+        });
         
         logger.info('Routing incoming call to browser client', { 
           from, 
