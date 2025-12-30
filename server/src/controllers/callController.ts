@@ -429,24 +429,43 @@ export const callController = {
 
       if (identity) {
         try {
+          // Identity can be email OR userId (older tokens / deployments)
+          const isEmail = identity.includes('@');
           const user = await prisma.user.findUnique({
-            where: { email: identity },
-            select: {
-              id: true,
-              smsSettings: { select: { phoneNumber: true, active: true } },
-            },
+            where: isEmail ? { email: identity } : { id: identity },
+            select: { id: true, email: true },
           });
 
-          const agentNumber = user?.smsSettings?.active ? user.smsSettings.phoneNumber : null;
+          // Pull agent's configured Twilio number from UserSmsSettings (per-agent)
+          const sms = user?.id
+            ? await prisma.userSmsSettings.findUnique({
+                where: { userId: user.id },
+                select: { phoneNumber: true, active: true },
+              })
+            : null;
+
+          const agentNumber = sms?.active ? sms.phoneNumber : null;
           if (agentNumber) callerId = agentNumber;
 
-          logger.info('Resolved callerId for browser call', {
+          // IMPORTANT: pino signature is (obj, msg). Previous logs were dropping fields.
+          logger.info(
+            { identity, resolvedUserId: user?.id, resolvedEmail: user?.email, callerId },
+            'Resolved callerId for browser call'
+          );
+          console.log('📞 twimlVoice callerId resolution', {
+            fromParam,
             identity,
-            userId: user?.id,
+            resolvedUserId: user?.id,
+            resolvedEmail: user?.email,
             callerId,
           });
         } catch (e: any) {
-          logger.warn('Failed to resolve callerId for browser call; using fallback', {
+          logger.warn(
+            { identity, error: e?.message || String(e) },
+            'Failed to resolve callerId for browser call; using fallback'
+          );
+          console.log('❌ twimlVoice callerId resolution failed', {
+            fromParam,
             identity,
             error: e?.message || String(e),
           });
