@@ -54,7 +54,6 @@ import {
   SortAsc,
   SortDesc
 } from "lucide-react";
-import { DashboardLayout } from "@/components/DashboardLayout";
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { useLeads, type LeadType } from "@/hooks/useLeads";
 import { useAuth } from "@/contexts/AuthContext";
@@ -842,7 +841,6 @@ const Leads = () => {
   };
 
   return (
-    <DashboardLayout>
       <div className="flex flex-col h-full bg-gray-50">
         {/* Header */}
         <div className="bg-white border-b border-gray-200">
@@ -1729,7 +1727,6 @@ const Leads = () => {
           </div>
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
   );
 };
 

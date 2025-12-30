@@ -44,7 +44,6 @@ import { API_BASE, makeApiCall } from '@/config/api';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTwilioContext } from '@/contexts/TwilioContext';
-import { DashboardLayout } from '@/components/DashboardLayout';
 import { CompsManager } from '@/components/CompsManager';
 import { LeadTimeline } from '@/components/LeadTimeline';
 import { 
@@ -1465,7 +1464,7 @@ const LeadEdit: React.FC = () => {
       
       // Store call in database for history
       try {
-        await makeApiCall(`${API_BASE}/calls/make`, {
+        await makeApiCall(`${API_BASE}/calls/log-outbound`, {
           method: 'POST',
           body: JSON.stringify({ 
             to: phoneNumber,
@@ -1510,7 +1509,7 @@ const LeadEdit: React.FC = () => {
       
       // Store call in database for history
       try {
-        await makeApiCall(`${API_BASE}/calls/make`, {
+        await makeApiCall(`${API_BASE}/calls/log-outbound`, {
           method: 'POST',
           body: JSON.stringify({ 
             to: phoneNumber,
@@ -2062,24 +2061,20 @@ const LeadEdit: React.FC = () => {
 
   if (loading) {
     return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="text-lg text-slate-600">Loading lead details...</div>
-        </div>
-      </DashboardLayout>
+      <div className="flex items-center justify-center h-64">
+        <div className="text-lg text-slate-600">Loading lead details...</div>
+      </div>
     );
   }
 
   if (!lead) {
     return (
-      <DashboardLayout>
-        <div className="text-center py-12">
-          <p className="text-lg text-slate-600">Lead not found</p>
-          <Button onClick={() => navigate('/leads')} className="mt-4">
-            Back to Leads
-          </Button>
-        </div>
-      </DashboardLayout>
+      <div className="text-center py-12">
+        <p className="text-lg text-slate-600">Lead not found</p>
+        <Button onClick={() => navigate('/leads')} className="mt-4">
+          Back to Leads
+        </Button>
+      </div>
     );
   }
 
@@ -2100,7 +2095,6 @@ const LeadEdit: React.FC = () => {
   const additionalOwners = leadOwners.filter((o) => !primaryOwner || o.id !== primaryOwner.id);
 
   return (
-    <DashboardLayout>
       <div className="space-y-2">
         {/* Header with Back Button and Save */}
         <div className="flex items-center justify-between">
@@ -3266,7 +3260,6 @@ const LeadEdit: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
   );
 };
 
