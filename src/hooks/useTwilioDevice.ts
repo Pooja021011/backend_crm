@@ -26,6 +26,7 @@ export const useTwilioDevice = () => {
   const [incomingCall, setIncomingCall] = useState<IncomingCallInfo | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [currentCallNumber, setCurrentCallNumber] = useState<string>(''); // Track current call number
   const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const ringtoneRef = useRef<HTMLAudioElement | null>(null);
   const { toast } = useToast();
@@ -196,6 +197,7 @@ export const useTwilioDevice = () => {
       }
 
       setCallStatus({ status: 'connecting', duration: 0 });
+      setCurrentCallNumber(phoneNumber); // Store the number being called
 
       // Make the call
       const call = await deviceToUse.connect({
@@ -228,6 +230,7 @@ export const useTwilioDevice = () => {
         console.log('Call disconnected');
         setCallStatus({ status: 'disconnected', duration: 0 });
         setActiveCall(null);
+        setCurrentCallNumber(''); // Clear stored number
         
         // Clear duration counter
         if (durationIntervalRef.current) {
@@ -245,6 +248,7 @@ export const useTwilioDevice = () => {
         console.log('Call cancelled');
         setCallStatus({ status: 'idle', duration: 0 });
         setActiveCall(null);
+        setCurrentCallNumber(''); // Clear stored number
         
         if (durationIntervalRef.current) {
           clearInterval(durationIntervalRef.current);
@@ -256,6 +260,7 @@ export const useTwilioDevice = () => {
         console.log('Call rejected');
         setCallStatus({ status: 'idle', duration: 0 });
         setActiveCall(null);
+        setCurrentCallNumber(''); // Clear stored number
         
         if (durationIntervalRef.current) {
           clearInterval(durationIntervalRef.current);
@@ -351,6 +356,9 @@ export const useTwilioDevice = () => {
       
       const call = incomingCall.call;
       
+      // Store the caller's number
+      setCurrentCallNumber(incomingCall.from);
+      
       // Log to backend that call was answered
       try {
         await makeApiCall(`${API_BASE}/calls/log-answer`, {
@@ -387,6 +395,7 @@ export const useTwilioDevice = () => {
         console.log('Call disconnected');
         setCallStatus({ status: 'disconnected', duration: 0 });
         setActiveCall(null);
+        setCurrentCallNumber(''); // Clear stored number
         
         if (durationIntervalRef.current) {
           clearInterval(durationIntervalRef.current);
@@ -502,6 +511,7 @@ export const useTwilioDevice = () => {
     incomingCall,
     isInitializing,
     isMuted,
+    currentCallNumber, // Export current call number
     initializeDevice,
     makeCall,
     hangUp,

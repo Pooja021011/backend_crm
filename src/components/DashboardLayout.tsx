@@ -3,6 +3,7 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { IncomingCallPopup } from "@/components/IncomingCallPopup";
+import { ActiveCallWidget } from "@/components/ActiveCallWidget";
 import { useTwilioDevice } from "@/hooks/useTwilioDevice";
 
 interface DashboardLayoutProps {
@@ -10,7 +11,18 @@ interface DashboardLayoutProps {
 }
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
-  const { incomingCall, answerCall, rejectCall, initializeDevice } = useTwilioDevice();
+  const { 
+    incomingCall, 
+    answerCall, 
+    rejectCall, 
+    initializeDevice,
+    activeCall,
+    callStatus,
+    hangUp,
+    toggleMute,
+    isMuted,
+    currentCallNumber // Get the current call number
+  } = useTwilioDevice();
 
   // Initialize Twilio device when component mounts
   useEffect(() => {
@@ -43,6 +55,19 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             incomingCall={incomingCall}
             onAnswer={answerCall}
             onReject={rejectCall}
+          />
+        )}
+
+        {/* Active Call Widget - Shows when call is connected */}
+        {activeCall && !incomingCall && (
+          <ActiveCallWidget
+            callStatus={callStatus}
+            isMuted={isMuted}
+            onHangUp={hangUp}
+            onToggleMute={toggleMute}
+            contactInfo={{
+              phoneNumber: currentCallNumber || 'Unknown'
+            }}
           />
         )}
       </div>
