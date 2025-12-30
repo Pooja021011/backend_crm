@@ -142,7 +142,8 @@ export const useTwilioDevice = () => {
           
           call.on('disconnect', () => {
             console.log('Outgoing call disconnected');
-            setCallStatus({ status: 'disconnected', duration: 0 });
+            // Reset to idle so future incoming calls can show the popup reliably
+            setCallStatus({ status: 'idle', duration: 0 });
             setActiveCall(null);
             setCurrentCallNumber('');
             isOutgoingCallRef.current = false; // Reset flag
@@ -271,7 +272,8 @@ export const useTwilioDevice = () => {
 
       call.on('disconnect', () => {
         console.log('Call disconnected');
-        setCallStatus({ status: 'disconnected', duration: 0 });
+        // Reset to idle so future incoming calls can show the popup reliably
+        setCallStatus({ status: 'idle', duration: 0 });
         setActiveCall(null);
         setCurrentCallNumber(''); // Clear stored number
         isOutgoingCallRef.current = false; // Reset outgoing flag
@@ -441,7 +443,8 @@ export const useTwilioDevice = () => {
       // Setup call event listeners
       call.on('disconnect', () => {
         console.log('Call disconnected');
-        setCallStatus({ status: 'disconnected', duration: 0 });
+        // Reset to idle so future incoming calls can show the popup reliably
+        setCallStatus({ status: 'idle', duration: 0 });
         setActiveCall(null);
         setCurrentCallNumber(''); // Clear stored number
         isOutgoingCallRef.current = false; // Reset flag (just in case)
