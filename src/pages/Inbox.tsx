@@ -2722,71 +2722,7 @@ const Inbox = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Floating Call Status Indicator */}
-      {callStatus.status !== 'idle' && (
-        <div className="fixed top-6 right-6 bg-white shadow-2xl rounded-lg border-2 border-purple-600 p-4 min-w-[300px] z-[9999] animate-in slide-in-from-top-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className={`w-3 h-3 rounded-full ${
-                callStatus.status === 'connected' ? 'bg-green-500 animate-pulse' :
-                callStatus.status === 'ringing' ? 'bg-yellow-500 animate-pulse' :
-                callStatus.status === 'connecting' ? 'bg-blue-500 animate-pulse' :
-                'bg-gray-500'
-              }`} />
-              <span className="font-semibold text-sm">
-                {callStatus.status === 'connected' ? 'Connected' :
-                 callStatus.status === 'ringing' ? 'Ringing...' :
-                 callStatus.status === 'connecting' ? 'Connecting...' :
-                 'Call Ended'}
-              </span>
-            </div>
-            {callStatus.status === 'connected' && (
-              <span className="text-sm text-gray-600">
-                {Math.floor(callStatus.duration / 60)}:{(callStatus.duration % 60).toString().padStart(2, '0')}
-              </span>
-            )}
-          </div>
-          
-          {callStatus.status === 'connected' && (
-            <div className="flex gap-2">
-              <Button
-                onClick={toggleMute}
-                variant="outline"
-                size="sm"
-                className="flex-1"
-              >
-                {isMuted ? (
-                  <>
-                    <MicOff className="w-4 h-4 mr-2" />
-                    Unmute
-                  </>
-                ) : (
-                  <>
-                    <Mic className="w-4 h-4 mr-2" />
-                    Mute
-                  </>
-                )}
-              </Button>
-              <Button
-                onClick={hangUp}
-                variant="destructive"
-                size="sm"
-                className="flex-1"
-              >
-                <PhoneOff className="w-4 h-4 mr-2" />
-                Hang Up
-              </Button>
-            </div>
-          )}
-          
-          {(callStatus.status === 'connecting' || callStatus.status === 'ringing') && (
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Please wait...</span>
-            </div>
-          )}
-        </div>
-      )}
+      {/* Call controls are shown globally via ActiveCallWidget to avoid duplicates */}
     </div>
   );
 };
