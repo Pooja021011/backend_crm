@@ -2095,6 +2095,7 @@ const LeadEdit: React.FC = () => {
   const additionalOwners = leadOwners.filter((o) => !primaryOwner || o.id !== primaryOwner.id);
 
   return (
+    <>
       <div className="space-y-2">
         {/* Header with Back Button and Save */}
         <div className="flex items-center justify-between">
@@ -3260,6 +3261,7 @@ const LeadEdit: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </>
   );
 };
 

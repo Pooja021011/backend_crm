@@ -966,7 +966,7 @@ const Inbox = () => {
       
       // Store call in database for history
       try {
-        await makeApiCall(`${API_BASE}/calls/make`, {
+        await makeApiCall(`${API_BASE}/calls/log-outbound`, {
           method: 'POST',
           body: JSON.stringify({ 
             to: phoneNumber,

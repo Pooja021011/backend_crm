@@ -23,6 +23,11 @@ router.post('/make', (req, res, next) =>
   callController.makeCall(req, res).catch(next)
 );
 
+// Log outbound call (browser calling) without initiating Twilio Voice API call
+router.post('/log-outbound', (req, res, next) =>
+  callController.logOutbound(req, res).catch(next)
+);
+
 // Get call history
 router.get('/history', (req, res, next) => 
   callController.getCallHistory(req, res).catch(next)

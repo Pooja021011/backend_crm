@@ -1,6 +1,8 @@
 import type { Request, Response } from 'express';
 import { callService } from '../services/callService.js';
 import { logger } from '../config/logger.js';
+import { communicationRepository } from '../repositories/communicationRepository.js';
+import { communicationResponseService } from '../services/communicationResponseService.js';
 import twilio from 'twilio';
 
 const AccessToken = twilio.jwt.AccessToken;
@@ -121,6 +123,55 @@ export const callController = {
         success: false,
         error: 'Internal server error'
       });
+    }
+  },
+
+  /**
+   * Log outbound call (for browser-calling UI) WITHOUT initiating a Twilio Voice API call.
+   * This prevents duplicate calls and avoids triggering incoming popup during outgoing calls.
+   */
+  async logOutbound(req: Request, res: Response) {
+    try {
+      const { to, leadId } = req.body as { to?: string; leadId?: string };
+      const userId = (req as any).user?.id as string | undefined;
+
+      if (!userId) {
+        return res.status(401).json({ success: false, error: 'Unauthorized' });
+      }
+
+      if (!to || !leadId) {
+        return res.status(400).json({ success: false, error: 'to and leadId are required' });
+      }
+
+      // Validate and normalize phone number
+      const formattedTo = callService.formatPhoneNumber(to);
+      if (!callService.validatePhoneNumber(formattedTo)) {
+        return res.status(400).json({ success: false, error: 'Invalid phone number format' });
+      }
+
+      await communicationRepository.create(leadId, {
+        type: 'CALL',
+        direction: 'OUTBOUND',
+        subject: `Call to ${formattedTo}`,
+        body: `Outbound call initiated to ${formattedTo}`,
+        occurredAt: new Date(),
+        createdById: userId,
+        metadata: {
+          status: 'initiated',
+          to: formattedTo,
+          source: 'browser',
+        },
+      });
+
+      // Keep lead automation consistent with other call logging
+      await communicationResponseService
+        .handleCommunicationEvent(leadId, 'OUTBOUND', 'CALL')
+        .catch((err) => logger.error(`Failed to handle communication event: ${String(err?.message || err)}`));
+
+      return res.json({ success: true });
+    } catch (error: any) {
+      logger.error(`Error logging outbound call: ${String(error?.message || error)}`);
+      return res.status(500).json({ success: false, error: 'Failed to log outbound call' });
     }
   },
 
