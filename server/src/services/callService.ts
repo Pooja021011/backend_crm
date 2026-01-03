@@ -455,19 +455,27 @@ export const callService = {
   /**
    * Get call history for a user from database
    */
-  async getCallHistory(userId: string): Promise<any[]> {
+  async getCallHistory(params: { userId: string; roles?: string[] }): Promise<any[]> {
     try {
-      logger.info({ userId }, 'Fetching call history from database');
+      const userId = params.userId;
+      const roles = params.roles || [];
+      const isPrivileged = roles.includes('ADMIN') || roles.includes('EXECUTIVE') || roles.includes('MANAGER') || roles.includes('TC');
+
+      logger.info({ userId, roles }, 'Fetching call history from database');
 
       // Fetch real call communications from database
       const communications = await prisma.communication.findMany({
         where: {
           type: 'CALL',
-          OR: [
-            { createdById: userId },
-            { lead: { assignedUserId: userId } },
-            { lead: { createdById: userId } },
-          ]
+          ...(isPrivileged
+            ? {}
+            : {
+                OR: [
+                  { createdById: userId },
+                  { lead: { assignedUserId: userId } },
+                  { lead: { createdById: userId } },
+                ],
+              }),
         },
         include: {
           lead: {
@@ -532,11 +540,11 @@ export const callService = {
         };
       });
 
-      logger.info({ userId, totalCalls: callHistory.length }, 'Call history fetched successfully');
+      logger.info({ userId, totalCalls: callHistory.length, isPrivileged }, 'Call history fetched successfully');
 
       return callHistory;
     } catch (error: any) {
-      logger.error({ error: error.message, userId }, 'Failed to get call history');
+      logger.error({ error: error.message, userId: params.userId }, 'Failed to get call history');
       return [];
     }
   }

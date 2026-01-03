@@ -308,6 +308,7 @@ export const callController = {
   async getCallHistory(req: Request, res: Response) {
     try {
       const userId = (req as any).user?.id;
+      const roles = ((req as any).user?.roles as string[] | undefined) || [];
       
       if (!userId) {
         return res.status(401).json({
@@ -316,7 +317,7 @@ export const callController = {
         });
       }
 
-      const callHistory = await callService.getCallHistory(userId);
+      const callHistory = await callService.getCallHistory({ userId, roles });
 
       res.json({
         success: true,
