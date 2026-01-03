@@ -28,8 +28,7 @@ const AdminLogin = () => {
   // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated) {
-      const from = location.state?.from?.pathname || '/';
-      navigate(from, { replace: true });
+      navigate('/inbox', { replace: true });
     }
   }, [isAuthenticated, navigate, location]);
 
@@ -38,8 +37,7 @@ const AdminLogin = () => {
     
     const success = await login(email, password);
     if (success) {
-      const from = location.state?.from?.pathname || '/';
-      navigate(from, { replace: true });
+      navigate('/inbox', { replace: true });
     }
   };
 
