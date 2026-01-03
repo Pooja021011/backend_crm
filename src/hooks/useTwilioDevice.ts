@@ -33,9 +33,90 @@ export const useTwilioDevice = () => {
   const lastIdentityRef = useRef<string>(''); // Track which user identity this Device was created for
   const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const ringtoneRef = useRef<HTMLAudioElement | null>(null);
+  const deviceRef = useRef<Device | null>(null);
+  const activeCallRef = useRef<Call | null>(null);
+  const incomingCallRef = useRef<IncomingCallInfo | null>(null);
   const { toast } = useToast();
 
   const currentIdentityKey = user?.email || user?.id || '';
+
+  useEffect(() => {
+    deviceRef.current = device;
+  }, [device]);
+
+  useEffect(() => {
+    activeCallRef.current = activeCall;
+  }, [activeCall]);
+
+  useEffect(() => {
+    incomingCallRef.current = incomingCall;
+  }, [incomingCall]);
+
+  const teardownDevice = useCallback((reason: string) => {
+    try {
+      console.log('🧹 Tearing down Twilio Device:', { reason });
+    } catch {
+      // ignore
+    }
+
+    // Stop timers & audio first
+    if (durationIntervalRef.current) {
+      clearInterval(durationIntervalRef.current);
+      durationIntervalRef.current = null;
+    }
+
+    if (ringtoneRef.current) {
+      try {
+        ringtoneRef.current.pause();
+        ringtoneRef.current.currentTime = 0;
+      } catch {
+        // ignore
+      }
+    }
+
+    // Reject any pending incoming call so Twilio doesn't keep it ringing
+    const pendingIncoming = incomingCallRef.current?.call;
+    if (pendingIncoming) {
+      try {
+        pendingIncoming.reject();
+      } catch {
+        // ignore
+      }
+    }
+
+    // Disconnect any active call
+    if (activeCallRef.current) {
+      try {
+        activeCallRef.current.disconnect();
+      } catch {
+        // ignore
+      }
+    }
+
+    // Unregister/destroy the device so we stop receiving inbound calls after logout
+    if (deviceRef.current) {
+      try {
+        deviceRef.current.unregister();
+      } catch {
+        // ignore
+      }
+      try {
+        deviceRef.current.destroy();
+      } catch {
+        // ignore
+      }
+    }
+
+    // Reset state
+    setDevice(null);
+    setActiveCall(null);
+    setIncomingCall(null);
+    setCallStatus({ status: 'idle', duration: 0 });
+    setIsMuted(false);
+    setCurrentCallNumber('');
+    isOutgoingCallRef.current = false;
+    lastIdentityRef.current = '';
+  }, []);
 
   // If user changes (admin -> agent, agent -> admin), destroy the old Device so we re-register with correct identity.
   useEffect(() => {
@@ -44,27 +125,16 @@ export const useTwilioDevice = () => {
 
     // If device exists but identity changed, teardown to force fresh token + registration
     if (device && lastIdentityRef.current && lastIdentityRef.current !== currentIdentityKey) {
-      try {
-        console.log('🔄 Twilio identity changed. Reinitializing device.', {
-          from: lastIdentityRef.current,
-          to: currentIdentityKey,
-        });
-        device.unregister();
-        device.destroy();
-      } catch (e) {
-        // ignore teardown errors
-      }
-
-      setDevice(null);
-      setActiveCall(null);
-      setIncomingCall(null);
-      setCallStatus({ status: 'idle', duration: 0 });
-      setIsMuted(false);
-      setCurrentCallNumber('');
-      isOutgoingCallRef.current = false;
-      lastIdentityRef.current = '';
+      teardownDevice('identity-changed');
     }
-  }, [currentIdentityKey, isAuthenticated, device]);
+  }, [currentIdentityKey, isAuthenticated, device, teardownDevice]);
+
+  // Critical: when auth becomes unauthenticated, explicitly destroy/unregister the Device
+  // so Twilio inbound calls stop ringing even if the token is still valid.
+  useEffect(() => {
+    if (isAuthenticated) return;
+    teardownDevice('logged-out');
+  }, [isAuthenticated, teardownDevice]);
 
   // Initialize ringtone
   useEffect(() => {
@@ -87,6 +157,8 @@ export const useTwilioDevice = () => {
 
   // Initialize Twilio Device
   const initializeDevice = useCallback(async () => {
+    if (!isAuthenticated) return null;
+    if (!currentIdentityKey) return null;
     // If device exists but was created for a different user, ignore and recreate.
     if (device && (!lastIdentityRef.current || lastIdentityRef.current === currentIdentityKey)) return device;
 
@@ -101,7 +173,8 @@ export const useTwilioDevice = () => {
 
       const data = await response.json();
       const token = data.token;
-      lastIdentityRef.current = currentIdentityKey || data.identity || '';
+      // Prefer the identity returned by backend (it may normalize emails to lowercase)
+      lastIdentityRef.current = data.identity || currentIdentityKey || '';
 
       // Test microphone access first before creating Device
       console.log('🎤 Testing microphone access...');
@@ -259,7 +332,7 @@ export const useTwilioDevice = () => {
       });
       return null;
     }
-  }, [device, toast]);
+  }, [device, toast, isAuthenticated, currentIdentityKey]);
 
   // Make a call
   const makeCall = useCallback(async (phoneNumber: string) => {
@@ -581,18 +654,9 @@ export const useTwilioDevice = () => {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (durationIntervalRef.current) {
-        clearInterval(durationIntervalRef.current);
-      }
-      if (activeCall) {
-        activeCall.disconnect();
-      }
-      if (device) {
-        device.unregister();
-        device.destroy();
-      }
+      teardownDevice('unmounted');
     };
-  }, []);
+  }, [teardownDevice]);
 
   return {
     device,

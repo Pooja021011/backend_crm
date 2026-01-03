@@ -6,6 +6,23 @@ import { smsSettingsRepository } from '../repositories/smsSettingsRepository.js'
 import { communicationResponseService } from './communicationResponseService.js';
 import { leadRepository } from '../repositories/leadRepository.js';
 
+function normalizeBaseUrl(input?: string | null): string {
+  const trimmed = String(input || '').trim();
+  return trimmed ? trimmed.replace(/\/+$/, '') : '';
+}
+
+function getTwilioCallbackBaseUrl(): string {
+  // Prefer explicit public URL for external callbacks (HTTPS domain)
+  const publicUrl = normalizeBaseUrl(process.env.PUBLIC_BASE_URL);
+  if (publicUrl) return publicUrl;
+
+  // Backwards compatible fallback
+  const appBase = normalizeBaseUrl(process.env.APP_BASE_URL);
+  if (appBase) return appBase;
+
+  return 'http://localhost:4000';
+}
+
 // Initialize Twilio client
 // #region agent log
 fetch('http://127.0.0.1:7242/ingest/06111847-3345-4786-9a5d-89cc38601516',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'callService.ts:8',message:'Initializing Twilio for calls',data:{hasSID:!!process.env.TWILIO_ACCOUNT_SID,hasToken:!!process.env.TWILIO_AUTH_TOKEN,baseURL:process.env.APP_BASE_URL},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
@@ -39,6 +56,7 @@ export const callService = {
    */
   async makeCall(callRequest: CallRequest): Promise<CallResponse> {
     try {
+      const baseUrl = getTwilioCallbackBaseUrl();
       // Get user's phone number from SMS settings (same number for calls)
       let fromNumber = callRequest.from;
       if (callRequest.userId && !fromNumber) {
@@ -74,8 +92,8 @@ export const callService = {
       const call = await twilioClient.calls.create({
         to: fromNumber, // Call YOUR phone first
         from: fromNumber, // From your Twilio number
-        url: `${process.env.APP_BASE_URL}/api/v1/calls/twiml?contactNumber=${encodeURIComponent(callRequest.to)}`, // Pass contact number to TwiML
-        statusCallback: `${process.env.APP_BASE_URL}/api/v1/calls/webhook`,
+        url: `${baseUrl}/api/v1/calls/twiml?contactNumber=${encodeURIComponent(callRequest.to)}`, // Pass contact number to TwiML
+        statusCallback: `${baseUrl}/api/v1/calls/webhook`,
         statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
         statusCallbackMethod: 'POST',
       });

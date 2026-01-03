@@ -11,6 +11,9 @@ export const env = {
   // Twilio Configuration
   TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID || '',
   TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN || '',
+  // Public base URL used for external callbacks (Twilio webhooks, etc.). Should be your HTTPS domain.
+  // Example: https://realestate.withai.agency
+  PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL || '',
   APP_BASE_URL: process.env.APP_BASE_URL || 'http://localhost:4000',
   // DocuSign Configuration
   DOCUSIGN_BASE_PATH: process.env.DOCUSIGN_BASE_PATH || 'https://demo.docusign.net/restapi',

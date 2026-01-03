@@ -5,12 +5,14 @@ import { DashboardHeader } from "@/components/DashboardHeader";
 import { IncomingCallPopup } from "@/components/IncomingCallPopup";
 import { ActiveCallWidget } from "@/components/ActiveCallWidget";
 import { useTwilioContext } from "@/contexts/TwilioContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
 function DashboardLayoutContent({ children }: DashboardLayoutProps) {
+  const { isAuthenticated } = useAuth();
   const { 
     incomingCall, 
     answerCall, 
@@ -26,11 +28,12 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
 
   // Initialize Twilio device when component mounts
   useEffect(() => {
+    if (!isAuthenticated) return;
     console.log('🎤 Initializing Twilio Device for incoming calls...');
     initializeDevice().catch(err => {
       console.error('Failed to initialize Twilio device:', err);
     });
-  }, [initializeDevice]);
+  }, [initializeDevice, isAuthenticated]);
 
   return (
     <SidebarProvider defaultOpen={true}>

@@ -9,6 +9,33 @@ import twilio from 'twilio';
 const AccessToken = twilio.jwt.AccessToken;
 const VoiceGrant = AccessToken.VoiceGrant;
 
+function normalizeBaseUrl(input?: string | null): string | null {
+  if (!input) return null;
+  const trimmed = String(input).trim();
+  if (!trimmed) return null;
+  return trimmed.replace(/\/+$/, '');
+}
+
+function getPublicBaseUrl(req: Request): string {
+  // Prefer explicit public URL for external callbacks (Twilio, DocuSign, etc.)
+  const fromEnv = normalizeBaseUrl(process.env.PUBLIC_BASE_URL) || normalizeBaseUrl(process.env.APP_BASE_URL);
+  if (fromEnv) return fromEnv;
+
+  // Fallback: infer from request headers (works behind proxies when trust proxy is enabled)
+  const forwardedProto = (req.headers['x-forwarded-proto'] as string | undefined)?.split(',')[0]?.trim();
+  const proto = forwardedProto || req.protocol || 'http';
+  const forwardedHost = (req.headers['x-forwarded-host'] as string | undefined)?.split(',')[0]?.trim();
+  const host = forwardedHost || req.get('host') || 'localhost:4000';
+  return normalizeBaseUrl(`${proto}://${host}`) || 'http://localhost:4000';
+}
+
+function normalizeTwilioIdentity(identity?: string | null): string {
+  const raw = String(identity || '').trim();
+  if (!raw) return raw;
+  // Twilio Client identities are case-sensitive. Normalize emails to lowercase so routing is consistent.
+  return raw.includes('@') ? raw.toLowerCase() : raw;
+}
+
 export const callController = {
   /**
    * Generate Twilio access token for browser-based calling
@@ -39,15 +66,16 @@ export const callController = {
       }
 
       // Create access token
+      const identity = normalizeTwilioIdentity(userEmail || userId);
       const token = new AccessToken(accountSid, apiKey, apiSecret, {
-        identity: userEmail || userId,
+        identity,
         ttl: 3600 // 1 hour
       });
 
       console.log('🔑 GENERATING TWILIO TOKEN:', {
         userId,
         userEmail,
-        identity: userEmail || userId
+        identity
       });
 
       // Create voice grant
@@ -61,7 +89,7 @@ export const callController = {
       res.json({
         success: true,
         token: token.toJwt(),
-        identity: userEmail || userId
+        identity
       });
     } catch (error: any) {
       logger.error({ error: error.message }, 'Error generating access token');
@@ -387,11 +415,11 @@ export const callController = {
         logger.info('Cleaned To number:', to);
       }
 
-      const callbackUrl = `${process.env.APP_BASE_URL}/api/v1/calls/webhook`;
+      const callbackUrl = `${getPublicBaseUrl(req)}/api/v1/calls/webhook`;
 
       // Check if this is a client-to-client call
       if (to && to.startsWith('client:')) {
-        const clientIdentity = to.replace('client:', '');
+        const clientIdentity = normalizeTwilioIdentity(to.replace('client:', ''));
         logger.info({ targetClient: clientIdentity }, 'Browser-to-browser call detected');
 
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -426,7 +454,9 @@ export const callController = {
 
       // For browser calls, req.body.From is usually "client:<identity>"
       const fromParam = typeof req.body.From === 'string' ? req.body.From : '';
-      const identity = fromParam.startsWith('client:') ? fromParam.replace('client:', '') : '';
+      const identity = fromParam.startsWith('client:')
+        ? normalizeTwilioIdentity(fromParam.replace('client:', ''))
+        : '';
 
       if (identity) {
         try {
@@ -514,7 +544,7 @@ export const callController = {
 
       const from = req.body.From;
       const to = req.body.To;
-      const callbackUrl = `${process.env.APP_BASE_URL}/api/v1/calls/webhook`;
+      const callbackUrl = `${getPublicBaseUrl(req)}/api/v1/calls/webhook`;
 
       // Find which user should receive this call based on the destination number
       const smsSettingsRepository = await import('../repositories/smsSettingsRepository.js');
@@ -523,7 +553,7 @@ export const callController = {
 
       if (userSettings && userSettings.user) {
         // Route call to the user's browser client
-        const clientIdentity = userSettings.user.email || userSettings.userId;
+        const clientIdentity = normalizeTwilioIdentity(userSettings.user.email || userSettings.userId);
         
         console.log('🔍 INCOMING CALL ROUTING:', {
           from,

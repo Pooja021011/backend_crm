@@ -11,6 +11,10 @@ import { setupSwagger } from './docs/swagger.js';
 
 export const app = express();
 
+// Allow correct protocol/host reconstruction behind a reverse proxy (nginx, Azure, etc.)
+// This is important for generating absolute HTTPS callback URLs (e.g., Twilio webhooks).
+app.set('trust proxy', 1);
+
 // app.use(helmet());
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '2mb' }));
