@@ -936,9 +936,10 @@ const Inbox = () => {
       
       if (result.success) {
         // Filter to show only missed calls in inbox
-        const missedCalls = (result.data.calls || []).filter(
-          (call: any) => call.status === 'missed' || call.status === 'no-answer'
-        );
+        const missedCalls = (result.data.calls || [])
+          .filter((call: any) => (call.status === 'missed' || call.status === 'no-answer'))
+          // Safety: only show calls tied to an existing Lead (backend should already enforce this)
+          .filter((call: any) => Boolean(call?.leadId));
         setCallHistory(missedCalls);
       } else {
         throw new Error(result.error || 'Failed to fetch call history');

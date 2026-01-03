@@ -527,8 +527,12 @@ export const callService = {
         take: 100 // Limit to recent 100 calls
       });
 
+      // Safety: If a lead was deleted (or DB lacks FK cascade), Prisma can return communications with lead = null.
+      // For Inbox calls tab, we only want to show calls whose Lead still exists.
+      const communicationsWithLead = communications.filter((c) => Boolean((c as any).lead));
+
       // Transform communications to call history format
-      const callHistory = communications.map(comm => {
+      const callHistory = communicationsWithLead.map(comm => {
         let phoneNumber = '';
         let contactName = 'Unknown';
 
