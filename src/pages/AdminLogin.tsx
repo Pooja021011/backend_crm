@@ -18,8 +18,8 @@ import {
 import { useNavigate, useLocation } from "react-router-dom";
 
 const AdminLogin = () => {
-  const [email, setEmail] = useState("admin@admin.com");
-  const [password, setPassword] = useState("Admin@123#");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -72,7 +72,7 @@ const AdminLogin = () => {
               <Input
                 id="email"
                 type="email"
-                placeholder="admin@admin.com"
+                placeholder="Enter your email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="h-12 bg-input border-border focus:border-primary focus:ring-primary/20 transition-all duration-300"
