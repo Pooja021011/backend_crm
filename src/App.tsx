@@ -26,6 +26,17 @@ import LeadEdit from "./pages/LeadEdit";
 
 const queryClient = new QueryClient();
 
+const ProtectedAppRoute = ({ children, requiredRoles }: { children: React.ReactNode; requiredRoles?: string[] }) => (
+  <ProtectedRoute requiredRoles={requiredRoles}>
+    {/* Mount Twilio only in authenticated areas so incoming calls never ring on /login */}
+    <TwilioProvider>
+      <DashboardLayout>
+        {children}
+      </DashboardLayout>
+    </TwilioProvider>
+  </ProtectedRoute>
+);
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -33,24 +44,19 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <TwilioProvider>
-            <Routes>
+          <Routes>
             <Route path="/login" element={<AdminLogin />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/" element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <Inbox />
-                </DashboardLayout>
-              </ProtectedRoute>
+              <ProtectedAppRoute>
+                <Inbox />
+              </ProtectedAppRoute>
             } />
             <Route path="/inbox" element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <Inbox />
-                </DashboardLayout>
-              </ProtectedRoute>
+              <ProtectedAppRoute>
+                <Inbox />
+              </ProtectedAppRoute>
             } />
             {/* Commented out dashboard route to avoid confusion with index page */}
             {/* <Route path="/dashboard" element={
@@ -61,39 +67,29 @@ const App = () => (
               </ProtectedRoute>
             } /> */}
             <Route path="/leads" element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <Leads />
-                </DashboardLayout>
-              </ProtectedRoute>
+              <ProtectedAppRoute>
+                <Leads />
+              </ProtectedAppRoute>
             } />
             <Route path="/leads/:id/edit" element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <LeadEdit />
-                </DashboardLayout>
-              </ProtectedRoute>
+              <ProtectedAppRoute>
+                <LeadEdit />
+              </ProtectedAppRoute>
             } />
             <Route path="/pipeline" element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <Pipeline />
-                </DashboardLayout>
-              </ProtectedRoute>
+              <ProtectedAppRoute>
+                <Pipeline />
+              </ProtectedAppRoute>
             } />
             <Route path="/metrics" element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <Metrics />
-                </DashboardLayout>
-              </ProtectedRoute>
+              <ProtectedAppRoute>
+                <Metrics />
+              </ProtectedAppRoute>
             } />
             <Route path="/settings" element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <Settings />
-                </DashboardLayout>
-              </ProtectedRoute>
+              <ProtectedAppRoute>
+                <Settings />
+              </ProtectedAppRoute>
             } />
             <Route path="/concepts" element={
               <ProtectedRoute>
@@ -101,37 +97,28 @@ const App = () => (
               </ProtectedRoute>
             } />
             <Route path="/leads/add-seller" element={
-              <ProtectedRoute requiredRoles={['ADMIN', 'MANAGER', 'ACQ']}>
-                <DashboardLayout>
-                  <AddSellerLead />
-                </DashboardLayout>
-              </ProtectedRoute>
+              <ProtectedAppRoute requiredRoles={['ADMIN', 'MANAGER', 'ACQ']}>
+                <AddSellerLead />
+              </ProtectedAppRoute>
             } />
             <Route path="/leads/add-buyer" element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <AddBuyerLead />
-                </DashboardLayout>
-              </ProtectedRoute>
+              <ProtectedAppRoute>
+                <AddBuyerLead />
+              </ProtectedAppRoute>
             } />
             <Route path="/leads/add-vendor" element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <AddVendorLead />
-                </DashboardLayout>
-              </ProtectedRoute>
+              <ProtectedAppRoute>
+                <AddVendorLead />
+              </ProtectedAppRoute>
             } />
             <Route path="/agents" element={
-              <ProtectedRoute requiredRoles={['ADMIN']}>
-                <DashboardLayout>
-                  <Agents />
-                </DashboardLayout>
-              </ProtectedRoute>
+              <ProtectedAppRoute requiredRoles={['ADMIN']}>
+                <Agents />
+              </ProtectedAppRoute>
             } />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
-            </Routes>
-          </TwilioProvider>
+          </Routes>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
