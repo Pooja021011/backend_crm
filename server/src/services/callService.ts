@@ -174,8 +174,9 @@ export const callService = {
       };
 
       const ensureLead = async (userId: string) => {
-        // Try to find lead by phone number
-        const existing = safeFrom ? await this.findLeadByPhoneNumber(safeFrom) : null;
+        // Try to find a lead by phone number that belongs to THIS user (assigned/created).
+        // This avoids linking inbound calls to another agent's lead just because the phone matches.
+        const existing = safeFrom ? await this.findLeadByPhoneNumber(safeFrom, userId) : null;
         if (existing) return existing;
 
         // Auto-create a minimal SELLER lead for unknown inbound caller (so missed calls always show up)
@@ -359,22 +360,33 @@ export const callService = {
   /**
    * Find lead by phone number
    */
-  async findLeadByPhoneNumber(phoneNumber: string): Promise<any> {
+  async findLeadByPhoneNumber(phoneNumber: string, userId?: string): Promise<any> {
     try {
       // Search in lead detail tables (seller, buyer, vendor) for phone numbers
       const lead = await prisma.lead.findFirst({
         where: {
-          OR: [
-            { seller: { phone: phoneNumber } },
-            { seller: { phone: phoneNumber.replace(/\D/g, '') } },
-            { seller: { phone: phoneNumber.replace(/^\+1/, '') } },
-            { buyer: { phone: phoneNumber } },
-            { buyer: { phone: phoneNumber.replace(/\D/g, '') } },
-            { buyer: { phone: phoneNumber.replace(/^\+1/, '') } },
-            { vendor: { phone: phoneNumber } },
-            { vendor: { phone: phoneNumber.replace(/\D/g, '') } },
-            { vendor: { phone: phoneNumber.replace(/^\+1/, '') } },
-          ]
+          AND: [
+            {
+              OR: [
+                { seller: { phone: phoneNumber } },
+                { seller: { phone: phoneNumber.replace(/\D/g, '') } },
+                { seller: { phone: phoneNumber.replace(/^\+1/, '') } },
+                { buyer: { phone: phoneNumber } },
+                { buyer: { phone: phoneNumber.replace(/\D/g, '') } },
+                { buyer: { phone: phoneNumber.replace(/^\+1/, '') } },
+                { vendor: { phone: phoneNumber } },
+                { vendor: { phone: phoneNumber.replace(/\D/g, '') } },
+                { vendor: { phone: phoneNumber.replace(/^\+1/, '') } },
+              ],
+            },
+            ...(userId
+              ? [
+                  {
+                    OR: [{ assignedUserId: userId }, { createdById: userId }],
+                  },
+                ]
+              : []),
+          ],
         },
         include: {
           seller: true,
@@ -385,7 +397,7 @@ export const callService = {
       
       return lead;
     } catch (error: any) {
-      logger.error({ error: error.message, phoneNumber }, 'Error finding lead by phone number');
+      logger.error({ error: error.message, phoneNumber, userId }, 'Error finding lead by phone number');
       return null;
     }
   },
@@ -499,7 +511,8 @@ export const callService = {
             ? {}
             : {
                 OR: [
-                  { createdById: userId },
+                  // Show OUTBOUND calls the user placed (even if lead assignment changes later)
+                  { AND: [{ direction: 'OUTBOUND' as any }, { createdById: userId }] },
                   { lead: { assignedUserId: userId } },
                   { lead: { createdById: userId } },
                 ],
