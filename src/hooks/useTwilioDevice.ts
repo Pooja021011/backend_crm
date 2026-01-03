@@ -3,6 +3,7 @@ import { Device, Call } from '@twilio/voice-sdk';
 import { API_BASE, makeApiCall } from '@/config/api';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLocation } from 'react-router-dom';
 
 export interface CallStatus {
   status: 'idle' | 'connecting' | 'ringing' | 'connected' | 'disconnected';
@@ -19,6 +20,7 @@ export interface IncomingCallInfo {
 
 export const useTwilioDevice = () => {
   const { user, isAuthenticated } = useAuth();
+  const location = useLocation();
   const [device, setDevice] = useState<Device | null>(null);
   const [activeCall, setActiveCall] = useState<Call | null>(null);
   const [callStatus, setCallStatus] = useState<CallStatus>({
@@ -39,6 +41,10 @@ export const useTwilioDevice = () => {
   const { toast } = useToast();
 
   const currentIdentityKey = user?.email || user?.id || '';
+  const isAuthRoute =
+    location.pathname === '/login' ||
+    location.pathname.startsWith('/forgot-password') ||
+    location.pathname.startsWith('/reset-password');
 
   useEffect(() => {
     deviceRef.current = device;
@@ -118,6 +124,13 @@ export const useTwilioDevice = () => {
     lastIdentityRef.current = '';
   }, []);
 
+  // Absolute safety: never allow Twilio to stay active on auth screens.
+  // This prevents incoming-call beeps/popups on /login even if something mounts unexpectedly.
+  useEffect(() => {
+    if (!isAuthRoute) return;
+    teardownDevice('auth-route');
+  }, [isAuthRoute, teardownDevice]);
+
   // If user changes (admin -> agent, agent -> admin), destroy the old Device so we re-register with correct identity.
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -157,6 +170,7 @@ export const useTwilioDevice = () => {
 
   // Initialize Twilio Device
   const initializeDevice = useCallback(async () => {
+    if (isAuthRoute) return null;
     if (!isAuthenticated) return null;
     if (!currentIdentityKey) return null;
     // If device exists but was created for a different user, ignore and recreate.
@@ -332,7 +346,7 @@ export const useTwilioDevice = () => {
       });
       return null;
     }
-  }, [device, toast, isAuthenticated, currentIdentityKey]);
+  }, [device, toast, isAuthenticated, currentIdentityKey, isAuthRoute]);
 
   // Make a call
   const makeCall = useCallback(async (phoneNumber: string) => {
