@@ -66,6 +66,15 @@ export function AppSidebar() {
   const isCollapsed = state === "collapsed";
   const isAdmin = user?.roles?.some(role => ['ADMIN', 'MANAGER'].includes(role)) || false;
 
+  const displayName = user ? `${user.firstName} ${user.lastName}`.trim() : "User";
+  const orgName = "Real Estate Buyers";
+  const initials = (() => {
+    const first = user?.firstName?.trim()?.[0] || '';
+    const last = user?.lastName?.trim()?.[0] || '';
+    const combo = `${first}${last}`.toUpperCase();
+    return combo || (user?.email?.trim()?.[0] || 'U').toUpperCase();
+  })();
+
   const isActive = (path: string) => {
     if (path === "/inbox" && (currentPath === "/inbox" || currentPath === "/")) return true;
     if (path !== "/inbox" && path !== "/" && currentPath.startsWith(path)) return true;
@@ -126,7 +135,7 @@ export function AppSidebar() {
               isCollapsed ? "w-8 h-8" : "w-10 h-10"
             )}>
               <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground font-bold">
-                CH
+                {initials}
               </AvatarFallback>
             </Avatar>
             
@@ -134,8 +143,8 @@ export function AppSidebar() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between">
                   <div className="min-w-0">
-                    <h3 className="text-sm font-semibold text-sidebar-foreground truncate">Chris Harris</h3>
-                    <p className="text-xs text-sidebar-foreground/70 truncate">Real Estate Buyers</p>
+                    <h3 className="text-sm font-semibold text-sidebar-foreground truncate">{displayName}</h3>
+                    <p className="text-xs text-sidebar-foreground/70 truncate">{orgName}</p>
                   </div>
                 </div>
               </div>

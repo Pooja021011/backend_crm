@@ -42,10 +42,22 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
     if (value) {
       // Check if value has country code
       if (value.startsWith('+')) {
-        const match = value.match(/^(\+\d{1,3})(.*)$/);
-        if (match) {
-          setCountryCode(match[1]);
-          setPhoneNumber(match[2].replace(/[^\d]/g, ''));
+        // Prefer matching against known country codes to avoid greedy parsing
+        const normalized = value.trim();
+        const codeMatch = [...COUNTRY_CODES]
+          .sort((a, b) => b.code.length - a.code.length)
+          .find((c) => normalized.startsWith(c.code));
+
+        if (codeMatch) {
+          setCountryCode(codeMatch.code);
+          setPhoneNumber(normalized.slice(codeMatch.code.length).replace(/[^\d]/g, ''));
+        } else {
+          // Fallback: split on first 1-3 digits after +
+          const match = normalized.match(/^(\+\d{1,3})(.*)$/);
+          if (match) {
+            setCountryCode(match[1]);
+            setPhoneNumber(match[2].replace(/[^\d]/g, ''));
+          }
         }
       } else {
         setPhoneNumber(value.replace(/[^\d]/g, ''));
