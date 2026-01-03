@@ -136,6 +136,55 @@ export const useTwilioDevice = () => {
     }
   }, []);
 
+  // Keep server presence fresh while device is registered so inbound calls keep routing correctly.
+  useEffect(() => {
+    if (isAuthRoute) return;
+    if (!isAuthenticated) return;
+    if (!device) return;
+
+    // Heartbeat every 30s (server TTL is short by design).
+    const id = setInterval(() => {
+      setVoicePresence(true).catch(() => {});
+    }, 30_000);
+
+    return () => clearInterval(id);
+  }, [device, isAuthenticated, isAuthRoute, setVoicePresence]);
+
+  // Best-effort: unlock audio on first user interaction after navigation (helps ringtone playback).
+  useEffect(() => {
+    if (isAuthRoute) return;
+    if (!isAuthenticated) return;
+
+    let unlocked = false;
+    const unlock = async () => {
+      if (unlocked) return;
+      unlocked = true;
+      const r = ringtoneRef.current;
+      if (!r) return;
+      try {
+        const prevVol = r.volume;
+        r.volume = 0;
+        await r.play();
+        r.pause();
+        r.currentTime = 0;
+        r.volume = prevVol;
+      } catch {
+        // ignore; browser policy may still block until later interaction
+      } finally {
+        window.removeEventListener('pointerdown', unlock);
+        window.removeEventListener('keydown', unlock);
+      }
+    };
+
+    window.addEventListener('pointerdown', unlock, { once: true });
+    window.addEventListener('keydown', unlock, { once: true });
+
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+  }, [isAuthenticated, isAuthRoute]);
+
   // Absolute safety: never allow Twilio to stay active on auth screens.
   // This prevents incoming-call beeps/popups on /login even if something mounts unexpectedly.
   useEffect(() => {
