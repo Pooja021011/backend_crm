@@ -4,6 +4,7 @@ import { prisma } from '../config/db.js';
 import { communicationRepository } from '../repositories/communicationRepository.js';
 import { smsSettingsRepository } from '../repositories/smsSettingsRepository.js';
 import { communicationResponseService } from './communicationResponseService.js';
+import { leadRepository } from '../repositories/leadRepository.js';
 
 // Initialize Twilio client
 // #region agent log
@@ -59,11 +60,10 @@ export const callService = {
         };
       }
 
-      logger.info('Initiating call via Twilio', { 
-        to: callRequest.to, 
-        from: fromNumber, 
-        userId: callRequest.userId 
-      });
+      logger.info(
+        { to: callRequest.to, from: fromNumber, userId: callRequest.userId },
+        'Initiating call via Twilio'
+      );
 
       // #region agent log
       fetch('http://127.0.0.1:7242/ingest/06111847-3345-4786-9a5d-89cc38601516',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'callService.ts:62',message:'Initiating call',data:{to:callRequest.to,from:fromNumber,twimlUrl:`${process.env.APP_BASE_URL}/api/v1/calls/twiml`,statusCallback:`${process.env.APP_BASE_URL}/api/v1/calls/webhook`},timestamp:Date.now(),sessionId:'debug-session',runId:'call-make',hypothesisId:'C'})}).catch(()=>{});
@@ -84,7 +84,7 @@ export const callService = {
       fetch('http://127.0.0.1:7242/ingest/06111847-3345-4786-9a5d-89cc38601516',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'callService.ts:76',message:'Call created',data:{sid:call.sid,status:call.status,direction:call.direction},timestamp:Date.now(),sessionId:'debug-session',runId:'call-make',hypothesisId:'C'})}).catch(()=>{});
       // #endregion
 
-      logger.info('Call initiated successfully', { callId: call.sid });
+      logger.info({ callId: call.sid }, 'Call initiated successfully');
 
       // Store call record in communication history
       if (callRequest.leadId) {
@@ -102,7 +102,7 @@ export const callService = {
           callRequest.leadId,
           'OUTBOUND',
           'CALL'
-        ).catch(err => logger.error('Failed to handle communication event', { err }));
+        ).catch(err => logger.error({ err }, 'Failed to handle communication event'));
       }
 
       return {
@@ -112,7 +112,7 @@ export const callService = {
         fromNumber,
       };
     } catch (error: any) {
-      logger.error('Failed to initiate call via Twilio', { error: error.message });
+      logger.error({ error: error.message }, 'Failed to initiate call via Twilio');
       return {
         success: false,
         error: error.message,
@@ -125,12 +125,14 @@ export const callService = {
    */
   async handleIncomingCallWebhook(webhookData: any): Promise<void> {
     try {
-      logger.info('Processing incoming call webhook', { webhookData });
+      logger.info({ webhookData }, 'Processing incoming call webhook');
 
       // Twilio webhook format
       const { 
         From: from, 
-        To: to, 
+        To: to,
+        Called: called,
+        CalledVia: calledVia,
         CallSid: callSid, 
         CallStatus: callStatus,
         CallDuration: callDuration,
@@ -139,129 +141,189 @@ export const callService = {
         DialCallDuration: dialCallDuration // Child call duration
       } = webhookData;
 
+      const toCandidate =
+        (typeof to === 'string' && to) ||
+        (typeof called === 'string' && called) ||
+        (typeof calledVia === 'string' && calledVia) ||
+        '';
+
+      const safeFrom = typeof from === 'string' ? from : '';
+      const safeTo = typeof toCandidate === 'string' ? toCandidate : '';
+
+      const buildUnknownEmail = (phone: string) => {
+        const digits = String(phone || '').replace(/\D/g, '');
+        return digits ? `${digits}@unknown.local` : `unknown@unknown.local`;
+      };
+
+      const ensureLead = async (userId: string) => {
+        // Try to find lead by phone number
+        const existing = safeFrom ? await this.findLeadByPhoneNumber(safeFrom) : null;
+        if (existing) return existing;
+
+        // Auto-create a minimal SELLER lead for unknown inbound caller (so missed calls always show up)
+        // Note: SELLER leads require an address, so we create a safe placeholder.
+        const created = await leadRepository.create(
+          {
+            type: 'SELLER',
+            assignedUserId: userId,
+            address: {
+              address1: 'Unknown',
+              city: 'Unknown',
+              state: 'NA',
+              zip: '00000',
+            },
+            seller: {
+              firstName: 'Unknown',
+              lastName: 'Caller',
+              phone: safeFrom || 'Unknown',
+              email: buildUnknownEmail(safeFrom),
+            },
+          },
+          userId
+        );
+
+        if (!created) {
+          throw new Error('Failed to auto-create lead for unknown inbound caller');
+        }
+
+        logger.info(
+          { leadId: created.id, from: safeFrom, assignedUserId: userId },
+          'Auto-created lead for unknown inbound caller'
+        );
+
+        return created;
+      };
+
+      const upsertCallCommunication = async (leadId: string, userId: string, status: string, extra: any = {}) => {
+        const existingComm = await prisma.communication.findFirst({
+          where: {
+            leadId,
+            type: 'CALL',
+            direction: 'INBOUND',
+            metadata: { path: ['callSid'], equals: callSid },
+          },
+        });
+
+        const baseMetadata = {
+          callSid,
+          status,
+          from: safeFrom,
+          to: safeTo,
+          ...extra,
+        };
+
+        if (existingComm) {
+          await prisma.communication.update({
+            where: { id: existingComm.id },
+            data: {
+              metadata: baseMetadata,
+              subject: status === 'missed' ? `⚠️ MISSED CALL from ${safeFrom}` : `Incoming call from ${safeFrom}`,
+            },
+          });
+          return existingComm.id;
+        }
+
+        const created = await communicationRepository.create(leadId, {
+          type: 'CALL',
+          direction: 'INBOUND',
+          subject: status === 'missed' ? `⚠️ MISSED CALL from ${safeFrom}` : `Incoming call from ${safeFrom}`,
+          body: status === 'missed' ? `Missed inbound call from ${safeFrom}` : `Inbound call received from ${safeFrom}`,
+          occurredAt: new Date(),
+          createdById: userId,
+          metadata: baseMetadata,
+        });
+
+        return created.id;
+      };
+
       // Handle incoming call initiated
       if (callStatus === 'ringing' && direction === 'inbound') {
-        logger.info('Incoming call received', { from, to, callSid });
+        logger.info({ from: safeFrom, to: safeTo, callSid }, 'Incoming call received');
 
         // Find user by phone number to associate the call
-        const userSmsSettings = await smsSettingsRepository.findByPhoneNumber(to);
+        const userSmsSettings = await smsSettingsRepository.findByPhoneNumber(safeTo);
         
         if (userSmsSettings) {
-          // Try to find lead by phone number
-          const lead = await this.findLeadByPhoneNumber(from);
+          const lead = await ensureLead(userSmsSettings.userId);
           
           if (lead) {
-            // Store incoming call in communication history with metadata
-            await communicationRepository.create(lead.id, {
-              type: 'CALL',
-              direction: 'INBOUND',
-              subject: `Incoming call from ${from}`,
-              body: `Inbound call received from ${from}`,
-              occurredAt: new Date(),
-              createdById: userSmsSettings.userId,
-              metadata: {
-                callSid,
-                status: 'ringing',
-                from,
-                to
-              }
-            });
+            await upsertCallCommunication(lead.id, userSmsSettings.userId, 'ringing');
             
-            logger.info('Incoming call stored in communication history', { 
-              leadId: lead.id, 
-              from, 
-              userId: userSmsSettings.userId,
-              callSid 
-            });
+            logger.info(
+              { leadId: lead.id, from: safeFrom, userId: userSmsSettings.userId, callSid },
+              'Incoming call stored in communication history'
+            );
             
             // NEW: Auto-update lead status based on communication
             await communicationResponseService.handleCommunicationEvent(
               lead.id,
               'INBOUND',
               'CALL'
-            ).catch(err => logger.error('Failed to handle communication event', { err }));
-          } else {
-            logger.info('No lead found for incoming call phone number', { from });
+            ).catch(err => logger.error({ err }, 'Failed to handle communication event'));
           }
         } else {
-          logger.info('No user found for call destination number', { to });
+          logger.info({ to: safeTo }, 'No user found for call destination number');
         }
       }
       
       // Handle call completion - CRITICAL for missed call tracking
-      if (callStatus === 'completed' && direction === 'inbound') {
-        logger.info('Call completed - checking if answered', { 
-          callStatus,
-          callSid,
-          dialCallStatus,
-          duration: callDuration 
-        });
+      // NOTE: DialCallStatus is usually sent by Twilio via the <Dial action="..."> callback.
+      // That callback may not include Direction/CallStatus in the same way as StatusCallback events.
+      const hasDialResult = typeof dialCallStatus === 'string' && dialCallStatus.length > 0;
+      if ((callStatus === 'completed' && direction === 'inbound') || hasDialResult) {
+        logger.info(
+          { callStatus, callSid, dialCallStatus, duration: callDuration },
+          'Call completed - checking if answered'
+        );
 
         // Find user by phone number
-        const userSmsSettings = await smsSettingsRepository.findByPhoneNumber(to);
+        const userSmsSettings = await smsSettingsRepository.findByPhoneNumber(safeTo);
         
         if (userSmsSettings) {
-          const lead = await this.findLeadByPhoneNumber(from);
+          const lead = await ensureLead(userSmsSettings.userId);
           
           if (lead) {
-            // Find existing communication by callSid
-            const existingComm = await prisma.communication.findFirst({
-              where: {
-                leadId: lead.id,
-                type: 'CALL',
-                direction: 'INBOUND',
-                metadata: {
-                  path: ['callSid'],
-                  equals: callSid
-                }
-              }
+            // Check if call was answered or missed
+            const wasMissed =
+              dialCallStatus === 'no-answer' ||
+              dialCallStatus === 'busy' ||
+              dialCallStatus === 'failed' ||
+              dialCallStatus === 'canceled';
+
+            const finalStatus = wasMissed ? 'missed' : 'completed';
+            const duration = dialCallDuration ? parseInt(dialCallDuration) : 0;
+
+            await upsertCallCommunication(lead.id, userSmsSettings.userId, finalStatus, {
+              dialCallStatus,
+              duration,
+              completedAt: new Date().toISOString(),
             });
 
-            if (existingComm) {
-              // Check if call was answered or missed
-              const wasMissed = dialCallStatus === 'no-answer' || 
-                                dialCallStatus === 'busy' || 
-                                dialCallStatus === 'failed' ||
-                                dialCallStatus === 'canceled';
-
-              const finalStatus = wasMissed ? 'missed' : 'completed';
-              const duration = dialCallDuration ? parseInt(dialCallDuration) : 0;
-
-              // Update communication with final status
-              await prisma.communication.update({
-                where: { id: existingComm.id },
+            // If missed, keep body/subject explicit for UI and notifications
+            if (wasMissed) {
+              await prisma.communication.updateMany({
+                where: {
+                  leadId: lead.id,
+                  type: 'CALL',
+                  direction: 'INBOUND',
+                  metadata: { path: ['callSid'], equals: callSid },
+                },
                 data: {
-                  subject: wasMissed 
-                    ? `⚠️ MISSED CALL from ${from}` 
-                    : `✅ Answered call from ${from}`,
-                  body: wasMissed 
-                    ? `Missed incoming call - Agent not available. Reason: ${dialCallStatus}` 
-                    : `Call answered successfully. Duration: ${duration}s`,
-                  metadata: {
-                    callSid,
-                    status: finalStatus,
-                    dialCallStatus,
-                    duration,
-                    from,
-                    to,
-                    completedAt: new Date().toISOString()
-                  }
-                }
-              });
-
-              logger.info('Call status updated', { 
-                leadId: lead.id,
-                callSid,
-                finalStatus,
-                dialCallStatus,
-                duration
+                  subject: `⚠️ MISSED CALL from ${safeFrom}`,
+                  body: `Missed incoming call - Agent not available. Reason: ${dialCallStatus}`,
+                },
               });
             }
+
+            logger.info(
+              { leadId: lead.id, callSid, finalStatus, dialCallStatus, duration },
+              'Call status updated'
+            );
           }
         }
       }
     } catch (error: any) {
-      logger.error('Failed to process incoming call webhook', { error: error.message });
+      logger.error({ error: error.message }, 'Failed to process incoming call webhook');
       throw error;
     }
   },
@@ -295,7 +357,7 @@ export const callService = {
       
       return lead;
     } catch (error: any) {
-      logger.error('Error finding lead by phone number', { error: error.message, phoneNumber });
+      logger.error({ error: error.message, phoneNumber }, 'Error finding lead by phone number');
       return null;
     }
   },
@@ -306,12 +368,12 @@ export const callService = {
    */
   async answerCall(callSid: string): Promise<CallResponse> {
     try {
-      logger.info('Fetching call status', { callSid });
+      logger.info({ callSid }, 'Fetching call status');
 
       // Fetch call information (Twilio handles answering via TwiML)
       const call = await twilioClient.calls(callSid).fetch();
 
-      logger.info('Call info retrieved', { callSid, status: call.status });
+      logger.info({ callSid, status: call.status }, 'Call info retrieved');
 
       return {
         success: true,
@@ -319,7 +381,7 @@ export const callService = {
         data: call,
       };
     } catch (error: any) {
-      logger.error('Failed to fetch call info', { error: error.message });
+      logger.error({ error: error.message }, 'Failed to fetch call info');
       return {
         success: false,
         error: error.message,
@@ -332,13 +394,13 @@ export const callService = {
    */
   async hangupCall(callSid: string): Promise<CallResponse> {
     try {
-      logger.info('Hanging up call', { callSid });
+      logger.info({ callSid }, 'Hanging up call');
 
       const call = await twilioClient.calls(callSid).update({
         status: 'completed'
       });
 
-      logger.info('Call hung up successfully', { callSid });
+      logger.info({ callSid }, 'Call hung up successfully');
 
       return {
         success: true,
@@ -346,7 +408,7 @@ export const callService = {
         data: call,
       };
     } catch (error: any) {
-      logger.error('Failed to hang up call', { error: error.message });
+      logger.error({ error: error.message }, 'Failed to hang up call');
       return {
         success: false,
         error: error.message,
@@ -362,7 +424,7 @@ export const callService = {
       const call = await twilioClient.calls(callSid).fetch();
       return call;
     } catch (error: any) {
-      logger.error('Failed to get call status', { error: error.message });
+      logger.error({ error: error.message }, 'Failed to get call status');
       throw error;
     }
   },
@@ -395,7 +457,7 @@ export const callService = {
    */
   async getCallHistory(userId: string): Promise<any[]> {
     try {
-      logger.info('Fetching call history from database', { userId });
+      logger.info({ userId }, 'Fetching call history from database');
 
       // Fetch real call communications from database
       const communications = await prisma.communication.findMany({
@@ -470,14 +532,11 @@ export const callService = {
         };
       });
 
-      logger.info('Call history fetched successfully', { 
-        userId, 
-        totalCalls: callHistory.length 
-      });
+      logger.info({ userId, totalCalls: callHistory.length }, 'Call history fetched successfully');
 
       return callHistory;
     } catch (error: any) {
-      logger.error('Failed to get call history', { error: error.message, userId });
+      logger.error({ error: error.message, userId }, 'Failed to get call history');
       return [];
     }
   }

@@ -64,7 +64,7 @@ export const callController = {
         identity: userEmail || userId
       });
     } catch (error: any) {
-      logger.error('Error generating access token', { error: error.message });
+      logger.error({ error: error.message }, 'Error generating access token');
       res.status(500).json({
         success: false,
         error: 'Failed to generate access token'
@@ -119,7 +119,7 @@ export const callController = {
         });
       }
     } catch (error: any) {
-      logger.error('Error in makeCall controller', { error: error.message });
+      logger.error({ error: error.message }, 'Error in makeCall controller');
       res.status(500).json({
         success: false,
         error: 'Internal server error'
@@ -181,13 +181,13 @@ export const callController = {
    */
   async webhook(req: Request, res: Response) {
     try {
-      logger.info('Received call webhook', { body: req.body });
+      logger.info({ body: req.body }, 'Received call webhook');
 
       await callService.handleIncomingCallWebhook(req.body);
 
       res.json({ received: true });
     } catch (error: any) {
-      logger.error('Error in call webhook controller', { error: error.message });
+      logger.error({ error: error.message }, 'Error in call webhook controller');
       res.status(500).json({
         success: false,
         error: 'Webhook processing failed'
@@ -226,7 +226,7 @@ export const callController = {
         });
       }
     } catch (error: any) {
-      logger.error('Error in answerCall controller', { error: error.message });
+      logger.error({ error: error.message }, 'Error in answerCall controller');
       res.status(500).json({
         success: false,
         error: 'Failed to answer call'
@@ -265,7 +265,7 @@ export const callController = {
         });
       }
     } catch (error: any) {
-      logger.error('Error in hangupCall controller', { error: error.message });
+      logger.error({ error: error.message }, 'Error in hangupCall controller');
       res.status(500).json({
         success: false,
         error: 'Failed to hang up call'
@@ -294,7 +294,7 @@ export const callController = {
         data: status
       });
     } catch (error: any) {
-      logger.error('Error in getCallStatus controller', { error: error.message });
+      logger.error({ error: error.message }, 'Error in getCallStatus controller');
       res.status(500).json({
         success: false,
         error: 'Failed to get call status'
@@ -326,7 +326,7 @@ export const callController = {
         }
       });
     } catch (error: any) {
-      logger.error('Error in getCallHistory controller', { error: error.message });
+      logger.error({ error: error.message }, 'Error in getCallHistory controller');
       res.status(500).json({
         success: false,
         error: 'Failed to get call history'
@@ -339,7 +339,7 @@ export const callController = {
    */
   async twiml(req: Request, res: Response) {
     try {
-      logger.info('TwiML endpoint called', { body: req.body, query: req.query });
+      logger.info({ body: req.body, query: req.query }, 'TwiML endpoint called');
 
       // Get the contact number from query parameter (for browser calls) or body (for phone calls)
       const contactNumber = req.query.contactNumber as string || req.body.To;
@@ -362,7 +362,7 @@ export const callController = {
       res.type('text/xml');
       res.send(twiml);
     } catch (error: any) {
-      logger.error('Error in TwiML controller', { error: error.message });
+      logger.error({ error: error.message }, 'Error in TwiML controller');
       res.status(500).send('Error processing call');
     }
   },
@@ -372,10 +372,10 @@ export const callController = {
    */
   async twimlVoice(req: Request, res: Response) {
     try {
-      logger.info('TwiML Voice endpoint called', { 
-        body: req.body,
-        query: req.query 
-      });
+      logger.info(
+        { body: req.body, query: req.query },
+        'TwiML Voice endpoint called'
+      );
 
       // Get the 'To' parameter from body or query
       let to = req.body.To || req.query.To;
@@ -386,16 +386,16 @@ export const callController = {
         logger.info('Cleaned To number:', to);
       }
 
+      const callbackUrl = `${process.env.APP_BASE_URL}/api/v1/calls/webhook`;
+
       // Check if this is a client-to-client call
       if (to && to.startsWith('client:')) {
         const clientIdentity = to.replace('client:', '');
-        logger.info('Browser-to-browser call detected', { 
-          targetClient: clientIdentity 
-        });
+        logger.info({ targetClient: clientIdentity }, 'Browser-to-browser call detected');
 
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Dial timeout="30">
+  <Dial timeout="30" action="${callbackUrl}" method="POST">
     <Client>${clientIdentity}</Client>
   </Dial>
   <Say voice="alice">The user is not available. Please try again later.</Say>
@@ -477,7 +477,7 @@ export const callController = {
       
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Dial callerId="${callerId || process.env.TWILIO_PHONE_NUMBER}">
+  <Dial callerId="${callerId || process.env.TWILIO_PHONE_NUMBER}" action="${callbackUrl}" method="POST">
     <Number>${to}</Number>
   </Dial>
   <Say voice="alice">The call could not be completed. Please try again.</Say>
@@ -487,10 +487,10 @@ export const callController = {
       res.send(twiml);
       
     } catch (error: any) {
-      logger.error('Error in TwiML Voice controller', { 
-        error: error.message,
-        stack: error.stack 
-      });
+      logger.error(
+        { error: error.message, stack: error.stack },
+        'Error in TwiML Voice controller'
+      );
       
       // Return valid TwiML even on error (never return HTTP 500)
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -509,10 +509,11 @@ export const callController = {
    */
   async twimlIncoming(req: Request, res: Response) {
     try {
-      logger.info('TwiML Incoming endpoint called', { body: req.body });
+      logger.info({ body: req.body }, 'TwiML Incoming endpoint called');
 
       const from = req.body.From;
       const to = req.body.To;
+      const callbackUrl = `${process.env.APP_BASE_URL}/api/v1/calls/webhook`;
 
       // Find which user should receive this call based on the destination number
       const smsSettingsRepository = await import('../repositories/smsSettingsRepository.js');
@@ -531,16 +532,12 @@ export const callController = {
           userId: userSettings.userId
         });
         
-        logger.info('Routing incoming call to browser client', { 
-          from, 
-          to, 
-          clientIdentity 
-        });
+        logger.info({ from, to, clientIdentity }, 'Routing incoming call to browser client');
 
         // TwiML to route call to browser
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Dial>
+  <Dial timeout="30" action="${callbackUrl}" method="POST">
     <Client>${clientIdentity}</Client>
   </Dial>
   <Say voice="alice">The user is not available. Please try again later.</Say>
@@ -550,7 +547,7 @@ export const callController = {
         res.send(twiml);
       } else {
         // No user found for this number - play message
-        logger.warn('No user found for incoming call destination', { to, toNormalized });
+        logger.warn({ to, toNormalized }, 'No user found for incoming call destination');
         
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -562,7 +559,7 @@ export const callController = {
         res.send(twiml);
       }
     } catch (error: any) {
-      logger.error('Error in TwiML Incoming controller', { error: error.message });
+      logger.error({ error: error.message }, 'Error in TwiML Incoming controller');
       
       // Fallback TwiML
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -584,7 +581,7 @@ export const callController = {
       const { callSid, from, action } = req.body;
       const userId = (req as any).user?.id;
 
-      logger.info('Call answered from browser', { callSid, from, userId });
+      logger.info({ callSid, from, userId }, 'Call answered from browser');
 
       // Update the existing communication record if it exists
       // Or create a new one with answered status
@@ -598,7 +595,7 @@ export const callController = {
         message: 'Call answer logged'
       });
     } catch (error: any) {
-      logger.error('Error logging call answer', { error: error.message });
+      logger.error({ error: error.message }, 'Error logging call answer');
       res.status(500).json({
         success: false,
         error: 'Failed to log call answer'
@@ -614,7 +611,7 @@ export const callController = {
       const { callSid, from, action } = req.body;
       const userId = (req as any).user?.id;
 
-      logger.info('Call rejected from browser', { callSid, from, userId });
+      logger.info({ callSid, from, userId }, 'Call rejected from browser');
 
       // The incoming call was already logged by webhook
       // We could update it to mark as "rejected" if needed
@@ -624,7 +621,7 @@ export const callController = {
         message: 'Call rejection logged'
       });
     } catch (error: any) {
-      logger.error('Error logging call rejection', { error: error.message });
+      logger.error({ error: error.message }, 'Error logging call rejection');
       res.status(500).json({
         success: false,
         error: 'Failed to log call rejection'
