@@ -1136,7 +1136,7 @@ const Inbox = () => {
     try {
       const accessToken = localStorage.getItem('accessToken');
       console.log('🔑 Using token for communications:', accessToken ? 'Token exists' : 'NO TOKEN!');
-      const res = await fetch(`${API_BASE}/inbox/communications?timeframe=This%20Month`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+      const res = await fetch(`${API_BASE}/inbox/communications?timeframe=This%20Month&leadOnly=true&userScope=me`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
       
       if (!res.ok) {
         console.error(`Communications API error: ${res.status} ${res.statusText}`);
@@ -1157,7 +1157,10 @@ const Inbox = () => {
       console.log('💬 RAW COMMUNICATIONS DATA:', json.data);
       
       if (json.data && Array.isArray(json.data)) {
-        const items = json.data.map((c: any) => ({
+        const items = json.data
+          // Safety: only show communications that are tied to an existing Lead
+          .filter((c: any) => c?.lead?.id)
+          .map((c: any) => ({
         id: c.id,
         from: c.lead ? createLeadTitle(c.lead) : (c.subject || c.type),
         subject: c.subject || `${c.type} ${c.direction}`,
