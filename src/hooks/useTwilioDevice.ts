@@ -124,6 +124,18 @@ export const useTwilioDevice = () => {
     lastIdentityRef.current = '';
   }, []);
 
+  const setVoicePresence = useCallback(async (online: boolean) => {
+    try {
+      await makeApiCall(`${API_BASE}/calls/presence`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ online }),
+      });
+    } catch {
+      // Best-effort (may fail when token already cleared)
+    }
+  }, []);
+
   // Absolute safety: never allow Twilio to stay active on auth screens.
   // This prevents incoming-call beeps/popups on /login even if something mounts unexpectedly.
   useEffect(() => {
@@ -146,8 +158,10 @@ export const useTwilioDevice = () => {
   // so Twilio inbound calls stop ringing even if the token is still valid.
   useEffect(() => {
     if (isAuthenticated) return;
+    // Best effort: mark offline on server to prevent TwiML routing to this client
+    setVoicePresence(false).catch(() => {});
     teardownDevice('logged-out');
-  }, [isAuthenticated, teardownDevice]);
+  }, [isAuthenticated, teardownDevice, setVoicePresence]);
 
   // Initialize ringtone
   useEffect(() => {
@@ -229,6 +243,8 @@ export const useTwilioDevice = () => {
       // Device event listeners
       newDevice.on('registered', () => {
         console.log('Twilio Device registered');
+        // Mark online so inbound TwiML will dial the real client identity
+        setVoicePresence(true).catch(() => {});
       });
 
       newDevice.on('error', (error) => {

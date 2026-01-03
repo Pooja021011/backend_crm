@@ -18,6 +18,11 @@ router.get('/token', (req, res, next) =>
   callController.getAccessToken(req, res).catch(next)
 );
 
+// Set voice device presence (online/offline)
+router.post('/presence', (req, res, next) =>
+  callController.setVoicePresence(req, res).catch(next)
+);
+
 // Make outbound call
 router.post('/make', (req, res, next) => 
   callController.makeCall(req, res).catch(next)

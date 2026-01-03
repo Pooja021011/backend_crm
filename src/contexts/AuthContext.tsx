@@ -215,6 +215,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = async () => {
     try {
       const refreshTokenStored = localStorage.getItem('refreshToken');
+      const accessToken = localStorage.getItem('accessToken');
+
+      // Mark voice presence offline BEFORE clearing tokens (best-effort)
+      if (accessToken) {
+        try {
+          await httpFetch(`${API_BASE}/calls/presence`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({ online: false }),
+          });
+        } catch {
+          // ignore
+        }
+      }
+
       // Call logout endpoint to invalidate refresh token
       await httpFetch(`${API_BASE}/auth/logout`, {
         method: 'POST',

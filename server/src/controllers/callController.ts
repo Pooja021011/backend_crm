@@ -5,6 +5,7 @@ import { communicationRepository } from '../repositories/communicationRepository
 import { communicationResponseService } from '../services/communicationResponseService.js';
 import { prisma } from '../config/db.js';
 import twilio from 'twilio';
+import { voicePresenceService } from '../services/voicePresenceService.js';
 
 const AccessToken = twilio.jwt.AccessToken;
 const VoiceGrant = AccessToken.VoiceGrant;
@@ -98,6 +99,19 @@ export const callController = {
         error: 'Failed to generate access token'
       });
     }
+  },
+
+  /**
+   * Mark voice (Twilio Device) presence online/offline for the logged-in user.
+   * Used to prevent incoming calls from ringing when user is logged out.
+   */
+  async setVoicePresence(req: Request, res: Response) {
+    const userId = (req as any).user?.id as string | undefined;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const online = Boolean((req.body as any)?.online);
+    voicePresenceService.setOnline(userId, online);
+    return res.json({ success: true, data: { userId, online } });
   },
 
   /**
@@ -552,18 +566,25 @@ export const callController = {
       const userSettings = await smsSettingsRepository.smsSettingsRepository.findByPhoneNumber(toNormalized);
 
       if (userSettings && userSettings.user) {
-        // Route call to the user's browser client
-        const clientIdentity = normalizeTwilioIdentity(userSettings.user.email || userSettings.userId);
+        // Route call to the user's browser client ONLY if they're online.
+        // Twilio Client identities are case-sensitive; we normalize emails to lowercase.
+        const intendedIdentity = normalizeTwilioIdentity(userSettings.user.email || userSettings.userId);
+        const isOnline = voicePresenceService.isOnline(userSettings.userId);
+        // If offline, dial a non-existent client identity so no browser can receive the call.
+        // This yields a clean "no-answer" DialCallStatus without ringing logged-out browsers.
+        const clientIdentity = isOnline ? intendedIdentity : `offline-${userSettings.userId}`;
         
         console.log('🔍 INCOMING CALL ROUTING:', {
           from,
           to,
           clientIdentity,
+          intendedIdentity,
+          isOnline,
           userEmail: userSettings.user.email,
           userId: userSettings.userId
         });
         
-        logger.info({ from, to, clientIdentity }, 'Routing incoming call to browser client');
+        logger.info({ from, to, clientIdentity, intendedIdentity, isOnline }, 'Routing incoming call to browser client');
 
         // TwiML to route call to browser
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
