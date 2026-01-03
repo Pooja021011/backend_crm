@@ -267,13 +267,16 @@ export const callService = {
       }
       
       // Handle call completion - CRITICAL for missed call tracking
-      // NOTE: DialCallStatus is usually sent by Twilio via the <Dial action="..."> callback.
-      // That callback may not include Direction/CallStatus in the same way as StatusCallback events.
+      // IMPORTANT:
+      // - For inbound calls routed via <Dial>, the ONLY reliable indicator of "missed vs answered"
+      //   is DialCallStatus from the <Dial action="..."> callback.
+      // - Twilio statusCallback "completed" events often do NOT include DialCallStatus and can
+      //   arrive later, which would incorrectly overwrite a previously set "missed" status.
       const hasDialResult = typeof dialCallStatus === 'string' && dialCallStatus.length > 0;
-      if ((callStatus === 'completed' && direction === 'inbound') || hasDialResult) {
+      if (hasDialResult) {
         logger.info(
           { callStatus, callSid, dialCallStatus, duration: callDuration },
-          'Call completed - checking if answered'
+          'Dial completed - checking if answered'
         );
 
         // Find user by phone number
@@ -321,6 +324,13 @@ export const callService = {
             );
           }
         }
+      } else if (callStatus === 'completed' && direction === 'inbound') {
+        // Ignore status-only completion callbacks without DialCallStatus to avoid overwriting
+        // missed calls already marked by the <Dial action> callback.
+        logger.info(
+          { callStatus, callSid, direction, hasDialResult },
+          'Ignoring inbound completed status callback without DialCallStatus'
+        );
       }
     } catch (error: any) {
       logger.error({ error: error.message }, 'Failed to process incoming call webhook');
