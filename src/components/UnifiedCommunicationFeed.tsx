@@ -263,7 +263,7 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-200">
+      <div className="flex items-center justify-between mb-1 pb-1 border-b border-slate-200">
         <div className="flex items-center gap-2">
           <MessageSquare className="w-4 h-4 text-slate-600" />
           <h3 className="text-sm font-semibold text-slate-700">Communications</h3>
@@ -272,7 +272,7 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
       </div>
 
       {/* Unified Feed - All Items */}
-      <div className="flex-1 overflow-y-auto space-y-2 min-h-[400px] max-h-[500px] pr-1 mb-2">
+      <div className="flex-1 overflow-y-auto space-y-1 min-h-[300px] max-h-[420px] pr-1 mb-1">
         {loadingCommunications ? (
           <div className="flex items-center justify-center py-8 text-slate-500">
             <Loader2 className="w-5 h-5 animate-spin mr-2" />
@@ -284,7 +284,7 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
           </div>
         ) : (
           sortedItems.map((item) => (
-            <div key={item.id} className="flex gap-2 p-2 hover:bg-slate-50 rounded border-b border-slate-100">
+            <div key={item.id} className="flex gap-1.5 p-1.5 hover:bg-slate-50 rounded border-b border-slate-100">
               {/* Icon */}
               <div className="flex-shrink-0 mt-1">
                 {getIconForType(item.type)}
@@ -293,13 +293,13 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
               {/* Content */}
               <div className="flex-1 min-w-0">
                 {/* Header */}
-                <div className="flex items-start justify-between gap-2 mb-1">
+                <div className="flex items-start justify-between gap-2 mb-0.5">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs font-medium text-slate-500 uppercase">
                       {getTypeLabel(item.type)}
                     </span>
                     {item.user && (
-                      <span className="text-sm font-medium text-slate-900">
+                      <span className="text-xs font-medium text-slate-900">
                         {item.user.firstName} {item.user.lastName}
                       </span>
                     )}
@@ -318,14 +318,14 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
                       </span>
                     )}
                   </div>
-                  <span className="text-xs text-slate-400 flex-shrink-0">
+                  <span className="text-[10px] text-slate-400 flex-shrink-0">
                     {formatDateTime(item.occurredAt || item.createdAt || '')}
                   </span>
                 </div>
 
                 {/* Task Title */}
                 {item.type === 'TASK' && item.title && (
-                  <p className="text-sm font-medium text-slate-900 mb-1">
+                  <p className="text-xs font-medium text-slate-900 mb-0.5">
                     {item.title}
                   </p>
                 )}
@@ -347,21 +347,21 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
 
                 {/* Email Subject */}
                 {item.subject && (
-                  <p className="text-sm font-medium text-slate-700 mb-1">
+                  <p className="text-xs font-medium text-slate-700 mb-0.5">
                     {item.subject}
                   </p>
                 )}
 
                 {/* Body / Description */}
                 {(item.body || item.description) && (
-                  <p className="text-sm text-slate-600 whitespace-pre-wrap">
+                  <p className="text-xs text-slate-600 whitespace-pre-wrap">
                     {item.body || item.description}
                   </p>
                 )}
 
                 {/* Voicemail / Call recording playback (CALL only) */}
                 {item.type === 'CALL' && (item as any)?.metadata?.recordingSid && (
-                  <div className="mt-2 rounded border border-slate-200 bg-white p-2">
+                  <div className="mt-1.5 rounded border border-slate-200 bg-white p-1.5">
                     <div className="flex items-center justify-between gap-2">
                       <div className="text-xs text-slate-600">
                         <span className="font-semibold">

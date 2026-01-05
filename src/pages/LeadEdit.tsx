@@ -118,6 +118,15 @@ const LeadEdit: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
+
+  const userRoles = (user?.roles || []) as string[];
+  const isAcqOnlyUser =
+    userRoles.includes('ACQ') &&
+    !userRoles.some((r) => ['ADMIN', 'MANAGER', 'TC', 'EXECUTIVE', 'DISP'].includes(r));
+  const canSeeTransactionsTab = !isAcqOnlyUser;
+  const canSeeDispositionsTab = !isAcqOnlyUser;
+  const tabCount = 2 + (canSeeTransactionsTab ? 1 : 0) + (canSeeDispositionsTab ? 1 : 0);
+  const tabsGridColsClass = tabCount === 4 ? 'grid-cols-4' : tabCount === 3 ? 'grid-cols-3' : 'grid-cols-2';
   
   const [lead, setLead] = useState<LeadData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -278,6 +287,16 @@ const LeadEdit: React.FC = () => {
   // Countdown timer state
   const [timeInStatus, setTimeInStatus] = useState('0 hours');
   const [showNoContactAlert, setShowNoContactAlert] = useState(false);
+
+  useEffect(() => {
+    // Prevent ACQ-only users from accessing restricted tabs (even if URL/state tries to set it)
+    if (
+      (activeTab === 'transactions' && !canSeeTransactionsTab) ||
+      (activeTab === 'dispositions' && !canSeeDispositionsTab)
+    ) {
+      setActiveTab('acquisitions');
+    }
+  }, [activeTab, canSeeTransactionsTab, canSeeDispositionsTab]);
 
   // Calculate time in current status
   const calculateTimeInStatus = () => {
@@ -2300,16 +2319,15 @@ const LeadEdit: React.FC = () => {
           </div>
         </div>
 
-        {/* Section 3 - Lead dropdowns (left) + Timeline (right) */}
-        <div className="grid grid-cols-12 gap-3">
-          <div className="col-span-12 lg:col-span-6 border border-slate-200 rounded-lg bg-white p-2">
+        {/* Section 3 - Lead Details (full width) */}
+        <div className="border border-slate-200 rounded-lg bg-white p-3">
             <div className="flex items-center gap-1.5 mb-2">
               <FileText className="w-3.5 h-3.5 text-slate-500" />
               <span className="text-xs font-medium text-slate-600">Lead Details</span>
             </div>
 
-            <div className="space-y-2">
-              <div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+              <div className="col-span-2 sm:col-span-1">
                 <Label className="text-[10px] text-slate-500">Source</Label>
                 <Select value={leadSource} onValueChange={setLeadSource} disabled={!canEditLead}>
                   <SelectTrigger className="h-6 text-xs"><SelectValue placeholder="Source" /></SelectTrigger>
@@ -2323,7 +2341,7 @@ const LeadEdit: React.FC = () => {
                 </Select>
               </div>
 
-              <div>
+              <div className="col-span-2 sm:col-span-1">
                 <Label className="text-[10px] text-slate-500">Lead Status</Label>
                 <Select value={leadStatus} onValueChange={setLeadStatus} disabled={!canEditLead}>
                   <SelectTrigger className="h-6 text-xs"><SelectValue placeholder="Lead Status" /></SelectTrigger>
@@ -2337,7 +2355,7 @@ const LeadEdit: React.FC = () => {
                 </Select>
               </div>
 
-              <div>
+              <div className="col-span-2 sm:col-span-1">
                 <Label className="text-[10px] text-slate-500">Pipeline Status</Label>
                 <Select value={pipelineStatus} onValueChange={handlePipelineStatusChange} disabled={!canEditLead}>
                   <SelectTrigger className="h-6 text-xs"><SelectValue placeholder="Pipeline Status" /></SelectTrigger>
@@ -2351,7 +2369,7 @@ const LeadEdit: React.FC = () => {
                 </Select>
               </div>
 
-              <div>
+              <div className="col-span-2 sm:col-span-1">
                 <Label className="text-[10px] text-slate-500">ACQ Agent</Label>
                 <Select
                   value={acquisitionsAgent || 'unassigned'}
@@ -2376,7 +2394,7 @@ const LeadEdit: React.FC = () => {
                 </Select>
               </div>
 
-              <div>
+              <div className="col-span-2 sm:col-span-1">
                 <Label className="text-[10px] text-slate-500">DISP Agent</Label>
                 <Select
                   value={dispositionsAgent || 'unassigned'}
@@ -2401,9 +2419,10 @@ const LeadEdit: React.FC = () => {
                 </Select>
               </div>
             </div>
-          </div>
+        </div>
 
-          <div className="col-span-12 lg:col-span-6 space-y-3">
+        {/* Section 4 - Timeline (full width) */}
+        <div className="border border-slate-200 rounded-lg bg-white p-3">
             <LeadTimeline
               leadId={id!}
               leadCreatedAt={lead.createdAt}
@@ -2420,85 +2439,9 @@ const LeadEdit: React.FC = () => {
                 loadDeal();
               }}
             />
-
-            {/* Valuation & Schedule - Moved here to fill white space */}
-            <div className="border border-slate-200 rounded-lg bg-white p-3">
-              <div className="flex items-center gap-1.5 mb-2">
-                <DollarSign className="w-3.5 h-3.5 text-slate-500" />
-                <span className="text-xs font-medium text-slate-600">Valuation & Schedule</span>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <Label className="text-[10px] text-slate-500">Est. Value (ARV)</Label>
-                  <div className="relative">
-                    <DollarSign className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-slate-400" />
-                    <Input type="number" value={estimatedValue} onChange={(e) => setEstimatedValue(e.target.value)} placeholder="ARV" className="h-6 text-xs pl-6" disabled={!canEditLead} />
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-[10px] text-slate-500">Asking Price</Label>
-                  <div className="relative">
-                    <DollarSign className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-slate-400" />
-                    <Input type="number" value={askingPrice} onChange={(e) => setAskingPrice(e.target.value)} placeholder="Price" className="h-6 text-xs pl-6" disabled={!canEditLead} />
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-[10px] text-slate-500">Appointment</Label>
-                  <Input type="date" value={appointmentDate} onChange={(e) => setAppointmentDate(e.target.value)} className="h-6 text-xs" disabled={!canEditLead} />
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
 
-        {/* Contact Information - Compact */}
-        <div className="border border-slate-200 rounded-lg bg-white p-2">
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-1">
-              <Phone className="w-3 h-3 text-slate-500" />
-              <span className="text-xs font-medium text-slate-600">Contacts</span>
-            </div>
-            <Button size="sm" variant="ghost" className="h-5 text-[10px] px-2" onClick={addContact}><Plus className="w-2.5 h-2.5 mr-0.5" />Add</Button>
-          </div>
-          <div className="space-y-1.5">
-            {contacts.length > 0 ? (
-              contacts.map((contact, index) => (
-              <div key={index} className="flex items-center gap-2 p-1.5 bg-slate-50 rounded border border-slate-100">
-                <Input 
-                  value={contact.name} 
-                  onChange={(e) => updateContact(index, 'name', e.target.value)} 
-                  placeholder="Name" 
-                  className="h-6 text-xs w-32" 
-                />
-                <div className="flex-1">
-                  <PhoneInput
-                    value={contact.phone}
-                    onChange={(value) => updateContact(index, 'phone', value)}
-                    placeholder="Phone number"
-                    required={false}
-                    label=""
-                  />
-                </div>
-                <Input 
-                  value={contact.email} 
-                  onChange={(e) => updateContact(index, 'email', e.target.value)} 
-                  placeholder="Email" 
-                  type="email" 
-                  className="h-6 text-xs flex-1" 
-                />
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={() => removeContact(index)} 
-                  className="h-6 w-6 p-0 hover:bg-red-100 flex-shrink-0"
-                >
-                  <X className="w-3.5 h-3.5 text-red-500" />
-                </Button>
-              </div>
-            ))
-            ) : null}
-          </div>
-        </div>
+        {/* Contacts box removed (not needed) */}
 
         {/* Offer Information - Show if offer data exists */}
         {(lead?.customFields?.offerMadePrice || lead?.customFields?.maxAllowableOffer || lead?.customFields?.offerMadeResponse) && (
@@ -2562,11 +2505,20 @@ const LeadEdit: React.FC = () => {
         <div className="grid grid-cols-12 gap-2">
           {/* Left side - Tabs (8 columns) */}
           <div className="col-span-8">
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid w-full grid-cols-4 h-7">
+            <Tabs
+              value={activeTab}
+              onValueChange={(value) => {
+                if ((value === 'transactions' && !canSeeTransactionsTab) || (value === 'dispositions' && !canSeeDispositionsTab)) {
+                  setActiveTab('acquisitions');
+                  return;
+                }
+                setActiveTab(value);
+              }}
+            >
+              <TabsList className={`grid w-full ${tabsGridColsClass} h-7`}>
                 <TabsTrigger value="acquisitions" className="text-xs py-1">Acquisitions</TabsTrigger>
-                <TabsTrigger value="transactions" className="text-xs py-1">Transactions</TabsTrigger>
-                <TabsTrigger value="dispositions" className="text-xs py-1">Dispositions</TabsTrigger>
+                {canSeeTransactionsTab && <TabsTrigger value="transactions" className="text-xs py-1">Transactions</TabsTrigger>}
+                {canSeeDispositionsTab && <TabsTrigger value="dispositions" className="text-xs py-1">Dispositions</TabsTrigger>}
                 <TabsTrigger value="files" className="text-xs py-1">Files</TabsTrigger>
               </TabsList>
 
@@ -2647,6 +2599,7 @@ const LeadEdit: React.FC = () => {
               </TabsContent>
 
               {/* Transactions Tab */}
+              {canSeeTransactionsTab && (
               <TabsContent value="transactions" className="mt-2">
                 <div className="border border-slate-200 rounded-lg bg-white p-2">
                   <div className="flex items-center justify-between mb-2">
@@ -2681,8 +2634,10 @@ const LeadEdit: React.FC = () => {
                     )}
                 </div>
               </TabsContent>
+              )}
 
               {/* Dispositions Tab */}
+              {canSeeDispositionsTab && (
               <TabsContent value="dispositions" className="mt-2">
                 <div className="border border-slate-200 rounded-lg bg-white p-2">
                   <div className="flex items-center justify-between mb-2">
@@ -2751,6 +2706,7 @@ const LeadEdit: React.FC = () => {
                   ) : (<div className="text-center py-2 bg-slate-50 rounded text-[10px] text-slate-500">No offers yet</div>)}
                 </div>
               </TabsContent>
+              )}
 
               {/* Files Tab */}
               <TabsContent value="files" className="mt-2">
@@ -2856,7 +2812,7 @@ const LeadEdit: React.FC = () => {
 
           {/* Right side - Communication Section (4 columns) */}
           <div className="col-span-4">
-            <div className="sticky top-2 border border-slate-200 rounded-lg bg-white p-2">
+            <div className="sticky top-2 border border-slate-200 rounded-lg bg-white p-1.5">
               {/* Unified Communication Feed (includes Tasks, Calls, SMS, Emails, Notes) */}
               <UnifiedCommunicationFeed
                 communications={communications}
