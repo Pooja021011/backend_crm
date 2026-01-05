@@ -344,11 +344,65 @@ export const callService = {
           }
         }
       } else if (callStatus === 'completed' && direction === 'inbound') {
-        // Ignore status-only completion callbacks without DialCallStatus to avoid overwriting
-        // missed calls already marked by the <Dial action> callback.
+        // If we ONLY receive a "completed" progress event without DialCallStatus, we still need an inbox record.
+        // This happens for some Twilio configurations where only completed events are sent.
+        // To avoid false positives, we only create/mark missed when there is no existing Communication yet.
+        const userSmsSettings = await smsSettingsRepository.findByPhoneNumber(safeTo);
+        if (!userSmsSettings) {
+          logger.info({ to: safeTo }, 'No user found for call destination number (completed event)');
+          return;
+        }
+
+        const lead = await ensureLead(userSmsSettings.userId);
+        if (!lead) return;
+
+        const existingComm = await prisma.communication.findFirst({
+          where: {
+            leadId: lead.id,
+            type: 'CALL',
+            direction: 'INBOUND',
+            metadata: { path: ['callSid'], equals: callSid },
+          },
+        });
+
+        // If nothing exists yet, create a "missed" record so Inbox calls tab shows it.
+        if (!existingComm) {
+          const duration = callDuration ? parseInt(String(callDuration), 10) : 0;
+          await upsertCallCommunication(lead.id, userSmsSettings.userId, 'missed', {
+            callStatus,
+            duration,
+            completedAt: new Date().toISOString(),
+            note: 'Created from completed progress event (no DialCallStatus)',
+          });
+
+          logger.info(
+            { leadId: lead.id, callSid, finalStatus: 'missed', duration },
+            'Created missed call from completed progress event'
+          );
+          return;
+        }
+
+        // If we already have a comm, keep prior "completed" intact, but upgrade "ringing" to "missed".
+        const prevStatus = String((existingComm.metadata as any)?.status || '').toLowerCase();
+        if (prevStatus === 'ringing') {
+          const duration = callDuration ? parseInt(String(callDuration), 10) : 0;
+          await upsertCallCommunication(lead.id, userSmsSettings.userId, 'missed', {
+            callStatus,
+            duration,
+            completedAt: new Date().toISOString(),
+            note: 'Upgraded ringing to missed from completed progress event (no DialCallStatus)',
+          });
+
+          logger.info(
+            { leadId: lead.id, callSid, fromStatus: prevStatus, toStatus: 'missed', duration },
+            'Upgraded ringing call to missed from completed progress event'
+          );
+          return;
+        }
+
         logger.info(
-          { callStatus, callSid, direction, hasDialResult },
-          'Ignoring inbound completed status callback without DialCallStatus'
+          { callStatus, callSid, direction, hasDialResult, prevStatus },
+          'Ignoring inbound completed status callback without DialCallStatus (already tracked)'
         );
       }
     } catch (error: any) {
