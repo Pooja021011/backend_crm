@@ -7,7 +7,15 @@ const router = Router();
 // All call routes require authentication except webhooks
 router.use((req, res, next) => {
   // Skip auth for webhook endpoints and TwiML
-  if (req.path === '/webhook' || req.path === '/twiml' || req.path === '/twiml-voice' || req.path === '/twiml-incoming') {
+  if (
+    req.path === '/webhook' ||
+    req.path === '/twiml' ||
+    req.path === '/twiml-voice' ||
+    req.path === '/twiml-incoming' ||
+    req.path === '/dial-action' ||
+    req.path === '/voicemail-action' ||
+    req.path === '/recording-status'
+  ) {
     return next();
   }
   return authenticate(req, res, next);
@@ -23,6 +31,26 @@ router.post('/presence', (req, res, next) =>
   callController.setVoicePresence(req, res).catch(next)
 );
 
+// Dial action: after <Dial> ends, route to voicemail if not answered (no auth)
+router.post('/dial-action', (req, res, next) =>
+  callController.dialAction(req, res).catch(next)
+);
+
+// Voicemail action: after <Record> completes (no auth)
+router.post('/voicemail-action', (req, res, next) =>
+  callController.voicemailAction(req, res).catch(next)
+);
+
+// Recording status callback for call recordings and voicemails (no auth)
+router.post('/recording-status', (req, res, next) =>
+  callController.recordingStatus(req, res).catch(next)
+);
+
+// Stream a recording securely to authenticated users
+router.get('/recordings/:recordingSid', (req, res, next) =>
+  callController.streamRecording(req, res).catch(next)
+);
+
 // Make outbound call
 router.post('/make', (req, res, next) => 
   callController.makeCall(req, res).catch(next)
@@ -36,6 +64,11 @@ router.post('/log-outbound', (req, res, next) =>
 // Get call history
 router.get('/history', (req, res, next) => 
   callController.getCallHistory(req, res).catch(next)
+);
+
+// Mark missed call as read (Inbox dismiss)
+router.post('/:communicationId/mark-read', (req, res, next) =>
+  callController.markCallRead(req, res).catch(next)
 );
 
 // Log call answer action

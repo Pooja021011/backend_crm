@@ -6,6 +6,8 @@ import { communicationResponseService } from '../services/communicationResponseS
 import { prisma } from '../config/db.js';
 import twilio from 'twilio';
 import { voicePresenceService } from '../services/voicePresenceService.js';
+import { leadRepository } from '../repositories/leadRepository.js';
+import { Readable } from 'node:stream';
 
 const AccessToken = twilio.jwt.AccessToken;
 const VoiceGrant = AccessToken.VoiceGrant;
@@ -35,6 +37,25 @@ function normalizeTwilioIdentity(identity?: string | null): string {
   if (!raw) return raw;
   // Twilio Client identities are case-sensitive. Normalize emails to lowercase so routing is consistent.
   return raw.includes('@') ? raw.toLowerCase() : raw;
+}
+
+function buildVoicemailTwiml(baseUrl: string) {
+  const voicemailActionUrl = `${baseUrl}/api/v1/calls/voicemail-action`;
+  const recordingStatusUrl = `${baseUrl}/api/v1/calls/recording-status`;
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="alice">Sorry, we missed your call. Please leave a message after the beep.</Say>
+  <Record
+    playBeep="true"
+    maxLength="180"
+    action="${voicemailActionUrl}"
+    method="POST"
+    recordingStatusCallback="${recordingStatusUrl}"
+    recordingStatusCallbackMethod="POST"
+  />
+  <Say voice="alice">We did not receive a recording. Goodbye.</Say>
+  <Hangup/>
+</Response>`;
 }
 
 export const callController = {
@@ -112,6 +133,239 @@ export const callController = {
     const online = Boolean((req.body as any)?.online);
     voicePresenceService.setOnline(userId, online);
     return res.json({ success: true, data: { userId, online } });
+  },
+
+  /**
+   * Dial action handler: called after <Dial> ends.
+   * If the dial was not completed/answered, route caller to voicemail.
+   * No auth (Twilio calls this).
+   */
+  async dialAction(req: Request, res: Response) {
+    try {
+      // Reuse existing webhook logic to update missed/answered status in DB
+      await callService.handleIncomingCallWebhook(req.body).catch(() => {});
+
+      const dialCallStatus = String((req.body as any)?.DialCallStatus || '').toLowerCase();
+      const wasAnswered = dialCallStatus === 'completed';
+      const baseUrl = getPublicBaseUrl(req);
+
+      const twiml = wasAnswered
+        ? `<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>`
+        : buildVoicemailTwiml(baseUrl);
+
+      res.type('text/xml');
+      return res.send(twiml);
+    } catch (error: any) {
+      logger.error({ error: error.message }, 'Error in dialAction');
+      res.type('text/xml');
+      return res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>`);
+    }
+  },
+
+  /**
+   * Voicemail action: called after <Record> completes.
+   * No auth (Twilio calls this).
+   */
+  async voicemailAction(_req: Request, res: Response) {
+    res.type('text/xml');
+    return res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="alice">Thank you. Goodbye.</Say>
+  <Hangup/>
+</Response>`);
+  },
+
+  /**
+   * Recording status callback for both call recordings and voicemail recordings.
+   * No auth (Twilio calls this).
+   */
+  async recordingStatus(req: Request, res: Response) {
+    try {
+      const body = req.body as any;
+      const callSid = String(body?.CallSid || '');
+      const recordingSid = String(body?.RecordingSid || '');
+      const recordingUrl = String(body?.RecordingUrl || '');
+      const recordingDuration = Number(body?.RecordingDuration || 0);
+      const recordingSource = String(body?.RecordingSource || '');
+      const from = String(body?.From || '');
+      const to = String(body?.To || '');
+
+      if (!callSid || !recordingSid) {
+        return res.json({ success: true, ignored: true });
+      }
+
+      const isVoicemail = recordingSource && recordingSource !== 'DialVerb';
+
+      // Try to update existing call Communication by callSid
+      const existing = await prisma.communication.findFirst({
+        where: {
+          type: 'CALL',
+          metadata: { path: ['callSid'], equals: callSid },
+        },
+      });
+
+      if (existing) {
+        const prev = (existing.metadata as any) || {};
+        await prisma.communication.update({
+          where: { id: existing.id },
+          data: {
+            metadata: {
+              ...prev,
+              recordingSid,
+              recordingUrl,
+              recordingDuration,
+              recordingSource,
+              isVoicemail,
+            },
+          },
+        });
+
+        return res.json({ success: true, updated: true });
+      }
+
+      // If no existing Communication (common for offline voicemail flows), create one.
+      // Determine the owning user by destination phone number.
+      const smsSettingsRepository = await import('../repositories/smsSettingsRepository.js');
+      const toNormalized = typeof to === 'string' ? to.replace(/[\s\(\)\-]/g, '') : to;
+      const userSettings = await smsSettingsRepository.smsSettingsRepository.findByPhoneNumber(toNormalized);
+      const userId = userSettings?.userId;
+
+      if (!userId) {
+        return res.json({ success: true, ignored: true });
+      }
+
+      // Find matching lead for this agent; otherwise auto-create Unknown Caller lead
+      const lead = from ? await callService.findLeadByPhoneNumber(from, userId) : null;
+      const ensuredLead =
+        lead ||
+        (await leadRepository.create(
+          {
+            type: 'SELLER',
+            assignedUserId: userId,
+            address: { address1: 'Unknown', city: 'Unknown', state: 'NA', zip: '00000' },
+            seller: {
+              firstName: 'Unknown',
+              lastName: 'Caller',
+              phone: from || 'Unknown',
+              email: String(from || '').replace(/\D/g, '')
+                ? `${String(from || '').replace(/\D/g, '')}@unknown.local`
+                : 'unknown@unknown.local',
+            },
+          },
+          userId
+        ));
+
+      await communicationRepository.create(ensuredLead.id, {
+        type: 'CALL',
+        direction: 'INBOUND',
+        subject: isVoicemail ? `📩 Voicemail from ${from || 'Unknown'}` : `Call recording from ${from || 'Unknown'}`,
+        body: isVoicemail ? `Voicemail received from ${from || 'Unknown'}` : `Call recording captured`,
+        occurredAt: new Date(),
+        createdById: userId,
+        metadata: {
+          callSid,
+          status: 'missed',
+          from,
+          to,
+          recordingSid,
+          recordingUrl,
+          recordingDuration,
+          recordingSource,
+          isVoicemail,
+        },
+      });
+
+      return res.json({ success: true, created: true });
+    } catch (error: any) {
+      logger.error({ error: error.message }, 'Error in recordingStatus callback');
+      return res.json({ success: true });
+    }
+  },
+
+  /**
+   * Stream a Twilio recording to the browser (authenticated).
+   */
+  async streamRecording(req: Request, res: Response) {
+    const userId = (req as any).user?.id as string | undefined;
+    const roles = ((req as any).user?.roles as string[] | undefined) || [];
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const recordingSid = String(req.params.recordingSid || '');
+    if (!recordingSid) return res.status(400).json({ error: 'recordingSid required' });
+
+    const isPrivileged = roles.includes('ADMIN') || roles.includes('MANAGER') || roles.includes('TC') || roles.includes('EXECUTIVE');
+
+    // Ensure the user is allowed to access this recording based on the Communication/Lead ownership
+    const comm = await prisma.communication.findFirst({
+      where: { metadata: { path: ['recordingSid'], equals: recordingSid } },
+      include: { lead: { select: { assignedUserId: true, createdById: true } } },
+    });
+
+    if (!comm) return res.status(404).json({ error: 'Recording not found' });
+
+    if (
+      !isPrivileged &&
+      comm.createdById !== userId &&
+      comm.lead?.assignedUserId !== userId &&
+      comm.lead?.createdById !== userId
+    ) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    if (!accountSid || !authToken) return res.status(500).json({ error: 'Twilio not configured' });
+
+    const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Recordings/${recordingSid}.mp3`;
+    const basic = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+    const resp = await fetch(url, { headers: { Authorization: `Basic ${basic}` } });
+    if (!resp.ok || !resp.body) {
+      return res.status(502).json({ error: 'Failed to fetch recording' });
+    }
+
+    res.setHeader('Content-Type', 'audio/mpeg');
+    const nodeStream = Readable.fromWeb(resp.body as any);
+    nodeStream.pipe(res);
+  },
+
+  /**
+   * Mark a call communication as read for the logged-in user (Inbox dismiss).
+   */
+  async markCallRead(req: Request, res: Response) {
+    const userId = (req as any).user?.id as string | undefined;
+    const roles = ((req as any).user?.roles as string[] | undefined) || [];
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const communicationId = String(req.params.communicationId || '');
+    if (!communicationId) return res.status(400).json({ error: 'communicationId required' });
+
+    const isPrivileged = roles.includes('ADMIN') || roles.includes('MANAGER') || roles.includes('TC') || roles.includes('EXECUTIVE');
+
+    const comm = await prisma.communication.findUnique({
+      where: { id: communicationId },
+      include: { lead: { select: { assignedUserId: true, createdById: true } } },
+    });
+
+    if (!comm || comm.type !== 'CALL') return res.status(404).json({ error: 'Call communication not found' });
+
+    if (
+      !isPrivileged &&
+      comm.createdById !== userId &&
+      comm.lead?.assignedUserId !== userId &&
+      comm.lead?.createdById !== userId
+    ) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    // Some environments have Prisma Client type generation out of sync in editors.
+    // Use a safe cast here to avoid blocking builds while keeping runtime correct.
+    await (prisma as any).communicationRead.upsert({
+      where: { communicationId_userId: { communicationId, userId } },
+      update: { readAt: new Date() },
+      create: { communicationId, userId, readAt: new Date() },
+    });
+
+    return res.json({ success: true });
   },
 
   /**
@@ -392,11 +646,14 @@ export const callController = {
         return res.status(400).send('Contact number required');
       }
 
-      // TwiML to dial the contact number
+      const baseUrl = getPublicBaseUrl(req);
+      const recordingStatusUrl = `${baseUrl}/api/v1/calls/recording-status`;
+
+      // TwiML to dial the contact number (record all calls)
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="alice">Connecting your call.</Say>
-  <Dial callerId="${process.env.TWILIO_PHONE_NUMBER || req.body.From}">
+  <Dial callerId="${process.env.TWILIO_PHONE_NUMBER || req.body.From}" record="record-from-answer" recordingStatusCallback="${recordingStatusUrl}" recordingStatusCallbackMethod="POST">
     <Number>${contactNumber}</Number>
   </Dial>
   <Say voice="alice">The call has ended. Goodbye!</Say>
@@ -429,7 +686,9 @@ export const callController = {
         logger.info('Cleaned To number:', to);
       }
 
-      const callbackUrl = `${getPublicBaseUrl(req)}/api/v1/calls/webhook`;
+      const baseUrl = getPublicBaseUrl(req);
+      const callbackUrl = `${baseUrl}/api/v1/calls/webhook`;
+      const recordingStatusUrl = `${baseUrl}/api/v1/calls/recording-status`;
 
       // Check if this is a client-to-client call
       if (to && to.startsWith('client:')) {
@@ -438,7 +697,7 @@ export const callController = {
 
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Dial timeout="30" action="${callbackUrl}" method="POST">
+  <Dial timeout="30" action="${callbackUrl}" method="POST" record="record-from-answer" recordingStatusCallback="${recordingStatusUrl}" recordingStatusCallbackMethod="POST">
     <Client>${clientIdentity}</Client>
   </Dial>
   <Say voice="alice">The user is not available. Please try again later.</Say>
@@ -522,7 +781,7 @@ export const callController = {
       
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Dial callerId="${callerId || process.env.TWILIO_PHONE_NUMBER}" action="${callbackUrl}" method="POST">
+  <Dial callerId="${callerId || process.env.TWILIO_PHONE_NUMBER}" action="${callbackUrl}" method="POST" record="record-from-answer" recordingStatusCallback="${recordingStatusUrl}" recordingStatusCallbackMethod="POST">
     <Number>${to}</Number>
   </Dial>
   <Say voice="alice">The call could not be completed. Please try again.</Say>
@@ -558,7 +817,9 @@ export const callController = {
 
       const from = req.body.From;
       const to = req.body.To;
-      const callbackUrl = `${getPublicBaseUrl(req)}/api/v1/calls/webhook`;
+      const baseUrl = getPublicBaseUrl(req);
+      const dialActionUrl = `${baseUrl}/api/v1/calls/dial-action`;
+      const recordingStatusUrl = `${baseUrl}/api/v1/calls/recording-status`;
 
       // Find which user should receive this call based on the destination number
       const smsSettingsRepository = await import('../repositories/smsSettingsRepository.js');
@@ -567,33 +828,29 @@ export const callController = {
 
       if (userSettings && userSettings.user) {
         // Route call to the user's browser client ONLY if they're online.
-        // Twilio Client identities are case-sensitive; we normalize emails to lowercase.
-        const intendedIdentity = normalizeTwilioIdentity(userSettings.user.email || userSettings.userId);
+        // If offline, send caller directly to voicemail (no silent failure).
+        const clientIdentity = normalizeTwilioIdentity(userSettings.user.email || userSettings.userId);
         const isOnline = voicePresenceService.isOnline(userSettings.userId);
-        // If offline, dial a non-existent client identity so no browser can receive the call.
-        // This yields a clean "no-answer" DialCallStatus without ringing logged-out browsers.
-        const clientIdentity = isOnline ? intendedIdentity : `offline-${userSettings.userId}`;
         
         console.log('🔍 INCOMING CALL ROUTING:', {
           from,
           to,
           clientIdentity,
-          intendedIdentity,
           isOnline,
           userEmail: userSettings.user.email,
           userId: userSettings.userId
         });
         
-        logger.info({ from, to, clientIdentity, intendedIdentity, isOnline }, 'Routing incoming call to browser client');
+        logger.info({ from, to, clientIdentity, isOnline }, 'Routing incoming call to browser client');
 
-        // TwiML to route call to browser
-        const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+        const twiml = isOnline
+          ? `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Dial timeout="30" action="${callbackUrl}" method="POST">
+  <Dial timeout="30" action="${dialActionUrl}" method="POST" record="record-from-answer" recordingStatusCallback="${recordingStatusUrl}" recordingStatusCallbackMethod="POST">
     <Client>${clientIdentity}</Client>
   </Dial>
-  <Say voice="alice">The user is not available. Please try again later.</Say>
-</Response>`;
+</Response>`
+          : buildVoicemailTwiml(baseUrl);
 
         res.type('text/xml');
         res.send(twiml);

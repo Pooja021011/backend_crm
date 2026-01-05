@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { API_BASE, makeApiCall } from '@/config/api';
 import { 
   Phone, 
   MessageSquare, 
@@ -28,6 +29,7 @@ interface Communication {
   direction?: 'INBOUND' | 'OUTBOUND';
   body?: string;
   subject?: string;
+  metadata?: any;
   title?: string;
   description?: string;
   status?: string;
@@ -138,6 +140,42 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
   const [showSMSDialog, setShowSMSDialog] = useState(false);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
   const [showNoteDialog, setShowNoteDialog] = useState(false);
+
+  // Recording playback state (recordingSid -> object URL)
+  const [recordingUrls, setRecordingUrls] = useState<Record<string, string>>({});
+  const [recordingLoading, setRecordingLoading] = useState<Record<string, boolean>>({});
+
+  const loadRecording = async (recordingSid: string) => {
+    if (!recordingSid) return;
+    if (recordingUrls[recordingSid]) return;
+    if (recordingLoading[recordingSid]) return;
+
+    setRecordingLoading((p) => ({ ...p, [recordingSid]: true }));
+    try {
+      const resp = await makeApiCall(`${API_BASE}/calls/recordings/${recordingSid}`);
+      if (!resp.ok) throw new Error('Failed to load recording');
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      setRecordingUrls((p) => ({ ...p, [recordingSid]: url }));
+    } catch {
+      // Best-effort; keep UI usable even if recording can't be fetched
+    } finally {
+      setRecordingLoading((p) => ({ ...p, [recordingSid]: false }));
+    }
+  };
+
+  // Cleanup object URLs
+  useEffect(() => {
+    return () => {
+      Object.values(recordingUrls).forEach((url) => {
+        try {
+          URL.revokeObjectURL(url);
+        } catch {
+          // ignore
+        }
+      });
+    };
+  }, [recordingUrls]);
 
   // Merge communications and tasks into one array
   const allItems = [
@@ -319,6 +357,45 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
                   <p className="text-sm text-slate-600 whitespace-pre-wrap">
                     {item.body || item.description}
                   </p>
+                )}
+
+                {/* Voicemail / Call recording playback (CALL only) */}
+                {item.type === 'CALL' && (item as any)?.metadata?.recordingSid && (
+                  <div className="mt-2 rounded border border-slate-200 bg-white p-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-xs text-slate-600">
+                        <span className="font-semibold">
+                          {(item as any)?.metadata?.isVoicemail ? 'Voicemail' : 'Call recording'}
+                        </span>
+                        {Number((item as any)?.metadata?.recordingDuration || 0) ? (
+                          <span className="ml-2">({Number((item as any)?.metadata?.recordingDuration || 0)}s)</span>
+                        ) : null}
+                      </div>
+
+                      {!recordingUrls[(item as any)?.metadata?.recordingSid] ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={() => loadRecording((item as any)?.metadata?.recordingSid)}
+                          disabled={Boolean(recordingLoading[(item as any)?.metadata?.recordingSid])}
+                        >
+                          {recordingLoading[(item as any)?.metadata?.recordingSid] ? (
+                            <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                          ) : null}
+                          Load
+                        </Button>
+                      ) : null}
+                    </div>
+
+                    {recordingUrls[(item as any)?.metadata?.recordingSid] ? (
+                      <audio
+                        className="w-full mt-2"
+                        controls
+                        src={recordingUrls[(item as any)?.metadata?.recordingSid]}
+                      />
+                    ) : null}
+                  </div>
                 )}
               </div>
             </div>

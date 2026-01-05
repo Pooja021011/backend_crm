@@ -527,6 +527,10 @@ export const callService = {
               address: true
             }
           },
+          reads: {
+            where: { userId },
+            select: { userId: true },
+          },
           createdBy: {
             select: {
               firstName: true,
@@ -540,12 +544,19 @@ export const callService = {
         take: 100 // Limit to recent 100 calls
       });
 
-      // Safety: If a lead was deleted (or DB lacks FK cascade), Prisma can return communications with lead = null.
-      // For Inbox calls tab, we only want to show calls whose Lead still exists.
-      const communicationsWithLead = communications.filter((c) => Boolean((c as any).lead));
+      // Inbox behavior: hide missed calls that were already opened (marked read) by this user.
+      // Also safety: if lead was deleted, hide the row from inbox calls.
+      const communicationsForInbox = communications.filter((c: any) => {
+        if (!c.lead) return false;
+        const status = String(c?.metadata?.status || '').toLowerCase();
+        const isMissed = status === 'missed' || status === 'no-answer';
+        const isRead = Array.isArray(c.reads) && c.reads.length > 0;
+        if (isMissed && isRead) return false;
+        return true;
+      });
 
       // Transform communications to call history format
-      const callHistory = communicationsWithLead.map(comm => {
+      const callHistory = communicationsForInbox.map((comm: any) => {
         let phoneNumber = '';
         let contactName = 'Unknown';
 

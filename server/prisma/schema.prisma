@@ -31,6 +31,7 @@ model User {
   uploadedFileVersions FileVersion[] @relation("VersionUploadedByUser")
   createdScenarios UnderwritingScenario[] @relation("CreatedByUser")
   createdCommunications Communication[] @relation("CreatedByUser")
+  communicationReads CommunicationRead[]
   createdMarketingLinks MarketingLink[] @relation("CreatedByUser")
   emailSettings UserEmailSettings?
   targetedNotifications Notification[] @relation("NotificationTarget")
@@ -613,8 +614,21 @@ model Communication {
   createdAt   DateTime   @default(now())
 
   attachments CommunicationAttachment[]
+  reads       CommunicationRead[]
 
   @@index([leadId, occurredAt])
+}
+
+model CommunicationRead {
+  communicationId String
+  userId          String
+  readAt          DateTime @default(now())
+
+  communication Communication @relation(fields: [communicationId], references: [id], onDelete: Cascade)
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([communicationId, userId])
+  @@index([userId, readAt])
 }
 
 model CommunicationAttachment {

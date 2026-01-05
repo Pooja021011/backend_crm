@@ -956,6 +956,17 @@ const Inbox = () => {
     }
   };
 
+  const markMissedCallAsRead = async (communicationId: string) => {
+    try {
+      await makeApiCall(`${API_BASE}/calls/${communicationId}/mark-read`, {
+        method: 'POST',
+      });
+    } catch (error) {
+      console.error('Failed to mark missed call as read:', error);
+      // Best-effort; UI will still navigate and the server-side filter will hide on next refresh
+    }
+  };
+
   // Make outbound call
   const makeCall = async (phoneNumber: string, leadId?: string) => {
     setMakingCall(true);
@@ -1760,6 +1771,9 @@ const Inbox = () => {
                           className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50 cursor-pointer transition-colors"
                           onClick={() => {
                             if (call.leadId) {
+                              // Mark read + remove from list immediately (Inbox behavior)
+                              setCallHistory((prev) => prev.filter((c) => c.id !== call.id));
+                              markMissedCallAsRead(call.id);
                               navigate(`/leads/${call.leadId}/edit`);
                             } else {
                               toast({
