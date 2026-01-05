@@ -365,8 +365,20 @@ const Inbox = () => {
         console.log('🔗 Navigation URL:', navigationUrl);
         console.log('🆔 Lead ID:', email.leadId);
         navigate(navigationUrl);
-        
-        // Remove task from the list
+
+        // Mark task as read (persist) + remove from list
+        try {
+          const accessToken = localStorage.getItem('accessToken');
+          await fetch(`${API_BASE}/inbox/tasks/${email.id}/mark-read`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+            },
+          });
+        } catch (e) {
+          console.error('Failed to mark task as read:', e);
+        }
         setAssignedTasks(prevTasks => prevTasks.filter(task => task.id !== email.id));
         
         toast({
@@ -436,6 +448,33 @@ const Inbox = () => {
     if (email.isGmail && email.leadId) {
       console.log('📧 Gmail email clicked - navigating to lead:', email.leadId);
       navigate(`/leads/${email.leadId}/edit`);
+
+      // Inbox dismiss: persist read + remove from list
+      setGmailEmails(prev => prev.filter(e => e.id !== email.id));
+      try {
+        const accessToken = localStorage.getItem('accessToken');
+        // Best-effort mark as read on Gmail (existing behavior for modal path)
+        if (email.unread) {
+          await makeApiCall(`${API_BASE}/settings/email/mark-read`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({ emailId: email.id }),
+          }).catch(() => undefined);
+        }
+        // Persist dismiss for inbox list
+        await fetch(`${API_BASE}/inbox/emails/${email.id}/mark-read`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+          },
+        });
+      } catch (e) {
+        console.error('Failed to dismiss email:', e);
+      }
       
       toast({
         title: "Lead Opened",
@@ -784,6 +823,23 @@ const Inbox = () => {
   const handleSMSConversationClick = (conversation: any) => {
     // Navigate to lead edit page if leadId exists
     if (conversation.leadId) {
+      // Mark last inbound message as read (persist) + remove conversation from list
+      try {
+        const lastMessage = conversation.messages?.[conversation.messages.length - 1];
+        if (lastMessage?.direction === 'INBOUND' && lastMessage?.id) {
+          const accessToken = localStorage.getItem('accessToken');
+          fetch(`${API_BASE}/inbox/communications/${lastMessage.id}/mark-read`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+            },
+          }).catch((e) => console.error('Failed to mark SMS as read:', e));
+        }
+      } catch (e) {
+        console.error('Failed to dismiss SMS conversation:', e);
+      }
+      setSmsConversations((prev) => prev.filter((c: any) => c.id !== conversation.id));
       navigate(`/leads/${conversation.leadId}/edit`);
     } else {
       toast({

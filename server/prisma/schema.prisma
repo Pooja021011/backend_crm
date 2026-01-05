@@ -27,11 +27,13 @@ model User {
   createdLeads  Lead[]       @relation("CreatedByUserLeads")
   assignedTasks Task[]       @relation("AssignedToUserTasks")
   createdTasks  Task[]       @relation("CreatedByUserTasks")
+  taskReads     TaskRead[]
   uploadedFiles File[]       @relation("UploadedByUser")
   uploadedFileVersions FileVersion[] @relation("VersionUploadedByUser")
   createdScenarios UnderwritingScenario[] @relation("CreatedByUser")
   createdCommunications Communication[] @relation("CreatedByUser")
   communicationReads CommunicationRead[]
+  gmailEmailReads GmailEmailRead[]
   createdMarketingLinks MarketingLink[] @relation("CreatedByUser")
   emailSettings UserEmailSettings?
   targetedNotifications Notification[] @relation("NotificationTarget")
@@ -479,8 +481,33 @@ model Task {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
+  reads        TaskRead[]
+
   @@index([leadId])
   @@index([dueAt])
+}
+
+model TaskRead {
+  taskId String
+  userId String
+  readAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@index([userId, readAt])
+}
+
+model GmailEmailRead {
+  emailId String
+  userId  String
+  readAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([emailId, userId])
+  @@index([userId, readAt])
 }
 
 // Documents & Files

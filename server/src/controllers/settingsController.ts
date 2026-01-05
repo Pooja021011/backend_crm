@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { settingsService } from '../services/settingsService.js';
 import { smsSettingsRepository } from '../repositories/smsSettingsRepository.js';
+import { prisma } from '../config/db.js';
 
 export const settingsController = {
   // Markets
@@ -117,6 +118,18 @@ export const settingsController = {
             leadId
           });
         }
+      }
+
+      // Inbox behavior: hide emails already opened/dismissed by this user
+      const emailIds = leadEmails.map((e: any) => String(e.id)).filter(Boolean);
+      if (emailIds.length > 0) {
+        const reads = await prisma.gmailEmailRead.findMany({
+          where: { userId, emailId: { in: emailIds } },
+          select: { emailId: true },
+        });
+        const readSet = new Set(reads.map((r: { emailId: string }) => r.emailId));
+        const unreadLeadEmails = leadEmails.filter((e: any) => !readSet.has(String(e.id)));
+        return res.json({ success: true, data: unreadLeadEmails });
       }
       
       return res.json({ success: true, data: leadEmails });

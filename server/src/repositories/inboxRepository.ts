@@ -3,7 +3,12 @@ import { prisma } from '../config/db.js';
 export const inboxRepository = {
   listAssignedTasks: (userId: string) =>
     prisma.task.findMany({
-      where: { assignedToId: userId, status: 'OPEN' as any },
+      where: {
+        assignedToId: userId,
+        status: 'OPEN' as any,
+        // Inbox behavior: hide tasks already opened (marked read) by this user
+        reads: { none: { userId } },
+      },
       orderBy: { dueAt: 'asc' },
       include: { lead: true },
     }),

@@ -206,6 +206,10 @@ export const smsController = {
           ]
         },
         include: {
+          reads: {
+            where: { userId },
+            select: { userId: true },
+          },
           lead: {
             include: {
               seller: true,
@@ -258,6 +262,7 @@ export const smsController = {
           text: comm.body || '',
           direction: comm.direction,
           timestamp: comm.occurredAt,
+          read: Array.isArray((comm as any).reads) && (comm as any).reads.length > 0,
           status: 'delivered'
         });
         
@@ -270,12 +275,33 @@ export const smsController = {
 
       const conversations = Array.from(conversationsMap.values());
 
+      // Normalize each conversation and apply Inbox dismiss behavior:
+      // If last message is inbound AND that message was marked read by this user, hide the conversation.
+      const filteredConversations = conversations
+        .map((c: any) => {
+          // ensure chronological order
+          c.messages.sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+          const last = c.messages[c.messages.length - 1];
+          if (last) {
+            c.lastMessage = last.text || '';
+            c.lastMessageTime = last.timestamp;
+            c.direction = last.direction;
+          }
+          return c;
+        })
+        .filter((c: any) => {
+          const last = c.messages[c.messages.length - 1];
+          if (!last) return false;
+          if (last.direction === 'INBOUND' && last.read) return false;
+          return true;
+        });
+
       // Return real conversations from database (empty array if none exist)
       res.json({
         success: true,
         data: {
-          conversations,
-          total: conversations.length,
+          conversations: filteredConversations,
+          total: filteredConversations.length,
           hasMore: false
         }
       });
