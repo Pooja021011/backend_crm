@@ -216,11 +216,10 @@ export const useTwilioDevice = () => {
   useEffect(() => {
     // Create ringtone audio element
     const ringtone = new Audio();
-    // Using a data URI for a simple ringtone (beep sound)
-    // This is a short sine wave beep that repeats
-    ringtone.src = 'data:audio/wav;base64,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';
+    // Use the phone-ring.mp3 from public folder
+    ringtone.src = '/phone-ring.mp3';
     ringtone.loop = true;
-    ringtone.volume = 0.5;
+    ringtone.volume = 0.3; // Reduced volume for less aggressive sound
     ringtoneRef.current = ringtone;
 
     return () => {
@@ -369,6 +368,70 @@ export const useTwilioDevice = () => {
           callSid,
           customParameters: params
         });
+        
+        // Handle call cancellation (caller hangs up before answer)
+        call.on('cancel', () => {
+          console.log('📞 Incoming call was cancelled (caller hung up)');
+          
+          // Stop ringtone immediately
+          if (ringtoneRef.current) {
+            ringtoneRef.current.pause();
+            ringtoneRef.current.currentTime = 0;
+          }
+          
+          // Clear incoming call popup
+          setIncomingCall(null);
+          
+          toast({
+            title: 'Missed Call',
+            description: `Missed call from ${from}`,
+            duration: 3000,
+          });
+        });
+        
+        // Handle call disconnect (backup for cancelled)
+        call.on('disconnect', () => {
+          console.log('📞 Incoming call disconnected');
+          
+          // Stop ringtone
+          if (ringtoneRef.current) {
+            ringtoneRef.current.pause();
+            ringtoneRef.current.currentTime = 0;
+          }
+          
+          // Clear incoming call popup if still showing
+          setIncomingCall(null);
+        });
+        
+        // Auto-dismiss after 40 seconds (typical missed call timeout)
+        const missedCallTimeout = setTimeout(() => {
+          console.log('📞 Incoming call timed out (40 seconds)');
+          
+          // Stop ringtone
+          if (ringtoneRef.current) {
+            ringtoneRef.current.pause();
+            ringtoneRef.current.currentTime = 0;
+          }
+          
+          // Reject the call
+          try {
+            call.reject();
+          } catch (err) {
+            console.error('Error rejecting timed out call:', err);
+          }
+          
+          // Clear incoming call popup
+          setIncomingCall(null);
+          
+          toast({
+            title: 'Missed Call',
+            description: `Missed call from ${from}`,
+            duration: 3000,
+          });
+        }, 40000); // 40 seconds
+        
+        // Store timeout ID to clear it if call is answered/rejected manually
+        (call as any).missedCallTimeout = missedCallTimeout;
         
         // Show toast notification
         toast({
@@ -586,13 +649,18 @@ export const useTwilioDevice = () => {
     try {
       console.log('📞 Answering incoming call');
       
+      const call = incomingCall.call;
+      
+      // Clear missed call timeout
+      if ((call as any).missedCallTimeout) {
+        clearTimeout((call as any).missedCallTimeout);
+      }
+      
       // Stop ringtone
       if (ringtoneRef.current) {
         ringtoneRef.current.pause();
         ringtoneRef.current.currentTime = 0;
       }
-      
-      const call = incomingCall.call;
       
       // Store the caller's number
       setCurrentCallNumber(incomingCall.from);
@@ -694,6 +762,13 @@ export const useTwilioDevice = () => {
 
     try {
       console.log('📞 Rejecting incoming call');
+      
+      const call = incomingCall.call;
+      
+      // Clear missed call timeout
+      if ((call as any).missedCallTimeout) {
+        clearTimeout((call as any).missedCallTimeout);
+      }
       
       // Stop ringtone
       if (ringtoneRef.current) {

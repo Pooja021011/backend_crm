@@ -52,63 +52,63 @@ export const ActiveCallWidget: React.FC<ActiveCallWidgetProps> = ({
   }
 
   return (
-    <div className="fixed bottom-6 right-6 bg-white rounded-2xl shadow-2xl border-2 border-gray-200 p-6 w-80 z-[9999] animate-in slide-in-from-bottom duration-300">
+    <div className="fixed top-6 right-6 bg-white rounded-xl shadow-lg border border-gray-200 p-3 w-64 z-[9999] animate-in slide-in-from-top duration-300">
       {/* Status Badge */}
-      <div className={`flex items-center justify-center gap-2 mb-4 ${status.color}`}>
-        <div className={`w-2 h-2 rounded-full ${callStatus.status === 'connected' ? 'bg-green-500 animate-pulse' : 'bg-yellow-500 animate-pulse'}`}></div>
-        <span className="text-sm font-semibold uppercase tracking-wide">{status.text}</span>
+      <div className={`flex items-center justify-center gap-1.5 mb-2 ${status.color}`}>
+        <div className={`w-1.5 h-1.5 rounded-full ${callStatus.status === 'connected' ? 'bg-green-500 animate-pulse' : 'bg-yellow-500 animate-pulse'}`}></div>
+        <span className="text-xs font-semibold uppercase tracking-wide">{status.text}</span>
       </div>
 
-      {/* Contact Info */}
-      <div className="text-center mb-4">
-        <div className="flex justify-center mb-3">
-          <div className="bg-gradient-to-br from-purple-500 to-blue-500 rounded-full p-4">
-            <User className="w-8 h-8 text-white" />
+      {/* Contact Info - More Compact */}
+      <div className="text-center mb-2">
+        <div className="flex justify-center mb-2">
+          <div className="bg-gradient-to-br from-purple-500 to-blue-500 rounded-full p-2">
+            <User className="w-5 h-5 text-white" />
           </div>
         </div>
         
         {contactInfo?.name ? (
-          <div className="space-y-1">
-            <h3 className="text-lg font-bold text-gray-900">{contactInfo.name}</h3>
-            <p className="text-sm text-gray-600">{contactInfo.phoneNumber}</p>
+          <div className="space-y-0.5">
+            <h3 className="text-sm font-bold text-gray-900">{contactInfo.name}</h3>
+            <p className="text-xs text-gray-600">{contactInfo.phoneNumber}</p>
           </div>
         ) : (
-          <p className="text-lg font-semibold text-gray-900">{contactInfo?.phoneNumber || 'Unknown'}</p>
+          <p className="text-sm font-semibold text-gray-900">{contactInfo?.phoneNumber || 'Unknown'}</p>
         )}
       </div>
 
-      {/* Call Duration */}
+      {/* Call Duration - Smaller */}
       {callStatus.status === 'connected' && (
-        <div className="flex items-center justify-center gap-2 mb-4 text-gray-700">
-          <Clock className="w-4 h-4" />
-          <span className="text-sm font-mono font-semibold">
+        <div className="flex items-center justify-center gap-1.5 mb-2 text-gray-700">
+          <Clock className="w-3 h-3" />
+          <span className="text-xs font-mono font-semibold">
             {formatDuration(callStatus.duration)}
           </span>
         </div>
       )}
 
-      {/* Call Controls */}
-      <div className="flex gap-3 justify-center">
+      {/* Call Controls - More Compact */}
+      <div className="flex gap-2 justify-center">
         {/* Mute/Unmute Button */}
         <Button
           onClick={onToggleMute}
           variant="outline"
-          size="lg"
-          className={`flex-1 ${
+          size="sm"
+          className={`flex-1 text-xs ${
             isMuted 
-              ? 'border-2 border-red-500 bg-red-50 text-red-600 hover:bg-red-100' 
-              : 'border-2 border-gray-300 hover:border-gray-400'
+              ? 'border border-red-500 bg-red-50 text-red-600 hover:bg-red-100' 
+              : 'border border-gray-300 hover:border-gray-400'
           }`}
           disabled={callStatus.status !== 'connected'}
         >
           {isMuted ? (
             <>
-              <MicOff className="w-5 h-5 mr-2" />
+              <MicOff className="w-3 h-3 mr-1" />
               Unmute
             </>
           ) : (
             <>
-              <Mic className="w-5 h-5 mr-2" />
+              <Mic className="w-3 h-3 mr-1" />
               Mute
             </>
           )}
@@ -117,18 +117,18 @@ export const ActiveCallWidget: React.FC<ActiveCallWidgetProps> = ({
         {/* Hang Up Button */}
         <Button
           onClick={onHangUp}
-          size="lg"
-          className="flex-1 bg-red-500 hover:bg-red-600 text-white border-2 border-red-600"
+          size="sm"
+          className="flex-1 text-xs bg-red-500 hover:bg-red-600 text-white border border-red-600"
         >
-          <PhoneOff className="w-5 h-5 mr-2" />
-          End Call
+          <PhoneOff className="w-3 h-3 mr-1" />
+          End
         </Button>
       </div>
 
       {/* Error Message */}
       {callStatus.error && (
-        <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-          <p className="text-sm text-red-600 text-center">{callStatus.error}</p>
+        <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded">
+          <p className="text-xs text-red-600 text-center">{callStatus.error}</p>
         </div>
       )}
     </div>
