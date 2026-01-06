@@ -38,7 +38,7 @@ function normalizeTwilioIdentity(identity?: string | null): string {
   // Twilio Client identities are case-sensitive. Normalize emails to lowercase so routing is consistent.
   return raw.includes('@') ? raw.toLowerCase() : raw;
 }
-
+/**
 function buildVoicemailTwiml(baseUrl: string) {
   const voicemailActionUrl = `${baseUrl}/api/v1/calls/voicemail-action`;
   const recordingStatusUrl = `${baseUrl}/api/v1/calls/recording-status`;
@@ -57,6 +57,31 @@ function buildVoicemailTwiml(baseUrl: string) {
   <Hangup/>
 </Response>`;
 }
+*/
+function buildVoicemailTwiml(baseUrl: string) {
+  const voicemailActionUrl = `${baseUrl}/api/v1/calls/voicemail-action`;
+  const recordingStatusUrl = `${baseUrl}/api/v1/calls/recording-status`;
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <!-- Phone ringing sound -->
+  <Play loop="6">${baseUrl}/phone-ring.mp3</Play>
+
+  <!-- Voicemail -->
+  <Record
+    playBeep="true"
+    maxLength="180"
+    action="${voicemailActionUrl}"
+    method="POST"
+    recordingStatusCallback="${recordingStatusUrl}"
+    recordingStatusCallbackMethod="POST"
+  />
+
+  <Say voice="alice">We did not receive a recording. Goodbye.</Say>
+  <Hangup/>
+</Response>`;
+}
+
 
 export const callController = {
   /**
