@@ -58,29 +58,38 @@ function buildVoicemailTwiml(baseUrl: string) {
 </Response>`;
 }
 */
+
+
 function buildVoicemailTwiml(baseUrl: string) {
   const voicemailActionUrl = `${baseUrl}/api/v1/calls/voicemail-action`;
   const recordingStatusUrl = `${baseUrl}/api/v1/calls/recording-status`;
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <!-- Phone ringing sound -->
-  <Play loop="6">${baseUrl}/phone-ring.mp3</Play>
+    <!-- Phone ringing sound (~10 seconds) -->
+    <Play loop="2">${baseUrl}/phone-ring.mp3</Play>
 
-  <!-- Voicemail -->
-  <Record
-    playBeep="true"
-    maxLength="180"
-    action="${voicemailActionUrl}"
-    method="POST"
-    recordingStatusCallback="${recordingStatusUrl}"
-    recordingStatusCallbackMethod="POST"
-  />
+    <!-- US-style forwarded voicemail message -->
+    <Say voice="alice">
+        Your call has been forwarded to voicemail. Please leave a message after the tone.
+    </Say>
 
-  <Say voice="alice">We did not receive a recording. Goodbye.</Say>
-  <Hangup/>
+    <!-- Beep + record voicemail -->
+    <Record
+        playBeep="true"
+        maxLength="180"
+        action="${voicemailActionUrl}"
+        method="POST"
+        recordingStatusCallback="${recordingStatusUrl}"
+        recordingStatusCallbackMethod="POST"
+    />
+
+    <Hangup/>
 </Response>`;
 }
+
+
+
 
 
 export const callController = {
