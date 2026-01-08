@@ -588,13 +588,16 @@ export const useTwilioDevice = () => {
       });
 
       setActiveCall(call);
+      console.log('📞 Outgoing call initiated, call object:', call);
+      console.log('Attaching event listeners to outgoing call...');
 
       // Call event listeners
       call.on('accept', () => {
-        console.log('Call accepted');
+        console.log('✅ Call accepted - call is now connected');
         
         // Stop outgoing ringtone when call connects
         if (outgoingRingtoneRef.current) {
+          console.log('Stopping outgoing ringtone after call connected');
           outgoingRingtoneRef.current.pause();
           outgoingRingtoneRef.current.currentTime = 0;
         }
@@ -615,15 +618,18 @@ export const useTwilioDevice = () => {
       });
 
       call.on('disconnect', () => {
-        console.log('Call disconnected');
+        console.log('🔴 Call disconnect event fired');
+        console.log('Call status before disconnect:', callStatus);
         
         // Stop outgoing ringtone if still playing
         if (outgoingRingtoneRef.current) {
+          console.log('Stopping outgoing ringtone');
           outgoingRingtoneRef.current.pause();
           outgoingRingtoneRef.current.currentTime = 0;
         }
         
         // Reset to idle so future incoming calls can show the popup reliably
+        console.log('Setting call status to idle and clearing active call');
         setCallStatus({ status: 'idle', duration: 0 });
         setActiveCall(null);
         setCurrentCallNumber(''); // Clear stored number
@@ -718,11 +724,12 @@ export const useTwilioDevice = () => {
       });
 
       call.on('ringing', () => {
-        console.log('Call ringing');
+        console.log('📞 Call ringing - playing ringback tone');
         setCallStatus({ status: 'ringing', duration: 0 });
         
         // Play outgoing ringtone (ringback tone)
         if (outgoingRingtoneRef.current) {
+          console.log('Starting outgoing ringtone playback');
           outgoingRingtoneRef.current.play().catch(err => {
             console.error('Failed to play outgoing ringtone:', err);
           });
