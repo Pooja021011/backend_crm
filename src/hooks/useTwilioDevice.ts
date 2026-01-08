@@ -383,6 +383,50 @@ export const useTwilioDevice = () => {
             setIncomingCall(null);
           });
           
+          // Handle call disconnect (backup for cancelled)
+          call.on('disconnect', () => {
+            console.log('📞 Call waiting disconnected');
+            
+            // Stop ringtone
+            if (ringtoneRef.current) {
+              ringtoneRef.current.pause();
+              ringtoneRef.current.currentTime = 0;
+            }
+            
+            // Clear incoming call popup if still showing
+            setIncomingCall(null);
+          });
+          
+          // Auto-dismiss after 20 seconds (same as regular incoming calls)
+          const missedCallTimeout = setTimeout(() => {
+            console.log('📞 Call waiting timed out (20 seconds)');
+            
+            // Stop ringtone
+            if (ringtoneRef.current) {
+              ringtoneRef.current.pause();
+              ringtoneRef.current.currentTime = 0;
+            }
+            
+            // Reject the call - this will trigger voicemail routing on server
+            try {
+              call.reject();
+            } catch (err) {
+              console.error('Error rejecting timed out call waiting:', err);
+            }
+            
+            // Clear incoming call popup
+            setIncomingCall(null);
+            
+            toast({
+              title: 'Missed Call',
+              description: `Missed call from ${from}`,
+              duration: 3000,
+            });
+          }, 20000); // 20 seconds - standard phone ring timeout
+          
+          // Store timeout ID to clear it if call is answered/rejected manually
+          (call as any).missedCallTimeout = missedCallTimeout;
+          
           // Show toast notification
           toast({
             title: '📞 Call Waiting',
@@ -724,16 +768,11 @@ export const useTwilioDevice = () => {
       });
 
       call.on('ringing', () => {
-        console.log('📞 Call ringing - playing ringback tone');
+        console.log('📞 Call ringing - Twilio provides ringback tone');
         setCallStatus({ status: 'ringing', duration: 0 });
         
-        // Play outgoing ringtone (ringback tone)
-        if (outgoingRingtoneRef.current) {
-          console.log('Starting outgoing ringtone playback');
-          outgoingRingtoneRef.current.play().catch(err => {
-            console.error('Failed to play outgoing ringtone:', err);
-          });
-        }
+        // DO NOT play our own ringback tone - Twilio server provides it with ringTone="at"
+        // Playing our own would create a double ring effect
       });
 
     } catch (error: any) {
@@ -900,6 +939,17 @@ export const useTwilioDevice = () => {
       console.log('📞 Rejecting incoming call and sending to voicemail');
       
       const call = incomingCall.call;
+      const params = incomingCall.customParameters || call.parameters || {};
+      
+      // For incoming calls to browser client, the CallSid is the child call
+      // We need the ParentCallSid to redirect the original caller to voicemail
+      const parentCallSid = params.ParentCallSid || params.CallSid || incomingCall.callSid;
+      
+      console.log('📞 Call SIDs:', {
+        childCallSid: incomingCall.callSid,
+        parentCallSid: parentCallSid,
+        allParams: params
+      });
       
       // Clear missed call timeout
       if ((call as any).missedCallTimeout) {
@@ -913,17 +963,19 @@ export const useTwilioDevice = () => {
       }
       
       // IMPORTANT: Log to backend BEFORE rejecting to trigger voicemail routing
+      // Send the PARENT CallSid so the original caller can be redirected to voicemail
       try {
         await makeApiCall(`${API_BASE}/calls/log-reject`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            callSid: incomingCall.callSid,
+            callSid: parentCallSid,
+            childCallSid: incomingCall.callSid,
             from: incomingCall.from,
             action: 'rejected'
           })
         });
-        console.log('✅ Call rejection logged, voicemail routing triggered');
+        console.log('✅ Call rejection logged, voicemail routing triggered for parent call:', parentCallSid);
       } catch (logError) {
         console.error('Failed to log call rejection:', logError);
         // Continue anyway - still reject the call
@@ -942,6 +994,23 @@ export const useTwilioDevice = () => {
       setIncomingCall(null);
     }
   }, [incomingCall, toast]);
+
+  // Ignore incoming call (dismiss popup, let call keep ringing and timeout)
+  const ignoreCall = useCallback(() => {
+    if (!incomingCall) return;
+
+    console.log('📞 Ignoring incoming call - will timeout after 20 seconds');
+    
+    // Stop ringtone but DON'T clear the timeout - let it ring silently
+    if (ringtoneRef.current) {
+      ringtoneRef.current.pause();
+      ringtoneRef.current.currentTime = 0;
+    }
+    
+    // Clear the incoming call state to hide the popup
+    // The timeout will still fire and reject the call after 20 seconds
+    setIncomingCall(null);
+  }, [incomingCall]);
 
   // Cleanup on unmount - but don't force disconnect active calls
   // This allows calls to persist during navigation
@@ -966,6 +1035,7 @@ export const useTwilioDevice = () => {
     toggleMute,
     answerCall,
     rejectCall,
+    ignoreCall,
   };
 };
 

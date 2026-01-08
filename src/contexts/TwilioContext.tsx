@@ -17,6 +17,7 @@ interface TwilioContextType {
   toggleMute: () => boolean;
   answerCall: () => Promise<void>;
   rejectCall: () => Promise<void>;
+  ignoreCall: () => void;
 }
 
 const TwilioContext = createContext<TwilioContextType | undefined>(undefined);

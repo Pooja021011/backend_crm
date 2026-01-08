@@ -17,7 +17,8 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
   const { 
     incomingCall, 
     answerCall, 
-    rejectCall, 
+    rejectCall,
+    ignoreCall,
     initializeDevice,
     activeCall,
     callStatus,
@@ -67,11 +68,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
           <CallWaitingPopup
             incomingCall={incomingCall}
             onSendToVoicemail={rejectCall}
-            onIgnore={() => {
-              // Just close the popup, let call keep ringing
-              // User can answer from notification or let it go to voicemail after timeout
-              console.log('User chose to ignore call waiting');
-            }}
+            onIgnore={ignoreCall}
             currentCallDuration={callStatus.duration}
           />
         )}

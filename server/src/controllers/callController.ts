@@ -176,21 +176,44 @@ export const callController = {
    */
   async dialAction(req: Request, res: Response) {
     try {
+      const dialCallStatus = String((req.body as any)?.DialCallStatus || '').toLowerCase();
+      const from = req.body?.From || 'Unknown';
+      const to = req.body?.To || 'Unknown';
+      
+      console.log('📞 DIAL ACTION CALLBACK:', {
+        dialCallStatus,
+        from,
+        to,
+        fullBody: req.body
+      });
+      
+      logger.info(
+        { dialCallStatus, from, to },
+        'Dial action handler called'
+      );
+      
       // Reuse existing webhook logic to update missed/answered status in DB
       await callService.handleIncomingCallWebhook(req.body).catch(() => {});
 
-      const dialCallStatus = String((req.body as any)?.DialCallStatus || '').toLowerCase();
       const wasAnswered = dialCallStatus === 'completed';
       const baseUrl = getPublicBaseUrl(req);
 
+      // If not answered (busy, no-answer, canceled, failed, or any other non-completed status),
+      // route the caller to voicemail so they can leave a message
       const twiml = wasAnswered
         ? `<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>`
         : buildVoicemailTwiml(baseUrl);
+      
+      console.log('📞 DIAL ACTION RESPONSE:', {
+        wasAnswered,
+        action: wasAnswered ? 'hangup' : 'voicemail'
+      });
 
       res.type('text/xml');
       return res.send(twiml);
     } catch (error: any) {
       logger.error({ error: error.message }, 'Error in dialAction');
+      console.error('❌ DIAL ACTION ERROR:', error);
       res.type('text/xml');
       return res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>`);
     }
@@ -224,6 +247,17 @@ export const callController = {
       const from = String(body?.From || '');
       const to = String(body?.To || '');
 
+      console.log('🎤 RECORDING STATUS CALLBACK:', {
+        callSid,
+        recordingSid,
+        recordingUrl,
+        recordingDuration,
+        recordingSource,
+        from,
+        to,
+        isVoicemail: recordingSource && recordingSource !== 'DialVerb'
+      });
+
       if (!callSid || !recordingSid) {
         return res.json({ success: true, ignored: true });
       }
@@ -245,6 +279,7 @@ export const callController = {
           data: {
             metadata: {
               ...prev,
+              callSid,
               recordingSid,
               recordingUrl,
               recordingDuration,
@@ -254,6 +289,54 @@ export const callController = {
           },
         });
 
+        console.log('✅ Recording attached to existing Communication:', existing.id);
+        return res.json({ success: true, updated: true });
+      }
+
+      // For OUTBOUND calls from browser, the Communication might exist without a callSid
+      // Try to find recent OUTBOUND Communication by phone number
+      const toNormalized = typeof to === 'string' ? to.replace(/[\s\(\)\-]/g, '') : to;
+      const fromNormalized = typeof from === 'string' ? from.replace(/[\s\(\)\-]/g, '') : from;
+      
+      console.log('🔍 Searching for OUTBOUND Communication without callSid:', {
+        toNormalized,
+        fromNormalized
+      });
+
+      // Search for recent OUTBOUND calls (within last 5 minutes) matching the phone number
+      const recentOutbound = await prisma.communication.findFirst({
+        where: {
+          type: 'CALL',
+          direction: 'OUTBOUND',
+          occurredAt: {
+            gte: new Date(Date.now() - 5 * 60 * 1000) // Last 5 minutes
+          },
+          OR: [
+            { metadata: { path: ['to'], string_contains: toNormalized.slice(-10) } },
+            { subject: { contains: toNormalized.slice(-10) } }
+          ]
+        },
+        orderBy: { occurredAt: 'desc' }
+      });
+
+      if (recentOutbound) {
+        const prev = (recentOutbound.metadata as any) || {};
+        await prisma.communication.update({
+          where: { id: recentOutbound.id },
+          data: {
+            metadata: {
+              ...prev,
+              callSid,
+              recordingSid,
+              recordingUrl,
+              recordingDuration,
+              recordingSource,
+              isVoicemail,
+            },
+          },
+        });
+
+        console.log('✅ Recording attached to recent OUTBOUND Communication:', recentOutbound.id);
         return res.json({ success: true, updated: true });
       }
 
@@ -954,12 +1037,21 @@ export const callController = {
    */
   async logCallReject(req: Request, res: Response) {
     try {
-      const { callSid, from, action } = req.body;
+      const { callSid, childCallSid, from, action } = req.body;
       const userId = (req as any).user?.id;
 
-      logger.info({ callSid, from, userId }, 'Call rejected from browser');
+      console.log('🚫 CALL REJECTION REQUEST:', {
+        callSid,
+        childCallSid,
+        from,
+        userId,
+        body: req.body
+      });
 
-      // If callSid provided, update the call to send to voicemail
+      logger.info({ callSid, childCallSid, from, userId }, 'Call rejected from browser');
+
+      // If callSid provided, update the PARENT call to send to voicemail
+      // The callSid here should be the parent call SID (the original incoming call)
       if (callSid) {
         try {
           const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -969,8 +1061,14 @@ export const callController = {
             const baseUrl = getPublicBaseUrl(req);
             const voicemailTwiml = buildVoicemailTwiml(baseUrl);
             
-            // Update the call to redirect to voicemail
-            await fetch(
+            console.log('🔄 REDIRECTING PARENT CALL TO VOICEMAIL:', {
+              parentCallSid: callSid,
+              childCallSid
+            });
+            
+            // Update the PARENT call to redirect to voicemail
+            // This redirects the original caller to the voicemail system
+            const response = await fetch(
               `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls/${callSid}.json`,
               {
                 method: 'POST',
@@ -984,9 +1082,21 @@ export const callController = {
               }
             );
             
-            logger.info({ callSid }, 'Call redirected to voicemail after rejection');
+            const responseData = await response.text();
+            console.log('✅ TWILIO API RESPONSE:', {
+              status: response.status,
+              statusText: response.statusText,
+              body: responseData
+            });
+            
+            logger.info({ callSid, childCallSid }, 'Call redirected to voicemail after rejection');
           }
         } catch (redirectError: any) {
+          console.error('❌ VOICEMAIL REDIRECT FAILED:', {
+            error: redirectError.message,
+            callSid,
+            stack: redirectError.stack
+          });
           logger.error({ error: redirectError.message, callSid }, 'Failed to redirect rejected call to voicemail');
           // Don't fail the request - rejection was still logged
         }
@@ -998,6 +1108,7 @@ export const callController = {
       });
     } catch (error: any) {
       logger.error({ error: error.message }, 'Error logging call rejection');
+      console.error('❌ CALL REJECTION ERROR:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to log call rejection'
