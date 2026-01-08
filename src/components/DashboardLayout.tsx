@@ -76,8 +76,8 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
           />
         )}
 
-        {/* Active Call Widget - Shows when call is connected */}
-        {activeCall && !incomingCall && (
+        {/* Active Call Widget - Shows when call is active */}
+        {activeCall && !incomingCall && callStatus.status !== 'idle' && callStatus.status !== 'disconnected' && (
           <ActiveCallWidget
             callStatus={callStatus}
             isMuted={isMuted}
