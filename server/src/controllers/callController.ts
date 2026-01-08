@@ -343,7 +343,7 @@ export const callController = {
       // If no existing Communication (common for offline voicemail flows), create one.
       // Determine the owning user by destination phone number.
       const smsSettingsRepository = await import('../repositories/smsSettingsRepository.js');
-      const toNormalized = typeof to === 'string' ? to.replace(/[\s\(\)\-]/g, '') : to;
+      // Reuse toNormalized variable from above (line 298)
       const userSettings = await smsSettingsRepository.smsSettingsRepository.findByPhoneNumber(toNormalized);
       const userId = userSettings?.userId;
 
