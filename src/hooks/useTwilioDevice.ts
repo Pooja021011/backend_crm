@@ -35,6 +35,7 @@ export const useTwilioDevice = () => {
   const lastIdentityRef = useRef<string>(''); // Track which user identity this Device was created for
   const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const ringtoneRef = useRef<HTMLAudioElement | null>(null);
+  const outgoingRingtoneRef = useRef<HTMLAudioElement | null>(null);
   const deviceRef = useRef<Device | null>(null);
   const activeCallRef = useRef<Call | null>(null);
   const incomingCallRef = useRef<IncomingCallInfo | null>(null);
@@ -234,21 +235,30 @@ export const useTwilioDevice = () => {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, []);
 
-  // Initialize ringtone - use built-in audio file with proper cadence
+  // Initialize ringtones - incoming and outgoing
   useEffect(() => {
-    // Create ringtone audio element
+    // Create incoming ringtone audio element
     const ringtone = new Audio();
-    // Use the phone-ring.mp3 from public folder
-    // The audio file should have built-in cadence (ring pattern with pauses)
     ringtone.src = '/phone-ring.mp3';
     ringtone.loop = true; // Loop continuously for reliable ringing
     ringtone.volume = 0.5; // Audible volume
     ringtoneRef.current = ringtone;
 
+    // Create outgoing ringtone audio element (ringback tone)
+    const outgoingRingtone = new Audio();
+    outgoingRingtone.src = '/phone-ring.mp3'; // Using same sound, can be different
+    outgoingRingtone.loop = true;
+    outgoingRingtone.volume = 0.5;
+    outgoingRingtoneRef.current = outgoingRingtone;
+
     return () => {
       if (ringtoneRef.current) {
         ringtoneRef.current.pause();
         ringtoneRef.current = null;
+      }
+      if (outgoingRingtoneRef.current) {
+        outgoingRingtoneRef.current.pause();
+        outgoingRingtoneRef.current = null;
       }
     };
   }, []);
@@ -582,6 +592,13 @@ export const useTwilioDevice = () => {
       // Call event listeners
       call.on('accept', () => {
         console.log('Call accepted');
+        
+        // Stop outgoing ringtone when call connects
+        if (outgoingRingtoneRef.current) {
+          outgoingRingtoneRef.current.pause();
+          outgoingRingtoneRef.current.currentTime = 0;
+        }
+        
         setCallStatus({ status: 'connected', duration: 0 });
         
         // Start duration counter
@@ -599,6 +616,13 @@ export const useTwilioDevice = () => {
 
       call.on('disconnect', () => {
         console.log('Call disconnected');
+        
+        // Stop outgoing ringtone if still playing
+        if (outgoingRingtoneRef.current) {
+          outgoingRingtoneRef.current.pause();
+          outgoingRingtoneRef.current.currentTime = 0;
+        }
+        
         // Reset to idle so future incoming calls can show the popup reliably
         setCallStatus({ status: 'idle', duration: 0 });
         setActiveCall(null);
@@ -619,6 +643,13 @@ export const useTwilioDevice = () => {
 
       call.on('cancel', () => {
         console.log('Call cancelled');
+        
+        // Stop outgoing ringtone
+        if (outgoingRingtoneRef.current) {
+          outgoingRingtoneRef.current.pause();
+          outgoingRingtoneRef.current.currentTime = 0;
+        }
+        
         setCallStatus({ status: 'idle', duration: 0 });
         setActiveCall(null);
         setCurrentCallNumber(''); // Clear stored number
@@ -632,6 +663,13 @@ export const useTwilioDevice = () => {
 
       call.on('reject', () => {
         console.log('Call rejected');
+        
+        // Stop outgoing ringtone
+        if (outgoingRingtoneRef.current) {
+          outgoingRingtoneRef.current.pause();
+          outgoingRingtoneRef.current.currentTime = 0;
+        }
+        
         setCallStatus({ status: 'idle', duration: 0 });
         setActiveCall(null);
         setCurrentCallNumber(''); // Clear stored number
@@ -651,6 +689,13 @@ export const useTwilioDevice = () => {
 
       call.on('error', (error) => {
         console.error('Call error:', error);
+        
+        // Stop outgoing ringtone
+        if (outgoingRingtoneRef.current) {
+          outgoingRingtoneRef.current.pause();
+          outgoingRingtoneRef.current.currentTime = 0;
+        }
+        
         setCallStatus({ 
           status: 'idle', 
           duration: 0,
@@ -675,6 +720,13 @@ export const useTwilioDevice = () => {
       call.on('ringing', () => {
         console.log('Call ringing');
         setCallStatus({ status: 'ringing', duration: 0 });
+        
+        // Play outgoing ringtone (ringback tone)
+        if (outgoingRingtoneRef.current) {
+          outgoingRingtoneRef.current.play().catch(err => {
+            console.error('Failed to play outgoing ringtone:', err);
+          });
+        }
       });
 
     } catch (error: any) {
@@ -696,14 +748,15 @@ export const useTwilioDevice = () => {
   // Hang up call
   const hangUp = useCallback(() => {
     if (activeCall) {
-      activeCall.disconnect();
-      setActiveCall(null);
-      setCallStatus({ status: 'idle', duration: 0 });
-      
-      if (durationIntervalRef.current) {
-        clearInterval(durationIntervalRef.current);
-        durationIntervalRef.current = null;
+      // Stop outgoing ringtone if still playing
+      if (outgoingRingtoneRef.current) {
+        outgoingRingtoneRef.current.pause();
+        outgoingRingtoneRef.current.currentTime = 0;
       }
+      
+      activeCall.disconnect();
+      // Don't set state here - let the disconnect event handler do it
+      // This prevents double state updates and race conditions
     }
   }, [activeCall]);
 
