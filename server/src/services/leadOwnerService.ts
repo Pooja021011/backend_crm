@@ -80,7 +80,25 @@ export const leadOwnerService = {
    */
   async deleteOwner(ownerId: string) {
     try {
-      return await leadOwnerRepository.delete(ownerId);
+      // Get the owner being deleted
+      const ownerToDelete = await leadOwnerRepository.findById(ownerId);
+      if (!ownerToDelete) {
+        throw new Error('Owner not found');
+      }
+
+      // Delete the owner
+      await leadOwnerRepository.delete(ownerId);
+
+      // If we deleted the primary owner, promote the next owner to primary
+      if (ownerToDelete.isPrimary) {
+        const remainingOwners = await leadOwnerRepository.getByLeadId(ownerToDelete.leadId);
+        if (remainingOwners.length > 0) {
+          // Promote the first remaining owner to primary
+          await leadOwnerRepository.setPrimary(remainingOwners[0].id);
+        }
+      }
+
+      return { success: true };
     } catch (error: any) {
       logger.error('Error deleting owner', { error: error.message, ownerId });
       throw error;

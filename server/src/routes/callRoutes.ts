@@ -81,6 +81,11 @@ router.post('/log-reject', (req, res, next) =>
   callController.logCallReject(req, res).catch(next)
 );
 
+// Save call notes
+router.post('/save-notes', (req, res, next) => 
+  callController.saveCallNotes(req, res).catch(next)
+);
+
 // Get call status
 router.get('/status/:callControlId', (req, res, next) => 
   callController.getCallStatus(req, res).catch(next)

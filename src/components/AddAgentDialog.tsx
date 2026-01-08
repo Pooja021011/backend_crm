@@ -29,9 +29,9 @@ import { useAgents, type CreateAgentData } from "@/hooks/useAgents";
 import { useToast } from "@/hooks/use-toast";
 import { 
   validateEmail, 
-  validatePhoneNumber, 
+  validateE164PhoneNumber, 
   validateName, 
-  formatPhoneNumber 
+  formatE164PhoneNumber 
 } from "@/utils/validation";
 
 interface AddAgentDialogProps {
@@ -124,7 +124,7 @@ export const AddAgentDialog: React.FC<AddAgentDialogProps> = ({
       return false;
     }
 
-    const phoneValidation = validatePhoneNumber(formData.phone);
+    const phoneValidation = validateE164PhoneNumber(formData.phone);
     if (formData.phone && !phoneValidation.isValid) {
       toast({
         title: "Validation Error",
@@ -316,9 +316,9 @@ export const AddAgentDialog: React.FC<AddAgentDialogProps> = ({
                     name="phone"
                     value={formData.phone}
                     onValueChange={(value) => handleInputChange('phone', value)}
-                    validator={validatePhoneNumber}
-                    formatter={formatPhoneNumber}
-                    placeholder="(555) 123-4567"
+                    validator={validateE164PhoneNumber}
+                    formatter={formatE164PhoneNumber}
+                    placeholder="+17752548172"
                     icon={<Phone className="w-4 h-4" />}
                   />
                 </div>

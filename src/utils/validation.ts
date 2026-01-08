@@ -180,3 +180,53 @@ export const isValidDate = (dateValue: Date | string | null | undefined): boolea
   const date = new Date(dateValue);
   return isValid(date);
 };
+
+// E.164 Phone number validation (for Twilio)
+// Format: +[country code][number] e.g., +17752548172
+export const validateE164PhoneNumber = (phone: string): ValidationResult => {
+  if (!phone.trim()) {
+    return { isValid: true }; // Optional field
+  }
+  
+  // E.164 format: + followed by country code and number (up to 15 digits total)
+  const e164Regex = /^\+[1-9]\d{1,14}$/;
+  
+  if (e164Regex.test(phone)) {
+    return { isValid: true };
+  }
+  
+  // Check if it's just missing the + sign
+  const digitsOnly = phone.replace(/\D/g, '');
+  if (digitsOnly.length >= 10 && digitsOnly.length <= 15) {
+    return { isValid: false, error: 'Phone number must be in E.164 format (e.g., +17752548172)' };
+  }
+  
+  return { isValid: false, error: 'Please enter a valid phone number in E.164 format (e.g., +17752548172)' };
+};
+
+// Format phone number to E.164 format
+export const formatE164PhoneNumber = (phone: string): string => {
+  // If already starts with +, keep it as-is but remove any formatting
+  if (phone.startsWith('+')) {
+    return '+' + phone.substring(1).replace(/\D/g, '');
+  }
+  
+  // Remove all non-digit characters
+  const digitsOnly = phone.replace(/\D/g, '');
+  
+  // If empty, return empty
+  if (digitsOnly.length === 0) return '';
+  
+  // If starts with 1 and has 11 digits, it's a US number with country code
+  if (digitsOnly.length === 11 && digitsOnly.startsWith('1')) {
+    return '+' + digitsOnly;
+  }
+  
+  // If 10 digits, assume US number and add +1
+  if (digitsOnly.length === 10) {
+    return '+1' + digitsOnly;
+  }
+  
+  // Otherwise return with + prefix
+  return '+' + digitsOnly;
+};

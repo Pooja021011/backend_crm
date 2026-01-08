@@ -20,6 +20,7 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   refreshToken: () => Promise<boolean>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -212,6 +213,38 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const refreshUser = async (): Promise<void> => {
+    try {
+      const accessToken = localStorage.getItem('accessToken');
+      if (!accessToken) {
+        console.warn('⚠️ No access token available');
+        return;
+      }
+
+      console.log('🔄 Refreshing user data...');
+      const response = await httpFetch(`${API_BASE}/users/profile`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.data) {
+          console.log('✅ User data refreshed successfully');
+          localStorage.setItem('user', JSON.stringify(data.data));
+          setUser(data.data);
+        }
+      } else {
+        console.error('❌ User refresh failed');
+      }
+    } catch (error) {
+      console.error('❌ User refresh error:', error);
+    }
+  };
+
   const logout = async () => {
     try {
       const refreshTokenStored = localStorage.getItem('refreshToken');
@@ -297,6 +330,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     isLoading,
     isAuthenticated: !!user,
     refreshToken,
+    refreshUser,
   };
 
   return (

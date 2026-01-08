@@ -25,6 +25,15 @@ export const leadOwnerRepository = {
   },
 
   /**
+   * Find owner by ID
+   */
+  async findById(id: string) {
+    return prisma.leadOwner.findUnique({
+      where: { id }
+    });
+  },
+
+  /**
    * Create a new owner
    */
   async create(data: {

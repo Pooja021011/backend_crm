@@ -3,6 +3,7 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { IncomingCallPopup } from "@/components/IncomingCallPopup";
+import { CallWaitingPopup } from "@/components/CallWaitingPopup";
 import { ActiveCallWidget } from "@/components/ActiveCallWidget";
 import { useTwilioContext } from "@/contexts/TwilioContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -58,6 +59,20 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
             incomingCall={incomingCall}
             onAnswer={answerCall}
             onReject={rejectCall}
+          />
+        )}
+
+        {/* Call Waiting Popup - Show when incoming call arrives during active call */}
+        {incomingCall && activeCall && (
+          <CallWaitingPopup
+            incomingCall={incomingCall}
+            onSendToVoicemail={rejectCall}
+            onIgnore={() => {
+              // Just close the popup, let call keep ringing
+              // User can answer from notification or let it go to voicemail after timeout
+              console.log('User chose to ignore call waiting');
+            }}
+            currentCallDuration={callStatus.duration}
           />
         )}
 

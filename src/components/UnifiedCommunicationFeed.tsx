@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
@@ -101,12 +101,21 @@ interface UnifiedCommunicationFeedProps {
   
   // Task props
   onOpenTaskDialog?: () => void;
+  
+  // Lead info for filtering mentionable users
+  lead?: {
+    id: string;
+    assignedUserId?: string;
+    createdById?: string;
+    dispAgentId?: string;
+  };
 }
 
 export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> = ({
   communications,
   tasks,
   loadingCommunications,
+  lead,
   smsText,
   setSmsText,
   sendingSMS,
@@ -139,11 +148,71 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
   // Dialog states
   const [showSMSDialog, setShowSMSDialog] = useState(false);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
-  const [showNoteDialog, setShowNoteDialog] = useState(false);
+  
+  // User mention state
+  const [users, setUsers] = useState<Array<{id: string; firstName: string; lastName: string}>>([]);
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [mentionSearchTerm, setMentionSearchTerm] = useState('');
+  const [cursorPosition, setCursorPosition] = useState(0);
+  const noteInputRef = useRef<HTMLTextAreaElement>(null);
 
   // Recording playback state (recordingSid -> object URL)
   const [recordingUrls, setRecordingUrls] = useState<Record<string, string>>({});
   const [recordingLoading, setRecordingLoading] = useState<Record<string, boolean>>({});
+  
+  // Load users for @ mentions - only users who have access to this lead
+  useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        const response = await makeApiCall(`${API_BASE}/agents`);
+        if (response.ok) {
+          const data = await response.json();
+          const allUsers = data.data || [];
+          
+          console.log('🔍 Lead info for mention filtering:', lead);
+          console.log('📋 All users:', allUsers.length);
+          console.log('📝 Tasks:', tasks.length);
+          
+          // Filter users who have access to this lead
+          const allowedUsers = allUsers.filter((user: any) => {
+            // Always allow ADMIN, MANAGER, and Transaction Coordinator
+            if (user.roles?.includes('ADMIN') || user.roles?.includes('MANAGER') || user.roles?.includes('TC')) {
+              return true;
+            }
+            
+            // Allow if user is ACQ agent (assigned to the lead)
+            if (lead?.assignedUserId === user.id) {
+              return true;
+            }
+            
+            // Allow if user is DISP agent
+            if (lead?.dispAgentId === user.id) {
+              return true;
+            }
+            
+            // Allow if user created the lead
+            if (lead?.createdById === user.id) {
+              return true;
+            }
+            
+            // Allow if user has REAL tasks assigned on this lead (not auto-generated mention tasks)
+            const realTasks = tasks.filter(t => !t.title?.startsWith('Review note on '));
+            if (realTasks.some(task => task.assignedToId === user.id)) {
+              return true;
+            }
+            
+            return false;
+          });
+          
+          console.log('✅ Allowed users for mentions:', allowedUsers.map(u => `${u.firstName} ${u.lastName}`));
+          setUsers(allowedUsers);
+        }
+      } catch (error) {
+        console.error('Error loading users:', error);
+      }
+    };
+    loadUsers();
+  }, [lead, tasks]);
 
   const loadRecording = async (recordingSid: string) => {
     if (!recordingSid) return;
@@ -163,6 +232,15 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
       setRecordingLoading((p) => ({ ...p, [recordingSid]: false }));
     }
   };
+  
+  // Auto-load all recordings when communications change
+  useEffect(() => {
+    communications.forEach((comm) => {
+      if (comm.type === 'CALL' && (comm as any)?.metadata?.recordingSid) {
+        loadRecording((comm as any).metadata.recordingSid);
+      }
+    });
+  }, [communications]);
 
   // Cleanup object URLs
   useEffect(() => {
@@ -178,9 +256,14 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
   }, [recordingUrls]);
 
   // Merge communications and tasks into one array
+  // Filter out auto-generated mention tasks (they only appear in Inbox, not in lead communications)
+  const filteredTasks = tasks.filter(task => 
+    !task.title?.startsWith('Review note on ')
+  );
+  
   const allItems = [
     ...communications,
-    ...tasks.map(task => ({
+    ...filteredTasks.map(task => ({
       id: task.id,
       type: 'TASK' as const,
       title: task.title,
@@ -194,11 +277,11 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
     }))
   ];
 
-  // Sort all items by timestamp (most recent first)
+  // Sort all items by timestamp (oldest first - newest at bottom)
   const sortedItems = allItems.sort((a, b) => {
     const dateA = new Date(a.occurredAt || a.createdAt || 0).getTime();
     const dateB = new Date(b.occurredAt || b.createdAt || 0).getTime();
-    return dateB - dateA;
+    return dateA - dateB;
   });
 
   const getIconForType = (type: string) => {
@@ -256,9 +339,57 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
 
   const handleAddNote = () => {
     onAddNote();
-    setShowNoteDialog(false);
-    setNoteText('');
   };
+  
+  const handleNoteInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    const cursorPos = e.target.selectionStart;
+    setNoteText(value);
+    setCursorPosition(cursorPos);
+    
+    // Check if user typed @
+    const textBeforeCursor = value.substring(0, cursorPos);
+    const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+    
+    if (lastAtIndex !== -1) {
+      const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
+      // Check if there's a space after @ (which means they finished the mention)
+      if (!textAfterAt.includes(' ') && textAfterAt.length <= 20) {
+        setMentionSearchTerm(textAfterAt.toLowerCase());
+        setShowUserDropdown(true);
+        return;
+      }
+    }
+    
+    setShowUserDropdown(false);
+  };
+  
+  const handleUserSelect = (user: {id: string; firstName: string; lastName: string}) => {
+    const textBeforeCursor = noteText.substring(0, cursorPosition);
+    const textAfterCursor = noteText.substring(cursorPosition);
+    const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+    
+    if (lastAtIndex !== -1) {
+      const beforeAt = textBeforeCursor.substring(0, lastAtIndex);
+      const mention = `@${user.firstName} ${user.lastName}`;
+      const newText = beforeAt + mention + ' ' + textAfterCursor;
+      setNoteText(newText);
+      setShowUserDropdown(false);
+      
+      // Focus back on textarea
+      setTimeout(() => {
+        if (noteInputRef.current) {
+          noteInputRef.current.focus();
+          const newCursorPos = beforeAt.length + mention.length + 1;
+          noteInputRef.current.setSelectionRange(newCursorPos, newCursorPos);
+        }
+      }, 0);
+    }
+  };
+  
+  const filteredUsers = users.filter(user => 
+    `${user.firstName} ${user.lastName}`.toLowerCase().includes(mentionSearchTerm)
+  );
 
   return (
     <div className="flex flex-col h-full">
@@ -272,7 +403,7 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
       </div>
 
       {/* Unified Feed - All Items */}
-      <div className="flex-1 overflow-y-auto space-y-1 min-h-[300px] max-h-[420px] pr-1 mb-1">
+      <div className="flex-1 overflow-y-auto space-y-1 min-h-[300px] max-h-[420px] pr-1 mb-2">
         {loadingCommunications ? (
           <div className="flex items-center justify-center py-8 text-slate-500">
             <Loader2 className="w-5 h-5 animate-spin mr-2" />
@@ -362,7 +493,7 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
                 {/* Voicemail / Call recording playback (CALL only) */}
                 {item.type === 'CALL' && (item as any)?.metadata?.recordingSid && (
                   <div className="mt-1.5 rounded border border-slate-200 bg-white p-1.5">
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center justify-between gap-2 mb-2">
                       <div className="text-xs text-slate-600">
                         <span className="font-semibold">
                           {(item as any)?.metadata?.isVoicemail ? 'Voicemail' : 'Call recording'}
@@ -371,30 +502,18 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
                           <span className="ml-2">({Number((item as any)?.metadata?.recordingDuration || 0)}s)</span>
                         ) : null}
                       </div>
-
-                      {!recordingUrls[(item as any)?.metadata?.recordingSid] ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs"
-                          onClick={() => loadRecording((item as any)?.metadata?.recordingSid)}
-                          disabled={Boolean(recordingLoading[(item as any)?.metadata?.recordingSid])}
-                        >
-                          {recordingLoading[(item as any)?.metadata?.recordingSid] ? (
-                            <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                          ) : null}
-                          Load
-                        </Button>
-                      ) : null}
+                      {recordingLoading[(item as any)?.metadata?.recordingSid] && (
+                        <Loader2 className="w-3 h-3 animate-spin text-blue-600" />
+                      )}
                     </div>
 
-                    {recordingUrls[(item as any)?.metadata?.recordingSid] ? (
+                    {recordingUrls[(item as any)?.metadata?.recordingSid] && (
                       <audio
-                        className="w-full mt-2"
+                        className="w-full"
                         controls
                         src={recordingUrls[(item as any)?.metadata?.recordingSid]}
                       />
-                    ) : null}
+                    )}
                   </div>
                 )}
               </div>
@@ -403,11 +522,49 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
         )}
       </div>
 
-      {/* Action Buttons at Bottom */}
+      {/* Note Input Box - Always Visible */}
       <div className="border-t border-slate-200 pt-2 bg-white">
-        {/* Call controls are handled globally by ActiveCallWidget to avoid duplicates */}
+        <div className="relative mb-2">
+          <Textarea
+            ref={noteInputRef}
+            value={noteText}
+            onChange={handleNoteInputChange}
+            placeholder="Add a note... (Type @ to mention someone)"
+            className="min-h-[60px] text-sm resize-none pr-12"
+            disabled={addingNote}
+          />
+          <Button
+            onClick={handleAddNote}
+            disabled={addingNote || !noteText.trim()}
+            size="sm"
+            className="absolute bottom-2 right-2 h-8 px-3"
+          >
+            {addingNote ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Send className="w-4 h-4" />
+            )}
+          </Button>
+          
+          {/* User Mention Dropdown */}
+          {showUserDropdown && filteredUsers.length > 0 && (
+            <div className="absolute bottom-full left-0 w-full mb-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto z-50">
+              {filteredUsers.map((user) => (
+                <button
+                  key={user.id}
+                  onClick={() => handleUserSelect(user)}
+                  className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"
+                >
+                  <User className="w-4 h-4 text-slate-500" />
+                  <span>{user.firstName} {user.lastName}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         
-        <div className="grid grid-cols-5 gap-1">
+        {/* Action Buttons */}
+        <div className="grid grid-cols-4 gap-1">
           {/* Call Button */}
           <Button
             onClick={onMakeCall}
@@ -441,17 +598,6 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
           >
             <Mail className="w-4 h-4" />
             <span>Email</span>
-          </Button>
-
-          {/* Note Button */}
-          <Button
-            onClick={() => setShowNoteDialog(true)}
-            size="sm"
-            variant="outline"
-            className="h-9 text-xs flex flex-col items-center justify-center gap-0.5 p-1"
-          >
-            <FileText className="w-4 h-4" />
-            <span>Note</span>
           </Button>
 
           {/* Task Button */}
@@ -640,53 +786,6 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
         </DialogContent>
       </Dialog>
 
-      {/* Note Dialog */}
-      <Dialog open={showNoteDialog} onOpenChange={setShowNoteDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileText className="w-5 h-5 text-orange-600" />
-              Add Note
-            </DialogTitle>
-            <DialogDescription>
-              Add an internal note or activity log
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="note-text">Note</Label>
-              <Textarea
-                id="note-text"
-                value={noteText}
-                onChange={(e) => setNoteText(e.target.value)}
-                placeholder="Type your note..."
-                className="min-h-[120px] mt-1"
-                disabled={addingNote}
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => setShowNoteDialog(false)}
-                disabled={addingNote}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleAddNote}
-                disabled={addingNote || !noteText.trim()}
-                className="bg-orange-600 hover:bg-orange-700"
-              >
-                {addingNote ? (
-                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Adding...</>
-                ) : (
-                  <><Plus className="w-4 h-4 mr-2" />Add Note</>
-                )}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

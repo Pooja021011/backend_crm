@@ -145,6 +145,17 @@ export const agentRepository = {
           }))
         });
 
+        // Create UserSmsSettings with phone number as Twilio number
+        if (agent.phone) {
+          await tx.userSmsSettings.create({
+            data: {
+              userId: agent.id,
+              phoneNumber: agent.phone,
+              active: true
+            }
+          });
+        }
+
         // Fetch the complete agent data with roles
         return tx.user.findUnique({
           where: { id: agent.id },
@@ -233,6 +244,28 @@ export const agentRepository = {
               userId: id,
               roleId: role.id
             }))
+          });
+        }
+      }
+
+      // Update or create UserSmsSettings if phone number is provided
+      if (data.phone !== undefined) {
+        if (data.phone) {
+          // Update or create SMS settings with phone as Twilio number
+          await tx.userSmsSettings.upsert({
+            where: { userId: id },
+            update: { phoneNumber: data.phone },
+            create: {
+              userId: id,
+              phoneNumber: data.phone,
+              active: true
+            }
+          });
+        } else {
+          // If phone is removed, remove from SMS settings too
+          await tx.userSmsSettings.updateMany({
+            where: { userId: id },
+            data: { phoneNumber: null }
           });
         }
       }

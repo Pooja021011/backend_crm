@@ -90,7 +90,7 @@ type EmailSettings = {
 };
 
 const Settings = () => {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') || 'profile';
@@ -303,7 +303,7 @@ const Settings = () => {
     try {
       const response = await makeApiCall(`${API_BASE}/settings/sms`, {
         method: 'POST',
-        body: JSON.stringify(smsSettings)
+        body: JSON.stringify({ ...smsSettings, active: true })
       });
 
       const result = await response.json();
@@ -412,13 +412,16 @@ const Settings = () => {
   const saveProfile = async () => {
     setSavingProfile(true);
     try {
-      const response = await makeApiCall(`${API_BASE}/user/profile`, {
+      const response = await makeApiCall(`${API_BASE}/users/profile`, {
         method: 'PUT',
         body: JSON.stringify(profileData)
       });
 
       const result = await response.json();
       if (result.success) {
+        // Refresh user data in AuthContext
+        await refreshUser();
+        
         toast({
           title: "Profile Updated",
           description: "Your profile has been updated successfully!",
@@ -477,7 +480,7 @@ const Settings = () => {
 
     setChangingPassword(true);
     try {
-      const response = await makeApiCall(`${API_BASE}/user/change-password`, {
+      const response = await makeApiCall(`${API_BASE}/users/change-password`, {
         method: 'PUT',
         body: JSON.stringify({
           currentPassword: passwordData.currentPassword,
@@ -868,9 +871,16 @@ const Settings = () => {
                             type="tel" 
                             value={profileData.phone}
                             onChange={(e) => setProfileData(prev => ({ ...prev, phone: e.target.value }))}
-                            placeholder="Enter your phone number"
+                            placeholder="+1 (555) 123-4567"
                             className="bg-input border-border focus:ring-primary focus:border-primary"
+                            disabled={!isAdminOrManager}
+                            readOnly={!isAdminOrManager}
                           />
+                          {!isAdminOrManager && (
+                            <p className="text-xs text-muted-foreground">
+                              Contact your administrator to update your phone number
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1255,9 +1265,13 @@ const Settings = () => {
                                 phoneNumber: e.target.value
                               }))}
                               className="font-mono"
+                              disabled={!isAdminOrManager}
+                              readOnly={!isAdminOrManager}
                             />
                             <p className="text-xs text-muted-foreground">
-                              Enter your Twilio phone number in E.164 format (e.g., +1234567890)
+                              {isAdminOrManager 
+                                ? 'Enter your Twilio phone number in E.164 format (e.g., +1234567890)'
+                                : 'Only admins can modify the phone number'}
                             </p>
                           </div>
 
@@ -1273,55 +1287,40 @@ const Settings = () => {
                                 ...prev,
                                 displayName: e.target.value
                               }))}
+                              disabled={!isAdminOrManager}
+                              readOnly={!isAdminOrManager}
                             />
                             <p className="text-xs text-muted-foreground">
-                              Friendly name for this phone number
+                              {isAdminOrManager 
+                                ? 'Friendly name for this phone number'
+                                : 'Only admins can modify the display name'}
                             </p>
                           </div>
                         </div>
+                      </div>
 
-                        <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg border">
-                          <div className="flex items-center gap-3">
-                            <Switch
-                              checked={smsSettings?.active !== false}
-                              onCheckedChange={(checked) => setSmsSettings(prev => ({
-                                ...prev,
-                                active: checked
-                              }))}
-                            />
-                            <div>
-                              <Label className="text-sm font-medium">Enable SMS</Label>
-                              <p className="text-xs text-muted-foreground">
-                                Allow sending and receiving SMS messages
-                              </p>
-                            </div>
-                          </div>
-                          <Badge variant={smsSettings?.active !== false ? "default" : "secondary"}>
-                            {smsSettings?.active !== false ? "Active" : "Inactive"}
-                          </Badge>
+                      {/* Save Button - Admin Only */}
+                      {isAdminOrManager && (
+                        <div className="flex justify-end pt-6 border-t">
+                          <Button
+                            onClick={saveSmsSettings}
+                            disabled={savingSmsSettings || !smsSettings?.phoneNumber?.trim()}
+                            className="min-w-[120px]"
+                          >
+                            {savingSmsSettings ? (
+                              <>
+                                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                                Saving...
+                              </>
+                            ) : (
+                              <>
+                                <Save className="w-4 h-4 mr-2" />
+                                Save Settings
+                              </>
+                            )}
+                          </Button>
                         </div>
-                      </div>
-
-                      {/* Save Button */}
-                      <div className="flex justify-end pt-6 border-t">
-                        <Button
-                          onClick={saveSmsSettings}
-                          disabled={savingSmsSettings || !smsSettings?.phoneNumber?.trim()}
-                          className="min-w-[120px]"
-                        >
-                          {savingSmsSettings ? (
-                            <>
-                              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                              Saving...
-                            </>
-                          ) : (
-                            <>
-                              <Save className="w-4 h-4 mr-2" />
-                              Save Settings
-                            </>
-                          )}
-                        </Button>
-                      </div>
+                      )}
                     </div>
                   )}
                 </div>

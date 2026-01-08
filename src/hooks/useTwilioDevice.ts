@@ -58,11 +58,18 @@ export const useTwilioDevice = () => {
     incomingCallRef.current = incomingCall;
   }, [incomingCall]);
 
-  const teardownDevice = useCallback((reason: string) => {
+  const teardownDevice = useCallback((reason: string, forceDisconnect = false) => {
     try {
-      console.log('🧹 Tearing down Twilio Device:', { reason });
+      console.log('🧹 Tearing down Twilio Device:', { reason, forceDisconnect });
     } catch {
       // ignore
+    }
+
+    // CRITICAL: Don't disconnect active calls unless forced (e.g., explicit logout)
+    // This prevents calls from dropping during navigation/tab changes
+    if (activeCallRef.current && !forceDisconnect) {
+      console.log('⚠️ Active call in progress - skipping teardown to preserve call');
+      return;
     }
 
     // Stop timers & audio first
@@ -90,8 +97,8 @@ export const useTwilioDevice = () => {
       }
     }
 
-    // Disconnect any active call
-    if (activeCallRef.current) {
+    // Disconnect any active call ONLY if forced
+    if (activeCallRef.current && forceDisconnect) {
       try {
         activeCallRef.current.disconnect();
       } catch {
@@ -189,7 +196,7 @@ export const useTwilioDevice = () => {
   // This prevents incoming-call beeps/popups on /login even if something mounts unexpectedly.
   useEffect(() => {
     if (!isAuthRoute) return;
-    teardownDevice('auth-route');
+    teardownDevice('auth-route', true); // Force disconnect on auth screens
   }, [isAuthRoute, teardownDevice]);
 
   // If user changes (admin -> agent, agent -> admin), destroy the old Device so we re-register with correct identity.
@@ -199,7 +206,7 @@ export const useTwilioDevice = () => {
 
     // If device exists but identity changed, teardown to force fresh token + registration
     if (device && lastIdentityRef.current && lastIdentityRef.current !== currentIdentityKey) {
-      teardownDevice('identity-changed');
+      teardownDevice('identity-changed', true); // Force disconnect when identity changes
     }
   }, [currentIdentityKey, isAuthenticated, device, teardownDevice]);
 
@@ -209,17 +216,33 @@ export const useTwilioDevice = () => {
     if (isAuthenticated) return;
     // Best effort: mark offline on server to prevent TwiML routing to this client
     setVoicePresence(false).catch(() => {});
-    teardownDevice('logged-out');
+    // Force disconnect on logout
+    teardownDevice('logged-out', true);
   }, [isAuthenticated, teardownDevice, setVoicePresence]);
 
-  // Initialize ringtone
+  // Warn user before closing tab/window if call is active
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (activeCallRef.current) {
+        e.preventDefault();
+        e.returnValue = 'You have an active call. Are you sure you want to leave?';
+        return e.returnValue;
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
+
+  // Initialize ringtone - use built-in audio file with proper cadence
   useEffect(() => {
     // Create ringtone audio element
     const ringtone = new Audio();
     // Use the phone-ring.mp3 from public folder
+    // The audio file should have built-in cadence (ring pattern with pauses)
     ringtone.src = '/phone-ring.mp3';
-    ringtone.loop = true;
-    ringtone.volume = 0.3; // Reduced volume for less aggressive sound
+    ringtone.loop = true; // Loop continuously for reliable ringing
+    ringtone.volume = 0.5; // Audible volume
     ringtoneRef.current = ringtone;
 
     return () => {
@@ -290,7 +313,9 @@ export const useTwilioDevice = () => {
 
       // Device event listeners
       newDevice.on('registered', () => {
-        console.log('Twilio Device registered');
+        console.log('✅ Twilio Device registered successfully');
+        console.log('📞 Ready to receive incoming calls');
+        console.log('🔑 Client identity:', lastIdentityRef.current);
         // Mark online so inbound TwiML will dial the real client identity
         setVoicePresence(true).catch(() => {});
       });
@@ -305,7 +330,58 @@ export const useTwilioDevice = () => {
       });
 
       newDevice.on('incoming', (call) => {
-        console.log('📞 Incoming call received:', call);
+        console.log('===========================================');
+        console.log('📞 INCOMING CALL RECEIVED');
+        console.log('Call object:', call);
+        console.log('Call parameters:', call.parameters);
+        console.log('Current active call:', activeCallRef.current);
+        console.log('Is outgoing call:', isOutgoingCallRef.current);
+        console.log('===========================================');
+        
+        // CRITICAL: Check if there's already an active call
+        // If yes, this is a call waiting scenario - don't auto-answer
+        if (activeCallRef.current && !isOutgoingCallRef.current) {
+          console.log('⚠️ Call waiting: Another call is already active');
+          
+          // Get call parameters
+          const params = call.parameters;
+          const from = params.From || 'Unknown';
+          const callSid = call.parameters.CallSid || '';
+          
+          // Set incoming call state - this will show the call waiting popup
+          setIncomingCall({
+            call,
+            from,
+            callSid,
+            customParameters: params
+          });
+          
+          // Play ringtone
+          if (ringtoneRef.current) {
+            ringtoneRef.current.play().catch(err => {
+              console.error('Failed to play ringtone:', err);
+            });
+          }
+          
+          // Handle call cancellation
+          call.on('cancel', () => {
+            console.log('📞 Call waiting was cancelled (caller hung up)');
+            if (ringtoneRef.current) {
+              ringtoneRef.current.pause();
+              ringtoneRef.current.currentTime = 0;
+            }
+            setIncomingCall(null);
+          });
+          
+          // Show toast notification
+          toast({
+            title: '📞 Call Waiting',
+            description: `Incoming call from ${from} while on active call`,
+            duration: 5000,
+          });
+          
+          return; // Don't auto-answer - show waiting popup
+        }
         
         // Check if this is an outgoing call callback (we initiated it)
         if (isOutgoingCallRef.current) {
@@ -403,9 +479,9 @@ export const useTwilioDevice = () => {
           setIncomingCall(null);
         });
         
-        // Auto-dismiss after 40 seconds (typical missed call timeout)
+        // Auto-dismiss after 20 seconds (standard phone ring timeout)
         const missedCallTimeout = setTimeout(() => {
-          console.log('📞 Incoming call timed out (40 seconds)');
+          console.log('📞 Incoming call timed out (20 seconds)');
           
           // Stop ringtone
           if (ringtoneRef.current) {
@@ -428,7 +504,7 @@ export const useTwilioDevice = () => {
             description: `Missed call from ${from}`,
             duration: 3000,
           });
-        }, 40000); // 40 seconds
+        }, 20000); // 20 seconds - standard phone ring timeout
         
         // Store timeout ID to clear it if call is answered/rejected manually
         (call as any).missedCallTimeout = missedCallTimeout;
@@ -756,12 +832,12 @@ export const useTwilioDevice = () => {
     }
   }, [incomingCall, toast]);
 
-  // Reject incoming call
+  // Reject incoming call and send to voicemail
   const rejectCall = useCallback(async () => {
     if (!incomingCall) return;
 
     try {
-      console.log('📞 Rejecting incoming call');
+      console.log('📞 Rejecting incoming call and sending to voicemail');
       
       const call = incomingCall.call;
       
@@ -776,7 +852,7 @@ export const useTwilioDevice = () => {
         ringtoneRef.current.currentTime = 0;
       }
       
-      // Log to backend that call was rejected
+      // IMPORTANT: Log to backend BEFORE rejecting to trigger voicemail routing
       try {
         await makeApiCall(`${API_BASE}/calls/log-reject`, {
           method: 'POST',
@@ -787,17 +863,19 @@ export const useTwilioDevice = () => {
             action: 'rejected'
           })
         });
+        console.log('✅ Call rejection logged, voicemail routing triggered');
       } catch (logError) {
         console.error('Failed to log call rejection:', logError);
-        // Continue anyway
+        // Continue anyway - still reject the call
       }
       
+      // Reject the call on client side
       incomingCall.call.reject();
       setIncomingCall(null);
       
       toast({
-        title: 'Call Rejected',
-        description: 'The incoming call was rejected',
+        title: 'Call Sent to Voicemail',
+        description: 'The caller can leave a voicemail message',
       });
     } catch (error: any) {
       console.error('Error rejecting call:', error);
@@ -805,10 +883,12 @@ export const useTwilioDevice = () => {
     }
   }, [incomingCall, toast]);
 
-  // Cleanup on unmount
+  // Cleanup on unmount - but don't force disconnect active calls
+  // This allows calls to persist during navigation
   useEffect(() => {
     return () => {
-      teardownDevice('unmounted');
+      // Don't force disconnect - let calls persist
+      teardownDevice('unmounted', false);
     };
   }, [teardownDevice]);
 

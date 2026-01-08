@@ -1,7 +1,10 @@
-import React from 'react';
-import { Phone, PhoneOff, Mic, MicOff, User, Clock } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Phone, PhoneOff, Mic, MicOff, User, Clock, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { CallStatus } from '@/hooks/useTwilioDevice';
+import { API_BASE, makeApiCall } from '@/config/api';
+import { useToast } from '@/hooks/use-toast';
 
 interface ActiveCallWidgetProps {
   callStatus: CallStatus;
@@ -11,6 +14,8 @@ interface ActiveCallWidgetProps {
   contactInfo?: {
     name?: string;
     phoneNumber?: string;
+    leadId?: string;
+    callSid?: string;
   };
 }
 
@@ -21,6 +26,101 @@ export const ActiveCallWidget: React.FC<ActiveCallWidgetProps> = ({
   onToggleMute,
   contactInfo,
 }) => {
+  const { toast } = useToast();
+  const [notes, setNotes] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSavedNotesRef = useRef('');
+  const hasUnsavedChanges = useRef(false);
+  // Save notes to backend
+  const saveNotes = useCallback(async (notesToSave: string, isImmediate = false) => {
+    if (!notesToSave.trim() || !contactInfo?.phoneNumber) {
+      return;
+    }
+
+    // Don't save if notes haven't changed
+    if (notesToSave === lastSavedNotesRef.current && !isImmediate) {
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      await makeApiCall(`${API_BASE}/calls/save-notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leadId: contactInfo?.leadId,
+          phoneNumber: contactInfo.phoneNumber,
+          notes: notesToSave,
+          callSid: contactInfo?.callSid
+        })
+      });
+      
+      lastSavedNotesRef.current = notesToSave;
+      hasUnsavedChanges.current = false;
+      
+      if (isImmediate) {
+        toast({
+          title: 'Notes Saved',
+          description: 'Call notes have been saved successfully',
+        });
+      }
+    } catch (error) {
+      console.error('Failed to save call notes:', error);
+      toast({
+        title: 'Failed to Save Notes',
+        description: 'Could not save call notes. Please try again.',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  }, [contactInfo, toast]);
+
+  // Auto-save notes with debounce
+  useEffect(() => {
+    if (notes.trim() && notes !== lastSavedNotesRef.current) {
+      hasUnsavedChanges.current = true;
+      
+      // Clear existing timeout
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+      
+      // Set new timeout for auto-save (2 seconds after typing stops)
+      saveTimeoutRef.current = setTimeout(() => {
+        saveNotes(notes);
+      }, 2000);
+    }
+    
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [notes, saveNotes]);
+
+  // Save notes when call ends
+  useEffect(() => {
+    return () => {
+      // Component unmounting (call ended) - save any unsaved notes immediately
+      if (hasUnsavedChanges.current && notes.trim()) {
+        // Use sync API or navigator.sendBeacon for guaranteed delivery
+        if (navigator.sendBeacon && contactInfo?.phoneNumber) {
+          const data = JSON.stringify({
+            leadId: contactInfo?.leadId,
+            phoneNumber: contactInfo.phoneNumber,
+            notes: notes,
+            callSid: contactInfo?.callSid
+          });
+          const blob = new Blob([data], { type: 'application/json' });
+          navigator.sendBeacon(`${API_BASE}/calls/save-notes`, blob);
+        }
+      }
+    };
+  }, [notes, contactInfo]);
+
   // Format duration as MM:SS
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
@@ -52,7 +152,7 @@ export const ActiveCallWidget: React.FC<ActiveCallWidgetProps> = ({
   }
 
   return (
-    <div className="fixed top-6 right-6 bg-white rounded-xl shadow-lg border border-gray-200 p-3 w-64 z-[9999] animate-in slide-in-from-top duration-300">
+    <div className="fixed top-6 right-6 bg-white rounded-xl shadow-lg border border-gray-200 p-3 w-80 z-[9999] animate-in slide-in-from-top duration-300">
       {/* Status Badge */}
       <div className={`flex items-center justify-center gap-1.5 mb-2 ${status.color}`}>
         <div className={`w-1.5 h-1.5 rounded-full ${callStatus.status === 'connected' ? 'bg-green-500 animate-pulse' : 'bg-yellow-500 animate-pulse'}`}></div>
@@ -88,41 +188,82 @@ export const ActiveCallWidget: React.FC<ActiveCallWidgetProps> = ({
       )}
 
       {/* Call Controls - More Compact */}
-      <div className="flex gap-2 justify-center">
-        {/* Mute/Unmute Button */}
-        <Button
-          onClick={onToggleMute}
-          variant="outline"
-          size="sm"
-          className={`flex-1 text-xs ${
-            isMuted 
-              ? 'border border-red-500 bg-red-50 text-red-600 hover:bg-red-100' 
-              : 'border border-gray-300 hover:border-gray-400'
-          }`}
-          disabled={callStatus.status !== 'connected'}
-        >
-          {isMuted ? (
-            <>
-              <MicOff className="w-3 h-3 mr-1" />
-              Unmute
-            </>
-          ) : (
-            <>
-              <Mic className="w-3 h-3 mr-1" />
-              Mute
-            </>
-          )}
-        </Button>
+      <div className="space-y-2">
+        <div className="flex gap-2 justify-center">
+          {/* Notes Toggle Button */}
+          <Button
+            onClick={() => setShowNotes(!showNotes)}
+            variant="outline"
+            size="sm"
+            className="flex-1 text-xs border border-gray-300 hover:border-gray-400"
+          >
+            <FileText className="w-3 h-3 mr-1" />
+            {showNotes ? 'Hide Notes' : 'Notes'}
+          </Button>
 
-        {/* Hang Up Button */}
-        <Button
-          onClick={onHangUp}
-          size="sm"
-          className="flex-1 text-xs bg-red-500 hover:bg-red-600 text-white border border-red-600"
-        >
-          <PhoneOff className="w-3 h-3 mr-1" />
-          End
-        </Button>
+          {/* Mute/Unmute Button */}
+          <Button
+            onClick={onToggleMute}
+            variant="outline"
+            size="sm"
+            className={`flex-1 text-xs ${
+              isMuted 
+                ? 'border border-red-500 bg-red-50 text-red-600 hover:bg-red-100' 
+                : 'border border-gray-300 hover:border-gray-400'
+            }`}
+            disabled={callStatus.status !== 'connected'}
+          >
+            {isMuted ? (
+              <>
+                <MicOff className="w-3 h-3 mr-1" />
+                Unmute
+              </>
+            ) : (
+              <>
+                <Mic className="w-3 h-3 mr-1" />
+                Mute
+              </>
+            )}
+          </Button>
+
+          {/* Hang Up Button */}
+          <Button
+            onClick={onHangUp}
+            size="sm"
+            className="flex-1 text-xs bg-red-500 hover:bg-red-600 text-white border border-red-600"
+          >
+            <PhoneOff className="w-3 h-3 mr-1" />
+            End
+          </Button>
+        </div>
+
+        {/* Call Notes Section */}
+        {showNotes && (
+          <div className="space-y-2 animate-in slide-in-from-top duration-200">
+            <div className="relative">
+              <Textarea
+                placeholder="Add call notes..."
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className="text-xs min-h-[80px] resize-none"
+              />
+              {isSaving && (
+                <div className="absolute bottom-2 right-2 text-xs text-gray-500">
+                  Saving...
+                </div>
+              )}
+            </div>
+            <Button
+              onClick={() => saveNotes(notes, true)}
+              size="sm"
+              variant="outline"
+              className="w-full text-xs"
+              disabled={!notes.trim() || isSaving}
+            >
+              Save Notes
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Error Message */}

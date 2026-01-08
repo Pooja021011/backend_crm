@@ -731,7 +731,7 @@ export const callController = {
 
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Dial timeout="30" action="${callbackUrl}" method="POST" record="record-from-answer" recordingStatusCallback="${recordingStatusUrl}" recordingStatusCallbackMethod="POST">
+  <Dial timeout="20" action="${callbackUrl}" method="POST" record="record-from-answer" recordingStatusCallback="${recordingStatusUrl}" recordingStatusCallbackMethod="POST">
     <Client>${clientIdentity}</Client>
   </Dial>
   <Say voice="alice">The user is not available. Please try again later.</Say>
@@ -813,9 +813,11 @@ export const callController = {
       // Regular phone call - dial the number
       logger.info('Placing call to phone number:', to);
       
+      // Use ringTone="at" to suppress local ringback (prevent double ring)
+      // This makes the call behavior more like a normal cell phone
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Dial callerId="${callerId || process.env.TWILIO_PHONE_NUMBER}" action="${callbackUrl}" method="POST" record="record-from-answer" recordingStatusCallback="${recordingStatusUrl}" recordingStatusCallbackMethod="POST">
+  <Dial callerId="${callerId || process.env.TWILIO_PHONE_NUMBER}" action="${callbackUrl}" method="POST" record="record-from-answer" recordingStatusCallback="${recordingStatusUrl}" recordingStatusCallbackMethod="POST" ringTone="at">
     <Number>${to}</Number>
   </Dial>
   <Say voice="alice">The call could not be completed. Please try again.</Say>
@@ -880,7 +882,7 @@ export const callController = {
         const twiml = isOnline
           ? `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Dial timeout="30" action="${dialActionUrl}" method="POST" record="record-from-answer" recordingStatusCallback="${recordingStatusUrl}" recordingStatusCallbackMethod="POST">
+  <Dial timeout="20" action="${dialActionUrl}" method="POST" record="record-from-answer" recordingStatusCallback="${recordingStatusUrl}" recordingStatusCallbackMethod="POST">
     <Client>${clientIdentity}</Client>
   </Dial>
 </Response>`
@@ -948,6 +950,7 @@ export const callController = {
 
   /**
    * Log when user rejects incoming call from browser
+   * Also triggers voicemail routing via TwiML if callSid provided
    */
   async logCallReject(req: Request, res: Response) {
     try {
@@ -956,8 +959,38 @@ export const callController = {
 
       logger.info({ callSid, from, userId }, 'Call rejected from browser');
 
-      // The incoming call was already logged by webhook
-      // We could update it to mark as "rejected" if needed
+      // If callSid provided, update the call to send to voicemail
+      if (callSid) {
+        try {
+          const accountSid = process.env.TWILIO_ACCOUNT_SID;
+          const authToken = process.env.TWILIO_AUTH_TOKEN;
+          
+          if (accountSid && authToken) {
+            const baseUrl = getPublicBaseUrl(req);
+            const voicemailTwiml = buildVoicemailTwiml(baseUrl);
+            
+            // Update the call to redirect to voicemail
+            await fetch(
+              `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls/${callSid}.json`,
+              {
+                method: 'POST',
+                headers: {
+                  'Authorization': 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64'),
+                  'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: new URLSearchParams({
+                  Twiml: voicemailTwiml
+                })
+              }
+            );
+            
+            logger.info({ callSid }, 'Call redirected to voicemail after rejection');
+          }
+        } catch (redirectError: any) {
+          logger.error({ error: redirectError.message, callSid }, 'Failed to redirect rejected call to voicemail');
+          // Don't fail the request - rejection was still logged
+        }
+      }
       
       res.json({ 
         success: true,
@@ -968,6 +1001,104 @@ export const callController = {
       res.status(500).json({
         success: false,
         error: 'Failed to log call rejection'
+      });
+    }
+  },
+
+  /**
+   * Save call notes to communication record
+   */
+  async saveCallNotes(req: Request, res: Response) {
+    try {
+      const { leadId, phoneNumber, notes, callSid } = req.body;
+      const userId = (req as any).user?.id;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: 'Unauthorized'
+        });
+      }
+
+      if (!leadId || !notes) {
+        return res.status(400).json({
+          success: false,
+          error: 'leadId and notes are required'
+        });
+      }
+
+      logger.info({ leadId, userId, callSid }, 'Saving call notes');
+
+      // Find existing communication record by callSid if provided
+      let communication = null;
+      if (callSid) {
+        communication = await prisma.communication.findFirst({
+          where: {
+            leadId,
+            type: 'CALL',
+            metadata: { path: ['callSid'], equals: callSid }
+          }
+        });
+      }
+
+      // If no existing communication found, find by phone number and recent time
+      if (!communication && phoneNumber) {
+        communication = await prisma.communication.findFirst({
+          where: {
+            leadId,
+            type: 'CALL',
+            occurredAt: {
+              gte: new Date(Date.now() - 60 * 60 * 1000) // Within last hour
+            }
+          },
+          orderBy: { occurredAt: 'desc' }
+        });
+      }
+
+      if (communication) {
+        // Update existing communication with notes
+        await prisma.communication.update({
+          where: { id: communication.id },
+          data: {
+            body: notes,
+            metadata: {
+              ...(communication.metadata as any || {}),
+              notes,
+              notesUpdatedAt: new Date().toISOString()
+            }
+          }
+        });
+
+        logger.info({ communicationId: communication.id }, 'Call notes updated');
+      } else {
+        // Create new communication record with notes
+        await communicationRepository.create(leadId, {
+          type: 'CALL',
+          direction: 'OUTBOUND',
+          subject: `Call notes for ${phoneNumber || 'unknown'}`,
+          body: notes,
+          occurredAt: new Date(),
+          createdById: userId,
+          metadata: {
+            notes,
+            phoneNumber,
+            callSid,
+            notesOnly: true
+          }
+        });
+
+        logger.info({ leadId }, 'New call notes record created');
+      }
+
+      res.json({
+        success: true,
+        message: 'Call notes saved successfully'
+      });
+    } catch (error: any) {
+      logger.error({ error: error.message }, 'Error saving call notes');
+      res.status(500).json({
+        success: false,
+        error: 'Failed to save call notes'
       });
     }
   }

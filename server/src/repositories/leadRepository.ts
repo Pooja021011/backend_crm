@@ -207,10 +207,23 @@ export const leadRepository = {
     
     // Handle address relation - use upsert to create if doesn't exist
     if (data.address) {
+      // Map zipCode to zip for database compatibility
+      const addressData: any = {
+        address1: data.address.address1 || '',
+        city: data.address.city || '',
+        state: data.address.state || '',
+        zip: data.address.zipCode || data.address.zip || ''
+      };
+      
+      // Include county if provided
+      if (data.address.countyId) {
+        addressData.countyId = data.address.countyId;
+      }
+      
       updateData.address = { 
         upsert: {
-          create: data.address,
-          update: data.address
+          create: addressData,
+          update: addressData
         }
       };
     }

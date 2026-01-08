@@ -58,6 +58,7 @@ import { ProjectionsSheet } from '@/components/ProjectionsSheet';
 import { UnifiedCommunicationFeed } from '@/components/UnifiedCommunicationFeed';
 import { PhoneInput } from '@/components/PhoneInput';
 import { validatePhoneNumber } from '@/utils/phoneValidation';
+import { LeadOwnerSection, type LeadOwnerSectionRef } from '@/components/LeadOwnerSection';
 
 interface Contact {
   id?: string;
@@ -101,9 +102,8 @@ interface LeadData {
     address1?: string;
     city?: string;
     state?: string;
-    zipCode?: string;
-    // Some places in the UI still reference `zip`
-    zip?: string;
+    zip?: string;  // Database uses 'zip' field
+    zipCode?: string;  // For backward compatibility
     [key: string]: any;
   };
   seller?: LeadParty;
@@ -145,6 +145,24 @@ const LeadEdit: React.FC = () => {
     phone: '',
     email: '',
   });
+  const [editingAddress, setEditingAddress] = useState(false);
+  const [savingAddress, setSavingAddress] = useState(false);
+  const [editAddressForm, setEditAddressForm] = useState({
+    address1: '',
+    city: '',
+    state: '',
+    zipCode: ''
+  });
+  
+  // Owner editing state
+  const [editingOwnerId, setEditingOwnerId] = useState<string | null>(null);
+  const [editOwnerForm, setEditOwnerForm] = useState<{
+    firstName: string;
+    lastName: string;
+    phone: string;
+    email: string;
+  } | null>(null);
+  const ownerSectionRef = React.useRef<LeadOwnerSectionRef>(null);
   
   // Permission state
   const [canEditLead, setCanEditLead] = useState(false);
@@ -257,6 +275,10 @@ const LeadEdit: React.FC = () => {
   // Files
   const [files, setFiles] = useState<any[]>([]);
   const [uploading, setUploading] = useState(false);
+  
+  // Photos
+  const [photos, setPhotos] = useState<any[]>([]);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   
   // Transaction/Deal fields
   const [deal, setDeal] = useState<any>(null);
@@ -396,6 +418,7 @@ const LeadEdit: React.FC = () => {
     loadComparables();
     loadUnderwritingScenarios();
     loadFiles();
+    loadPhotos();
     loadDeal();
     loadBuyerOffers();
     loadBuyers();
@@ -417,6 +440,7 @@ const LeadEdit: React.FC = () => {
         const data = await response.json();
         const leadData = data.data;
         console.log('Loaded lead data:', leadData);
+        console.log('📍 Address from DB:', leadData.address);
         setLead(leadData);
         
         // Set editable fields
@@ -651,9 +675,10 @@ const LeadEdit: React.FC = () => {
     const isLeadOwner = lead.assignedUserId === user.id;
     const isLeadCreator = (lead as any).createdById === user.id;
     
-    // Check if user has any tasks assigned for this lead
-    const hasAssignedTask = tasks.some(task => task.assignedToId === user.id);
-    const assignedTaskTitle = tasks.find(t => t.assignedToId === user.id)?.title;
+    // Check if user has any REAL tasks assigned (exclude auto-generated mention tasks)
+    const realTasks = tasks.filter(task => !task.title?.startsWith('Review note on '));
+    const hasAssignedTask = realTasks.some(task => task.assignedToId === user.id);
+    const assignedTaskTitle = realTasks.find(t => t.assignedToId === user.id)?.title;
     
     // Check if user is admin/manager
     const isAdmin = user.roles?.includes('ADMIN');
@@ -676,19 +701,31 @@ const LeadEdit: React.FC = () => {
       setHasTaskAccess(true); // Can complete tasks
       setAccessReason(`Task assigned: ${assignedTaskTitle || 'View only'}`);
     } else {
-      // No access at all
-      setCanEditLead(false);
-      setCanViewLead(false);
-      setHasTaskAccess(false);
-      setAccessReason('No access');
+      // No access at all - but allow access if they have a mention task
+      const hasMentionTask = tasks.some(task => 
+        task.assignedToId === user.id && task.title?.startsWith('Review note on ')
+      );
       
-      // Redirect to leads page
-      toast({
-        title: "Access Denied",
-        description: "You don't have permission to view this lead",
-        variant: "destructive"
-      });
-      setTimeout(() => navigate('/leads'), 1000);
+      if (hasMentionTask) {
+        // Allow view-only access for mention tasks without showing the banner
+        setCanEditLead(false);
+        setCanViewLead(true);
+        setHasTaskAccess(true);
+        setAccessReason(''); // Empty to hide the banner
+      } else {
+        setCanEditLead(false);
+        setCanViewLead(false);
+        setHasTaskAccess(false);
+        setAccessReason('No access');
+        
+        // Redirect to leads page
+        toast({
+          title: "Access Denied",
+          description: "You don't have permission to view this lead",
+          variant: "destructive"
+        });
+        setTimeout(() => navigate('/leads'), 1000);
+      }
     }
   };
 
@@ -862,6 +899,12 @@ const LeadEdit: React.FC = () => {
     }
   };
 
+  // Handle owner editing state changes from LeadOwnerSection
+  const handleOwnerEditingChange = (isEditing: boolean, ownerId: string | null, ownerData: { firstName: string; lastName: string; phone: string; email: string } | null) => {
+    setEditingOwnerId(ownerId);
+    setEditOwnerForm(ownerData);
+  };
+
   const handleSave = async () => {
     // Validate phone numbers before saving
     const invalidPhones: string[] = [];
@@ -930,6 +973,25 @@ const LeadEdit: React.FC = () => {
       const updates: any = {
         customFields: propertyDetails
       };
+
+      // Include address if being edited or if it exists (only update if address is populated)
+      if (editingAddress && (editAddressForm.address1 || editAddressForm.city || editAddressForm.state || editAddressForm.zipCode)) {
+        // Use the form data if currently editing
+        updates.address = {
+          address1: editAddressForm.address1 || '',
+          city: editAddressForm.city || '',
+          state: editAddressForm.state || '',
+          zipCode: editAddressForm.zipCode || ''
+        };
+      } else if (lead?.address && (lead.address.address1 || lead.address.city || lead.address.state || lead.address.zip)) {
+        // Otherwise use existing lead address data
+        updates.address = {
+          address1: lead.address.address1 || '',
+          city: lead.address.city || '',
+          state: lead.address.state || '',
+          zipCode: lead.address.zip || lead.address.zipCode || ''
+        };
+      }
 
       // Track if pipeline stage changed
       const stageChanged = pipelineStatus && lead?.pipelineStageId !== pipelineStatus;
@@ -1002,6 +1064,23 @@ const LeadEdit: React.FC = () => {
         // Save contacts if they've been modified
         await saveContacts();
         
+        // Save owner if being edited
+        if (editingOwnerId && editOwnerForm) {
+          await saveOwner();
+        }
+        
+        // Close address editing mode if it was open
+        if (editingAddress) {
+          setEditingAddress(false);
+        }
+        
+        // Close owner editing mode if it was open
+        if (editingOwnerId) {
+          ownerSectionRef.current?.cancelEdit();
+          setEditingOwnerId(null);
+          setEditOwnerForm(null);
+        }
+        
         toast({
           title: 'Success',
           description: 'Lead updated successfully'
@@ -1009,6 +1088,9 @@ const LeadEdit: React.FC = () => {
         
         // Reload lead data to reflect changes
         await loadLead();
+        
+        // Refresh owner section to show updated data
+        ownerSectionRef.current?.refresh();
       } else {
         const errorData = await response.json();
         throw new Error(errorData.message || 'Failed to update lead');
@@ -1022,6 +1104,31 @@ const LeadEdit: React.FC = () => {
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveOwner = async () => {
+    if (!editingOwnerId || !editOwnerForm) return;
+    
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`${API_BASE}/owners/${editingOwnerId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(editOwnerForm)
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update owner');
+      }
+      
+      console.log('✅ Owner updated successfully');
+    } catch (error) {
+      console.error('Error saving owner:', error);
+      throw error; // Re-throw to be caught by handleSave
     }
   };
 
@@ -1186,7 +1293,7 @@ const LeadEdit: React.FC = () => {
           description: 'Note added successfully'
         });
         setNoteText('');
-        loadNotes(); // Reload notes
+        loadCommunications(); // Reload all communications
       } else {
         const errorData = await response.json();
         throw new Error(errorData.message || 'Failed to add note');
@@ -1782,6 +1889,20 @@ const LeadEdit: React.FC = () => {
     }
   };
 
+  const loadPhotos = async () => {
+    try {
+      const response = await makeApiCall(`${API_BASE}/files/lead/${id}`);
+      if (response.ok) {
+        const data = await response.json();
+        // Filter only photos category
+        const photoFiles = (data.data || []).filter((file: any) => file.category === 'photos');
+        setPhotos(photoFiles);
+      }
+    } catch (error) {
+      console.error('Error loading photos:', error);
+    }
+  };
+
   const loadDeal = async () => {
     try {
       const response = await makeApiCall(`${API_BASE}/deals/${id}`);
@@ -2078,6 +2199,66 @@ const LeadEdit: React.FC = () => {
     }
   };
 
+  const handlePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploadingPhoto(true);
+    try {
+      // Upload multiple photos
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        
+        // Validate file is an image
+        if (!file.type.startsWith('image/')) {
+          toast({
+            title: 'Invalid File',
+            description: `${file.name} is not an image file`,
+            variant: 'destructive'
+          });
+          continue;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('leadId', id!);
+        formData.append('category', 'photos');
+        formData.append('tags', JSON.stringify(['property']));
+
+        const response = await fetch(`${API_BASE}/files/upload`, {
+          method: 'POST',
+          body: formData,
+          credentials: 'include',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to upload ${file.name}`);
+        }
+      }
+
+      toast({
+        title: 'Success',
+        description: `${files.length} photo(s) uploaded successfully`
+      });
+      
+      loadPhotos();
+      // Reset the input
+      event.target.value = '';
+    } catch (error: any) {
+      console.error('Error uploading photos:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to upload photos',
+        variant: 'destructive'
+      });
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -2143,7 +2324,7 @@ const LeadEdit: React.FC = () => {
         </div>
 
         {/* Access Information Banner */}
-        {canViewLead && !canEditLead && (
+        {canViewLead && !canEditLead && accessReason && (
           <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
             <div className="flex items-start gap-2">
               <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
@@ -2168,112 +2349,139 @@ const LeadEdit: React.FC = () => {
                 <Home className="w-3 h-3 text-slate-500" />
                 <span className="text-[10px] text-slate-500 uppercase">Address</span>
               </div>
-              <p className="text-sm font-semibold text-slate-900 truncate">{lead.address?.address1 || 'No Address'}</p>
-              <p className="text-[10px] text-slate-500 truncate">
-                {lead.address?.city && lead.address?.state ? `${lead.address.city}, ${lead.address.state} ${lead.address.zipCode || ''}` : ''}
-              </p>
-            </div>
-
-            {/* Owner */}
-            <div className="col-span-12 md:col-span-6">
-              <div className="flex items-center gap-1 mb-0.5">
-                <User className="w-3 h-3 text-slate-500" />
-                <span className="text-[10px] text-slate-500 uppercase">Owner</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-semibold text-slate-900 truncate flex-1">{ownerName}</p>
-                {canEditLead && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0"
-                    onClick={() => setShowAddOwnerInline(true)}
-                    title="Add owner"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                  </Button>
-                )}
-              </div>
-              <p className="text-[10px] text-slate-500 truncate">{ownerContactLine}</p>
-
-              {/* Multiple owners list (always visible) */}
-              <div className="mt-2 space-y-1">
-                {leadOwners.length === 0 ? (
-                  <p className="text-[10px] text-slate-500">No additional owners yet</p>
-                ) : (
-                  leadOwners.map((o) => {
-                    const line = [o.email, o.phone].filter(Boolean).join(' • ');
-                    return (
-                      <div key={o.id} className="text-[10px] text-slate-700">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">{o.firstName} {o.lastName}</span>
-                          {o.isPrimary && <Badge className="h-4 text-[9px] px-1 py-0 bg-slate-100 text-slate-700">Primary</Badge>}
-                        </div>
-                        {line && <div className="text-[10px] text-slate-500 truncate">{line}</div>}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-
-            {/* Inline Add Owner (full-width, auto-opened by + button) */}
-            {showAddOwnerInline && (
-              <div className="col-span-12">
-                <div className="flex items-center gap-2 p-1.5 bg-slate-50 rounded border border-slate-100">
-                  <Input
-                    className="h-6 text-xs w-32"
-                    value={newOwnerInline.firstName}
-                    onChange={(e) => setNewOwnerInline({ ...newOwnerInline, firstName: e.target.value })}
-                    placeholder="First Name"
-                  />
-                  <Input
-                    className="h-6 text-xs w-32"
-                    value={newOwnerInline.lastName}
-                    onChange={(e) => setNewOwnerInline({ ...newOwnerInline, lastName: e.target.value })}
-                    placeholder="Last Name"
-                  />
-                  <div className="flex-1">
-                    <PhoneInput
-                      label=""
-                      value={newOwnerInline.phone}
-                      onChange={(value) => setNewOwnerInline({ ...newOwnerInline, phone: value })}
-                      placeholder="Phone"
-                      required={false}
-                      disabled={!canEditLead}
+              {!editingAddress ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-slate-900 truncate">{lead.address?.address1 || 'No Address'}</p>
+                      <p className="text-[10px] text-slate-500 truncate">
+                        {lead.address?.city && lead.address?.state ? `${lead.address.city}, ${lead.address.state} ${lead.address.zip || lead.address.zipCode || ''}` : ''}
+                      </p>
+                    </div>
+                    {canEditLead && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0"
+                        onClick={() => {
+                          setEditingAddress(true);
+                          setEditAddressForm({
+                            address1: lead.address?.address1 || '',
+                            city: lead.address?.city || '',
+                            state: lead.address?.state || '',
+                            zipCode: lead.address?.zip || lead.address?.zipCode || ''
+                          });
+                        }}
+                        title="Edit address"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-2 mt-1">
+                  <div>
+                    <Input
+                      className="h-6 text-xs"
+                      value={editAddressForm.address1}
+                      onChange={(e) => setEditAddressForm({ ...editAddressForm, address1: e.target.value })}
+                      placeholder="Street Address"
                     />
                   </div>
-                  <Input
-                    className="h-6 text-xs flex-1"
-                    type="email"
-                    value={newOwnerInline.email}
-                    onChange={(e) => setNewOwnerInline({ ...newOwnerInline, email: e.target.value })}
-                    placeholder="Email"
-                  />
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="h-6 text-xs px-3"
-                    onClick={handleInlineAddOwner}
-                  >
-                    Add
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setShowAddOwnerInline(false);
-                      setNewOwnerInline({ firstName: '', lastName: '', phone: '', email: '' });
-                    }}
-                    className="h-6 w-6 p-0 hover:bg-red-100 flex-shrink-0"
-                  >
-                    <X className="w-3.5 h-3.5 text-red-500" />
-                  </Button>
+                  <div className="grid grid-cols-3 gap-1">
+                    <Input
+                      className="h-6 text-xs"
+                      value={editAddressForm.city}
+                      onChange={(e) => setEditAddressForm({ ...editAddressForm, city: e.target.value })}
+                      placeholder="City"
+                    />
+                    <Input
+                      className="h-6 text-xs"
+                      value={editAddressForm.state}
+                      onChange={(e) => setEditAddressForm({ ...editAddressForm, state: e.target.value })}
+                      placeholder="State"
+                    />
+                    <Input
+                      className="h-6 text-xs"
+                      value={editAddressForm.zipCode}
+                      onChange={(e) => setEditAddressForm({ ...editAddressForm, zipCode: e.target.value })}
+                      placeholder="Zip"
+                    />
+                  </div>
+                  <div className="flex gap-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-6 text-xs px-3"
+                      disabled={savingAddress}
+                      onClick={async () => {
+                        setSavingAddress(true);
+                        console.log('💾 Saving address:', editAddressForm);
+                        try {
+                          const response = await makeApiCall(`${API_BASE}/leads/${id}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ address: editAddressForm })
+                          });
+                          console.log('📡 Address save response status:', response.status);
+                          if (response.ok) {
+                            const responseData = await response.json();
+                            console.log('✅ Address saved successfully:', responseData.data?.address);
+                            toast({
+                              title: 'Success',
+                              description: 'Address updated successfully'
+                            });
+                            setEditingAddress(false);
+                            await loadLead();
+                          } else {
+                            const errorData = await response.json();
+                            console.error('❌ Address save error:', errorData);
+                            throw new Error(errorData.error || errorData.message || 'Failed to update address');
+                          }
+                        } catch (error: any) {
+                          console.error('❌ Address save exception:', error);
+                          toast({
+                            title: 'Error',
+                            description: error.message || 'Failed to update address',
+                            variant: 'destructive'
+                          });
+                        } finally {
+                          setSavingAddress(false);
+                        }
+                      }}
+                    >
+                      {savingAddress ? (
+                        <>
+                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        'Save'
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-xs px-3"
+                      onClick={() => {
+                        setEditingAddress(false);
+                        setEditAddressForm({ address1: '', city: '', state: '', zipCode: '' });
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
+
+            {/* Owner Section - Using LeadOwnerSection Component */}
+            <div className="col-span-12 md:col-span-6">
+              {id && <LeadOwnerSection ref={ownerSectionRef} leadId={id} readOnly={!canEditLead} onEditingChange={handleOwnerEditingChange} />}
+            </div>
           </div>
         </div>
 
@@ -2538,7 +2746,93 @@ const LeadEdit: React.FC = () => {
                   </div>
                 </div>
 
-                {/* 2. Comparable Properties */}
+                {/* 2. Photos */}
+                <div className="border border-slate-200 rounded-lg bg-white p-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium text-slate-600">Photos</span>
+                    <Button 
+                      size="sm" 
+                      variant="ghost" 
+                      className="h-6 text-xs px-2" 
+                      disabled={uploadingPhoto}
+                      onClick={() => document.getElementById('photo-upload')?.click()}
+                    >
+                      <Plus className="w-3 h-3 mr-1" />
+                      {uploadingPhoto ? 'Uploading...' : 'Add'}
+                    </Button>
+                    <input 
+                      id="photo-upload" 
+                      type="file" 
+                      accept="image/*" 
+                      multiple
+                      className="hidden" 
+                      onChange={handlePhotoUpload} 
+                      disabled={uploadingPhoto} 
+                    />
+                  </div>
+                  
+                  {photos.length > 0 ? (
+                    <div className="grid grid-cols-4 gap-2">
+                      {photos.map((photo: any) => {
+                        const accessToken = localStorage.getItem('accessToken');
+                        const previewUrl = `${API_BASE}/files/${photo.id}/preview?token=${accessToken}`;
+                        
+                        return (
+                          <div key={photo.id} className="relative border border-slate-200 rounded-lg bg-white hover:shadow-md transition-shadow group">
+                            {/* Photo */}
+                            <div className="relative w-full h-24 bg-slate-100 rounded-t-lg overflow-hidden">
+                              <img 
+                                src={previewUrl} 
+                                alt={photo.originalName}
+                                className="w-full h-full object-cover cursor-pointer"
+                                onClick={() => window.open(`${API_BASE}/files/${photo.id}/download`, '_blank')}
+                                onError={(e) => {
+                                  const parent = e.currentTarget.parentElement;
+                                  if (parent) {
+                                    parent.innerHTML = '<div class="flex items-center justify-center h-full text-slate-400"><svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg></div>';
+                                  }
+                                }}
+                              />
+                              {/* Delete button - shows on hover */}
+                              <Button 
+                                size="sm" 
+                                variant="ghost" 
+                                className="absolute top-1 right-1 h-5 w-5 p-0 bg-red-500 hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity" 
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  if (confirm('Delete this photo?')) {
+                                    try {
+                                      await makeApiCall(`${API_BASE}/files/${photo.id}`, { method: 'DELETE' });
+                                      toast({ title: 'Success', description: 'Photo deleted' });
+                                      loadPhotos();
+                                    } catch (error) {
+                                      toast({ title: 'Error', description: 'Failed to delete photo', variant: 'destructive' });
+                                    }
+                                  }
+                                }}
+                              >
+                                <X className="w-3 h-3 text-white" />
+                              </Button>
+                            </div>
+                            
+                            {/* Photo Info */}
+                            <div className="p-1.5">
+                              <span className="text-[10px] text-slate-500 truncate block" title={photo.originalName}>
+                                {photo.originalName || 'Photo'}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 bg-slate-50 rounded text-xs text-slate-500">
+                      No photos yet. Click "Add" to upload photos.
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. Comparable Properties */}
                 <CompsManager 
                   leadId={id!} 
                   leadAddress={lead?.address ? {
@@ -2549,8 +2843,8 @@ const LeadEdit: React.FC = () => {
                   } : undefined}
                 />
 
-                {/* 3. Rehab Budget Calculator */}
-                <RehabBudgetCalculatorCompact 
+                {/* 4. Rehab Budget Calculator */}
+                <RehabBudgetCalculatorCompact
                   leadId={id!}
                   sqft={parseInt(sqft) || 0}
                   bathrooms={Math.max(0, Math.ceil(parseFloat(bathrooms) || 0))}
@@ -2567,9 +2861,9 @@ const LeadEdit: React.FC = () => {
                   }}
                 />
 
-                {/* 4. Underwriting Calculator - Role-Based (Admin, Manager, ACQ only) */}
+                {/* 5. Underwriting Calculator - Role-Based (Admin, Manager, ACQ only) */}
                 {user?.roles && (user.roles.includes('ADMIN') || user.roles.includes('MANAGER') || user.roles.includes('ACQ')) && (
-                  <UnderwritingCalculator 
+                  <UnderwritingCalculator
                     leadId={id!}
                     rehabCost={parseInt(rehabBudget) || 0}
                     readOnly={false}
@@ -2587,8 +2881,8 @@ const LeadEdit: React.FC = () => {
                   />
                 )}
 
-                {/* 5. Projections Sheet - Visible to ALL users (Read-only) */}
-                <ProjectionsSheet 
+                {/* 6. Projections Sheet - Visible to ALL users (Read-only) */}
+                <ProjectionsSheet
                   leadId={id!}
                   finalOffer={finalOffer}
                   rehabCost={underwritingRehabCost || parseInt(rehabBudget) || 0}
@@ -2846,6 +3140,12 @@ const LeadEdit: React.FC = () => {
                 onOpenTaskDialog={() => openTaskDialog()}
                 addingNote={addingNote}
                 onAddNote={handleAddNote}
+                lead={lead ? {
+                  id: lead.id,
+                  assignedUserId: lead.assignedUserId,
+                  createdById: (lead as any).createdById,
+                  dispAgentId: lead.dispAgentId
+                } : undefined}
               />
             </div>
           </div>

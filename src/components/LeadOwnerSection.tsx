@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { Plus, Trash2, Star, Phone, Mail, User } from 'lucide-react';
+import { Plus, Trash2, Star, Phone, Mail, User, Pencil } from 'lucide-react';
 import { API_BASE } from '@/config/api';
 import { useToast } from '@/hooks/use-toast';
 
@@ -20,12 +20,19 @@ interface LeadOwner {
 interface LeadOwnerSectionProps {
   leadId: string;
   readOnly?: boolean;
+  onEditingChange?: (isEditing: boolean, ownerId: string | null, ownerData: { firstName: string; lastName: string; phone: string; email: string } | null) => void;
 }
 
-export function LeadOwnerSection({ leadId, readOnly = false }: LeadOwnerSectionProps) {
+export interface LeadOwnerSectionRef {
+  cancelEdit: () => void;
+  refresh: () => void;
+}
+
+export const LeadOwnerSection = forwardRef<LeadOwnerSectionRef, LeadOwnerSectionProps>(({ leadId, readOnly = false, onEditingChange }, ref) => {
   const [owners, setOwners] = useState<LeadOwner[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [editingOwnerId, setEditingOwnerId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const [newOwner, setNewOwner] = useState({
@@ -35,9 +42,26 @@ export function LeadOwnerSection({ leadId, readOnly = false }: LeadOwnerSectionP
     email: ''
   });
 
+  const [editOwner, setEditOwner] = useState({
+    firstName: '',
+    lastName: '',
+    phone: '',
+    email: ''
+  });
+
   useEffect(() => {
     fetchOwners();
   }, [leadId]);
+
+  // Expose methods to parent via ref
+  useImperativeHandle(ref, () => ({
+    cancelEdit: () => {
+      handleCancelEdit();
+    },
+    refresh: () => {
+      fetchOwners();
+    }
+  }));
 
   const fetchOwners = async () => {
     try {
@@ -101,7 +125,18 @@ export function LeadOwnerSection({ leadId, readOnly = false }: LeadOwnerSectionP
   };
 
   const handleDeleteOwner = async (ownerId: string) => {
-    if (!confirm('Are you sure you want to delete this owner?')) return;
+    const ownerToDelete = owners.find(o => o.id === ownerId);
+    const isPrimary = ownerToDelete?.isPrimary;
+    const hasOtherOwners = owners.length > 1;
+    
+    let confirmMessage = 'Are you sure you want to delete this owner?';
+    if (isPrimary && hasOtherOwners) {
+      confirmMessage = 'This is the primary owner. The next owner will be promoted to primary. Are you sure you want to delete this owner?';
+    } else if (isPrimary && !hasOtherOwners) {
+      confirmMessage = 'This is the only owner. Are you sure you want to delete this owner?';
+    }
+    
+    if (!confirm(confirmMessage)) return;
 
     try {
       const token = localStorage.getItem('accessToken');
@@ -154,6 +189,66 @@ export function LeadOwnerSection({ leadId, readOnly = false }: LeadOwnerSectionP
     }
   };
 
+  const handleEditOwner = (owner: LeadOwner) => {
+    setEditingOwnerId(owner.id);
+    const ownerData = {
+      firstName: owner.firstName,
+      lastName: owner.lastName,
+      phone: owner.phone,
+      email: owner.email
+    };
+    setEditOwner(ownerData);
+    onEditingChange?.(true, owner.id, ownerData);
+  };
+
+  const handleUpdateOwner = async (ownerId: string) => {
+    if (!editOwner.firstName || !editOwner.lastName || !editOwner.phone || !editOwner.email) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please fill in all fields',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`${API_BASE}/owners/${ownerId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(editOwner)
+      });
+
+      if (response.ok) {
+        toast({
+          title: 'Success',
+          description: 'Owner updated successfully'
+        });
+        setEditingOwnerId(null);
+        setEditOwner({ firstName: '', lastName: '', phone: '', email: '' });
+        onEditingChange?.(false, null, null);
+        fetchOwners();
+      } else {
+        throw new Error('Failed to update owner');
+      }
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to update owner',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingOwnerId(null);
+    setEditOwner({ firstName: '', lastName: '', phone: '', email: '' });
+    onEditingChange?.(false, null, null);
+  };
+
   if (loading) {
     return <div className="text-center py-4">Loading owners...</div>;
   }
@@ -186,55 +281,133 @@ export function LeadOwnerSection({ leadId, readOnly = false }: LeadOwnerSectionP
         )}
 
         {owners.map((owner) => (
-          <div
-            key={owner.id}
-            className="flex items-center justify-between p-1.5 bg-slate-50 rounded text-[10px] group"
-          >
-            <div className="flex-1">
-              <div className="flex items-center gap-1">
-                <span className="font-medium text-slate-800">
-                  {owner.firstName} {owner.lastName}
-                </span>
-                {owner.isPrimary && (
-                  <Star className="h-2.5 w-2.5 fill-yellow-400 text-yellow-400" />
-                )}
+          editingOwnerId === owner.id ? (
+            // Edit Mode
+            <div key={owner.id} className="p-1.5 bg-slate-100 rounded space-y-1">
+              <span className="text-[10px] font-medium text-slate-600">Edit Owner</span>
+              <div className="grid grid-cols-4 gap-1">
+                <div>
+                  <Label className="text-[10px] text-slate-500">First Name</Label>
+                  <Input
+                    className="h-6 text-xs"
+                    value={editOwner.firstName}
+                    onChange={(e) => {
+                      const updated = { ...editOwner, firstName: e.target.value };
+                      setEditOwner(updated);
+                      onEditingChange?.(true, editingOwnerId, updated);
+                    }}
+                    placeholder="John"
+                  />
+                </div>
+                <div>
+                  <Label className="text-[10px] text-slate-500">Last Name</Label>
+                  <Input
+                    className="h-6 text-xs"
+                    value={editOwner.lastName}
+                    onChange={(e) => {
+                      const updated = { ...editOwner, lastName: e.target.value };
+                      setEditOwner(updated);
+                      onEditingChange?.(true, editingOwnerId, updated);
+                    }}
+                    placeholder="Doe"
+                  />
+                </div>
+                <div>
+                  <Label className="text-[10px] text-slate-500">Phone</Label>
+                  <Input
+                    className="h-6 text-xs"
+                    value={editOwner.phone}
+                    onChange={(e) => {
+                      const updated = { ...editOwner, phone: e.target.value };
+                      setEditOwner(updated);
+                      onEditingChange?.(true, editingOwnerId, updated);
+                    }}
+                    placeholder="555-123-4567"
+                  />
+                </div>
+                <div>
+                  <Label className="text-[10px] text-slate-500">Email</Label>
+                  <Input
+                    className="h-6 text-xs"
+                    type="email"
+                    value={editOwner.email}
+                    onChange={(e) => {
+                      const updated = { ...editOwner, email: e.target.value };
+                      setEditOwner(updated);
+                      onEditingChange?.(true, editingOwnerId, updated);
+                    }}
+                    placeholder="john@example.com"
+                  />
+                </div>
               </div>
-              <div className="flex items-center gap-2 text-slate-600">
-                <span className="flex items-center gap-0.5">
-                  <Phone className="h-2 w-2" />
-                  {owner.phone}
-                </span>
-                <span className="flex items-center gap-0.5">
-                  <Mail className="h-2 w-2" />
-                  {owner.email}
-                </span>
+              <div className="flex gap-1">
+                <Button size="sm" variant="ghost" className="h-5 text-[10px] px-2" onClick={() => handleUpdateOwner(owner.id)}>Save</Button>
+                <Button size="sm" variant="ghost" className="h-5 text-[10px] px-2" onClick={handleCancelEdit}>
+                  Cancel
+                </Button>
               </div>
             </div>
+          ) : (
+            // View Mode
+            <div
+              key={owner.id}
+              className="flex items-center justify-between p-1.5 bg-slate-50 rounded text-[10px] group"
+            >
+              <div className="flex-1">
+                <div className="flex items-center gap-1">
+                  <span className="font-medium text-slate-800">
+                    {owner.firstName} {owner.lastName}
+                  </span>
+                  {owner.isPrimary && (
+                    <Star className="h-2.5 w-2.5 fill-yellow-400 text-yellow-400" />
+                  )}
+                </div>
+                <div className="flex items-center gap-2 text-slate-600">
+                  <span className="flex items-center gap-0.5">
+                    <Phone className="h-2 w-2" />
+                    {owner.phone}
+                  </span>
+                  <span className="flex items-center gap-0.5">
+                    <Mail className="h-2 w-2" />
+                    {owner.email}
+                  </span>
+                </div>
+              </div>
 
-            {!readOnly && (
-              <div className="flex items-center gap-0.5">
-                {!owner.isPrimary && (
+              {!readOnly && (
+                <div className="flex items-center gap-0.5">
                   <Button
                     size="sm"
                     variant="ghost"
                     className="h-4 w-4 p-0 opacity-0 group-hover:opacity-100"
-                    onClick={() => handleSetPrimary(owner.id)}
-                    title="Set as primary"
+                    onClick={() => handleEditOwner(owner)}
+                    title="Edit owner"
                   >
-                    <Star className="h-2.5 w-2.5" />
+                    <Pencil className="h-2.5 w-2.5 text-blue-500" />
                   </Button>
-                )}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-4 w-4 p-0 opacity-0 group-hover:opacity-100"
-                  onClick={() => handleDeleteOwner(owner.id)}
-                >
-                  <Trash2 className="h-2.5 w-2.5 text-red-500" />
-                </Button>
-              </div>
-            )}
-          </div>
+                  {!owner.isPrimary && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-4 w-4 p-0 opacity-0 group-hover:opacity-100"
+                      onClick={() => handleSetPrimary(owner.id)}
+                      title="Set as primary"
+                    >
+                      <Star className="h-2.5 w-2.5" />
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-4 w-4 p-0 opacity-0 group-hover:opacity-100"
+                    onClick={() => handleDeleteOwner(owner.id)}
+                  >
+                    <Trash2 className="h-2.5 w-2.5 text-red-500" />
+                  </Button>
+                </div>
+              )}
+            </div>
+          )
         ))}
 
         {/* Add New Owner Form */}
@@ -294,5 +467,7 @@ export function LeadOwnerSection({ leadId, readOnly = false }: LeadOwnerSectionP
       </div>
     </div>
   );
-}
+});
+
+LeadOwnerSection.displayName = 'LeadOwnerSection';
 
