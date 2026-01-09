@@ -55,7 +55,7 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
         </div>
 
         {/* Global Incoming Call Popup - Only show if no active call */}
-        {incomingCall && !activeCall && callStatus.status === 'idle' && (
+        {incomingCall && !activeCall && (
           <IncomingCallPopup
             incomingCall={incomingCall}
             onAnswer={answerCall}

@@ -768,11 +768,17 @@ export const useTwilioDevice = () => {
       });
 
       call.on('ringing', () => {
-        console.log('📞 Call ringing - Twilio provides ringback tone');
+        console.log('📞 Call ringing - playing ringback tone for user feedback');
         setCallStatus({ status: 'ringing', duration: 0 });
         
-        // DO NOT play our own ringback tone - Twilio server provides it with ringTone="at"
-        // Playing our own would create a double ring effect
+        // Play ringback tone so user knows the call is ringing
+        // This is REQUIRED for browser-to-PSTN calls
+        if (outgoingRingtoneRef.current) {
+          console.log('Starting ringback tone playback');
+          outgoingRingtoneRef.current.play().catch(err => {
+            console.error('Failed to play ringback tone:', err);
+          });
+        }
       });
 
     } catch (error: any) {
