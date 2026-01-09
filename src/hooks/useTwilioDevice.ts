@@ -630,44 +630,57 @@ export const useTwilioDevice = () => {
         }
       };
 
-      // Call event listeners
-      call.on('accept', () => {
-        console.log('✅ Call accepted - call is now connected');
-        
-        // Stop outgoing ringtone when call connects
-        if (outgoingRingtoneRef.current) {
-          console.log('Stopping outgoing ringtone after call connected');
-          outgoingRingtoneRef.current.pause();
-          outgoingRingtoneRef.current.currentTime = 0;
-        }
-        
-        setCallStatus({ status: 'connected', duration: 0 });
-        
-        // Start duration counter
-        let seconds = 0;
-        durationIntervalRef.current = setInterval(() => {
-          seconds++;
-          setCallStatus(prev => ({ ...prev, duration: seconds }));
-        }, 1000);
+      // Track if call was actually answered by remote party
+      let remoteAnswered = false;
+      let ringbackCheckInterval: NodeJS.Timeout | null = null;
 
-        toast({
-          title: 'Call Connected',
-          description: 'You are now connected',
-        });
+      // Call event listeners
+      // IMPORTANT: For browser-to-PSTN calls, 'accept' fires when YOU answer in browser,
+      // NOT when the remote party answers. We need to track this carefully.
+      call.on('accept', () => {
+        console.log('✅ Call accept event fired');
+        console.log('Call status from Twilio:', call.status());
+        
+        // For outgoing calls, 'accept' means our browser accepted the connection,
+        // but remote party hasn't answered yet. Don't start timer yet!
+        
+        // Keep status as 'ringing' until we detect remote party answered
+        // We'll monitor the call.isMuted() state which changes when remote answers
       });
 
       call.on('disconnect', () => {
         console.log('🔴 Call disconnect event fired');
+        console.log('Remote answered:', remoteAnswered);
+        
+        // Clear ringback check interval
+        if (ringbackCheckInterval) {
+          clearInterval(ringbackCheckInterval);
+          ringbackCheckInterval = null;
+        }
+        
         cleanupCall('disconnect');
         
-        toast({
-          title: 'Call Ended',
-          description: 'The call has been disconnected',
-        });
+        // Only show "Call Ended" if call was actually connected
+        // Otherwise, it was just ringing or busy
+        if (remoteAnswered) {
+          toast({
+            title: 'Call Ended',
+            description: 'The call has been disconnected',
+          });
+        } else {
+          toast({
+            title: 'Call Not Answered',
+            description: 'The call was not answered',
+          });
+        }
       });
 
       call.on('cancel', () => {
         console.log('❌ Call cancel event fired');
+        if (ringbackCheckInterval) {
+          clearInterval(ringbackCheckInterval);
+          ringbackCheckInterval = null;
+        }
         cleanupCall('cancel');
         
         toast({
@@ -678,17 +691,25 @@ export const useTwilioDevice = () => {
 
       call.on('reject', () => {
         console.log('🚫 Call reject event fired');
+        if (ringbackCheckInterval) {
+          clearInterval(ringbackCheckInterval);
+          ringbackCheckInterval = null;
+        }
         cleanupCall('reject');
         
         toast({
           title: 'Call Rejected',
-          description: 'The call was rejected',
+          description: 'The call was rejected or busy',
           variant: 'destructive',
         });
       });
 
       call.on('error', (error) => {
         console.error('❌ Call error event fired:', error);
+        if (ringbackCheckInterval) {
+          clearInterval(ringbackCheckInterval);
+          ringbackCheckInterval = null;
+        }
         cleanupCall(`error: ${error.message}`);
         
         toast({
@@ -699,17 +720,64 @@ export const useTwilioDevice = () => {
       });
 
       call.on('ringing', () => {
-        console.log('📞 Call ringing - playing ringback tone for user feedback');
+        console.log('📞 Call ringing - remote phone is ringing');
         setCallStatus({ status: 'ringing', duration: 0 });
         
         // Play ringback tone so user knows the call is ringing
         // This is REQUIRED for browser-to-PSTN calls
         if (outgoingRingtoneRef.current) {
           console.log('Starting ringback tone playback');
+          outgoingRingtoneRef.current.loop = true; // Keep ringing until answered or disconnected
           outgoingRingtoneRef.current.play().catch(err => {
             console.error('Failed to play ringback tone:', err);
           });
         }
+        
+        // Start monitoring for when remote party answers
+        // Check every 500ms if call status changed to 'open' (both parties connected)
+        ringbackCheckInterval = setInterval(() => {
+          const currentStatus = call.status();
+          console.log('🔍 Checking call status:', currentStatus, 'remoteAnswered:', remoteAnswered);
+          
+          if (!remoteAnswered && currentStatus === 'open') {
+            console.log('🎉 Remote party answered! Starting call timer.');
+            remoteAnswered = true;
+            
+            // Clear the check interval
+            if (ringbackCheckInterval) {
+              clearInterval(ringbackCheckInterval);
+              ringbackCheckInterval = null;
+            }
+            
+            // Stop ringback tone
+            if (outgoingRingtoneRef.current) {
+              outgoingRingtoneRef.current.pause();
+              outgoingRingtoneRef.current.currentTime = 0;
+              outgoingRingtoneRef.current.loop = false;
+            }
+            
+            setCallStatus({ status: 'connected', duration: 0 });
+            
+            // Start duration counter
+            let seconds = 0;
+            durationIntervalRef.current = setInterval(() => {
+              seconds++;
+              setCallStatus(prev => ({ ...prev, duration: seconds }));
+            }, 1000);
+
+            toast({
+              title: 'Call Connected',
+              description: 'You are now connected',
+            });
+          } else if (currentStatus === 'closed' || currentStatus === 'cancelled') {
+            // Call ended while ringing
+            console.log('📵 Call ended while ringing');
+            if (ringbackCheckInterval) {
+              clearInterval(ringbackCheckInterval);
+              ringbackCheckInterval = null;
+            }
+          }
+        }, 500); // Check every 500ms
       });
 
     } catch (error: any) {

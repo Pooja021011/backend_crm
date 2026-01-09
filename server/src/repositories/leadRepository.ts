@@ -97,6 +97,17 @@ export const leadRepository = {
           createdById: createdById || null,
           address: { create: address },
           seller: { create: seller },
+          // Auto-create primary owner from seller details
+          owners: {
+            create: {
+              firstName: seller.firstName,
+              lastName: seller.lastName,
+              phone: seller.phone,
+              email: seller.email,
+              isPrimary: true,
+              order: 0,
+            }
+          },
         },
         include: includeLead,
       });
@@ -131,6 +142,17 @@ export const leadRepository = {
           createdById: createdById || null,
           buyer: { create: buyer },
           ...(criteria ? { buyerCriteria: { create: criteria } } : {}),
+          // Auto-create primary owner from buyer details
+          owners: {
+            create: {
+              firstName: buyer.firstName,
+              lastName: buyer.lastName,
+              phone: buyer.phone,
+              email: buyer.email,
+              isPrimary: true,
+              order: 0,
+            }
+          },
         },
         include: includeLead,
       });
@@ -165,6 +187,17 @@ export const leadRepository = {
           stageEnteredAt: new Date(),
           createdById: createdById || null,
           vendor: { create: vendor },
+          // Auto-create primary owner from vendor details
+          owners: {
+            create: {
+              firstName: vendor.firstName,
+              lastName: vendor.lastName,
+              phone: vendor.phone,
+              email: vendor.email,
+              isPrimary: true,
+              order: 0,
+            }
+          },
         },
         include: includeLead,
       });
@@ -317,13 +350,21 @@ export const leadRepository = {
       if (vendorIndustry) where.vendor = { ...(where.vendor || {}), industry: { contains: vendorIndustry, mode: 'insensitive' } };
     }
     if (q) {
-      // Simple ilike search across common fields
+      // Simple ilike search across common fields including email and phone
       where.OR = [
         { address: { address1: { contains: q, mode: 'insensitive' } } },
         { seller: { firstName: { contains: q, mode: 'insensitive' } } },
         { seller: { lastName: { contains: q, mode: 'insensitive' } } },
+        { seller: { email: { contains: q, mode: 'insensitive' } } },
+        { seller: { phone: { contains: q, mode: 'insensitive' } } },
         { buyer: { firstName: { contains: q, mode: 'insensitive' } } },
         { buyer: { lastName: { contains: q, mode: 'insensitive' } } },
+        { buyer: { email: { contains: q, mode: 'insensitive' } } },
+        { buyer: { phone: { contains: q, mode: 'insensitive' } } },
+        { vendor: { firstName: { contains: q, mode: 'insensitive' } } },
+        { vendor: { lastName: { contains: q, mode: 'insensitive' } } },
+        { vendor: { email: { contains: q, mode: 'insensitive' } } },
+        { vendor: { phone: { contains: q, mode: 'insensitive' } } },
       ];
     }
 
@@ -345,20 +386,113 @@ export const leadRepository = {
   },
 
   async suggestions(q: string, take = 10) {
+    // Strip non-digits from query for phone number matching
+    const digitsOnly = q.replace(/\D/g, '');
+    // Consider it a phone query if it has 3+ digits (even if mixed with other chars)
+    const isPhoneQuery = digitsOnly.length >= 3;
+    
+    console.log('🔍 Search suggestions:', { q, digitsOnly, isPhoneQuery, queryLength: q.length });
+    
+    // For phone queries, fetch MORE results to filter in-memory
+    // This handles cases where phone formatting breaks database CONTAINS matching
+    const fetchLimit = isPhoneQuery ? 100 : take;
+    
     const leads = await prisma.lead.findMany({
       where: {
         OR: [
           { address: { address1: { contains: q, mode: 'insensitive' } } },
           { seller: { firstName: { contains: q, mode: 'insensitive' } } },
           { seller: { lastName: { contains: q, mode: 'insensitive' } } },
+          { seller: { email: { contains: q, mode: 'insensitive' } } },
+          { seller: { phone: { contains: q, mode: 'insensitive' } } },
+          // Add digit-only phone search for better matching
+          ...(digitsOnly.length >= 3 ? [
+            { seller: { phone: { contains: digitsOnly, mode: 'insensitive' } } },
+          ] : []),
           { buyer: { firstName: { contains: q, mode: 'insensitive' } } },
           { buyer: { lastName: { contains: q, mode: 'insensitive' } } },
+          { buyer: { email: { contains: q, mode: 'insensitive' } } },
+          { buyer: { phone: { contains: q, mode: 'insensitive' } } },
+          // Add digit-only phone search for better matching
+          ...(digitsOnly.length >= 3 ? [
+            { buyer: { phone: { contains: digitsOnly, mode: 'insensitive' } } },
+          ] : []),
+          { vendor: { firstName: { contains: q, mode: 'insensitive' } } },
+          { vendor: { lastName: { contains: q, mode: 'insensitive' } } },
+          { vendor: { email: { contains: q, mode: 'insensitive' } } },
+          { vendor: { phone: { contains: q, mode: 'insensitive' } } },
+          // Add digit-only phone search for better matching
+          ...(digitsOnly.length >= 3 ? [
+            { vendor: { phone: { contains: digitsOnly, mode: 'insensitive' } } },
+          ] : []),
+          // Search in lead owners
+          { owners: { some: { firstName: { contains: q, mode: 'insensitive' } } } },
+          { owners: { some: { lastName: { contains: q, mode: 'insensitive' } } } },
+          { owners: { some: { email: { contains: q, mode: 'insensitive' } } } },
+          { owners: { some: { phone: { contains: q, mode: 'insensitive' } } } },
+          // Add digit-only phone search for lead owners
+          ...(digitsOnly.length >= 3 ? [
+            { owners: { some: { phone: { contains: digitsOnly, mode: 'insensitive' } } } },
+          ] : []),
         ],
       },
-      include: { address: true, seller: true, buyer: true, vendor: true },
-      take,
+      include: { address: true, seller: true, buyer: true, vendor: true, owners: true },
+      take: fetchLimit,
     });
-    return leads.map((l) => {
+    
+    console.log('📦 Database results:', leads.length, 'leads found');
+    
+    // If no results from database but it's a phone query, try fetching ALL leads to filter
+    if (leads.length === 0 && isPhoneQuery && digitsOnly.length >= 3) {
+      console.log('⚠️ No database results, fetching all leads for in-memory filtering...');
+      const allLeads = await prisma.lead.findMany({
+        include: { address: true, seller: true, buyer: true, vendor: true, owners: true },
+        take: 100,
+      });
+      console.log('📦 Fetched', allLeads.length, 'leads for filtering');
+      leads.push(...allLeads);
+    }
+    
+    if (leads.length > 0 && leads[0].owners) {
+      console.log('📱 First lead owners:', leads[0].owners.map(o => ({ name: `${o.firstName} ${o.lastName}`, phone: o.phone })));
+    }
+    
+    // For phone queries, ALWAYS do in-memory filtering to handle formatted phone numbers
+    // This ensures we match even when formatting breaks database CONTAINS
+    let filteredLeads = leads;
+    if (isPhoneQuery && digitsOnly.length >= 3) {
+      console.log('🔢 Filtering by digits only:', digitsOnly);
+      
+      filteredLeads = leads.filter((l) => {
+        const phoneNumbers = [
+          l.seller?.phone,
+          l.buyer?.phone,
+          l.vendor?.phone,
+          ...(l.owners || []).map(o => o.phone),
+        ].filter(Boolean);
+        
+        // Check if any phone number contains the digits (ignoring formatting)
+        const hasMatch = phoneNumbers.some((phone) => {
+          const phoneDigits = phone?.replace(/\D/g, '') || '';
+          const matches = phoneDigits.includes(digitsOnly);
+          if (matches) {
+            console.log('✅ Match found:', { phone, phoneDigits, searchDigits: digitsOnly });
+          }
+          return matches;
+        });
+        
+        return hasMatch;
+      });
+      
+      console.log('🎯 After digit filtering:', filteredLeads.length, 'leads matched');
+    }
+    
+    // Limit results to requested take amount
+    const finalLeads = filteredLeads.slice(0, take);
+    
+    console.log('✅ Final results:', finalLeads.length, 'leads after filtering');
+    
+    return finalLeads.map((l) => {
       let name = '';
       let subtitle = '';
       let phone = '';
@@ -404,6 +538,7 @@ const includeLead = {
   pipelineStage: true,
   leadStatus: true,
   leadSource: true,
+  owners: true,
   assignedUser: {
     select: {
       id: true,

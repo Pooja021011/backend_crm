@@ -896,11 +896,12 @@ export const callController = {
       // Regular phone call - dial the number
       logger.info('Placing call to phone number:', to);
       
-      // Use ringTone="at" to suppress local ringback (prevent double ring)
-      // This makes the call behavior more like a normal cell phone
+      // NOTE: Not using ringTone attribute to allow browser to handle ringback naturally.
+      // The frontend will play ringback tone when 'ringing' event fires.
+      // action="${callbackUrl}" will be called when the dial completes (answered, busy, no-answer, etc.)
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Dial callerId="${callerId || process.env.TWILIO_PHONE_NUMBER}" action="${callbackUrl}" method="POST" record="record-from-answer" recordingStatusCallback="${recordingStatusUrl}" recordingStatusCallbackMethod="POST" ringTone="at">
+  <Dial callerId="${callerId || process.env.TWILIO_PHONE_NUMBER}" action="${callbackUrl}" method="POST" record="record-from-answer" recordingStatusCallback="${recordingStatusUrl}" recordingStatusCallbackMethod="POST">
     <Number>${to}</Number>
   </Dial>
   <Say voice="alice">The call could not be completed. Please try again.</Say>

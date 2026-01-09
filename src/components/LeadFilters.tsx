@@ -204,7 +204,7 @@ export const LeadFilters: React.FC<LeadFiltersProps> = ({
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
             <Input
-              placeholder="Search leads by name, address, email, phone..."
+              placeholder="Search"
               value={filters.q || ''}
               onChange={(e) => handleFilterChange('q', e.target.value || undefined)}
               className="pl-10"

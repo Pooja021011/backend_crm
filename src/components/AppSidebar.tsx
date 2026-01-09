@@ -34,8 +34,8 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 const navigationItems = [
   { title: "Inbox", url: "/inbox", icon: Inbox },
-  { title: "Leads", url: "/leads", icon: Users },
   { title: "Pipeline", url: "/pipeline", icon: TrendingUp },
+  { title: "Leads", url: "/leads", icon: Users },
   { title: "Metrics", url: "/metrics", icon: BarChart3 },
   { 
     title: "Settings", 

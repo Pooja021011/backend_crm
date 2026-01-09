@@ -106,19 +106,29 @@ const Leads = () => {
   
   // Helper to get first available phone number from all sources
   const getLeadPhone = (lead: any): string => {
-    // Check contacts first
+    // Priority 1: Check primary lead owner first
+    if (lead.owners && lead.owners.length > 0) {
+      const primaryOwner = lead.owners.find((o: any) => o.isPrimary);
+      if (primaryOwner?.phone?.trim()) return primaryOwner.phone.trim();
+      
+      // If no primary, get first owner with phone
+      const ownerPhone = lead.owners.find((o: any) => o.phone)?.phone?.trim();
+      if (ownerPhone) return ownerPhone;
+    }
+    
+    // Priority 2: Check contacts (for backward compatibility)
     if (lead.contacts && lead.contacts.length > 0) {
       const contactPhone = lead.contacts[0]?.phone?.trim();
       if (contactPhone) return contactPhone;
     }
     
-    // Check lead owners
+    // Priority 3: Check lead owners (old field name for backward compatibility)
     if (lead.leadOwners && lead.leadOwners.length > 0) {
       const ownerPhone = lead.leadOwners.find((o: any) => o.phone)?.phone?.trim();
       if (ownerPhone) return ownerPhone;
     }
     
-    // Check seller/buyer/vendor
+    // Priority 4: Check seller/buyer/vendor as fallback
     const sellerPhone = lead.seller?.phone?.trim();
     if (sellerPhone) return sellerPhone;
     
@@ -133,19 +143,29 @@ const Leads = () => {
   
   // Helper to get first available email from all sources
   const getLeadEmail = (lead: any): string => {
-    // Check contacts first
+    // Priority 1: Check primary lead owner first
+    if (lead.owners && lead.owners.length > 0) {
+      const primaryOwner = lead.owners.find((o: any) => o.isPrimary);
+      if (primaryOwner?.email?.trim()) return primaryOwner.email.trim();
+      
+      // If no primary, get first owner with email
+      const ownerEmail = lead.owners.find((o: any) => o.email)?.email?.trim();
+      if (ownerEmail) return ownerEmail;
+    }
+    
+    // Priority 2: Check contacts (for backward compatibility)
     if (lead.contacts && lead.contacts.length > 0) {
       const contactEmail = lead.contacts[0]?.email?.trim();
       if (contactEmail) return contactEmail;
     }
     
-    // Check lead owners
+    // Priority 3: Check lead owners (old field name for backward compatibility)
     if (lead.leadOwners && lead.leadOwners.length > 0) {
       const ownerEmail = lead.leadOwners.find((o: any) => o.email)?.email?.trim();
       if (ownerEmail) return ownerEmail;
     }
     
-    // Check seller/buyer/vendor
+    // Priority 4: Check seller/buyer/vendor as fallback
     const sellerEmail = lead.seller?.email?.trim();
     if (sellerEmail) return sellerEmail;
     
@@ -310,18 +330,14 @@ const Leads = () => {
       
       setPipelineStages(allStages);
 
-      // Get unique lead statuses from current leads
-      const statusMap = new Map();
-      leads.forEach(lead => {
-        if (lead.leadStatus) {
-          statusMap.set(lead.leadStatus.id, {
-            id: lead.leadStatus.id,
-            name: lead.leadStatus.name,
-            color: lead.leadStatus.color
-          });
-        }
+      // Fetch all lead statuses from API instead of extracting from current leads
+      const statusesResponse = await fetch(`${API_BASE}/lead-statuses`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
       });
-      setLeadStatuses(Array.from(statusMap.values()));
+      if (statusesResponse.ok) {
+        const statusesData = await statusesResponse.json();
+        setLeadStatuses(statusesData.data || []);
+      }
       
     } catch (error) {
       console.error('Error loading filter data:', error);
@@ -910,9 +926,9 @@ const Leads = () => {
                 </select>
               </div>
 
-              {/* Date Range Filter */}
+              {/* Date Created Filter */}
               <div className="space-y-1">
-                <label className="text-xs font-medium text-gray-700">Date Range</label>
+                <label className="text-xs font-medium text-gray-700">Date Created</label>
                 <select 
                   className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                   value={selectedDateRange}
@@ -1146,58 +1162,6 @@ const Leads = () => {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
-                
-                {/* Sort Dropdown */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="gap-2">
-                      {sortConfig.key ? (
-                        sortConfig.direction === 'asc' ? <SortAsc className="w-4 h-4" /> : <SortDesc className="w-4 h-4" />
-                      ) : (
-                        <ArrowUpDown className="w-4 h-4" />
-                      )}
-                      Sort
-                      <ChevronDown className="w-3 h-3" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent>
-                    <DropdownMenuItem onClick={() => handleSort('name')}>
-                      Sort by Name
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleSort('email')}>
-                      Sort by Email
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleSort('createdAt')}>
-                      Sort by Created Date
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleSort('updatedAt')}>
-                      Sort by Last Contact
-                    </DropdownMenuItem>
-                    {activeTab === 'BUYER' && (
-                      <DropdownMenuItem onClick={() => handleSort('priceRange')}>
-                        Sort by Price Range
-                      </DropdownMenuItem>
-                    )}
-                    {activeTab === 'VENDOR' && (
-                      <>
-                        <DropdownMenuItem onClick={() => handleSort('company')}>
-                          Sort by Company
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleSort('rating')}>
-                          Sort by Rating
-                        </DropdownMenuItem>
-                      </>
-                    )}
-                    {sortConfig.key && (
-                      <>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={resetSort}>
-                          Clear Sort
-                        </DropdownMenuItem>
-                      </>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
                 
                 {/* Filter Button */}
                 <Button 

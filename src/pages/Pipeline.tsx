@@ -603,10 +603,7 @@ const Pipeline = () => {
         throw new Error('Failed to move lead');
       }
 
-      toast({
-        title: "Lead Moved",
-        description: `${leadToMove.address} moved to ${stageName}`,
-      });
+      // Success notification removed - only show errors
     } catch (error) {
       console.error('Error moving lead:', error);
       
@@ -873,10 +870,7 @@ const Pipeline = () => {
                 });
                 
                 if (response.ok) {
-                  toast({
-                    title: "Lead Moved",
-                    description: `${pendingStageChange.leadToMove.address} moved to ${pendingStageChange.stageName}. ${uploadedCount} photo(s) uploaded.`,
-                  });
+                  // Success notification removed - only show errors
                 } else {
                   const errorData = await response.json();
                   throw new Error(errorData.error || 'Failed to move lead');
@@ -929,10 +923,7 @@ const Pipeline = () => {
               });
               
               if (response.ok) {
-                toast({
-                  title: "Lead Moved",
-                  description: `${pendingStageChange.leadToMove.address} moved to ${pendingStageChange.stageName}`,
-                });
+                // Success notification removed - only show errors
               }
               
               setShowDueDiligencePopup(false);
@@ -974,10 +965,7 @@ const Pipeline = () => {
               });
               
               if (response.ok) {
-                toast({
-                  title: "Lead Moved",
-                  description: `${pendingStageChange.leadToMove.address} moved to ${pendingStageChange.stageName}`,
-                });
+                // Success notification removed - only show errors
               }
               
               setShowOfferMadePopup(false);

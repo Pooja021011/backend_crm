@@ -2485,60 +2485,20 @@ const LeadEdit: React.FC = () => {
           </div>
         </div>
 
-        {/* Section 2 - Property Information (full width) */}
-        <div className="border border-slate-200 rounded-lg bg-white p-3">
-          <div className="flex items-center gap-1.5 mb-2">
-            <Home className="w-3.5 h-3.5 text-slate-500" />
-            <span className="text-xs font-medium text-slate-600">Property Information</span>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-            <div>
-              <Label className="text-[10px] text-slate-500">Type</Label>
-              <Select value={propertyType} onValueChange={setPropertyType} disabled={!canEditLead}>
-                <SelectTrigger className="h-6 text-xs"><SelectValue placeholder="Type" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Single Family">Single Family</SelectItem>
-                  <SelectItem value="Multi Family">Multi Family</SelectItem>
-                  <SelectItem value="Land">Land</SelectItem>
-                  <SelectItem value="Commercial">Commercial</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-[10px] text-slate-500">SqFt</Label>
-              <Input type="number" value={sqft} onChange={(e) => setSqft(e.target.value)} placeholder="SqFt" className="h-6 text-xs" disabled={!canEditLead} />
-            </div>
-            <div>
-              <Label className="text-[10px] text-slate-500">Lot</Label>
-              <Input value={lotSize} onChange={(e) => setLotSize(e.target.value)} placeholder="Acres" className="h-6 text-xs" disabled={!canEditLead} />
-            </div>
-            <div>
-              <Label className="text-[10px] text-slate-500">Beds</Label>
-              <Input type="number" value={bedrooms} onChange={(e) => setBedrooms(e.target.value)} placeholder="Beds" className="h-6 text-xs" disabled={!canEditLead} />
-            </div>
-            <div>
-              <Label className="text-[10px] text-slate-500">Baths</Label>
-              <Input type="number" step="0.5" value={bathrooms} onChange={(e) => setBathrooms(e.target.value)} placeholder="Baths" className="h-6 text-xs" disabled={!canEditLead} />
-            </div>
-            <div>
-              <Label className="text-[10px] text-slate-500">Year</Label>
-              <Input type="number" value={yearBuilt} onChange={(e) => setYearBuilt(e.target.value)} placeholder="Year" className="h-6 text-xs" disabled={!canEditLead} />
-            </div>
-          </div>
-        </div>
-
-        {/* Section 3 - Lead Details (full width) */}
-        <div className="border border-slate-200 rounded-lg bg-white p-3">
+        {/* Section 2 - Lead Details + Timeline (side by side) */}
+        <div className="grid grid-cols-12 gap-2">
+          {/* Lead Details - Left Side (6 cols) */}
+          <div className="col-span-6 border border-slate-200 rounded-lg bg-white p-2">
             <div className="flex items-center gap-1.5 mb-2">
-              <FileText className="w-3.5 h-3.5 text-slate-500" />
-              <span className="text-xs font-medium text-slate-600">Lead Details</span>
+              <FileText className="w-3 h-3 text-slate-500" />
+              <span className="text-[11px] font-medium text-slate-600">Lead Details</span>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-              <div className="col-span-2 sm:col-span-1">
-                <Label className="text-[10px] text-slate-500">Source</Label>
+            <div className="grid grid-cols-2 gap-1.5">
+              <div>
+                <Label className="text-[9px] text-slate-500">Source</Label>
                 <Select value={leadSource} onValueChange={setLeadSource} disabled={!canEditLead}>
-                  <SelectTrigger className="h-6 text-xs"><SelectValue placeholder="Source" /></SelectTrigger>
+                  <SelectTrigger className="h-5 text-[10px]"><SelectValue placeholder="Source" /></SelectTrigger>
                   <SelectContent>
                     {leadSources.map((source) => (
                       <SelectItem key={source.id} value={source.name}>
@@ -2549,10 +2509,10 @@ const LeadEdit: React.FC = () => {
                 </Select>
               </div>
 
-              <div className="col-span-2 sm:col-span-1">
-                <Label className="text-[10px] text-slate-500">Lead Status</Label>
+              <div>
+                <Label className="text-[9px] text-slate-500">Lead Status</Label>
                 <Select value={leadStatus} onValueChange={setLeadStatus} disabled={!canEditLead}>
-                  <SelectTrigger className="h-6 text-xs"><SelectValue placeholder="Lead Status" /></SelectTrigger>
+                  <SelectTrigger className="h-5 text-[10px]"><SelectValue placeholder="Lead Status" /></SelectTrigger>
                   <SelectContent>
                     {leadStatuses.map((status) => (
                       <SelectItem key={status.id} value={status.id}>
@@ -2563,10 +2523,10 @@ const LeadEdit: React.FC = () => {
                 </Select>
               </div>
 
-              <div className="col-span-2 sm:col-span-1">
-                <Label className="text-[10px] text-slate-500">Pipeline Status</Label>
+              <div>
+                <Label className="text-[9px] text-slate-500">Pipeline Status</Label>
                 <Select value={pipelineStatus} onValueChange={handlePipelineStatusChange} disabled={!canEditLead}>
-                  <SelectTrigger className="h-6 text-xs"><SelectValue placeholder="Pipeline Status" /></SelectTrigger>
+                  <SelectTrigger className="h-5 text-[10px]"><SelectValue placeholder="Pipeline Status" /></SelectTrigger>
                   <SelectContent>
                     {pipelineStages.map((stage) => (
                       <SelectItem key={stage.id} value={stage.id}>
@@ -2577,14 +2537,14 @@ const LeadEdit: React.FC = () => {
                 </Select>
               </div>
 
-              <div className="col-span-2 sm:col-span-1">
-                <Label className="text-[10px] text-slate-500">ACQ Agent</Label>
+              <div>
+                <Label className="text-[9px] text-slate-500">ACQ Agent</Label>
                 <Select
                   value={acquisitionsAgent || 'unassigned'}
                   onValueChange={(value) => setAcquisitionsAgent(value === 'unassigned' ? '' : value)}
                   disabled={!canEditLead}
                 >
-                  <SelectTrigger className="h-6 text-xs"><SelectValue placeholder="ACQ Agent" /></SelectTrigger>
+                  <SelectTrigger className="h-5 text-[10px]"><SelectValue placeholder="ACQ Agent" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="unassigned">None</SelectItem>
                     {agents
@@ -2602,14 +2562,14 @@ const LeadEdit: React.FC = () => {
                 </Select>
               </div>
 
-              <div className="col-span-2 sm:col-span-1">
-                <Label className="text-[10px] text-slate-500">DISP Agent</Label>
+              <div>
+                <Label className="text-[9px] text-slate-500">DISP Agent</Label>
                 <Select
                   value={dispositionsAgent || 'unassigned'}
                   onValueChange={(value) => setDispositionsAgent(value === 'unassigned' ? '' : value)}
                   disabled={!canEditLead}
                 >
-                  <SelectTrigger className="h-6 text-xs"><SelectValue placeholder="DISP Agent" /></SelectTrigger>
+                  <SelectTrigger className="h-5 text-[10px]"><SelectValue placeholder="DISP Agent" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="unassigned">None</SelectItem>
                     {agents
@@ -2627,10 +2587,10 @@ const LeadEdit: React.FC = () => {
                 </Select>
               </div>
             </div>
-        </div>
+          </div>
 
-        {/* Section 4 - Timeline (full width) */}
-        <div className="border border-slate-200 rounded-lg bg-white p-3">
+          {/* Timeline - Right Side (6 cols) */}
+          <div className="col-span-6 border border-slate-200 rounded-lg bg-white p-2">
             <LeadTimeline
               leadId={id!}
               leadCreatedAt={lead.createdAt}
@@ -2647,6 +2607,49 @@ const LeadEdit: React.FC = () => {
                 loadDeal();
               }}
             />
+          </div>
+        </div>
+
+        {/* Section 3 - Property Information (full width) */}
+        <div className="border border-slate-200 rounded-lg bg-white p-2">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <Home className="w-3 h-3 text-slate-500" />
+            <span className="text-[11px] font-medium text-slate-600">Property Information</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1.5">
+            <div>
+              <Label className="text-[9px] text-slate-500">Type</Label>
+              <Select value={propertyType} onValueChange={setPropertyType} disabled={!canEditLead}>
+                <SelectTrigger className="h-5 text-[10px]"><SelectValue placeholder="Type" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Single Family">Single Family</SelectItem>
+                  <SelectItem value="Multi Family">Multi Family</SelectItem>
+                  <SelectItem value="Land">Land</SelectItem>
+                  <SelectItem value="Commercial">Commercial</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-[9px] text-slate-500">SqFt</Label>
+              <Input type="number" value={sqft} onChange={(e) => setSqft(e.target.value)} placeholder="SqFt" className="h-5 text-[10px]" disabled={!canEditLead} />
+            </div>
+            <div>
+              <Label className="text-[9px] text-slate-500">Lot</Label>
+              <Input value={lotSize} onChange={(e) => setLotSize(e.target.value)} placeholder="Acres" className="h-5 text-[10px]" disabled={!canEditLead} />
+            </div>
+            <div>
+              <Label className="text-[9px] text-slate-500">Beds</Label>
+              <Input type="number" value={bedrooms} onChange={(e) => setBedrooms(e.target.value)} placeholder="Beds" className="h-5 text-[10px]" disabled={!canEditLead} />
+            </div>
+            <div>
+              <Label className="text-[9px] text-slate-500">Baths</Label>
+              <Input type="number" step="0.5" value={bathrooms} onChange={(e) => setBathrooms(e.target.value)} placeholder="Baths" className="h-5 text-[10px]" disabled={!canEditLead} />
+            </div>
+            <div>
+              <Label className="text-[9px] text-slate-500">Year</Label>
+              <Input type="number" value={yearBuilt} onChange={(e) => setYearBuilt(e.target.value)} placeholder="Year" className="h-5 text-[10px]" disabled={!canEditLead} />
+            </div>
+          </div>
         </div>
 
         {/* Contacts box removed (not needed) */}
@@ -3104,9 +3107,9 @@ const LeadEdit: React.FC = () => {
             </Tabs>
           </div>
 
-          {/* Right side - Communication Section (4 columns) */}
+          {/* Right side - Communication Section (4 columns) - TALLER */}
           <div className="col-span-4">
-            <div className="sticky top-2 border border-slate-200 rounded-lg bg-white p-1.5">
+            <div className="sticky top-2 border border-slate-200 rounded-lg bg-white p-1.5 max-h-[calc(100vh-120px)] overflow-hidden flex flex-col">
               {/* Unified Communication Feed (includes Tasks, Calls, SMS, Emails, Notes) */}
               <UnifiedCommunicationFeed
                 communications={communications}

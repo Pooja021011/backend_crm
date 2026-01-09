@@ -66,6 +66,10 @@ export const metricsService = {
       if (name.includes('closed')) months[idx].closedLeads += 1;
     }
 
+    // Sort months in calendar order (Jan, Feb, Mar, ..., Dec)
+    const monthOrder = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    months.sort((a, b) => monthOrder.indexOf(a.name) - monthOrder.indexOf(b.name));
+
     return months;
   },
 
@@ -357,8 +361,8 @@ export const metricsService = {
     const generateHourlyBreakdown = (communications: typeof comms) => {
       const hourlyData: Record<string, { outbound: number; inbound: number }> = {};
       
-      // Initialize business hours (6 AM to 8 PM)
-      for (let h = 6; h <= 20; h++) {
+      // Initialize business hours (7 AM to 7 PM)
+      for (let h = 7; h <= 19; h++) {
         const hourLabel = h === 12 ? '12 PM' : h > 12 ? `${h - 12} PM` : `${h} AM`;
         hourlyData[hourLabel] = { outbound: 0, inbound: 0 };
       }
@@ -366,7 +370,7 @@ export const metricsService = {
       // Count communications by hour
       communications.forEach(c => {
         const hour = new Date(c.occurredAt).getHours();
-        if (hour >= 6 && hour <= 20) {
+        if (hour >= 7 && hour <= 19) {
           const hourLabel = hour === 12 ? '12 PM' : hour > 12 ? `${hour - 12} PM` : `${hour} AM`;
           if (c.direction === 'OUTBOUND') {
             hourlyData[hourLabel].outbound++;

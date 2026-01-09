@@ -2466,18 +2466,22 @@ const Metrics = () => {
                 ) : (
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
-                      <BarChart 
-                        data={callsByHour.length > 0 ? callsByHour : [
-                          { hour: '9 AM', outbound: 0, inbound: 0 },
-                          { hour: '10 AM', outbound: 0, inbound: 0 },
-                          { hour: '11 AM', outbound: 0, inbound: 0 },
-                          { hour: '12 PM', outbound: 0, inbound: 0 },
-                          { hour: '1 PM', outbound: 0, inbound: 0 },
-                          { hour: '2 PM', outbound: 0, inbound: 0 },
-                          { hour: '3 PM', outbound: 0, inbound: 0 },
-                          { hour: '4 PM', outbound: 0, inbound: 0 },
-                          { hour: '5 PM', outbound: 0, inbound: 0 }
-                        ]} 
+                  <BarChart 
+                    data={callsByHour.length > 0 ? callsByHour : [
+                      { hour: '7 AM', outbound: 0, inbound: 0 },
+                      { hour: '8 AM', outbound: 0, inbound: 0 },
+                      { hour: '9 AM', outbound: 0, inbound: 0 },
+                      { hour: '10 AM', outbound: 0, inbound: 0 },
+                      { hour: '11 AM', outbound: 0, inbound: 0 },
+                      { hour: '12 PM', outbound: 0, inbound: 0 },
+                      { hour: '1 PM', outbound: 0, inbound: 0 },
+                      { hour: '2 PM', outbound: 0, inbound: 0 },
+                      { hour: '3 PM', outbound: 0, inbound: 0 },
+                      { hour: '4 PM', outbound: 0, inbound: 0 },
+                      { hour: '5 PM', outbound: 0, inbound: 0 },
+                      { hour: '6 PM', outbound: 0, inbound: 0 },
+                      { hour: '7 PM', outbound: 0, inbound: 0 }
+                    ]}
                         margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
                       >
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -2563,18 +2567,22 @@ const Metrics = () => {
                 ) : (
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
-                      <BarChart 
-                        data={smsByHour.length > 0 ? smsByHour : [
-                          { hour: '9 AM', outbound: 0, inbound: 0 },
-                          { hour: '10 AM', outbound: 0, inbound: 0 },
-                          { hour: '11 AM', outbound: 0, inbound: 0 },
-                          { hour: '12 PM', outbound: 0, inbound: 0 },
-                          { hour: '1 PM', outbound: 0, inbound: 0 },
-                          { hour: '2 PM', outbound: 0, inbound: 0 },
-                          { hour: '3 PM', outbound: 0, inbound: 0 },
-                          { hour: '4 PM', outbound: 0, inbound: 0 },
-                          { hour: '5 PM', outbound: 0, inbound: 0 }
-                        ]} 
+                  <BarChart 
+                    data={smsByHour.length > 0 ? smsByHour : [
+                      { hour: '7 AM', outbound: 0, inbound: 0 },
+                      { hour: '8 AM', outbound: 0, inbound: 0 },
+                      { hour: '9 AM', outbound: 0, inbound: 0 },
+                      { hour: '10 AM', outbound: 0, inbound: 0 },
+                      { hour: '11 AM', outbound: 0, inbound: 0 },
+                      { hour: '12 PM', outbound: 0, inbound: 0 },
+                      { hour: '1 PM', outbound: 0, inbound: 0 },
+                      { hour: '2 PM', outbound: 0, inbound: 0 },
+                      { hour: '3 PM', outbound: 0, inbound: 0 },
+                      { hour: '4 PM', outbound: 0, inbound: 0 },
+                      { hour: '5 PM', outbound: 0, inbound: 0 },
+                      { hour: '6 PM', outbound: 0, inbound: 0 },
+                      { hour: '7 PM', outbound: 0, inbound: 0 }
+                    ]}
                         margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
                       >
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />

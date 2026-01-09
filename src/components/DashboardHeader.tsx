@@ -322,7 +322,7 @@ export const DashboardHeader = () => {
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <Input
                 type="search"
-                placeholder="Search by seller/buyer name or property address..."
+                placeholder="Search"
                 value={searchQuery}
                 onChange={handleSearchChange}
                 onFocus={() => searchQuery.length > 0 && setShowDropdown(true)}
@@ -368,13 +368,13 @@ export const DashboardHeader = () => {
                   <div className="p-6 text-center">
                     <div className="text-2xl mb-2">🔍</div>
                     <p className="text-gray-500 text-sm">No results found for "{searchQuery}"</p>
-                    <p className="text-xs text-gray-400 mt-1">Try searching by property address, seller name, or buyer name</p>
+                    <p className="text-xs text-gray-400 mt-1">Try searching by name, address, email, or phone number</p>
                   </div>
                 ) : searchQuery.length > 0 && searchQuery.length < 3 ? (
                   <div className="p-6 text-center">
                     <div className="text-2xl mb-2">⌨️</div>
                     <p className="text-gray-500 text-sm">Type at least 3 characters to search</p>
-                    <p className="text-xs text-gray-400 mt-1">Search by property address, seller name, or buyer name</p>
+                    <p className="text-xs text-gray-400 mt-1">Search by name, address, email, or phone number</p>
                   </div>
                 ) : null}
               </Card>
