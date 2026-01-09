@@ -635,6 +635,29 @@ export const useTwilioDevice = () => {
       console.log('📞 Outgoing call initiated, call object:', call);
       console.log('Attaching event listeners to outgoing call...');
 
+      // Cleanup function for call end
+      const cleanupCall = (reason: string) => {
+        console.log(`🧹 Cleaning up call - Reason: ${reason}`);
+        
+        // Stop outgoing ringtone
+        if (outgoingRingtoneRef.current) {
+          outgoingRingtoneRef.current.pause();
+          outgoingRingtoneRef.current.currentTime = 0;
+        }
+        
+        // Reset state
+        setCallStatus({ status: 'idle', duration: 0 });
+        setActiveCall(null);
+        setCurrentCallNumber('');
+        isOutgoingCallRef.current = false;
+        
+        // Clear duration counter
+        if (durationIntervalRef.current) {
+          clearInterval(durationIntervalRef.current);
+          durationIntervalRef.current = null;
+        }
+      };
+
       // Call event listeners
       call.on('accept', () => {
         console.log('✅ Call accepted - call is now connected');
@@ -663,28 +686,8 @@ export const useTwilioDevice = () => {
 
       call.on('disconnect', () => {
         console.log('🔴 Call disconnect event fired');
-        console.log('Call status before disconnect:', callStatus);
+        cleanupCall('disconnect');
         
-        // Stop outgoing ringtone if still playing
-        if (outgoingRingtoneRef.current) {
-          console.log('Stopping outgoing ringtone');
-          outgoingRingtoneRef.current.pause();
-          outgoingRingtoneRef.current.currentTime = 0;
-        }
-        
-        // Reset to idle so future incoming calls can show the popup reliably
-        console.log('Setting call status to idle and clearing active call');
-        setCallStatus({ status: 'idle', duration: 0 });
-        setActiveCall(null);
-        setCurrentCallNumber(''); // Clear stored number
-        isOutgoingCallRef.current = false; // Reset outgoing flag
-        
-        // Clear duration counter
-        if (durationIntervalRef.current) {
-          clearInterval(durationIntervalRef.current);
-          durationIntervalRef.current = null;
-        }
-
         toast({
           title: 'Call Ended',
           description: 'The call has been disconnected',
@@ -692,44 +695,19 @@ export const useTwilioDevice = () => {
       });
 
       call.on('cancel', () => {
-        console.log('Call cancelled');
+        console.log('❌ Call cancel event fired');
+        cleanupCall('cancel');
         
-        // Stop outgoing ringtone
-        if (outgoingRingtoneRef.current) {
-          outgoingRingtoneRef.current.pause();
-          outgoingRingtoneRef.current.currentTime = 0;
-        }
-        
-        setCallStatus({ status: 'idle', duration: 0 });
-        setActiveCall(null);
-        setCurrentCallNumber(''); // Clear stored number
-        isOutgoingCallRef.current = false; // Reset outgoing flag
-        
-        if (durationIntervalRef.current) {
-          clearInterval(durationIntervalRef.current);
-          durationIntervalRef.current = null;
-        }
+        toast({
+          title: 'Call Cancelled',
+          description: 'The call was cancelled',
+        });
       });
 
       call.on('reject', () => {
-        console.log('Call rejected');
+        console.log('🚫 Call reject event fired');
+        cleanupCall('reject');
         
-        // Stop outgoing ringtone
-        if (outgoingRingtoneRef.current) {
-          outgoingRingtoneRef.current.pause();
-          outgoingRingtoneRef.current.currentTime = 0;
-        }
-        
-        setCallStatus({ status: 'idle', duration: 0 });
-        setActiveCall(null);
-        setCurrentCallNumber(''); // Clear stored number
-        isOutgoingCallRef.current = false; // Reset outgoing flag
-        
-        if (durationIntervalRef.current) {
-          clearInterval(durationIntervalRef.current);
-          durationIntervalRef.current = null;
-        }
-
         toast({
           title: 'Call Rejected',
           description: 'The call was rejected',
@@ -738,28 +716,9 @@ export const useTwilioDevice = () => {
       });
 
       call.on('error', (error) => {
-        console.error('Call error:', error);
+        console.error('❌ Call error event fired:', error);
+        cleanupCall(`error: ${error.message}`);
         
-        // Stop outgoing ringtone
-        if (outgoingRingtoneRef.current) {
-          outgoingRingtoneRef.current.pause();
-          outgoingRingtoneRef.current.currentTime = 0;
-        }
-        
-        setCallStatus({ 
-          status: 'idle', 
-          duration: 0,
-          error: error.message 
-        });
-        setActiveCall(null);
-        setCurrentCallNumber('');
-        isOutgoingCallRef.current = false; // Reset outgoing flag
-        
-        if (durationIntervalRef.current) {
-          clearInterval(durationIntervalRef.current);
-          durationIntervalRef.current = null;
-        }
-
         toast({
           title: 'Call Error',
           description: error.message || 'An error occurred during the call',
