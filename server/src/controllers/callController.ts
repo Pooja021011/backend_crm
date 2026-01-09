@@ -901,8 +901,14 @@ export const callController = {
       // action="${callbackUrl}" will be called when the dial completes (answered, busy, no-answer, etc.)
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Dial callerId="${callerId || process.env.TWILIO_PHONE_NUMBER}" action="${callbackUrl}" method="POST" record="record-from-answer" recordingStatusCallback="${recordingStatusUrl}" recordingStatusCallbackMethod="POST">
-    <Number>${to}</Number>
+  <!--
+    CRITICAL:
+    answerOnBridge="true" prevents bridging the browser leg until the callee actually answers.
+    Without this, the browser call can "connect" as soon as Twilio's media gateway is ready,
+    which makes the CRM timer start and stops local ringback even while the phone is still ringing.
+  -->
+  <Dial callerId="${callerId || process.env.TWILIO_PHONE_NUMBER}" action="${callbackUrl}" method="POST" record="record-from-answer" recordingStatusCallback="${recordingStatusUrl}" recordingStatusCallbackMethod="POST" answerOnBridge="true">
+    <Number timeout="30">${to}</Number>
   </Dial>
   <Say voice="alice">The call could not be completed. Please try again.</Say>
 </Response>`;
