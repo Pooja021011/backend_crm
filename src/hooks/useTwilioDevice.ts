@@ -437,43 +437,15 @@ export const useTwilioDevice = () => {
           return; // Don't auto-answer - show waiting popup
         }
         
-        // Check if this is an outgoing call callback (we initiated it)
+        // IMPORTANT: Ignore any Device-level incoming event that may be emitted during an outbound call.
+        // Outbound calls are managed via device.connect() and the Call instance returned there.
+        // Treating this as a real incoming call (or auto-accepting) causes:
+        // - timer starting before the callee answers
+        // - ringback stopping after a single bell
+        // - stuck UI and possible repeated call attempts
         if (isOutgoingCallRef.current) {
-          console.log('✅ This is an outgoing call callback - not showing popup');
-          // Set as active call directly without showing incoming popup
-          setActiveCall(call);
-          setCallStatus({ status: 'connecting', duration: 0 });
-          
-          // Setup call event listeners for outgoing call
-          call.on('accept', () => {
-            console.log('Outgoing call accepted');
-            setCallStatus({ status: 'connected', duration: 0 });
-            
-            // Start duration counter
-            let seconds = 0;
-            durationIntervalRef.current = setInterval(() => {
-              seconds++;
-              setCallStatus(prev => ({ ...prev, duration: seconds }));
-            }, 1000);
-          });
-          
-          call.on('disconnect', () => {
-            console.log('Outgoing call disconnected');
-            // Reset to idle so future incoming calls can show the popup reliably
-            setCallStatus({ status: 'idle', duration: 0 });
-            setActiveCall(null);
-            setCurrentCallNumber('');
-            isOutgoingCallRef.current = false; // Reset flag
-            
-            if (durationIntervalRef.current) {
-              clearInterval(durationIntervalRef.current);
-              durationIntervalRef.current = null;
-            }
-          });
-          
-          // Auto-accept for outgoing calls
-          call.accept();
-          return; // Don't show incoming popup
+          console.log('🚫 Ignoring Device incoming event during outbound call');
+          return;
         }
         
         // This is a real incoming call - show the popup
