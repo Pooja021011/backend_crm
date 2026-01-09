@@ -633,19 +633,13 @@ export const useTwilioDevice = () => {
       // Track if call was actually answered by remote party
       let remoteAnswered = false;
       let ringbackCheckInterval: NodeJS.Timeout | null = null;
+      let lastBytesReceived = 0;
+      let audioDetectionAttempts = 0;
 
       // Call event listeners
-      // IMPORTANT: For browser-to-PSTN calls, 'accept' fires when YOU answer in browser,
-      // NOT when the remote party answers. We need to track this carefully.
       call.on('accept', () => {
-        console.log('✅ Call accept event fired');
-        console.log('Call status from Twilio:', call.status());
-        
-        // For outgoing calls, 'accept' means our browser accepted the connection,
-        // but remote party hasn't answered yet. Don't start timer yet!
-        
-        // Keep status as 'ringing' until we detect remote party answered
-        // We'll monitor the call.isMuted() state which changes when remote answers
+        console.log('✅ Call accept event fired - browser connected to Twilio');
+        // Don't start timer yet - wait for actual remote party to answer
       });
 
       call.on('disconnect', () => {
@@ -733,49 +727,77 @@ export const useTwilioDevice = () => {
           });
         }
         
-        // Start monitoring for when remote party answers
-        // Check every 500ms if call status changed to 'open' (both parties connected)
-        ringbackCheckInterval = setInterval(() => {
-          const currentStatus = call.status();
-          console.log('🔍 Checking call status:', currentStatus, 'remoteAnswered:', remoteAnswered);
-          
-          if (!remoteAnswered && currentStatus === 'open') {
-            console.log('🎉 Remote party answered! Starting call timer.');
-            remoteAnswered = true;
-            
-            // Clear the check interval
-            if (ringbackCheckInterval) {
-              clearInterval(ringbackCheckInterval);
-              ringbackCheckInterval = null;
+        // Start monitoring for when remote party actually answers
+        // We'll check WebRTC stats to detect when audio bytes start flowing
+        ringbackCheckInterval = setInterval(async () => {
+          try {
+            // Get the underlying RTCPeerConnection
+            const pc = (call as any).pstream?.peerConnection;
+            if (!pc) {
+              console.log('⚠️ No peer connection available yet');
+              return;
             }
-            
-            // Stop ringback tone
-            if (outgoingRingtoneRef.current) {
-              outgoingRingtoneRef.current.pause();
-              outgoingRingtoneRef.current.currentTime = 0;
-              outgoingRingtoneRef.current.loop = false;
-            }
-            
-            setCallStatus({ status: 'connected', duration: 0 });
-            
-            // Start duration counter
-            let seconds = 0;
-            durationIntervalRef.current = setInterval(() => {
-              seconds++;
-              setCallStatus(prev => ({ ...prev, duration: seconds }));
-            }, 1000);
 
-            toast({
-              title: 'Call Connected',
-              description: 'You are now connected',
+            // Get RTC stats to check for incoming audio
+            const stats = await pc.getStats();
+            let currentBytesReceived = 0;
+            let hasInboundAudio = false;
+
+            stats.forEach((report: any) => {
+              // Look for inbound-rtp audio stats
+              if (report.type === 'inbound-rtp' && report.kind === 'audio') {
+                hasInboundAudio = true;
+                currentBytesReceived = report.bytesReceived || 0;
+                console.log('📊 Audio bytes received:', currentBytesReceived, 'Last:', lastBytesReceived);
+              }
             });
-          } else if (currentStatus === 'closed' || currentStatus === 'cancelled') {
-            // Call ended while ringing
-            console.log('📵 Call ended while ringing');
-            if (ringbackCheckInterval) {
-              clearInterval(ringbackCheckInterval);
-              ringbackCheckInterval = null;
+
+            // If we're receiving audio bytes and they're increasing, remote party answered
+            if (hasInboundAudio && currentBytesReceived > lastBytesReceived && currentBytesReceived > 1000) {
+              console.log('🎉 Audio flowing! Remote party answered!');
+              remoteAnswered = true;
+              
+              // Clear the check interval
+              if (ringbackCheckInterval) {
+                clearInterval(ringbackCheckInterval);
+                ringbackCheckInterval = null;
+              }
+              
+              // Stop ringback tone
+              if (outgoingRingtoneRef.current) {
+                outgoingRingtoneRef.current.pause();
+                outgoingRingtoneRef.current.currentTime = 0;
+                outgoingRingtoneRef.current.loop = false;
+              }
+              
+              setCallStatus({ status: 'connected', duration: 0 });
+              
+              // Start duration counter
+              let seconds = 0;
+              durationIntervalRef.current = setInterval(() => {
+                seconds++;
+                setCallStatus(prev => ({ ...prev, duration: seconds }));
+              }, 1000);
+
+              toast({
+                title: 'Call Connected',
+                description: 'You are now connected',
+              });
             }
+
+            lastBytesReceived = currentBytesReceived;
+            audioDetectionAttempts++;
+
+            // Safety: After 60 seconds of ringing, assume no answer
+            if (audioDetectionAttempts > 120) { // 120 * 500ms = 60 seconds
+              console.log('⏰ Call ringing timeout - no answer detected');
+              if (ringbackCheckInterval) {
+                clearInterval(ringbackCheckInterval);
+                ringbackCheckInterval = null;
+              }
+            }
+          } catch (error) {
+            console.error('Error checking audio stats:', error);
           }
         }, 500); // Check every 500ms
       });
