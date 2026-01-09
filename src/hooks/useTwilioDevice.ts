@@ -648,7 +648,7 @@ export const useTwilioDevice = () => {
       // With answerOnBridge="true" in TwiML, Twilio should only bridge the browser leg
       // when the callee actually answers. We therefore treat `accept` as "connected".
       // Early-media (carrier busy tones / remote ringback) can still arrive as audio BEFORE accept,
-      // so we stop our local ringback as soon as Twilio provides remote audio to avoid double-sound.
+      // so we keep local ringback strictly until accept/reject/cancel/disconnect (per requirement).
       let remoteAnswered = false;
       let isRinging = false;
 
@@ -662,6 +662,23 @@ export const useTwilioDevice = () => {
           // ignore
         }
       };
+
+      const startLocalRingback = () => {
+        if (!outgoingRingtoneRef.current) return;
+        try {
+          outgoingRingtoneRef.current.currentTime = 0;
+          outgoingRingtoneRef.current.loop = true;
+          outgoingRingtoneRef.current.play().catch(err => {
+            console.error('Failed to play ringback tone:', err);
+          });
+        } catch {
+          // ignore
+        }
+      };
+
+      // Start ringback immediately while connecting (this runs on the user click gesture,
+      // so it avoids autoplay blocking and ensures the agent hears ringing until answer).
+      startLocalRingback();
 
       // Call event listeners
       call.on('accept', () => {
@@ -750,23 +767,8 @@ export const useTwilioDevice = () => {
         
         // Play ringback tone so user knows the call is ringing
         // This is REQUIRED for browser-to-PSTN calls
-        if (outgoingRingtoneRef.current) {
-          console.log('Starting ringback tone playback');
-          outgoingRingtoneRef.current.currentTime = 0;
-          outgoingRingtoneRef.current.loop = true; // Keep ringing until answered or disconnected
-          outgoingRingtoneRef.current.play().catch(err => {
-            console.error('Failed to play ringback tone:', err);
-          });
-        }
-      });
-
-      // If Twilio provides any remote audio (early media ringback/busy tones),
-      // stop our local ringback immediately to avoid the "bell + busy together" sound.
-      (call as any).on?.('audio', () => {
-        if (isRinging && !remoteAnswered) {
-          console.log('🔈 Remote audio detected during ringing (early media) - stopping local ringback');
-          stopLocalRingback();
-        }
+        console.log('Starting ringback tone playback');
+        startLocalRingback();
       });
 
     } catch (error: any) {
