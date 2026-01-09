@@ -167,15 +167,23 @@ export const useTwilioDevice = () => {
     const unlock = async () => {
       if (unlocked) return;
       unlocked = true;
-      const r = ringtoneRef.current;
-      if (!r) return;
+
+      // Unlock BOTH incoming + outgoing audio elements. Browsers often block play()
+      // if it's not directly inside a user gesture; our ringback play happens later
+      // when Twilio emits "ringing", so we need to pre-unlock here.
+      const audios = [ringtoneRef.current, outgoingRingtoneRef.current].filter(
+        Boolean
+      ) as HTMLAudioElement[];
+      if (!audios.length) return;
       try {
-        const prevVol = r.volume;
-        r.volume = 0;
-        await r.play();
-        r.pause();
-        r.currentTime = 0;
-        r.volume = prevVol;
+        for (const a of audios) {
+          const prevVol = a.volume;
+          a.volume = 0;
+          await a.play();
+          a.pause();
+          a.currentTime = 0;
+          a.volume = prevVol;
+        }
       } catch {
         // ignore; browser policy may still block until later interaction
       } finally {
@@ -639,33 +647,28 @@ export const useTwilioDevice = () => {
 
       // With answerOnBridge="true" in TwiML, Twilio will only bridge the browser leg
       // when the callee actually answers. That means `accept` is a reliable "connected" signal.
+      // HOWEVER: Some carriers / early-media paths can still cause Twilio to emit accept early.
+      // So we only mark connected when we detect real inbound audio on the WebRTC peer connection.
       let remoteAnswered = false;
+      let answeredViaMedia = false;
+      let mediaCheckInterval: NodeJS.Timeout | null = null;
+      let lastInboundBytes = 0;
 
       // Call event listeners
       call.on('accept', () => {
-        console.log('✅ Call accepted - callee answered, call is connected');
-        remoteAnswered = true;
-
-        // Stop outgoing ringtone when call connects
-        if (outgoingRingtoneRef.current) {
-          outgoingRingtoneRef.current.pause();
-          outgoingRingtoneRef.current.currentTime = 0;
-          outgoingRingtoneRef.current.loop = false;
-        }
-
-        setCallStatus({ status: 'connected', duration: 0 });
-
-        // Start duration counter
-        let seconds = 0;
-        durationIntervalRef.current = setInterval(() => {
-          seconds++;
-          setCallStatus(prev => ({ ...prev, duration: seconds }));
-        }, 1000);
+        // Don't stop ringback / start timer here; we wait for inbound audio to confirm answer.
+        // This prevents the "bell one time then connected" issue.
+        console.log('✅ Call accept event fired (waiting for media to confirm answer)');
       });
 
       call.on('disconnect', () => {
         console.log('🔴 Call disconnect event fired');
         console.log('Remote answered:', remoteAnswered);
+
+        if (mediaCheckInterval) {
+          clearInterval(mediaCheckInterval);
+          mediaCheckInterval = null;
+        }
 
         cleanupCall('disconnect');
         
@@ -686,6 +689,10 @@ export const useTwilioDevice = () => {
 
       call.on('cancel', () => {
         console.log('❌ Call cancel event fired');
+        if (mediaCheckInterval) {
+          clearInterval(mediaCheckInterval);
+          mediaCheckInterval = null;
+        }
         cleanupCall('cancel');
         
         toast({
@@ -696,6 +703,10 @@ export const useTwilioDevice = () => {
 
       call.on('reject', () => {
         console.log('🚫 Call reject event fired');
+        if (mediaCheckInterval) {
+          clearInterval(mediaCheckInterval);
+          mediaCheckInterval = null;
+        }
         cleanupCall('reject');
         
         toast({
@@ -707,6 +718,10 @@ export const useTwilioDevice = () => {
 
       call.on('error', (error) => {
         console.error('❌ Call error event fired:', error);
+        if (mediaCheckInterval) {
+          clearInterval(mediaCheckInterval);
+          mediaCheckInterval = null;
+        }
         cleanupCall(`error: ${error.message}`);
         
         toast({
@@ -728,6 +743,80 @@ export const useTwilioDevice = () => {
           outgoingRingtoneRef.current.play().catch(err => {
             console.error('Failed to play ringback tone:', err);
           });
+        }
+
+        // Media-based answer detection (robust): poll WebRTC stats until we see inbound audio bytes move.
+        // When user doesn't answer, these counters won't increase; when they answer, they will.
+        if (!mediaCheckInterval) {
+          let attempts = 0;
+          mediaCheckInterval = setInterval(async () => {
+            attempts++;
+            try {
+              if (answeredViaMedia) return;
+
+              const mh = (call as any)._mediaHandler;
+              if (!mh) return;
+
+              // Twilio wraps RTCPeerConnection; find the underlying pc by shape.
+              const candidates = [
+                mh.peerConnection,
+                mh._peerConnection,
+                mh._pc,
+                mh._rtcPeerConnection,
+                mh._connection,
+              ];
+              const pc = candidates.find(
+                (c: any) => c && typeof c.getStats === 'function'
+              ) as RTCPeerConnection | undefined;
+              if (!pc) return;
+
+              const stats = await pc.getStats();
+              let inboundBytes = 0;
+
+              stats.forEach((r: any) => {
+                if (r.type === 'inbound-rtp' && (r.kind === 'audio' || r.mediaType === 'audio')) {
+                  inboundBytes = Math.max(inboundBytes, Number(r.bytesReceived || 0));
+                }
+              });
+
+              // Require a real increase to avoid false positives
+              if (inboundBytes > lastInboundBytes + 200) {
+                answeredViaMedia = true;
+                remoteAnswered = true;
+
+                if (mediaCheckInterval) {
+                  clearInterval(mediaCheckInterval);
+                  mediaCheckInterval = null;
+                }
+
+                // Stop ringback
+                if (outgoingRingtoneRef.current) {
+                  outgoingRingtoneRef.current.pause();
+                  outgoingRingtoneRef.current.currentTime = 0;
+                  outgoingRingtoneRef.current.loop = false;
+                }
+
+                setCallStatus({ status: 'connected', duration: 0 });
+
+                // Start duration counter
+                let seconds = 0;
+                durationIntervalRef.current = setInterval(() => {
+                  seconds++;
+                  setCallStatus(prev => ({ ...prev, duration: seconds }));
+                }, 1000);
+              }
+
+              lastInboundBytes = inboundBytes;
+
+              // Stop polling after 60 seconds of ringing (best-effort).
+              if (attempts >= 120 && mediaCheckInterval) {
+                clearInterval(mediaCheckInterval);
+                mediaCheckInterval = null;
+              }
+            } catch {
+              // ignore polling errors
+            }
+          }, 500);
         }
       });
 
