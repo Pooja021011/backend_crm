@@ -653,6 +653,7 @@ export const useTwilioDevice = () => {
       let isRinging = false;
       let answerPollInterval: NodeJS.Timeout | null = null;
       let connectedStarted = false;
+      let consecutiveRemoteAudio = 0;
 
       const stopLocalRingback = () => {
         if (!outgoingRingtoneRef.current) return;
@@ -724,6 +725,27 @@ export const useTwilioDevice = () => {
       call.on('accept', () => {
         console.log('✅ Call accept event fired (waiting for _isAnswered to confirm callee answered)');
         ensureAnswerPolling();
+      });
+
+      // Prevent "busy + bell together":
+      // Twilio may provide early-media audio (carrier ringback or busy tones) BEFORE the callee answers.
+      // If we keep playing our local ring MP3 at the same time, the agent hears double audio.
+      // So if we detect sustained remote output volume during ringing, stop the local ringback and let
+      // Twilio's early-media audio be heard instead.
+      (call as any).on?.('volume', (inputVolume: number, outputVolume: number) => {
+        if (!isRinging || remoteAnswered) return;
+
+        // outputVolume is 0..1-ish; require a sustained signal to avoid false positives
+        if (typeof outputVolume === 'number' && outputVolume > 0.12) {
+          consecutiveRemoteAudio++;
+        } else {
+          consecutiveRemoteAudio = 0;
+        }
+
+        if (consecutiveRemoteAudio >= 3) {
+          console.log('🔈 Sustained remote audio detected during ringing (early media) - stopping local ringback');
+          stopLocalRingback();
+        }
       });
 
       call.on('disconnect', () => {
