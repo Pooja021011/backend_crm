@@ -654,6 +654,8 @@ export const useTwilioDevice = () => {
       let answerPollInterval: NodeJS.Timeout | null = null;
       let connectedStarted = false;
       let consecutiveRemoteAudio = 0;
+      let earlyMediaPollInterval: NodeJS.Timeout | null = null;
+      let consecutiveEarlyMedia = 0;
 
       const stopLocalRingback = () => {
         if (!outgoingRingtoneRef.current) return;
@@ -693,6 +695,10 @@ export const useTwilioDevice = () => {
           clearInterval(answerPollInterval);
           answerPollInterval = null;
         }
+        if (earlyMediaPollInterval) {
+          clearInterval(earlyMediaPollInterval);
+          earlyMediaPollInterval = null;
+        }
 
         // Stop local ringback when call connects
         stopLocalRingback();
@@ -727,12 +733,15 @@ export const useTwilioDevice = () => {
         ensureAnswerPolling();
       });
 
+      const stopRingbackOnEarlyMedia = (source: string) => {
+        if (!isRinging || remoteAnswered) return;
+        console.log(`🔈 Early-media detected (${source}) - stopping local ringback to avoid overlap`);
+        stopLocalRingback();
+      };
+
       // Prevent "busy + bell together":
-      // Twilio may provide early-media audio (carrier ringback or busy tones) BEFORE the callee answers.
-      // If we keep playing our local ring MP3 at the same time, the agent hears double audio.
-      // So if we detect sustained remote output volume during ringing, stop the local ringback and let
-      // Twilio's early-media audio be heard instead.
-      (call as any).on?.('volume', (inputVolume: number, outputVolume: number) => {
+      // Use the official Call 'volume' event (fires frequently when remote audio is present).
+      call.on('volume', (inputVolume: number, outputVolume: number) => {
         if (!isRinging || remoteAnswered) return;
 
         // outputVolume is 0..1-ish; require a sustained signal to avoid false positives
@@ -743,10 +752,28 @@ export const useTwilioDevice = () => {
         }
 
         if (consecutiveRemoteAudio >= 3) {
-          console.log('🔈 Sustained remote audio detected during ringing (early media) - stopping local ringback');
-          stopLocalRingback();
+          stopRingbackOnEarlyMedia('volume-event');
         }
       });
+
+      // Fallback: some environments don’t reliably emit 'volume' even though audio is playing.
+      // Twilio Call keeps internal meters like _latestOutputVolume; poll briefly while ringing.
+      const ensureEarlyMediaPolling = () => {
+        if (earlyMediaPollInterval) return;
+        earlyMediaPollInterval = setInterval(() => {
+          if (!isRinging || remoteAnswered) return;
+          const v = Number((call as any)._latestOutputVolume || 0);
+          if (v > 0.12) {
+            consecutiveEarlyMedia++;
+          } else {
+            consecutiveEarlyMedia = 0;
+          }
+          if (consecutiveEarlyMedia >= 3) {
+            stopRingbackOnEarlyMedia('_latestOutputVolume');
+            // Keep polling; if ringback was restarted we want to stop it again.
+          }
+        }, 200);
+      };
 
       call.on('disconnect', () => {
         console.log('🔴 Call disconnect event fired');
@@ -756,6 +783,10 @@ export const useTwilioDevice = () => {
         if (answerPollInterval) {
           clearInterval(answerPollInterval);
           answerPollInterval = null;
+        }
+        if (earlyMediaPollInterval) {
+          clearInterval(earlyMediaPollInterval);
+          earlyMediaPollInterval = null;
         }
 
         cleanupCall('disconnect');
@@ -783,6 +814,10 @@ export const useTwilioDevice = () => {
           clearInterval(answerPollInterval);
           answerPollInterval = null;
         }
+        if (earlyMediaPollInterval) {
+          clearInterval(earlyMediaPollInterval);
+          earlyMediaPollInterval = null;
+        }
         cleanupCall('cancel');
         
         toast({
@@ -798,6 +833,10 @@ export const useTwilioDevice = () => {
         if (answerPollInterval) {
           clearInterval(answerPollInterval);
           answerPollInterval = null;
+        }
+        if (earlyMediaPollInterval) {
+          clearInterval(earlyMediaPollInterval);
+          earlyMediaPollInterval = null;
         }
         cleanupCall('reject');
         
@@ -815,6 +854,10 @@ export const useTwilioDevice = () => {
         if (answerPollInterval) {
           clearInterval(answerPollInterval);
           answerPollInterval = null;
+        }
+        if (earlyMediaPollInterval) {
+          clearInterval(earlyMediaPollInterval);
+          earlyMediaPollInterval = null;
         }
         cleanupCall(`error: ${error.message}`);
         
@@ -835,6 +878,7 @@ export const useTwilioDevice = () => {
         console.log('Starting ringback tone playback');
         startLocalRingback();
         ensureAnswerPolling();
+        ensureEarlyMediaPolling();
       });
 
     } catch (error: any) {
