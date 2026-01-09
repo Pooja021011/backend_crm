@@ -731,12 +731,30 @@ export const useTwilioDevice = () => {
         // We'll check WebRTC stats to detect when audio bytes start flowing
         ringbackCheckInterval = setInterval(async () => {
           try {
-            // Get the underlying RTCPeerConnection
-            const pc = (call as any).pstream?.peerConnection;
+            // Try multiple paths to get the RTCPeerConnection
+            // Twilio SDK stores it in different places depending on version
+            let pc = null;
+            
+            // Try different possible paths
+            if ((call as any).peerConnection) {
+              pc = (call as any).peerConnection;
+            } else if ((call as any)._mediaHandler?.peerConnection) {
+              pc = (call as any)._mediaHandler.peerConnection;
+            } else if ((call as any).mediaStream?.peerConnection) {
+              pc = (call as any).mediaStream.peerConnection;
+            }
+            
             if (!pc) {
-              console.log('⚠️ No peer connection available yet');
+              // Log available properties for debugging (only first time)
+              if (audioDetectionAttempts === 0) {
+                console.log('🔍 Call object keys:', Object.keys(call));
+                console.log('🔍 Call object:', call);
+              }
+              audioDetectionAttempts++;
               return;
             }
+
+            console.log('✅ Found peer connection, checking stats...');
 
             // Get RTC stats to check for incoming audio
             const stats = await pc.getStats();
