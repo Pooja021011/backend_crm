@@ -804,7 +804,6 @@ export const callController = {
       }
 
       const baseUrl = getPublicBaseUrl(req);
-      const callbackUrl = `${baseUrl}/api/v1/calls/webhook`;
       const recordingStatusUrl = `${baseUrl}/api/v1/calls/recording-status`;
 
       // Check if this is a client-to-client call
@@ -814,10 +813,15 @@ export const callController = {
 
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Dial timeout="20" action="${callbackUrl}" method="POST" record="record-from-answer" recordingStatusCallback="${recordingStatusUrl}" recordingStatusCallbackMethod="POST">
+  <!--
+    IMPORTANT:
+    Do NOT set <Dial action="..."> to /calls/webhook because that endpoint returns JSON, not TwiML.
+    Twilio expects TwiML for the action URL. Returning JSON can produce unexpected tones and keep
+    the browser leg alive, which keeps the CRM popup open after the call ends.
+  -->
+  <Dial timeout="20" record="record-from-answer" recordingStatusCallback="${recordingStatusUrl}" recordingStatusCallbackMethod="POST">
     <Client>${clientIdentity}</Client>
   </Dial>
-  <Say voice="alice">The user is not available. Please try again later.</Say>
 </Response>`;
 
         res.type('text/xml');
@@ -898,7 +902,6 @@ export const callController = {
       
       // NOTE: Not using ringTone attribute to allow browser to handle ringback naturally.
       // The frontend will play ringback tone when 'ringing' event fires.
-      // action="${callbackUrl}" will be called when the dial completes (answered, busy, no-answer, etc.)
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <!--
@@ -907,10 +910,9 @@ export const callController = {
     Without this, the browser call can "connect" as soon as Twilio's media gateway is ready,
     which makes the CRM timer start and stops local ringback even while the phone is still ringing.
   -->
-  <Dial callerId="${callerId || process.env.TWILIO_PHONE_NUMBER}" action="${callbackUrl}" method="POST" record="record-from-answer" recordingStatusCallback="${recordingStatusUrl}" recordingStatusCallbackMethod="POST" answerOnBridge="true">
+  <Dial callerId="${callerId || process.env.TWILIO_PHONE_NUMBER}" record="record-from-answer" recordingStatusCallback="${recordingStatusUrl}" recordingStatusCallbackMethod="POST" answerOnBridge="true">
     <Number timeout="30">${to}</Number>
   </Dial>
-  <Say voice="alice">The call could not be completed. Please try again.</Say>
 </Response>`;
 
       res.type('text/xml');
