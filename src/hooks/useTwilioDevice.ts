@@ -651,6 +651,8 @@ export const useTwilioDevice = () => {
       // so we keep local ringback strictly until accept/reject/cancel/disconnect (per requirement).
       let remoteAnswered = false;
       let isRinging = false;
+      let answerPollInterval: NodeJS.Timeout | null = null;
+      let connectedStarted = false;
 
       const stopLocalRingback = () => {
         if (!outgoingRingtoneRef.current) return;
@@ -680,11 +682,16 @@ export const useTwilioDevice = () => {
       // so it avoids autoplay blocking and ensures the agent hears ringing until answer).
       startLocalRingback();
 
-      // Call event listeners
-      call.on('accept', () => {
-        console.log('✅ Call accepted - callee answered, call is connected');
+      const startConnected = () => {
+        if (connectedStarted) return;
+        connectedStarted = true;
         remoteAnswered = true;
         isRinging = false;
+
+        if (answerPollInterval) {
+          clearInterval(answerPollInterval);
+          answerPollInterval = null;
+        }
 
         // Stop local ringback when call connects
         stopLocalRingback();
@@ -697,6 +704,26 @@ export const useTwilioDevice = () => {
           seconds++;
           setCallStatus(prev => ({ ...prev, duration: seconds }));
         }, 1000);
+      };
+
+      // Twilio Voice SDK can fire `accept` before the callee answers (early media / gateway accepted).
+      // To guarantee ringback stays until the callee answers, poll internal flags and only switch
+      // to connected when `_isAnswered === true`.
+      const ensureAnswerPolling = () => {
+        if (answerPollInterval) return;
+        answerPollInterval = setInterval(() => {
+          const answered = Boolean((call as any)._isAnswered);
+          if (answered) {
+            console.log('✅ Detected callee answered (_isAnswered=true).');
+            startConnected();
+          }
+        }, 250);
+      };
+
+      // Call event listeners
+      call.on('accept', () => {
+        console.log('✅ Call accept event fired (waiting for _isAnswered to confirm callee answered)');
+        ensureAnswerPolling();
       });
 
       call.on('disconnect', () => {
@@ -704,6 +731,10 @@ export const useTwilioDevice = () => {
         console.log('Remote answered:', remoteAnswered);
         isRinging = false;
         stopLocalRingback();
+        if (answerPollInterval) {
+          clearInterval(answerPollInterval);
+          answerPollInterval = null;
+        }
 
         cleanupCall('disconnect');
         
@@ -726,6 +757,10 @@ export const useTwilioDevice = () => {
         console.log('❌ Call cancel event fired');
         isRinging = false;
         stopLocalRingback();
+        if (answerPollInterval) {
+          clearInterval(answerPollInterval);
+          answerPollInterval = null;
+        }
         cleanupCall('cancel');
         
         toast({
@@ -738,6 +773,10 @@ export const useTwilioDevice = () => {
         console.log('🚫 Call reject event fired');
         isRinging = false;
         stopLocalRingback();
+        if (answerPollInterval) {
+          clearInterval(answerPollInterval);
+          answerPollInterval = null;
+        }
         cleanupCall('reject');
         
         toast({
@@ -751,6 +790,10 @@ export const useTwilioDevice = () => {
         console.error('❌ Call error event fired:', error);
         isRinging = false;
         stopLocalRingback();
+        if (answerPollInterval) {
+          clearInterval(answerPollInterval);
+          answerPollInterval = null;
+        }
         cleanupCall(`error: ${error.message}`);
         
         toast({
@@ -769,6 +812,7 @@ export const useTwilioDevice = () => {
         // This is REQUIRED for browser-to-PSTN calls
         console.log('Starting ringback tone playback');
         startLocalRingback();
+        ensureAnswerPolling();
       });
 
     } catch (error: any) {
