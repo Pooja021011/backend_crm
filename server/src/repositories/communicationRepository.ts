@@ -24,5 +24,35 @@ export const communicationRepository = {
         attachments: data.attachmentFileIds?.length ? { create: data.attachmentFileIds.map((id) => ({ file: { connect: { id } } })) } : undefined,
       }
     }),
+
+  updateNote: (params: { id: string; body: string; direction: string; metadata?: any }) =>
+    prisma.communication.update({
+      where: { id: params.id },
+      data: {
+        body: params.body,
+        direction: params.direction as any,
+        metadata: params.metadata || null,
+      },
+    }),
+
+  findById: (id: string) =>
+    prisma.communication.findUnique({
+      where: { id },
+      include: {
+        lead: {
+          select: {
+            id: true,
+            assignedUserId: true,
+            dispAgentId: true,
+            createdById: true,
+            tasks: { select: { assignedToId: true, title: true } },
+            address: { select: { address1: true, city: true, state: true } },
+            seller: { select: { firstName: true, lastName: true } },
+            buyer: { select: { firstName: true, lastName: true } },
+            vendor: { select: { firstName: true, lastName: true } },
+          },
+        },
+      },
+    }),
 };
 

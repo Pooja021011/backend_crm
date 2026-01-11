@@ -1,6 +1,8 @@
 import type { Request, Response } from 'express';
 import { inboxService } from '../services/inboxService.js';
 import { prisma } from '../config/db.js';
+import { settingsRepository } from '../repositories/settingsRepository.js';
+import { smsSettingsRepository } from '../repositories/smsSettingsRepository.js';
 
 export const inboxController = {
   myTasks: async (req: Request, res: Response) => {
@@ -87,10 +89,34 @@ export const inboxController = {
       requestedScope === 'all' && isAdmin
         ? undefined
         : (authUser?.id as string);
-    const type = req.query.type as 'EMAIL'|'SMS'|'CALL' | undefined;
+    const type = req.query.type as 'EMAIL'|'SMS'|'CALL'|'NOTE' | undefined;
     const timeframe = (req.query.timeframe as any) || 'This Month';
     const leadOnly = String(req.query.leadOnly || 'false').toLowerCase() === 'true';
-    const data = await inboxService.getCommunications({ userId, type, timeframe, leadOnly });
+    const internal = String(req.query.internal || 'false').toLowerCase() === 'true';
+
+    // For EMAIL/SMS/CALL, scope results to the user's own email/phone number(s)
+    // to prevent admins/managers from seeing everyone else’s notifications.
+    let scope: { email?: string; phone?: string } | undefined;
+    if (userId && (type === 'EMAIL' || type === 'SMS' || type === 'CALL')) {
+      const [emailSettings, smsSettings] = await Promise.all([
+        settingsRepository.getUserEmailSettings(userId),
+        smsSettingsRepository.getUserSmsSettings(userId),
+      ]);
+      scope = {
+        email: emailSettings?.email,
+        phone: smsSettings?.phoneNumber || undefined,
+      };
+    }
+
+    const data = await inboxService.getCommunications({
+      userId,
+      type,
+      timeframe,
+      leadOnly,
+      internal,
+      viewerUserId: authUser?.id,
+      scope,
+    });
     res.json({ data });
   },
 };

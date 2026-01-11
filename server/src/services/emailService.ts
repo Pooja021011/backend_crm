@@ -96,7 +96,12 @@ export const emailService = {
           subject: emailData.subject,
           body: emailData.text || emailData.html || '',
           occurredAt: new Date(),
-          createdById: userId
+          createdById: userId,
+          metadata: {
+            from: userSettings.email,
+            to: emailData.to,
+            messageId: result.messageId,
+          },
         });
       } catch (error) {
         console.error('Failed to log email to communication table:', error);

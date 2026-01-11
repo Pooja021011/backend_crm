@@ -113,6 +113,12 @@ export const callService = {
           body: `Outbound call initiated to ${callRequest.to}`,
           occurredAt: new Date(),
           createdById: callRequest.userId,
+          metadata: {
+            from: fromNumber,
+            to: callRequest.to,
+            callSid: call.sid,
+            status: call.status,
+          },
         });
         
         // NEW: Auto-update lead status based on communication

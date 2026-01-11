@@ -20,6 +20,31 @@ export interface PipelineAccess {
 }
 
 export const pipelineService = {
+  // LeadStatus values that should not appear in Pipeline view
+  hiddenPipelineLeadStatuses: ['Long Term Follow Up', 'Dead'] as const,
+
+  async getVisibleLeadCountsByStage(stageIds: string[]) {
+    if (!stageIds.length) return new Map<string, number>();
+    const hidden = [...this.hiddenPipelineLeadStatuses];
+
+    const grouped = await prisma.lead.groupBy({
+      by: ['pipelineStageId'],
+      where: {
+        pipelineStageId: { in: stageIds },
+        NOT: {
+          leadStatus: { name: { in: hidden } },
+        },
+      },
+      _count: { _all: true },
+    });
+
+    const map = new Map<string, number>();
+    for (const row of grouped) {
+      if (row.pipelineStageId) map.set(row.pipelineStageId, row._count._all);
+    }
+    return map;
+  },
+
   /**
    * Determine pipeline access based on user role
    */
@@ -268,11 +293,6 @@ export const pipelineService = {
               name: true,
               orderIndex: true,
               color: true,
-              _count: {
-                select: {
-                  leads: true
-                }
-              }
             }
           }
         }
@@ -282,12 +302,14 @@ export const pipelineService = {
         throw new Error(`Pipeline with key ${pipelineKey} not found`);
       }
 
+      const counts = await this.getVisibleLeadCountsByStage(pipeline.stages.map(s => s.id));
+
       return pipeline.stages.map(stage => ({
         id: stage.id,
         name: stage.name,
         orderIndex: stage.orderIndex,
         color: stage.color || 'gray',
-        leadCount: stage._count.leads
+        leadCount: counts.get(stage.id) || 0
       }));
     } catch (error: any) {
       logger.error('Error getting pipeline stages', { pipelineKey, error: error.message });
@@ -307,11 +329,6 @@ export const pipelineService = {
             orderBy: { orderIndex: 'asc' },
             include: {
               rolePermissions: true,
-              _count: {
-                select: {
-                  leads: true
-                }
-              }
             }
           }
         }
@@ -321,6 +338,8 @@ export const pipelineService = {
         throw new Error(`Pipeline with key ${pipelineKey} not found`);
       }
 
+      const counts = await this.getVisibleLeadCountsByStage(pipeline.stages.map(s => s.id));
+
       // ADMIN and MANAGER can see all stages
       if (userRoles.includes('ADMIN') || userRoles.includes('MANAGER')) {
         return pipeline.stages.map(stage => ({
@@ -328,7 +347,7 @@ export const pipelineService = {
           name: stage.name,
           orderIndex: stage.orderIndex,
           color: stage.color || 'gray',
-          leadCount: stage._count.leads
+          leadCount: counts.get(stage.id) || 0
         }));
       }
 
@@ -350,7 +369,7 @@ export const pipelineService = {
         name: stage.name,
         orderIndex: stage.orderIndex,
         color: stage.color || 'gray',
-        leadCount: stage._count.leads
+        leadCount: counts.get(stage.id) || 0
       }));
     } catch (error: any) {
       logger.error('Error getting pipeline stages for user', { pipelineKey, userRoles, error: error.message });
@@ -375,7 +394,10 @@ export const pipelineService = {
       const whereClause: any = {
         pipelineStage: {
           pipelineId: pipeline.id
-        }
+        },
+        NOT: {
+          leadStatus: { name: { in: [...this.hiddenPipelineLeadStatuses] } },
+        },
       };
 
       // Apply role-based filtering
@@ -412,6 +434,7 @@ export const pipelineService = {
           address: true,
           seller: true,
           buyer: true,
+          leadStatus: true,
           pipelineStage: true,
           assignedUser: {
             select: {

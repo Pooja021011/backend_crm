@@ -1,7 +1,9 @@
-import React, { useEffect, useRef } from 'react';
-import { PhoneOff, Mic, MicOff, User, Clock } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { PhoneOff, Mic, MicOff, Clock, Mail, Phone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CallStatus } from '@/hooks/useTwilioDevice';
+import { API_BASE, makeApiCall } from '@/config/api';
+import { useNavigate } from 'react-router-dom';
 
 interface ActiveCallWidgetProps {
   callStatus: CallStatus;
@@ -16,6 +18,14 @@ interface ActiveCallWidgetProps {
   };
 }
 
+type ResolvedLeadInfo = {
+  leadId: string;
+  name?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+};
+
 export const ActiveCallWidget: React.FC<ActiveCallWidgetProps> = ({
   callStatus,
   isMuted,
@@ -23,7 +33,38 @@ export const ActiveCallWidget: React.FC<ActiveCallWidgetProps> = ({
   onToggleMute,
   contactInfo,
 }) => {
+  const navigate = useNavigate();
   const disconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [resolvedLead, setResolvedLead] = useState<ResolvedLeadInfo | null>(null);
+  const [leadLoading, setLeadLoading] = useState(false);
+  const [leadError, setLeadError] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // Draggable positioning (fixed)
+  const [pos, setPos] = useState<{ x: number; y: number }>(() => {
+    // initial: approximate top-right
+    const margin = 24;
+    const approxWidth = 240;
+    return { x: Math.max(margin, window.innerWidth - approxWidth - margin), y: margin };
+  });
+  const dragRef = useRef<{
+    dragging: boolean;
+    startX: number;
+    startY: number;
+    startLeft: number;
+    startTop: number;
+    width: number;
+    height: number;
+  }>({
+    dragging: false,
+    startX: 0,
+    startY: 0,
+    startLeft: 0,
+    startTop: 0,
+    width: 0,
+    height: 0,
+  });
+
   // Handle cleanup on unmount
   useEffect(() => {
     return () => {
@@ -31,6 +72,28 @@ export const ActiveCallWidget: React.FC<ActiveCallWidgetProps> = ({
         clearTimeout(disconnectTimeoutRef.current);
       }
     };
+  }, []);
+
+  const clampToViewport = (x: number, y: number, w: number, h: number) => {
+    const margin = 8;
+    const maxX = Math.max(margin, window.innerWidth - w - margin);
+    const maxY = Math.max(margin, window.innerHeight - h - margin);
+    return {
+      x: Math.min(Math.max(x, margin), maxX),
+      y: Math.min(Math.max(y, margin), maxY),
+    };
+  };
+
+  // Keep widget within viewport on resize
+  useEffect(() => {
+    const onResize = () => {
+      const el = containerRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      setPos(prev => clampToViewport(prev.x, prev.y, rect.width, rect.height));
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
   }, []);
 
   // Format duration as MM:SS
@@ -63,30 +126,192 @@ export const ActiveCallWidget: React.FC<ActiveCallWidgetProps> = ({
     return null;
   }
 
+  const phoneNumber = contactInfo?.phoneNumber || '';
+  const leadId = contactInfo?.leadId || '';
+
+  const hasLeadHint = Boolean(leadId) || Boolean(phoneNumber);
+
+  const display = useMemo(() => {
+    const name = resolvedLead?.name || contactInfo?.name || undefined;
+    const phone = resolvedLead?.phone || phoneNumber || undefined;
+    const email = resolvedLead?.email || undefined;
+    const address = resolvedLead?.address || undefined;
+    const id = resolvedLead?.leadId || leadId || undefined;
+    return { id, name, phone, email, address };
+  }, [resolvedLead, contactInfo?.name, phoneNumber, leadId]);
+
+  const extractLeadInfo = (lead: any): ResolvedLeadInfo | null => {
+    if (!lead?.id) return null;
+
+    const contact = lead.seller || lead.buyer || lead.vendor || {};
+    const firstName = contact.firstName || '';
+    const lastName = contact.lastName || '';
+    const name = `${firstName} ${lastName}`.trim() || undefined;
+
+    const address = lead.address?.address1
+      ? `${lead.address.address1}${lead.address.city ? `, ${lead.address.city}` : ''}${lead.address.state ? `, ${lead.address.state}` : ''}`
+      : undefined;
+
+    return {
+      leadId: lead.id,
+      name,
+      phone: contact.phone || undefined,
+      email: contact.email || undefined,
+      address,
+    };
+  };
+
+  useEffect(() => {
+    // Fetch only when connected (answered) and we have a hint; avoid re-fetch loops.
+    if (callStatus.status !== 'connected') return;
+    if (!hasLeadHint) return;
+
+    let cancelled = false;
+
+    const fetchLead = async () => {
+      try {
+        setLeadError(null);
+        setLeadLoading(true);
+
+        // Prefer leadId when available (outbound calls)
+        if (leadId) {
+          const resp = await makeApiCall(`${API_BASE}/leads/${leadId}`);
+          if (!resp.ok) throw new Error('Failed to load lead');
+          const data = await resp.json();
+          const lead = data?.data;
+          const extracted = extractLeadInfo(lead);
+          if (!cancelled) setResolvedLead(extracted);
+          return;
+        }
+
+        // Otherwise best-effort resolve by phone (inbound calls)
+        if (phoneNumber) {
+          const resp = await makeApiCall(
+            `${API_BASE}/leads/search?phone=${encodeURIComponent(phoneNumber)}`
+          );
+          if (!resp.ok) throw new Error('Failed to search lead');
+          const data = await resp.json();
+          const lead = data?.lead;
+          const extracted = extractLeadInfo(lead);
+          if (!cancelled) setResolvedLead(extracted);
+        }
+      } catch (e: any) {
+        if (!cancelled) {
+          setResolvedLead(null);
+          setLeadError(e?.message || 'Failed to load lead info');
+        }
+      } finally {
+        if (!cancelled) setLeadLoading(false);
+      }
+    };
+
+    fetchLead();
+
+    return () => {
+      cancelled = true;
+    };
+    // We intentionally depend on leadId/phoneNumber only; status gates fetch to connected.
+  }, [callStatus.status, leadId, phoneNumber, hasLeadHint]);
+
   return (
-    <div className="fixed top-6 right-6 bg-white rounded-xl shadow-lg border border-gray-200 p-3 w-80 z-[9999] animate-in slide-in-from-top duration-300">
+    <div
+      ref={containerRef}
+      className="fixed bg-white rounded-xl shadow-lg border border-gray-200 p-2 w-60 z-[9999] cursor-grab active:cursor-grabbing"
+      style={{ left: pos.x, top: pos.y, touchAction: 'none' }}
+      onPointerDown={(e) => {
+        // Allow normal interaction with controls/links without dragging.
+        const target = e.target as HTMLElement | null;
+        if (target?.closest('button') || target?.closest('a')) {
+          // Note: address is a button; it should still be clickable.
+          // If user wants to drag, they can start dragging from any empty space.
+          return;
+        }
+
+        const el = containerRef.current;
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+
+        dragRef.current = {
+          dragging: true,
+          startX: e.clientX,
+          startY: e.clientY,
+          startLeft: rect.left,
+          startTop: rect.top,
+          width: rect.width,
+          height: rect.height,
+        };
+
+        (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+      }}
+      onPointerMove={(e) => {
+        if (!dragRef.current.dragging) return;
+        const dx = e.clientX - dragRef.current.startX;
+        const dy = e.clientY - dragRef.current.startY;
+        const next = clampToViewport(
+          dragRef.current.startLeft + dx,
+          dragRef.current.startTop + dy,
+          dragRef.current.width,
+          dragRef.current.height
+        );
+        setPos(next);
+      }}
+      onPointerUp={() => {
+        dragRef.current.dragging = false;
+      }}
+    >
       {/* Status Badge */}
       <div className={`flex items-center justify-center gap-1.5 mb-2 ${status.color}`}>
         <div className={`w-1.5 h-1.5 rounded-full ${callStatus.status === 'connected' ? 'bg-green-500 animate-pulse' : 'bg-yellow-500 animate-pulse'}`}></div>
         <span className="text-xs font-semibold uppercase tracking-wide">{status.text}</span>
       </div>
 
-      {/* Contact Info - More Compact */}
-      <div className="text-center mb-2">
-        <div className="flex justify-center mb-2">
-          <div className="bg-gradient-to-br from-purple-500 to-blue-500 rounded-full p-2">
-            <User className="w-5 h-5 text-white" />
+      {/* Lead Info */}
+      <div className="mb-2 text-center space-y-1">
+        {display.address && display.id ? (
+          <button
+            type="button"
+            onClick={() => navigate(`/leads/${display.id}/edit`)}
+            className="w-full text-xs font-semibold text-blue-700 hover:text-blue-900 hover:underline truncate"
+            title={display.address}
+          >
+            {display.address}
+          </button>
+        ) : display.address ? (
+          <div className="text-xs font-semibold text-gray-800 truncate" title={display.address}>
+            {display.address}
           </div>
+        ) : null}
+
+        {display.name ? (
+          <div className="text-sm font-bold text-gray-900 truncate" title={display.name}>
+            {display.name}
+          </div>
+        ) : null}
+
+        <div className="space-y-0.5">
+          {display.phone ? (
+            <div className="flex items-center justify-center gap-1 text-xs text-gray-700 font-mono">
+              <Phone className="w-3 h-3" />
+              <span className="truncate" title={display.phone}>
+                {display.phone}
+              </span>
+            </div>
+          ) : null}
+          {display.email ? (
+            <div className="flex items-center justify-center gap-1 text-xs text-gray-700">
+              <Mail className="w-3 h-3" />
+              <span className="truncate" title={display.email}>
+                {display.email}
+              </span>
+            </div>
+          ) : null}
+
+          {!display.name && !display.phone && !display.email && !display.address ? (
+            <div className="text-xs text-gray-600">
+              {leadLoading ? 'Loading lead…' : phoneNumber ? phoneNumber : 'Unknown'}
+            </div>
+          ) : null}
         </div>
-        
-        {contactInfo?.name ? (
-          <div className="space-y-0.5">
-            <h3 className="text-sm font-bold text-gray-900">{contactInfo.name}</h3>
-            <p className="text-xs text-gray-600">{contactInfo.phoneNumber}</p>
-          </div>
-        ) : (
-          <p className="text-sm font-semibold text-gray-900">{contactInfo?.phoneNumber || 'Unknown'}</p>
-        )}
       </div>
 
       {/* Call Duration - Smaller */}
@@ -140,9 +365,9 @@ export const ActiveCallWidget: React.FC<ActiveCallWidgetProps> = ({
       </div>
 
       {/* Error Message */}
-      {callStatus.error && (
+      {(callStatus.error || leadError) && (
         <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded">
-          <p className="text-xs text-red-600 text-center">{callStatus.error}</p>
+          <p className="text-xs text-red-600 text-center">{callStatus.error || leadError}</p>
         </div>
       )}
     </div>

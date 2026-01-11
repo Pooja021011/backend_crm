@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { API_BASE, makeApiCall } from '@/config/api';
+import { useToast } from '@/hooks/use-toast';
 import { 
   Phone, 
   MessageSquare, 
@@ -20,7 +21,9 @@ import {
   User,
   CheckSquare,
   Calendar,
-  Plus
+  Plus,
+  Edit2,
+  Save
 } from 'lucide-react';
 
 interface Communication {
@@ -30,6 +33,7 @@ interface Communication {
   body?: string;
   subject?: string;
   metadata?: any;
+  createdById?: string;
   title?: string;
   description?: string;
   status?: string;
@@ -47,9 +51,16 @@ interface Communication {
 }
 
 interface UnifiedCommunicationFeedProps {
+  leadId: string;
   communications: Communication[];
   tasks: any[];
   loadingCommunications: boolean;
+  currentUser?: { id: string; roles?: string[] };
+  canEditLead?: boolean;
+  onRefreshCommunications?: () => void;
+  onRefreshTasks?: () => void;
+  onNoteUpdated?: (updated: any) => void;
+  onTaskUpdated?: (updated: any) => void;
   
   // SMS props
   smsText: string;
@@ -112,9 +123,16 @@ interface UnifiedCommunicationFeedProps {
 }
 
 export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> = ({
+  leadId,
   communications,
   tasks,
   loadingCommunications,
+  currentUser,
+  canEditLead = false,
+  onRefreshCommunications,
+  onRefreshTasks,
+  onNoteUpdated,
+  onTaskUpdated,
   lead,
   smsText,
   setSmsText,
@@ -145,9 +163,25 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
   onAddNote,
   onOpenTaskDialog,
 }) => {
+  const { toast } = useToast();
   // Dialog states
   const [showSMSDialog, setShowSMSDialog] = useState(false);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
+
+  // Edit dialogs
+  const [editingNote, setEditingNote] = useState<any | null>(null);
+  const [editNoteBody, setEditNoteBody] = useState('');
+  const [savingNoteEdit, setSavingNoteEdit] = useState(false);
+
+  const [editingTask, setEditingTask] = useState<any | null>(null);
+  const [savingTaskEdit, setSavingTaskEdit] = useState(false);
+  const [taskEditForm, setTaskEditForm] = useState({
+    title: '',
+    description: '',
+    dueAtLocal: '',
+    assignedToId: '',
+    status: 'OPEN',
+  });
   
   // User mention state
   const [users, setUsers] = useState<Array<{id: string; firstName: string; lastName: string}>>([]);
@@ -159,6 +193,129 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
   // Recording playback state (recordingSid -> object URL)
   const [recordingUrls, setRecordingUrls] = useState<Record<string, string>>({});
   const [recordingLoading, setRecordingLoading] = useState<Record<string, boolean>>({});
+
+  const toLocalDateTimeInput = (iso?: string) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  const fromLocalDateTimeInput = (value?: string) => {
+    if (!value) return undefined;
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return undefined;
+    return d.toISOString();
+  };
+
+  const formatFromToLine = (item: any) => {
+    if (!item || !['CALL', 'SMS', 'EMAIL'].includes(item.type)) return null;
+
+    const direction = item.direction ? String(item.direction).toUpperCase() : 'UNKNOWN';
+    const meta = (item as any)?.metadata || {};
+    const fromVal = meta?.from ?? 'Unknown';
+    const toValRaw = meta?.to ?? 'Unknown';
+    const toVal =
+      Array.isArray(toValRaw) ? toValRaw.filter(Boolean).join(', ') : String(toValRaw || 'Unknown');
+
+    return `${direction} • From: ${String(fromVal || 'Unknown')} → To: ${toVal}`;
+  };
+
+  const canEditNoteItem = (item: any) => {
+    if (item.type !== 'NOTE') return false;
+    const userId = currentUser?.id;
+    const roles = currentUser?.roles || [];
+    const privileged = roles.includes('ADMIN') || roles.includes('MANAGER') || roles.includes('TC');
+    const isAuthor = !!userId && item.createdById === userId;
+    return privileged || canEditLead || isAuthor;
+  };
+
+  const canEditTaskItem = (item: any) => {
+    if (item.type !== 'TASK') return false;
+    const userId = currentUser?.id;
+    const isAssignee = !!userId && item.assignedToId === userId;
+    return canEditLead || isAssignee;
+  };
+
+  const openEditNote = (item: any) => {
+    setEditingNote(item);
+    setEditNoteBody(item.body || '');
+  };
+
+  const saveEditedNote = async () => {
+    if (!editingNote) return;
+    setSavingNoteEdit(true);
+    try {
+      const response = await makeApiCall(`${API_BASE}/leads/${leadId}/communications/${editingNote.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: editNoteBody }),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err?.error || err?.message || 'Failed to update note');
+      }
+      const json = await response.json().catch(() => ({}));
+      const updated = (json as any)?.data || (json as any);
+      if (updated?.id) onNoteUpdated?.(updated);
+      setEditingNote(null);
+      setEditNoteBody('');
+      toast({ title: 'Updated', description: 'Note updated' });
+      // Ensure UI refresh happens even if caller returns a Promise.
+      await Promise.resolve(onRefreshCommunications?.());
+      await Promise.resolve(onRefreshTasks?.());
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.message || 'Failed to update note', variant: 'destructive' });
+    } finally {
+      setSavingNoteEdit(false);
+    }
+  };
+
+  const openEditTask = (item: any) => {
+    setEditingTask(item);
+    setTaskEditForm({
+      title: item.title || '',
+      description: item.description || '',
+      dueAtLocal: toLocalDateTimeInput(item.dueAt),
+      assignedToId: item.assignedToId || '',
+      status: item.status || 'OPEN',
+    });
+  };
+
+  const saveEditedTask = async () => {
+    if (!editingTask) return;
+    setSavingTaskEdit(true);
+    try {
+      const payload: any = {
+        title: taskEditForm.title,
+        description: taskEditForm.description,
+        status: taskEditForm.status,
+      };
+      const dueAtIso = fromLocalDateTimeInput(taskEditForm.dueAtLocal);
+      if (dueAtIso) payload.dueAt = dueAtIso;
+      payload.assignedToId = taskEditForm.assignedToId || null;
+
+      const response = await makeApiCall(`${API_BASE}/leads/${leadId}/tasks/${editingTask.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err?.error || err?.message || 'Failed to update task');
+      }
+      const json = await response.json().catch(() => ({}));
+      const updated = (json as any)?.data || (json as any);
+      if (updated?.id) onTaskUpdated?.(updated);
+      toast({ title: 'Updated', description: 'Task updated' });
+      setEditingTask(null);
+      await Promise.resolve(onRefreshTasks?.());
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.message || 'Failed to update task', variant: 'destructive' });
+    } finally {
+      setSavingTaskEdit(false);
+    }
+  };
   
   // Load users for @ mentions - only users who have access to this lead
   useEffect(() => {
@@ -273,7 +430,8 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
       occurredAt: task.createdAt || task.dueAt,
       createdAt: task.createdAt,
       assignedTo: task.assignedTo,
-      user: task.createdBy
+      user: task.createdBy,
+      assignedToId: task.assignedToId,
     }))
   ];
 
@@ -453,6 +611,32 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
                     {formatDateTime(item.occurredAt || item.createdAt || '')}
                   </span>
                 </div>
+
+                {(canEditNoteItem(item) || canEditTaskItem(item)) && (
+                  <div className="flex justify-end mb-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 w-6 p-0"
+                      title={item.type === 'NOTE' ? 'Edit note' : 'Edit'}
+                      onClick={() => {
+                        if (item.type === 'NOTE') openEditNote(item);
+                        if (item.type === 'TASK') openEditTask(item);
+                      }}
+                    >
+                      <Edit2 className="w-3 h-3" />
+                      <span className="sr-only">Edit</span>
+                    </Button>
+                  </div>
+                )}
+
+                {/* Direction + From/To (CALL/SMS/EMAIL) */}
+                {formatFromToLine(item) && (
+                  <div className="text-[10px] text-slate-500 mb-1">
+                    {formatFromToLine(item)}
+                  </div>
+                )}
 
                 {/* Task Title */}
                 {item.type === 'TASK' && item.title && (
@@ -782,6 +966,123 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
                 )}
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Note Dialog */}
+      <Dialog
+        open={!!editingNote}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingNote(null);
+            setEditNoteBody('');
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Note</DialogTitle>
+            <DialogDescription>Update the note body (mentions will be re-processed).</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label className="text-sm">Note</Label>
+            <Textarea
+              value={editNoteBody}
+              onChange={(e) => setEditNoteBody(e.target.value)}
+              className="min-h-[140px]"
+              disabled={savingNoteEdit}
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setEditingNote(null)} disabled={savingNoteEdit}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={saveEditedNote} disabled={savingNoteEdit}>
+              {savingNoteEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+              Save
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Task Dialog */}
+      <Dialog open={!!editingTask} onOpenChange={(open) => !open && setEditingTask(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Task</DialogTitle>
+            <DialogDescription>Edit title/description/due date/assignee/status.</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <Label className="text-sm">Title</Label>
+              <Input
+                value={taskEditForm.title}
+                onChange={(e) => setTaskEditForm((p) => ({ ...p, title: e.target.value }))}
+                disabled={savingTaskEdit}
+              />
+            </div>
+            <div className="col-span-2">
+              <Label className="text-sm">Description</Label>
+              <Textarea
+                value={taskEditForm.description}
+                onChange={(e) => setTaskEditForm((p) => ({ ...p, description: e.target.value }))}
+                className="min-h-[110px]"
+                disabled={savingTaskEdit}
+              />
+            </div>
+            <div>
+              <Label className="text-sm">Due</Label>
+              <Input
+                type="datetime-local"
+                value={taskEditForm.dueAtLocal}
+                onChange={(e) => setTaskEditForm((p) => ({ ...p, dueAtLocal: e.target.value }))}
+                disabled={savingTaskEdit}
+              />
+            </div>
+            <div>
+              <Label className="text-sm">Status</Label>
+              <Select
+                value={taskEditForm.status}
+                onValueChange={(value) => setTaskEditForm((p) => ({ ...p, status: value }))}
+              >
+                <SelectTrigger disabled={savingTaskEdit}>
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="OPEN">OPEN</SelectItem>
+                  <SelectItem value="DONE">DONE</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="col-span-2">
+              <Label className="text-sm">Assigned To</Label>
+              <Select
+                value={taskEditForm.assignedToId || 'unassigned'}
+                onValueChange={(value) => setTaskEditForm((p) => ({ ...p, assignedToId: value === 'unassigned' ? '' : value }))}
+              >
+                <SelectTrigger disabled={savingTaskEdit}>
+                  <SelectValue placeholder="Assignee" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unassigned">Unassigned</SelectItem>
+                  {users.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.firstName} {u.lastName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setEditingTask(null)} disabled={savingTaskEdit}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={saveEditedTask} disabled={savingTaskEdit}>
+              {savingTaskEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+              Save
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

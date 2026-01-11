@@ -36,7 +36,14 @@ export const stageTransitionService = {
       
       const lead = await prisma.lead.findUnique({
         where: { id: leadId },
-        select: { customFields: true, leadType: true }
+        select: {
+          customFields: true,
+          leadType: true,
+          address: { select: { address1: true, city: true, state: true, zip: true } },
+          seller: { select: { firstName: true, lastName: true, phone: true, email: true } },
+          buyer: { select: { firstName: true, lastName: true, phone: true, email: true } },
+          vendor: { select: { firstName: true, lastName: true, phone: true, email: true } },
+        }
       });
       
       if (!lead) {
@@ -47,6 +54,7 @@ export const stageTransitionService = {
       
       const customFields = (lead.customFields as any) || {};
       const requiredFields: string[] = [];
+      const errors: string[] = [];
       
       // Rule 2A: Appointment Complete requires photo upload
       if (stageName.includes('appointment') && stageName.includes('complete')) {
@@ -70,6 +78,27 @@ export const stageTransitionService = {
       
       // Rule 2B: Due Diligence Complete requires property questions
       if (stageName.includes('due diligence') && stageName.includes('complete')) {
+        // Also require basic contact/address info before allowing Due Diligence Complete.
+        // Email is optional by requirement.
+        const nonEmpty = (v: any) => typeof v === 'string' && v.trim().length > 0;
+
+        const contact =
+          lead.leadType === 'SELLER' ? lead.seller :
+          lead.leadType === 'BUYER' ? lead.buyer :
+          lead.vendor;
+
+        if (!nonEmpty(contact?.firstName)) requiredFields.push('firstName');
+        if (!nonEmpty(contact?.lastName)) requiredFields.push('lastName');
+        if (!nonEmpty(contact?.phone)) requiredFields.push('phone');
+
+        // For property leads (SELLER), address must be present.
+        if (lead.leadType === 'SELLER') {
+          if (!nonEmpty(lead.address?.address1)) requiredFields.push('address1');
+          if (!nonEmpty(lead.address?.city)) requiredFields.push('city');
+          if (!nonEmpty(lead.address?.state)) requiredFields.push('state');
+          if (!nonEmpty(lead.address?.zip)) requiredFields.push('zip');
+        }
+
         if (!customFields.hvacType) requiredFields.push('hvacType');
         if (!customFields.hvacAge) requiredFields.push('hvacAge');
         if (!customFields.waterHeaterAge) requiredFields.push('waterHeaterAge');
@@ -78,11 +107,16 @@ export const stageTransitionService = {
         if (!customFields.sewerType) requiredFields.push('sewerType');
         
         if (requiredFields.length > 0) {
+          // Build a clear message: separate “basic info” from “property info” (custom fields).
+          const basic = requiredFields.filter(f => ['firstName','lastName','phone','address1','city','state','zip'].includes(f));
+          const dd = requiredFields.filter(f => !basic.includes(f));
+          if (basic.length) errors.push(`Basic information required: ${basic.join(', ')}`);
+          if (dd.length) errors.push(`Property information required: ${dd.join(', ')}`);
           return { 
             valid: false,
             stageName: toStage.name,
             requiredFields,
-            errors: [`Property information required: ${requiredFields.join(', ')}`]
+            errors: errors.length ? errors : [`Property information required: ${requiredFields.join(', ')}`]
           };
         }
       }

@@ -9,29 +9,103 @@ export const communicationController = {
     res.json({ data });
   },
   create: async (req: Request, res: Response) => {
-    const { type, direction, subject, body, occurredAt, attachmentFileIds } = req.body;
+    const { type, direction, subject, body, occurredAt, attachmentFileIds, metadata } = req.body;
     const created = await communicationRepository.create(req.params.id, {
-      type, direction, subject, body, occurredAt: new Date(occurredAt), createdById: (req as any).user?.id, attachmentFileIds
+      type,
+      direction,
+      subject,
+      body,
+      occurredAt: new Date(occurredAt),
+      createdById: (req as any).user?.id,
+      attachmentFileIds,
+      metadata: metadata || null,
     });
     
     // If this is a NOTE with @mentions, create tasks for mentioned users
     if (type === 'NOTE' && body) {
-      await createTasksForMentions(req.params.id, body, (req as any).user?.id);
+      const mentionedUserIds = await createTasksForMentions(req.params.id, body, (req as any).user?.id);
+
+      // Store mention recipients for inbox notification targeting
+      if (mentionedUserIds.length > 0) {
+        const mergedMetadata = {
+          ...(typeof created?.metadata === 'object' && created?.metadata ? created.metadata : {}),
+          mentionedUserIds,
+        };
+
+        // Treat tagged notes as "inbound to mentioned users" for inbox purposes
+        await prisma.communication.update({
+          where: { id: created.id },
+          data: {
+            direction: 'INBOUND' as any,
+            metadata: mergedMetadata,
+          },
+        });
+      }
     }
     
     res.status(201).json({ data: created });
   },
+
+  update: async (req: Request, res: Response) => {
+    const { commId } = req.params as any;
+    const { body } = req.body as any;
+
+    if (!commId) return res.status(400).json({ error: 'Missing commId' });
+    if (typeof body !== 'string') return res.status(400).json({ error: 'body is required' });
+
+    const user = (req as any).user;
+    const userId = user?.id as string | undefined;
+    const roles: string[] = user?.roles || [];
+
+    const comm = await communicationRepository.findById(commId);
+    if (!comm) return res.status(404).json({ error: 'Not found' });
+
+    // Only allow editing NOTE communications
+    if ((comm as any).type !== 'NOTE') return res.status(400).json({ error: 'Only NOTE can be edited' });
+
+    const lead = (comm as any).lead;
+    const isPrivileged = roles.includes('ADMIN') || roles.includes('MANAGER') || roles.includes('TC');
+    const isAuthor = !!userId && (comm as any).createdById === userId;
+    const isLeadEditor =
+      !!userId &&
+      (lead?.assignedUserId === userId || lead?.dispAgentId === userId || lead?.createdById === userId);
+
+    if (!isPrivileged && !isAuthor && !isLeadEditor) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const trimmed = body.trim();
+
+    // Re-run mention parsing and create mention tasks for newly mentioned users (add-only for safety)
+    const mentionedUserIds = trimmed ? await createTasksForMentions(req.params.id, trimmed, userId) : [];
+
+    const mergedMetadata = {
+      ...(typeof (comm as any)?.metadata === 'object' && (comm as any)?.metadata ? (comm as any).metadata : {}),
+      mentionedUserIds,
+    };
+
+    const direction = mentionedUserIds.length > 0 ? 'INBOUND' : ((comm as any).direction || 'OUTBOUND');
+
+    const updated = await communicationRepository.updateNote({
+      id: commId,
+      body: trimmed,
+      direction,
+      metadata: mergedMetadata,
+    });
+
+    res.json({ data: updated });
+  },
 };
 
 // Helper function to parse @mentions and create tasks
-async function createTasksForMentions(leadId: string, noteBody: string, createdById?: string) {
+async function createTasksForMentions(leadId: string, noteBody: string, createdById?: string): Promise<string[]> {
   try {
     // Extract all @mentions from the note body
     // Pattern: @FirstName LastName
     const mentionRegex = /@([A-Z][a-z]+)\s+([A-Z][a-z]+)/g;
     const mentions = Array.from(noteBody.matchAll(mentionRegex));
     
-    if (mentions.length === 0) return;
+    if (mentions.length === 0) return [];
     
     // Get lead info to check permissions
     const lead = await prisma.lead.findUnique({
@@ -49,7 +123,7 @@ async function createTasksForMentions(leadId: string, noteBody: string, createdB
       }
     });
     
-    if (!lead) return;
+    if (!lead) return [];
     
     // Get all users to match names
     const users = await prisma.user.findMany({
@@ -97,7 +171,7 @@ async function createTasksForMentions(leadId: string, noteBody: string, createdB
     
     if (allowedUsers.length === 0) {
       console.log('⚠️ No users with lead access were mentioned');
-      return;
+      return [];
     }
     
     const leadDescription = lead?.address?.address1 
@@ -125,9 +199,11 @@ async function createTasksForMentions(leadId: string, noteBody: string, createdB
     
     await Promise.all(taskPromises);
     console.log(`✅ Created ${taskPromises.length} tasks for @mentions in note`);
+    return allowedUsers.map(u => u.id);
   } catch (error) {
     console.error('❌ Error creating tasks for mentions:', error);
     // Don't throw - note should still be created even if task creation fails
+    return [];
   }
 }
 

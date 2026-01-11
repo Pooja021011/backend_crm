@@ -8,7 +8,7 @@ import { TabsContent } from './ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
-import { Home, Plus, Search, TrendingUp, Calendar, MapPin, Trash2, ExternalLink } from 'lucide-react';
+import { Home, Plus, Search, TrendingUp, Calendar, MapPin, Trash2, ExternalLink, ChevronDown, ChevronUp, FileText } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 import { API_BASE, makeApiCall } from '../config/api';
 
@@ -34,6 +34,12 @@ interface LeadComparable {
 
 interface CompsManagerProps {
   leadId: string;
+  arv?: number;
+  arvDisplay?: string;
+  onArvDisplayChange?: (raw: string) => void;
+  onArvBlur?: () => void;
+  canEditArv?: boolean;
+  arvHelpText?: string;
   leadAddress?: {
     address1: string;
     city: string;
@@ -42,7 +48,16 @@ interface CompsManagerProps {
   };
 }
 
-export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress }) => {
+export const CompsManager: React.FC<CompsManagerProps> = ({
+  leadId,
+  leadAddress,
+  arv = 0,
+  arvDisplay,
+  onArvDisplayChange,
+  onArvBlur,
+  canEditArv = true,
+  arvHelpText = 'This value feeds the Underwriting ARV input automatically.',
+}) => {
   const [leadComps, setLeadComps] = useState<LeadComparable[]>([]);
   const [searchResults, setSearchResults] = useState<LeadComparable[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -51,6 +66,11 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
   const [showSearchDialog, setShowSearchDialog] = useState(false);
   const [showImageGallery, setShowImageGallery] = useState(false);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
+  const [expanded, setExpanded] = useState(false);
+
+  // Comps PDFs
+  const [pdfs, setPdfs] = useState<any[]>([]);
+  const [uploadingPdf, setUploadingPdf] = useState(false);
   
   // Search filters
   const [searchFilters, setSearchFilters] = useState({
@@ -88,6 +108,7 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
 
   useEffect(() => {
     loadLeadComps();
+    loadLeadCompPdfs();
   }, [leadId]);
 
   const formatCurrency = (amount: number | undefined) => {
@@ -131,6 +152,65 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadLeadCompPdfs = async () => {
+    try {
+      const response = await makeApiCall(`${API_BASE}/comps/leads/${leadId}/pdfs`);
+      if (response.ok) {
+        const json = await response.json();
+        setPdfs(json.data || []);
+      }
+    } catch (e) {
+      // non-blocking
+    }
+  };
+
+  const handlePdfUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    event.target.value = '';
+
+    if (file.type !== 'application/pdf') {
+      toast({ title: 'Invalid file', description: 'Please upload a PDF', variant: 'destructive' });
+      return;
+    }
+
+    setUploadingPdf(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await makeApiCall(`${API_BASE}/comps/leads/${leadId}/pdfs`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err?.error || err?.message || 'Failed to upload PDF');
+      }
+
+      toast({ title: 'Success', description: 'Comp PDF uploaded' });
+      await loadLeadCompPdfs();
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.message || 'Failed to upload PDF', variant: 'destructive' });
+    } finally {
+      setUploadingPdf(false);
+    }
+  };
+
+  const deletePdf = async (id: string) => {
+    try {
+      const response = await makeApiCall(`${API_BASE}/comps/leads/${leadId}/pdfs/${id}`, { method: 'DELETE' });
+      if (!response.ok && response.status !== 204) {
+        throw new Error('Failed to delete PDF');
+      }
+      toast({ title: 'Success', description: 'PDF removed' });
+      await loadLeadCompPdfs();
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.message || 'Failed to delete PDF', variant: 'destructive' });
     }
   };
 
@@ -276,93 +356,184 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
     }
   };
 
-  if (isLoading) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Home className="h-5 w-5" />
-            Comparable Properties
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-8">Loading comparables...</div>
-        </CardContent>
-      </Card>
-    );
-  }
+  const formatArv = () => {
+    if (!arv) return 'ARV ($0)';
+    return `ARV (${formatCurrency(arv)})`;
+  };
 
   return (
-    <Card className="border border-slate-200">
-      <CardHeader className="p-3 pb-0">
-        <CardTitle className="flex items-center justify-between text-sm">
-          <div className="flex items-center gap-1.5">
-            <Home className="h-4 w-4" />
-            Comparable Properties
-          </div>
-          <Dialog open={showAddCompDialog} onOpenChange={setShowAddCompDialog}>
-            <DialogTrigger asChild><Button size="sm" variant="ghost" className="h-6 text-xs px-2"><Plus className="h-3 w-3 mr-0.5" />Add</Button></DialogTrigger>
-            <DialogContent className="max-w-md">
-              <DialogHeader><DialogTitle className="text-sm">Add Comparable</DialogTitle></DialogHeader>
-              <div className="grid grid-cols-4 gap-1 max-h-64 overflow-y-auto">
-                <div className="col-span-2"><Label className="text-[10px]">Address</Label><Input value={newComp.address} onChange={(e) => setNewComp(prev => ({ ...prev, address: e.target.value }))} placeholder="123 Main St" className="h-6 text-xs" /></div>
-                <div><Label className="text-[10px]">City</Label><Input value={newComp.city} onChange={(e) => setNewComp(prev => ({ ...prev, city: e.target.value }))} className="h-6 text-xs" /></div>
-                <div><Label className="text-[10px]">State</Label><Input value={newComp.state} onChange={(e) => setNewComp(prev => ({ ...prev, state: e.target.value }))} className="h-6 text-xs" /></div>
-                <div><Label className="text-[10px]">ZIP</Label><Input value={newComp.zip} onChange={(e) => setNewComp(prev => ({ ...prev, zip: e.target.value }))} className="h-6 text-xs" /></div>
-                <div><Label className="text-[10px]">Beds</Label><Input type="number" value={newComp.beds} onChange={(e) => setNewComp(prev => ({ ...prev, beds: e.target.value }))} className="h-6 text-xs" /></div>
-                <div><Label className="text-[10px]">Baths</Label><Input type="number" step="0.5" value={newComp.baths} onChange={(e) => setNewComp(prev => ({ ...prev, baths: e.target.value }))} className="h-6 text-xs" /></div>
-                <div><Label className="text-[10px]">SqFt</Label><Input type="number" value={newComp.sqft} onChange={(e) => setNewComp(prev => ({ ...prev, sqft: e.target.value }))} className="h-6 text-xs" /></div>
-                <div><Label className="text-[10px]">Year</Label><Input type="number" value={newComp.yearBuilt} onChange={(e) => setNewComp(prev => ({ ...prev, yearBuilt: e.target.value }))} className="h-6 text-xs" /></div>
-                <div><Label className="text-[10px]">Price</Label><Input type="number" value={newComp.salePrice} onChange={(e) => setNewComp(prev => ({ ...prev, salePrice: e.target.value }))} className="h-6 text-xs" /></div>
-                <div><Label className="text-[10px]">DOM</Label><Input type="number" value={newComp.dom} onChange={(e) => setNewComp(prev => ({ ...prev, dom: e.target.value }))} className="h-6 text-xs" /></div>
-                <div className="col-span-2"><Label className="text-[10px]">Date Sold</Label><Input type="date" value={newComp.dateSold} onChange={(e) => setNewComp(prev => ({ ...prev, dateSold: e.target.value }))} className="h-6 text-xs" /></div>
+    <div className="border border-slate-200 rounded-lg bg-white p-2">
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-1">
+          <Home className="w-3 h-3 text-slate-500" />
+          <span className="text-xs font-medium text-slate-600">Comparable Properties</span>
+          <span className="text-xs text-emerald-600 font-semibold ml-2">{formatArv()}</span>
+        </div>
+        <div className="flex items-center gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-5 text-[10px] px-2"
+              onClick={() => document.getElementById(`comps-pdf-upload-${leadId}`)?.click()}
+              disabled={uploadingPdf}
+            >
+              <Plus className="h-3 w-3 mr-0.5" />
+              {uploadingPdf ? 'Uploading...' : 'Add'}
+            </Button>
+            <input
+              id={`comps-pdf-upload-${leadId}`}
+              type="file"
+              accept="application/pdf"
+              className="hidden"
+              onChange={handlePdfUpload}
+              disabled={uploadingPdf}
+            />
+
+            <Dialog open={showAddCompDialog} onOpenChange={setShowAddCompDialog}>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="outline" className="h-5 text-[10px] px-2">
+                  Add Manual Comp
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader><DialogTitle className="text-sm">Add Comparable</DialogTitle></DialogHeader>
+                <div className="grid grid-cols-4 gap-1 max-h-64 overflow-y-auto">
+                  <div className="col-span-2"><Label className="text-[10px]">Address</Label><Input value={newComp.address} onChange={(e) => setNewComp(prev => ({ ...prev, address: e.target.value }))} placeholder="123 Main St" className="h-6 text-xs" /></div>
+                  <div><Label className="text-[10px]">City</Label><Input value={newComp.city} onChange={(e) => setNewComp(prev => ({ ...prev, city: e.target.value }))} className="h-6 text-xs" /></div>
+                  <div><Label className="text-[10px]">State</Label><Input value={newComp.state} onChange={(e) => setNewComp(prev => ({ ...prev, state: e.target.value }))} className="h-6 text-xs" /></div>
+                  <div><Label className="text-[10px]">ZIP</Label><Input value={newComp.zip} onChange={(e) => setNewComp(prev => ({ ...prev, zip: e.target.value }))} className="h-6 text-xs" /></div>
+                  <div><Label className="text-[10px]">Beds</Label><Input type="number" value={newComp.beds} onChange={(e) => setNewComp(prev => ({ ...prev, beds: e.target.value }))} className="h-6 text-xs" /></div>
+                  <div><Label className="text-[10px]">Baths</Label><Input type="number" step="0.5" value={newComp.baths} onChange={(e) => setNewComp(prev => ({ ...prev, baths: e.target.value }))} className="h-6 text-xs" /></div>
+                  <div><Label className="text-[10px]">SqFt</Label><Input type="number" value={newComp.sqft} onChange={(e) => setNewComp(prev => ({ ...prev, sqft: e.target.value }))} className="h-6 text-xs" /></div>
+                  <div><Label className="text-[10px]">Year</Label><Input type="number" value={newComp.yearBuilt} onChange={(e) => setNewComp(prev => ({ ...prev, yearBuilt: e.target.value }))} className="h-6 text-xs" /></div>
+                  <div><Label className="text-[10px]">Price</Label><Input type="number" value={newComp.salePrice} onChange={(e) => setNewComp(prev => ({ ...prev, salePrice: e.target.value }))} className="h-6 text-xs" /></div>
+                  <div><Label className="text-[10px]">DOM</Label><Input type="number" value={newComp.dom} onChange={(e) => setNewComp(prev => ({ ...prev, dom: e.target.value }))} className="h-6 text-xs" /></div>
+                  <div className="col-span-2"><Label className="text-[10px]">Date Sold</Label><Input type="date" value={newComp.dateSold} onChange={(e) => setNewComp(prev => ({ ...prev, dateSold: e.target.value }))} className="h-6 text-xs" /></div>
+                </div>
+                <div className="flex justify-end gap-1 mt-2">
+                  <Button variant="outline" size="sm" className="h-6 text-xs" onClick={() => setShowAddCompDialog(false)}>Cancel</Button>
+                  <Button size="sm" className="h-6 text-xs" onClick={createComparable}>Add</Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-5 w-5 p-0"
+              onClick={() => setExpanded(!expanded)}
+              title={expanded ? 'Collapse' : 'Expand'}
+            >
+              {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </Button>
+        </div>
+      </div>
+      {expanded && (
+        <div className="space-y-3">
+          {/* ARV input (inside Comparable Properties) */}
+          {typeof arvDisplay === 'string' && typeof onArvDisplayChange === 'function' && (
+            <div className="grid grid-cols-12 gap-2 items-end">
+              <div className="col-span-12 sm:col-span-4">
+                <Label className="text-[10px] text-slate-500">ARV (USD)</Label>
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  value={arvDisplay}
+                  onChange={(e) => onArvDisplayChange(e.target.value)}
+                  onBlur={onArvBlur}
+                  className="h-6 text-xs"
+                  placeholder="$0"
+                  disabled={!canEditArv}
+                />
               </div>
-              <div className="flex justify-end gap-1 mt-2">
-                <Button variant="outline" size="sm" className="h-6 text-xs" onClick={() => setShowAddCompDialog(false)}>Cancel</Button>
-                <Button size="sm" className="h-6 text-xs" onClick={createComparable}>Add</Button>
+              <div className="col-span-12 sm:col-span-8 text-[10px] text-slate-500">
+                {arvHelpText}
               </div>
-            </DialogContent>
-          </Dialog>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-3 pt-2">
-        {leadComps.length === 0 ? (
-          <div className="text-center py-3 text-[10px] text-muted-foreground">No comps yet</div>
-        ) : (
-          <div className="overflow-x-auto max-h-40">
-            <Table>
-              <TableHeader>
-                <TableRow className="text-[10px]">
-                  <TableHead className="py-1 px-1">Address</TableHead>
-                  <TableHead className="py-1 px-1">Beds/Baths</TableHead>
-                  <TableHead className="py-1 px-1">Sq Ft</TableHead>
-                  <TableHead className="py-1 px-1">Sale Price</TableHead>
-                  <TableHead className="py-1 px-1">Price/Sq Ft</TableHead>
-                  <TableHead className="py-1 px-1">DOM</TableHead>
-                  <TableHead className="py-1 px-1">Date Sold</TableHead>
-                  <TableHead className="py-1 px-1"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {leadComps.map((comp) => (
-                  <TableRow key={comp.id} className="text-[10px]">
-                    <TableCell className="py-1 px-1">
-                      <div className="font-medium">{comp.address}</div>
-                      <div className="text-slate-400">{comp.city}, {comp.state}</div>
-                    </TableCell>
-                    <TableCell className="py-1 px-1">{comp.beds || '-'}/{comp.baths || '-'}</TableCell>
-                    <TableCell className="py-1 px-1">{comp.sqft?.toLocaleString() || '-'}</TableCell>
-                    <TableCell className="py-1 px-1">{formatCurrency(comp.salePrice)}</TableCell>
-                    <TableCell className="py-1 px-1">{formatCurrency(comp.pricePerSqft)}</TableCell>
-                    <TableCell className="py-1 px-1">{comp.dom || '-'}</TableCell>
-                    <TableCell className="py-1 px-1">{formatDate(comp.dateSold)}</TableCell>
-                    <TableCell className="py-1 px-1"><Button size="sm" variant="ghost" className="h-4 w-4 p-0" onClick={() => deleteComparable(comp.id)}><Trash2 className="h-2.5 w-2.5" /></Button></TableCell>
-                  </TableRow>
+            </div>
+          )}
+
+          {/* PDFs */}
+          <div>
+            <div className="flex items-center gap-1.5 mb-1">
+              <FileText className="h-3.5 w-3.5 text-slate-500" />
+              <span className="text-xs font-medium text-slate-600">Comp PDFs</span>
+            </div>
+            {pdfs.length === 0 ? (
+              <div className="text-center py-2 text-[10px] text-muted-foreground">No PDFs yet</div>
+            ) : (
+              <div className="space-y-1">
+                {pdfs.map((p: any) => (
+                  <div key={p.id} className="flex items-center justify-between text-[10px] border border-slate-200 rounded px-2 py-1 bg-slate-50">
+                    <div className="truncate">
+                      <span className="font-medium">{p.file?.originalName || 'PDF'}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {p.previewUrl && (
+                        <Button size="sm" variant="ghost" className="h-5 text-[10px] px-2" onClick={() => window.open(`${API_BASE}${p.previewUrl.replace('/api/v1', '')}`, '_blank')}>
+                          Preview
+                        </Button>
+                      )}
+                      {p.downloadUrl && (
+                        <Button size="sm" variant="ghost" className="h-5 text-[10px] px-2" onClick={() => window.open(`${API_BASE}${p.downloadUrl.replace('/api/v1', '')}`, '_blank')}>
+                          Download
+                        </Button>
+                      )}
+                      <Button size="sm" variant="ghost" className="h-5 w-5 p-0" onClick={() => deletePdf(p.id)} title="Delete PDF">
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+            )}
           </div>
-        )}
+
+          {/* Manual comps table */}
+          <div>
+            <div className="flex items-center gap-1.5 mb-1">
+              <Home className="h-3.5 w-3.5 text-slate-500" />
+              <span className="text-xs font-medium text-slate-600">Manual Comps</span>
+            </div>
+            {isLoading ? (
+              <div className="text-center py-2 text-[10px] text-muted-foreground">Loading comparables...</div>
+            ) : leadComps.length === 0 ? (
+              <div className="text-center py-2 text-[10px] text-muted-foreground">No comps yet</div>
+            ) : (
+              <div className="overflow-x-auto max-h-40">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="text-[10px]">
+                      <TableHead className="py-1 px-1">Address</TableHead>
+                      <TableHead className="py-1 px-1">Beds/Baths</TableHead>
+                      <TableHead className="py-1 px-1">Sq Ft</TableHead>
+                      <TableHead className="py-1 px-1">Sale Price</TableHead>
+                      <TableHead className="py-1 px-1">Price/Sq Ft</TableHead>
+                      <TableHead className="py-1 px-1">DOM</TableHead>
+                      <TableHead className="py-1 px-1">Date Sold</TableHead>
+                      <TableHead className="py-1 px-1"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {leadComps.map((comp) => (
+                      <TableRow key={comp.id} className="text-[10px]">
+                        <TableCell className="py-1 px-1">
+                          <div className="font-medium">{comp.address}</div>
+                          <div className="text-slate-400">{comp.city}, {comp.state}</div>
+                        </TableCell>
+                        <TableCell className="py-1 px-1">{comp.beds || '-'}/{comp.baths || '-'}</TableCell>
+                        <TableCell className="py-1 px-1">{comp.sqft?.toLocaleString() || '-'}</TableCell>
+                        <TableCell className="py-1 px-1">{formatCurrency(comp.salePrice)}</TableCell>
+                        <TableCell className="py-1 px-1">{formatCurrency(comp.pricePerSqft)}</TableCell>
+                        <TableCell className="py-1 px-1">{comp.dom || '-'}</TableCell>
+                        <TableCell className="py-1 px-1">{formatDate(comp.dateSold)}</TableCell>
+                        <TableCell className="py-1 px-1"><Button size="sm" variant="ghost" className="h-4 w-4 p-0" onClick={() => deleteComparable(comp.id)}><Trash2 className="h-2.5 w-2.5" /></Button></TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
 
         {/* Search Results Dialog */}
         <Dialog open={showSearchDialog} onOpenChange={setShowSearchDialog}>
@@ -449,7 +620,8 @@ export const CompsManager: React.FC<CompsManagerProps> = ({ leadId, leadAddress 
             </div>
           </DialogContent>
         </Dialog>
-      </CardContent>
-    </Card>
+        </div>
+      )}
+    </div>
   );
 };

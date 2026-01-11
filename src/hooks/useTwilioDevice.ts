@@ -31,6 +31,7 @@ export const useTwilioDevice = () => {
   const [isInitializing, setIsInitializing] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [currentCallNumber, setCurrentCallNumber] = useState<string>(''); // Track current call number
+  const [currentCallLeadId, setCurrentCallLeadId] = useState<string>(''); // Track leadId (best-effort)
   const isOutgoingCallRef = useRef(false); // Track if we initiated the call (using ref for event handlers)
   const lastIdentityRef = useRef<string>(''); // Track which user identity this Device was created for
   const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -128,6 +129,7 @@ export const useTwilioDevice = () => {
     setCallStatus({ status: 'idle', duration: 0 });
     setIsMuted(false);
     setCurrentCallNumber('');
+    setCurrentCallLeadId('');
     isOutgoingCallRef.current = false;
     lastIdentityRef.current = '';
   }, []);
@@ -587,7 +589,7 @@ export const useTwilioDevice = () => {
   }, [device, toast, isAuthenticated, currentIdentityKey, isAuthRoute]);
 
   // Make a call
-  const makeCall = useCallback(async (phoneNumber: string) => {
+  const makeCall = useCallback(async (phoneNumber: string, leadId?: string) => {
     try {
       // Guard: never initiate a second outbound call while another call is active/connecting/ringing.
       // This prevents accidental "redial" caused by double-clicks or duplicate UI triggers.
@@ -609,6 +611,7 @@ export const useTwilioDevice = () => {
       
       setCallStatus({ status: 'connecting', duration: 0 });
       setCurrentCallNumber(phoneNumber); // Store the number being called
+      setCurrentCallLeadId(leadId || '');
 
       // Make the call
       const call = await deviceToUse.connect({
@@ -636,6 +639,7 @@ export const useTwilioDevice = () => {
         setCallStatus({ status: 'idle', duration: 0 });
         setActiveCall(null);
         setCurrentCallNumber('');
+        setCurrentCallLeadId('');
         isOutgoingCallRef.current = false;
         
         // Clear duration counter
@@ -888,6 +892,7 @@ export const useTwilioDevice = () => {
         duration: 0,
         error: error.message 
       });
+      setCurrentCallLeadId('');
       
       toast({
         title: 'Call Failed',
@@ -945,6 +950,7 @@ export const useTwilioDevice = () => {
       
       // Store the caller's number
       setCurrentCallNumber(incomingCall.from);
+      setCurrentCallLeadId(''); // Unknown for inbound; UI will resolve via phone lookup if needed
       
       // Log to backend that call was answered
       try {
@@ -984,6 +990,7 @@ export const useTwilioDevice = () => {
         setCallStatus({ status: 'idle', duration: 0 });
         setActiveCall(null);
         setCurrentCallNumber(''); // Clear stored number
+        setCurrentCallLeadId('');
         isOutgoingCallRef.current = false; // Reset flag (just in case)
         
         if (durationIntervalRef.current) {
@@ -1006,6 +1013,7 @@ export const useTwilioDevice = () => {
         });
         setActiveCall(null);
         setCurrentCallNumber('');
+        setCurrentCallLeadId('');
         isOutgoingCallRef.current = false; // Reset outgoing flag
         
         if (durationIntervalRef.current) {
@@ -1028,6 +1036,7 @@ export const useTwilioDevice = () => {
     } catch (error: any) {
       console.error('Error answering call:', error);
       setIncomingCall(null);
+      setCurrentCallLeadId('');
       
       toast({
         title: 'Failed to Answer',
@@ -1135,6 +1144,7 @@ export const useTwilioDevice = () => {
     isInitializing,
     isMuted,
     currentCallNumber, // Export current call number
+    currentCallLeadId, // Export best-effort leadId (outbound)
     initializeDevice,
     makeCall,
     hangUp,

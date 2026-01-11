@@ -41,6 +41,7 @@ router.patch('/:id/buyers/:leadBuyerId', (req, res, next) => leadBuyerController
 // Communications
 router.get('/:id/communications', (req, res, next) => communicationController.list(req, res).catch(next));
 router.post('/:id/communications', (req, res, next) => communicationController.create(req, res).catch(next));
+router.patch('/:id/communications/:commId', (req, res, next) => communicationController.update(req, res).catch(next));
 
 // Note: Marketing, underwriting, and comps functionality moved to separate route files
 

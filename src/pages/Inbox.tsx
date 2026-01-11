@@ -48,6 +48,7 @@ import {
   MicOff,
   Clock, 
   CheckSquare, 
+  Check,
   Users,
   User,
   Eye,
@@ -58,6 +59,7 @@ import {
   Star,
   Reply,
   Bell,
+  Pencil,
   ChevronDown,
   Trash2,
   RefreshCw,
@@ -85,6 +87,16 @@ const Inbox = () => {
   const [sendingReply, setSendingReply] = useState(false);
   const [emailThread, setEmailThread] = useState<any[]>([]);
   const [loadingThread, setLoadingThread] = useState(false);
+
+  // Task edit state (Inbox Tasks tab)
+  const [editingTask, setEditingTask] = useState<any | null>(null);
+  const [showTaskEdit, setShowTaskEdit] = useState(false);
+  const [savingTaskEdit, setSavingTaskEdit] = useState(false);
+  const [taskEditForm, setTaskEditForm] = useState<{ title: string; description: string; dueAt: string }>({
+    title: '',
+    description: '',
+    dueAt: '',
+  });
   
   // SMS-specific state
   const [smsConversations, setSmsConversations] = useState<any[]>([]);
@@ -355,7 +367,7 @@ const Inbox = () => {
     console.log('📋 Item type:', email.type);
     console.log('🏠 Lead address:', email.leadAddress);
     
-    // Handle task clicks - navigate to lead details and remove from list
+    // Handle task clicks - navigate to lead details (task remains in inbox until completed)
     if (email.type === 'task') {
       console.log('✅ Task clicked - attempting navigation');
       console.log('📍 Lead address:', email.leadAddress);
@@ -366,24 +378,9 @@ const Inbox = () => {
         console.log('🆔 Lead ID:', email.leadId);
         navigate(navigationUrl);
 
-        // Mark task as read (persist) + remove from list
-        try {
-          const accessToken = localStorage.getItem('accessToken');
-          await fetch(`${API_BASE}/inbox/tasks/${email.id}/mark-read`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
-            },
-          });
-        } catch (e) {
-          console.error('Failed to mark task as read:', e);
-        }
-        setAssignedTasks(prevTasks => prevTasks.filter(task => task.id !== email.id));
-        
         toast({
-          title: "Task Completed & Lead Opened",
-          description: `Opened ${email.from} details and removed task from list`,
+          title: "Lead Opened",
+          description: `Opened ${email.from} details`,
         });
       } else {
         console.log('❌ No leadId found, navigating to leads page anyway');
@@ -1175,6 +1172,10 @@ const Inbox = () => {
         starred: false,
         priority: 'normal',
         leadId: t.lead?.id,
+        dueAt: t.dueAt,
+        status: t.status,
+        title: t.title,
+        description: t.description || '',
         leadAddress: t.lead?.address ? (
           // Check if address1 already contains city/state
           t.lead.address.address1.includes(t.lead.address.city) ? 
@@ -1197,6 +1198,73 @@ const Inbox = () => {
     }
   };
 
+  const toLocalDateTimeInputValue = (isoOrDate: string) => {
+    const d = new Date(isoOrDate);
+    const tzOffsetMs = d.getTimezoneOffset() * 60_000;
+    const local = new Date(d.getTime() - tzOffsetMs);
+    return local.toISOString().slice(0, 16);
+  };
+
+  const openTaskEdit = (task: any) => {
+    setEditingTask(task);
+    setTaskEditForm({
+      title: task.title || task.subject || '',
+      description: task.description || task.preview || '',
+      dueAt: task.dueAt ? toLocalDateTimeInputValue(task.dueAt) : '',
+    });
+    setShowTaskEdit(true);
+  };
+
+  const saveTaskEdit = async () => {
+    if (!editingTask?.leadId || !editingTask?.id) return;
+    if (!taskEditForm.title.trim()) {
+      toast({ title: 'Validation', description: 'Task title is required', variant: 'destructive' });
+      return;
+    }
+    if (!taskEditForm.dueAt) {
+      toast({ title: 'Validation', description: 'Task due date/time is required', variant: 'destructive' });
+      return;
+    }
+
+    setSavingTaskEdit(true);
+    try {
+      await makeApiCall(`${API_BASE}/leads/${editingTask.leadId}/tasks/${editingTask.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: taskEditForm.title.trim(),
+          description: taskEditForm.description?.trim() || null,
+          dueAt: new Date(taskEditForm.dueAt).toISOString(),
+        }),
+      });
+
+      toast({ title: 'Task Updated', description: 'Task updated successfully' });
+      setShowTaskEdit(false);
+      setEditingTask(null);
+      fetchTasks();
+    } catch (e: any) {
+      toast({ title: 'Update Failed', description: e?.message || 'Failed to update task', variant: 'destructive' });
+    } finally {
+      setSavingTaskEdit(false);
+    }
+  };
+
+  const markTaskComplete = async (task: any) => {
+    if (!task?.leadId || !task?.id) return;
+    try {
+      await makeApiCall(`${API_BASE}/leads/${task.leadId}/tasks/${task.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'DONE' }),
+      });
+      toast({ title: 'Task Completed', description: 'Task marked as completed' });
+      // Remove immediately from inbox list (inbox only shows OPEN due tasks)
+      setAssignedTasks(prev => prev.filter(t => t.id !== task.id));
+    } catch (e: any) {
+      toast({ title: 'Failed', description: e?.message || 'Could not complete task', variant: 'destructive' });
+    }
+  };
+
   // Fetch communications
   const fetchCommunications = async () => {
     setLoadingComms(true);
@@ -1204,7 +1272,10 @@ const Inbox = () => {
     try {
       const accessToken = localStorage.getItem('accessToken');
       console.log('🔑 Using token for communications:', accessToken ? 'Token exists' : 'NO TOKEN!');
-      const res = await fetch(`${API_BASE}/inbox/communications?timeframe=This%20Month&leadOnly=true&userScope=me`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+      const res = await fetch(
+        `${API_BASE}/inbox/communications?timeframe=This%20Month&leadOnly=true&userScope=me&type=NOTE&internal=true`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+      );
       
       if (!res.ok) {
         console.error(`Communications API error: ${res.status} ${res.statusText}`);
@@ -1230,13 +1301,13 @@ const Inbox = () => {
           .filter((c: any) => c?.lead?.id)
           .map((c: any) => ({
         id: c.id,
-        from: c.lead ? createLeadTitle(c.lead) : (c.subject || c.type),
-        subject: c.subject || `${c.type} ${c.direction}`,
-        preview: c.content || c.notes || c.body || '',
+        from: c.createdBy ? `${c.createdBy.firstName} ${c.createdBy.lastName}`.trim() : 'User',
+        subject: c.body ? c.body.substring(0, 120) + (c.body.length > 120 ? '…' : '') : (c.subject || ''),
+        preview: '',
         time: new Date(c.occurredAt).toLocaleString(),
         type: 'communication',
         source: 'communications',
-        unread: c.direction === 'INBOUND',
+        unread: !(c.reads && Array.isArray(c.reads) && c.reads.length > 0),
         starred: false,
         priority: 'normal',
         leadId: c.lead?.id,
@@ -2032,20 +2103,30 @@ const Inbox = () => {
                               <span className={`font-medium text-sm ${
                                 message.unread ? 'text-gray-900' : 'text-gray-600'
                               }`}>
-                                {extractNameFromEmail(message.from)}
+                                {message.type === 'communication'
+                                  ? (message.leadAddress || 'Lead')
+                                  : message.type === 'task'
+                                  ? (message.leadAddress || message.from)
+                                  : extractNameFromEmail(message.from)}
                               </span>
                               
                               {/* Read/Unread Badge */}
-                              <Badge 
-                                variant={message.unread ? "default" : "secondary"} 
-                                className={`text-xs px-1.5 py-0.5 ${
-                                  message.unread 
-                                    ? 'bg-blue-100 text-blue-800 border-blue-200' 
-                                    : 'bg-gray-100 text-gray-600 border-gray-200'
-                                }`}
-                              >
-                                {message.unread ? 'Unread' : 'Read'}
-                              </Badge>
+                              {message.type === 'task' ? (
+                                <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
+                                  Due
+                                </Badge>
+                              ) : (
+                                <Badge 
+                                  variant={message.unread ? "default" : "secondary"} 
+                                  className={`text-xs px-1.5 py-0.5 ${
+                                    message.unread 
+                                      ? 'bg-blue-100 text-blue-800 border-blue-200' 
+                                      : 'bg-gray-100 text-gray-600 border-gray-200'
+                                  }`}
+                                >
+                                  {message.unread ? 'Unread' : 'Read'}
+                                </Badge>
+                              )}
                               
                               {/* Priority Badge for Reminders and Notifications */}
                               {(message.type === 'reminder' || message.type === 'notification') && (
@@ -2080,9 +2161,39 @@ const Inbox = () => {
                             </div>
                           </div>
                           
-                          {/* Time */}
-                          <div className="flex-shrink-0 text-sm text-gray-500">
-                            {message.time}
+                          {/* Time + Task actions */}
+                          <div className="flex-shrink-0 flex items-center gap-2">
+                            <div className="text-sm text-gray-500">
+                              {message.time}
+                            </div>
+
+                            {message.type === 'task' && (
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openTaskEdit(message);
+                                  }}
+                                >
+                                  <Pencil className="w-3 h-3 mr-1" />
+                                  Edit
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  className="h-7 px-2 text-xs bg-green-600 hover:bg-green-700"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    markTaskComplete(message);
+                                  }}
+                                >
+                                  <Check className="w-3 h-3 mr-1" />
+                                  Complete
+                                </Button>
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -2094,6 +2205,69 @@ const Inbox = () => {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Task Edit Modal */}
+      <Dialog open={showTaskEdit} onOpenChange={(open) => {
+        setShowTaskEdit(open);
+        if (!open) setEditingTask(null);
+      }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">Edit Task</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <div className="text-sm font-medium text-gray-700">Title</div>
+              <Input
+                value={taskEditForm.title}
+                onChange={(e) => setTaskEditForm(prev => ({ ...prev, title: e.target.value }))}
+                placeholder="Task title"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <div className="text-sm font-medium text-gray-700">Description</div>
+              <Textarea
+                value={taskEditForm.description}
+                onChange={(e) => setTaskEditForm(prev => ({ ...prev, description: e.target.value }))}
+                placeholder="Task description"
+                rows={4}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <div className="text-sm font-medium text-gray-700">Due date & time (Central)</div>
+              <Input
+                type="datetime-local"
+                value={taskEditForm.dueAt}
+                onChange={(e) => setTaskEditForm(prev => ({ ...prev, dueAt: e.target.value }))}
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowTaskEdit(false)}
+                disabled={savingTaskEdit}
+              >
+                Cancel
+              </Button>
+              <Button type="button" onClick={saveTaskEdit} disabled={savingTaskEdit}>
+                {savingTaskEdit ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    Saving...
+                  </>
+                ) : (
+                  'Save'
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Email Detail Modal */}
         <Dialog open={showEmailDetail} onOpenChange={setShowEmailDetail}>

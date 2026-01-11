@@ -25,7 +25,8 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
     hangUp,
     toggleMute,
     isMuted,
-    currentCallNumber
+    currentCallNumber,
+    currentCallLeadId
   } = useTwilioContext();
 
   // Initialize Twilio device when component mounts
@@ -81,7 +82,8 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
             onHangUp={hangUp}
             onToggleMute={toggleMute}
             contactInfo={{
-              phoneNumber: currentCallNumber || 'Unknown'
+              phoneNumber: currentCallNumber || 'Unknown',
+              leadId: currentCallLeadId || undefined
             }}
           />
         )}

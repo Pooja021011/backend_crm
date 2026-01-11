@@ -558,9 +558,8 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
                       name="firstName"
                       value={formData.firstName}
                       onValueChange={(value) => handleInputChange('firstName', value)}
-                      validator={(value) => validateName(value, 'First name')}
+                      validator={(value) => value.trim() ? validateName(value, 'First name') : ({ isValid: true })}
                       placeholder="Enter first name"
-                      required
                       icon={<User className="w-4 h-4" />}
                     />
                     <ValidatedInput
@@ -568,9 +567,8 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
                       name="lastName"
                       value={formData.lastName}
                       onValueChange={(value) => handleInputChange('lastName', value)}
-                      validator={(value) => validateName(value, 'Last name')}
+                      validator={(value) => value.trim() ? validateName(value, 'Last name') : ({ isValid: true })}
                       placeholder="Enter last name"
-                      required
                       icon={<User className="w-4 h-4" />}
                     />
                   </div>
@@ -581,10 +579,9 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
                       name="phone"
                       value={formData.phone}
                       onValueChange={(value) => handleInputChange('phone', value)}
-                      validator={validatePhoneNumber}
+                      validator={(value) => value.trim() ? validatePhoneNumber(value) : ({ isValid: true })}
                       formatter={formatPhoneNumber}
                       placeholder="(555) 123-4567"
-                      required
                       icon={<Phone className="w-4 h-4" />}
                     />
                     <ValidatedInput
@@ -592,9 +589,8 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
                       name="email"
                       value={formData.email}
                       onValueChange={(value) => handleInputChange('email', value)}
-                      validator={validateEmail}
+                      validator={(value) => value.trim() ? validateEmail(value) : ({ isValid: true })}
                       placeholder="email@example.com"
-                      required
                       icon={<Mail className="w-4 h-4" />}
                     />
                   </div>
@@ -617,9 +613,8 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
                       name="address1"
                       value={formData.address1}
                       onValueChange={(value) => handleInputChange('address1', value)}
-                      validator={validateAddress}
+                      validator={(value) => value.trim() ? validateAddress(value) : ({ isValid: true })}
                       placeholder="Enter property address"
-                      required
                       icon={<MapPin className="w-4 h-4" />}
                     />
 
@@ -629,7 +624,7 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
                         name="city"
                         value={formData.city}
                         onValueChange={(value) => handleInputChange('city', value)}
-                        validator={validateCity}
+                        validator={(value) => value.trim() ? validateCity(value) : ({ isValid: true })}
                         placeholder="Enter city"
                       />
                       <ValidatedInput
@@ -637,7 +632,7 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
                         name="state"
                         value={formData.state}
                         onValueChange={(value) => handleInputChange('state', value.toUpperCase())}
-                        validator={validateState}
+                        validator={(value) => value.trim() ? validateState(value) : ({ isValid: true })}
                         placeholder="NC"
                         maxLength={2}
                       />
@@ -646,7 +641,7 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
                         name="zip"
                         value={formData.zip}
                         onValueChange={(value) => handleInputChange('zip', value)}
-                        validator={validateZipCode}
+                        validator={(value) => value.trim() ? validateZipCode(value) : ({ isValid: true })}
                         placeholder="28202"
                       />
                       

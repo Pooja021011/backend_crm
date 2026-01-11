@@ -108,6 +108,80 @@ export const compsController = {
     }
   },
 
+  async listLeadCompPdfs(req: Request, res: Response): Promise<void> {
+    try {
+      const { leadId } = req.params;
+      const pdfs = await compsService.listLeadCompPdfs(leadId);
+
+      const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+      const data = pdfs.map((row: any) => ({
+        id: row.id,
+        leadId: row.leadId,
+        file: {
+          id: row.file?.id,
+          originalName: row.file?.originalName,
+          mimeType: row.file?.mimeType,
+          size: row.file?.size,
+          createdAt: row.file?.createdAt,
+          uploadedBy: row.file?.uploadedBy,
+        },
+        uploadedBy: row.uploadedBy,
+        createdAt: row.createdAt,
+        previewUrl: row.file?.id ? `/api/v1/files/${row.file.id}/preview${token ? `?token=${encodeURIComponent(token)}` : ''}` : null,
+        downloadUrl: row.file?.id ? `/api/v1/files/${row.file.id}/download${token ? `?token=${encodeURIComponent(token)}` : ''}` : null,
+      }));
+
+      res.json({ data });
+    } catch (error) {
+      logger.error('Error listing lead comp PDFs: ' + (error as Error).message);
+      res.status(500).json({ error: 'Failed to list comp PDFs' });
+    }
+  },
+
+  async uploadLeadCompPdf(req: Request, res: Response): Promise<void> {
+    try {
+      const { leadId } = req.params;
+      const file = (req as any).file as Express.Multer.File;
+      if (!file) {
+        res.status(400).json({ error: 'No file provided' });
+        return;
+      }
+      if (file.mimetype !== 'application/pdf') {
+        res.status(400).json({ error: 'Only PDF files are allowed' });
+        return;
+      }
+
+      const userId = (req as any).user?.id;
+      const created = await compsService.createLeadCompPdf({
+        leadId,
+        uploadedById: userId || null,
+        fileMeta: {
+          filename: file.filename,
+          originalName: file.originalname,
+          mimeType: file.mimetype,
+          size: file.size,
+          storageKey: file.filename,
+        },
+      });
+
+      res.status(201).json({ data: { id: created.link.id, fileId: created.file.id } });
+    } catch (error) {
+      logger.error('Error uploading lead comp PDF: ' + (error as Error).message);
+      res.status(500).json({ error: 'Failed to upload comp PDF' });
+    }
+  },
+
+  async deleteLeadCompPdf(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      await compsService.deleteLeadCompPdf(id);
+      res.status(204).send();
+    } catch (error) {
+      logger.error('Error deleting lead comp PDF: ' + (error as Error).message);
+      res.status(500).json({ error: 'Failed to delete comp PDF' });
+    }
+  },
+
   async analyzeComps(req: Request, res: Response): Promise<void> {
     try {
       const { leadId } = req.params;

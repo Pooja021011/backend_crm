@@ -726,6 +726,22 @@ model LeadComparable {
   @@index([leadId])
 }
 
+// Comparable PDF attachments (uploaded comps)
+model LeadCompPdf {
+  id           String   @id @default(uuid())
+  leadId       String
+  fileId       String
+  uploadedById String?
+  createdAt    DateTime @default(now())
+
+  lead       Lead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  file       File  @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  uploadedBy User? @relation(fields: [uploadedById], references: [id])
+
+  @@index([leadId, createdAt])
+  @@unique([leadId, fileId])
+}
+
 // Buyer offers and negotiations
 model BuyerOffer {
   id          String   @id @default(uuid())

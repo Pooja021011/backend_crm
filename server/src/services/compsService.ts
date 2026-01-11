@@ -1,4 +1,7 @@
 import { compsRepository, CreateComparableData, ComparableSearchFilters } from '../repositories/compsRepository';
+import { compsPdfRepository } from '../repositories/compsPdfRepository.js';
+import { fileRepository } from '../repositories/fileRepository.js';
+import type { LeadCompPdf } from '@prisma/client';
 import { LeadComparable } from '@prisma/client';
 
 export interface CompsAnalysis {
@@ -41,6 +44,37 @@ export const compsService = {
 
   async deleteComparable(id: string): Promise<void> {
     return compsRepository.deleteComparable(id);
+  },
+
+  async listLeadCompPdfs(leadId: string) {
+    return compsPdfRepository.listByLeadId(leadId);
+  },
+
+  async createLeadCompPdf(params: { leadId: string; fileMeta: { filename: string; originalName: string; mimeType: string; size: number; storageKey: string }; uploadedById?: string | null }) {
+    const file = await fileRepository.createForLead(
+      params.leadId,
+      {
+        filename: params.fileMeta.filename,
+        originalName: params.fileMeta.originalName,
+        mimeType: params.fileMeta.mimeType,
+        size: params.fileMeta.size,
+        storageKey: params.fileMeta.storageKey,
+        category: 'COMPS_PDF',
+        tags: ['comps', 'pdf'],
+        uploadedById: params.uploadedById || null,
+      }
+    );
+
+    const link = await compsPdfRepository.create(params.leadId, file.id, params.uploadedById || null);
+    return { link, file };
+  },
+
+  async deleteLeadCompPdf(id: string) {
+    const existing = await compsPdfRepository.findById(id);
+    if (!existing) return;
+    await compsPdfRepository.deleteById(id);
+    // Also remove the underlying file record and associations
+    await fileRepository.deleteFile(existing.fileId);
   },
 
   async analyzeComps(leadId: string): Promise<CompsAnalysis> {

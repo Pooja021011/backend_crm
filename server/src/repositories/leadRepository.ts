@@ -49,24 +49,30 @@ export const leadRepository = {
       return stage;
     };
 
-    // Get default lead status (New Lead)
+    // Get default lead status (Pipeline)
     const getDefaultLeadStatus = async () => {
-      const status = await prisma.leadStatus.findFirst({
-        where: {
-          name: {
-            contains: 'New Lead',
-            mode: 'insensitive'
-          }
-        }
+      // Prefer the explicitly configured default in Settings > Lead Statuses
+      const defaultStatus = await prisma.leadStatus.findFirst({
+        where: { isDefault: true },
       });
       
-      if (!status) {
-        console.warn('No "New Lead" status found, lead will be created without status');
-        return null;
+      if (defaultStatus) {
+        console.log(`Found default lead status: ${defaultStatus.name}`);
+        return defaultStatus;
       }
-      
-      console.log(`Found default lead status: ${status.name}`);
-      return status;
+
+      // Fallback: by name (expected: "Pipeline")
+      const pipelineStatus = await prisma.leadStatus.findFirst({
+        where: { name: { equals: 'Pipeline', mode: 'insensitive' as any } },
+      });
+
+      if (pipelineStatus) {
+        console.log(`Found default lead status by name: ${pipelineStatus.name}`);
+        return pipelineStatus;
+      }
+
+      console.warn('No default LeadStatus found (isDefault or name=Pipeline). Lead will be created without LeadStatus.');
+      return null;
     };
 
     if (input.type === 'SELLER') {
@@ -230,10 +236,21 @@ export const leadRepository = {
     
     // Handle vendor relation - use upsert to create if doesn't exist
     if (data.vendor) {
+      // Normalize vendor payload (some older clients use companyName/serviceType)
+      const v = data.vendor || {};
+      const normalizedVendor = {
+        firstName: v.firstName || '',
+        lastName: v.lastName || '',
+        phone: v.phone || '',
+        email: v.email || '',
+        company: v.company || v.companyName || 'Unknown',
+        industry: v.industry || v.serviceType || 'Unknown',
+        marketIds: Array.isArray(v.marketIds) ? v.marketIds : [],
+      };
       updateData.vendor = { 
         upsert: {
-          create: data.vendor,
-          update: data.vendor
+          create: normalizedVendor,
+          update: normalizedVendor
         }
       };
     }

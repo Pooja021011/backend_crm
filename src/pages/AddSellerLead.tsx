@@ -1,21 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useLeads } from "@/hooks/useLeads";
 import { useSettings } from "@/hooks/useSettings";
 import { useAgents } from "@/hooks/useAgents";
 import { useAuth } from "@/contexts/AuthContext";
-import { API_BASE } from "@/config/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ValidatedInput } from "@/components/ui/validated-input";
 import { Label } from "@/components/ui/label";
 import { PendingFileUploader, type PendingFileItem } from "@/components/PendingFileUploader";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
 import { 
   ArrowLeft, 
   Save, 
@@ -23,13 +18,9 @@ import {
   Phone, 
   Mail, 
   MapPin, 
-  Calendar as CalendarIcon,
-  Building,
   Target,
-  AlertCircle,
   Upload
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { 
   validateEmail, 
   validateName, 
@@ -46,16 +37,11 @@ const AddSellerLead = () => {
   const { toast } = useToast();
   const { user } = useAuth();
   const { createLead } = useLeads();
-  const { markets, counties, leadSources, getCountiesByMarket, isLoading: settingsLoading } = useSettings();
+  const { leadSources, isLoading: settingsLoading } = useSettings();
   const { getActiveAgents, isLoading: agentsLoading } = useAgents();
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [selectedMarketId, setSelectedMarketId] = useState<string>("");
-  const [availableCounties, setAvailableCounties] = useState<any[]>([]);
   const [pendingFiles, setPendingFiles] = useState<PendingFileItem[]>([]);
-  const [pipelineStages, setPipelineStages] = useState<any[]>([]);
-  const [loadingStages, setLoadingStages] = useState(true);
 
   // Check if current user is an ACQ agent
   const isACQAgent = user?.roles?.includes('ACQ');
@@ -65,16 +51,6 @@ const AddSellerLead = () => {
     agent.roles.some(role => role.role.name === 'ACQ')
   );
 
-  // Update available counties when market changes
-  useEffect(() => {
-    if (selectedMarketId) {
-      const marketCounties = getCountiesByMarket(selectedMarketId);
-      setAvailableCounties(marketCounties);
-    } else {
-      setAvailableCounties([]);
-    }
-  }, [selectedMarketId, getCountiesByMarket]);
-
   // Form state - initialize acquisitionsAgentId with current user if ACQ agent
   const [formData, setFormData] = useState({
     firstName: "",
@@ -83,43 +59,13 @@ const AddSellerLead = () => {
     emailAddress: "",
     leadSource: "",
     acquisitionsAgentId: isACQAgent && user?.id ? user.id : "",
-    pipelineStageId: "",
     propertyAddress: "",
     city: "",
     state: "",
     zip: "",
-    motivation: "Medium",
-    marketId: "",
+    // kept for backward compatibility in payload shape (optional)
     countyId: ""
   });
-
-  // Load pipeline stages (ACQUISITIONS for seller leads)
-  useEffect(() => {
-    const loadPipelineStages = async () => {
-      try {
-        setLoadingStages(true);
-        const response = await fetch(`${API_BASE}/pipeline/ACQUISITIONS/stages`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          setPipelineStages(data.data || []);
-        }
-      } catch (error) {
-        console.error('Error loading pipeline stages:', error);
-        toast({
-          title: "Warning",
-          description: "Could not load pipeline stages.",
-          variant: "destructive"
-        });
-      } finally {
-        setLoadingStages(false);
-      }
-    };
-    
-    loadPipelineStages();
-  }, [toast]);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({
@@ -143,28 +89,28 @@ const AddSellerLead = () => {
     
     switch (fieldName) {
       case 'firstName':
-        error = validateName(value, 'First name');
+        error = value.trim() ? (validateName(value, 'First name').error || '') : '';
         break;
       case 'lastName':
-        error = validateName(value, 'Last name');
+        error = value.trim() ? (validateName(value, 'Last name').error || '') : '';
         break;
       case 'phoneNumber':
-        error = validatePhoneNumber(value) ? '' : 'Please enter a valid phone number with country code';
+        error = value.trim() ? (validatePhoneNumber(value) ? '' : 'Please enter a valid phone number with country code') : '';
         break;
       case 'emailAddress':
-        error = validateEmail(value);
+        error = value.trim() ? (validateEmail(value).error || '') : '';
         break;
       case 'propertyAddress':
-        error = validateAddress(value);
+        error = value.trim() ? (validateAddress(value).error || '') : '';
         break;
       case 'city':
-        error = validateCity(value);
+        error = value.trim() ? (validateCity(value).error || '') : '';
         break;
       case 'state':
-        error = validateState(value);
+        error = value.trim() ? (validateState(value).error || '') : '';
         break;
       case 'zipCode':
-        error = validateZipCode(value);
+        error = value.trim() ? (validateZipCode(value).error || '') : '';
         break;
       case 'acquisitionsAgentId':
         if (!value) error = 'Acquisitions agent is required';
@@ -185,15 +131,8 @@ const AddSellerLead = () => {
   };
 
   const validateForm = () => {
-    const hasRequiredFields = formData.firstName.trim() && 
-           formData.lastName.trim() && 
-           formData.phoneNumber.trim() && 
-           formData.emailAddress.trim() && 
-           formData.propertyAddress.trim() &&
-           formData.leadSource &&
-           formData.pipelineStageId &&
-           formData.acquisitionsAgentId &&
-           selectedDate;
+    // Only require Lead Source + Assigned Agent; contact/address can be blank.
+    const hasRequiredFields = formData.leadSource && formData.acquisitionsAgentId;
            
     return hasRequiredFields;
   };
@@ -215,24 +154,21 @@ const AddSellerLead = () => {
     try {
       const leadData = {
         type: 'SELLER' as const,
-        marketId: formData.marketId || undefined,
         seller: {
           firstName: formData.firstName.trim(),
           lastName: formData.lastName.trim(),
           phone: formData.phoneNumber.trim(),
           email: formData.emailAddress.trim(),
-          motivation: formData.motivation,
-          notes: `Lead Source: ${formData.leadSource}`
+          notes: formData.leadSource ? `Lead Source: ${formData.leadSource}` : ''
         },
         address: {
           address1: formData.propertyAddress.trim(),
-          city: formData.city.trim() || 'Unknown',
-          state: formData.state.trim() || 'Unknown',
-          zip: formData.zip.trim() || '00000',
-          countyId: formData.countyId || undefined
+          city: formData.city.trim(),
+          state: formData.state.trim(),
+          zip: formData.zip.trim(),
+          countyId: formData.countyId || undefined,
         },
         assignedUserId: formData.acquisitionsAgentId && formData.acquisitionsAgentId !== 'no-agents' ? formData.acquisitionsAgentId : undefined,
-        pipelineStageId: formData.pipelineStageId || undefined
       };
 
       const createdLead = await createLead(leadData);
@@ -307,14 +243,7 @@ const AddSellerLead = () => {
   };
 
   const isFormValid = () => {
-    const hasRequiredFields = formData.firstName.trim() && 
-           formData.lastName.trim() && 
-           formData.phoneNumber.trim() && 
-           formData.emailAddress.trim() && 
-           formData.propertyAddress.trim() &&
-           formData.leadSource &&
-           formData.acquisitionsAgentId &&
-           selectedDate;
+    const hasRequiredFields = formData.leadSource && formData.acquisitionsAgentId;
            
     const hasNoErrors = Object.values(errors).every(error => !error);
     
@@ -326,7 +255,7 @@ const AddSellerLead = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Page Header */}
       <div className="flex items-center gap-4">
         <Button 
@@ -343,10 +272,10 @@ const AddSellerLead = () => {
 
       {/* Form Content */}
       <div>
-        <form onSubmit={handleSubmit} className="space-y-8">
+        <form onSubmit={handleSubmit} className="space-y-6">
           
           {/* Lead Information Section */}
-          <Card className="p-8 shadow-sm border border-gray-200">
+          <Card className="p-4 shadow-sm border border-gray-200">
             <div className="flex items-center gap-3 mb-6">
               <div className="p-2 bg-blue-100 rounded-lg">
                 <User className="w-5 h-5 text-blue-600" />
@@ -354,16 +283,15 @@ const AddSellerLead = () => {
               <h2 className="text-lg font-semibold text-gray-900">Lead Information</h2>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* First Name */}
               <ValidatedInput
                 label="First Name"
                 name="firstName"
                 value={formData.firstName}
                 onValueChange={(value) => handleInputChange('firstName', value)}
-                validator={(value) => validateName(value, 'First name')}
+                validator={(value) => value.trim() ? validateName(value, 'First name') : ({ isValid: true })}
                 placeholder="Enter first name"
-                required
                 icon={<User className="w-4 h-4" />}
               />
 
@@ -373,16 +301,15 @@ const AddSellerLead = () => {
                 name="lastName"
                 value={formData.lastName}
                 onValueChange={(value) => handleInputChange('lastName', value)}
-                validator={(value) => validateName(value, 'Last name')}
+                validator={(value) => value.trim() ? validateName(value, 'Last name') : ({ isValid: true })}
                 placeholder="Enter last name"
-                required
                 icon={<User className="w-4 h-4" />}
               />
 
               {/* Phone Number */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-700">
-                  Phone Number *
+                  Phone Number
                 </Label>
                 <PhoneInput
                   label=""
@@ -400,34 +327,15 @@ const AddSellerLead = () => {
                 type="email"
                 value={formData.emailAddress}
                 onValueChange={(value) => handleInputChange('emailAddress', value)}
-                validator={validateEmail}
+                validator={(value) => value.trim() ? validateEmail(value) : ({ isValid: true })}
                 placeholder="email@example.com"
-                required
                 icon={<Mail className="w-4 h-4" />}
               />
-              
-              {/* Motivation */}
-              <div className="space-y-2">
-                <Label htmlFor="motivation" className="text-sm font-medium text-gray-700">
-                  Seller Motivation
-                </Label>
-                <Select value={formData.motivation} onValueChange={(value) => handleInputChange('motivation', value)}>
-                  <SelectTrigger className="h-10 border-gray-300 focus:border-blue-500 focus:ring-blue-500/20">
-                    <SelectValue placeholder="Select motivation level" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Low">Low</SelectItem>
-                    <SelectItem value="Medium">Medium</SelectItem>
-                    <SelectItem value="High">High</SelectItem>
-                    <SelectItem value="Very High">Very High</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
           </Card>
 
           {/* Assignment & Source Section */}
-          <Card className="p-8 shadow-sm border border-gray-200">
+          <Card className="p-4 shadow-sm border border-gray-200">
             <div className="flex items-center gap-3 mb-6">
               <div className="p-2 bg-purple-100 rounded-lg">
                 <Target className="w-5 h-5 text-purple-600" />
@@ -435,7 +343,7 @@ const AddSellerLead = () => {
               <h2 className="text-lg font-semibold text-gray-900">Assignment & Source</h2>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Lead Source */}
               <div className="space-y-2">
                 <Label htmlFor="leadSource" className="text-sm font-medium text-gray-700">
@@ -459,60 +367,6 @@ const AddSellerLead = () => {
                 </Select>
               </div>
 
-              {/* Market */}
-              <div className="space-y-2">
-                <Label htmlFor="market" className="text-sm font-medium text-gray-700">
-                  Market *
-                </Label>
-                <Select 
-                  value={formData.marketId} 
-                  onValueChange={(value) => {
-                    handleInputChange('marketId', value);
-                    setSelectedMarketId(value);
-                    // Reset county when market changes
-                    handleInputChange('countyId', '');
-                  }}
-                  disabled={settingsLoading}
-                >
-                  <SelectTrigger className="h-10 border-gray-300 focus:border-blue-500 focus:ring-blue-500/20">
-                    <SelectValue placeholder={settingsLoading ? "Loading..." : "Select market"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {markets.map((market) => (
-                      <SelectItem key={market.id} value={market.id}>
-                        {market.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Pipeline Stage */}
-              <div className="space-y-2">
-                <Label htmlFor="pipelineStageId" className="text-sm font-medium text-gray-700">
-                  Pipeline Stage *
-                </Label>
-                <Select 
-                  value={formData.pipelineStageId} 
-                  onValueChange={(value) => handleInputChange('pipelineStageId', value)}
-                  disabled={loadingStages}
-                >
-                  <SelectTrigger className="h-10 border-gray-300 focus:border-blue-500 focus:ring-blue-500/20">
-                    <SelectValue placeholder={loadingStages ? "Loading..." : "Select Pipeline Stage"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {pipelineStages.map((stage) => (
-                      <SelectItem key={stage.id} value={stage.id}>
-                        {stage.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {pipelineStages.length === 0 && !loadingStages && (
-                  <p className="text-xs text-amber-600">⚠ No stages available for your role</p>
-                )}
-              </div>
-
               {/* Acquisitions Agent */}
               <div className="space-y-2">
                 <Label htmlFor="acquisitionsAgentId" className="text-sm font-medium text-gray-700">
@@ -526,10 +380,7 @@ const AddSellerLead = () => {
                   }}
                   disabled={agentsLoading || isACQAgent}
                 >
-                  <SelectTrigger className={cn(
-                    "h-10 border-gray-300 focus:border-blue-500 focus:ring-blue-500/20",
-                    errors.acquisitionsAgentId && "border-red-500 focus:border-red-500 focus:ring-red-500/20"
-                  )}>
+                  <SelectTrigger className="h-10 border-gray-300 focus:border-blue-500 focus:ring-blue-500/20">
                     <SelectValue placeholder={agentsLoading ? "Loading agents..." : "Select acquisitions agent"} />
                   </SelectTrigger>
                   <SelectContent>
@@ -560,68 +411,17 @@ const AddSellerLead = () => {
                     )}
                   </SelectContent>
                 </Select>
-                {errors.acquisitionsAgentId && (
-                  <Alert className="py-2 px-3 border-red-200 bg-red-50">
-                    <AlertCircle className="h-4 w-4 text-red-600" />
-                    <AlertDescription className="text-sm text-red-600">
-                      {errors.acquisitionsAgentId}
-                    </AlertDescription>
-                  </Alert>
-                )}
-              </div>
-
-              {/* Date Created */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">
-                  Date Created *
-                </Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "h-10 w-full justify-start text-left font-normal border-gray-300 focus:border-blue-500 focus:ring-blue-500/20",
-                        selectedDate ? "text-gray-900" : "text-muted-foreground",
-                        errors.selectedDate && "border-red-500 focus:border-red-500 focus:ring-red-500/20"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {selectedDate ? format(selectedDate, "PPP") : "Select date"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={selectedDate}
-                      onSelect={(date) => {
-                        setSelectedDate(date);
-                        if (date && errors.selectedDate) {
-                          setErrors(prev => ({ ...prev, selectedDate: "" }));
-                        }
-                      }}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-                {errors.selectedDate && (
-                  <Alert className="py-2 px-3 border-red-200 bg-red-50">
-                    <AlertCircle className="h-4 w-4 text-red-600" />
-                    <AlertDescription className="text-sm text-red-600">
-                      {errors.selectedDate}
-                    </AlertDescription>
-                  </Alert>
-                )}
               </div>
             </div>
           </Card>
 
           {/* Property Information Section */}
-          <Card className="p-8 shadow-sm border border-gray-200">
+          <Card className="p-4 shadow-sm border border-gray-200">
             <div className="flex items-center gap-3 mb-6">
               <div className="p-2 bg-green-100 rounded-lg">
-                <Building className="w-5 h-5 text-green-600" />
+                <MapPin className="w-5 h-5 text-green-600" />
               </div>
-              <h2 className="text-lg font-semibold text-gray-900">Property Information</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Property Information (optional)</h2>
             </div>
             
             <div className="space-y-6">
@@ -631,23 +431,19 @@ const AddSellerLead = () => {
                 name="propertyAddress"
                 value={formData.propertyAddress}
                 onValueChange={handleAddressChange}
-                validator={validateAddress}
+                validator={(value) => value.trim() ? validateAddress(value) : ({ isValid: true })}
                 placeholder="Enter property address"
-                required
                 icon={<MapPin className="w-4 h-4" />}
               />
-              <p className="text-xs text-gray-500 -mt-1">
-                Address will auto-populate additional property information
-              </p>
 
               {/* Additional Address Fields */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <ValidatedInput
                   label="City"
                   name="city"
                   value={formData.city}
                   onValueChange={(value) => handleInputChange('city', value)}
-                  validator={validateCity}
+                  validator={(value) => value.trim() ? validateCity(value) : ({ isValid: true })}
                   placeholder="Enter city"
                 />
                 <ValidatedInput
@@ -655,7 +451,7 @@ const AddSellerLead = () => {
                   name="state"
                   value={formData.state}
                   onValueChange={(value) => handleInputChange('state', value.toUpperCase())}
-                  validator={validateState}
+                  validator={(value) => value.trim() ? validateState(value) : ({ isValid: true })}
                   placeholder="NC"
                   maxLength={2}
                 />
@@ -664,40 +460,9 @@ const AddSellerLead = () => {
                   name="zip"
                   value={formData.zip}
                   onValueChange={(value) => handleInputChange('zip', value)}
-                  validator={validateZipCode}
+                  validator={(value) => value.trim() ? validateZipCode(value) : ({ isValid: true })}
                   placeholder="28202"
                 />
-                
-                {/* County */}
-                <div className="space-y-2">
-                  <Label htmlFor="county" className="text-sm font-medium text-gray-700">
-                    County
-                  </Label>
-                  <Select 
-                    value={formData.countyId} 
-                    onValueChange={(value) => handleInputChange('countyId', value)}
-                    disabled={settingsLoading || !selectedMarketId || availableCounties.length === 0}
-                  >
-                    <SelectTrigger className="h-10 border-gray-300 focus:border-blue-500 focus:ring-blue-500/20">
-                      <SelectValue 
-                        placeholder={
-                          !selectedMarketId 
-                            ? "Select market first" 
-                            : availableCounties.length === 0 
-                            ? "No counties available" 
-                            : "Select county"
-                        } 
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableCounties.map((county) => (
-                        <SelectItem key={county.id} value={county.id}>
-                          {county.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
 
               {/* Auto-populated fields placeholder */}
@@ -720,7 +485,7 @@ const AddSellerLead = () => {
           </Card>
 
           {/* Documents Section */}
-          <Card className="p-8 shadow-sm border border-gray-200">
+          <Card className="p-4 shadow-sm border border-gray-200">
             <div className="flex items-center gap-3 mb-6">
               <div className="p-2 bg-orange-100 rounded-lg">
                 <Upload className="w-5 h-5 text-orange-600" />

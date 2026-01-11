@@ -64,6 +64,12 @@ export function UnderwritingCalculator({
     setLoading(false);
   }, [leadId]);
 
+  // Sync ARV display/value when parent updates initialArv (e.g., top-level ARV box on Lead page)
+  useEffect(() => {
+    setArv(initialArv || 0);
+    setArvDisplay(initialArv ? formatCurrency(initialArv) : '');
+  }, [initialArv]);
+
   // Update rehabCostValue when rehabCost prop changes
   useEffect(() => {
     setRehabCostValue(rehabCost);

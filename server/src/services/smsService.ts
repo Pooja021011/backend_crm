@@ -116,6 +116,12 @@ export const smsService = {
             body: message.text,
             occurredAt: new Date(),
             createdById: message.userId,
+            metadata: {
+              from: fromNumber,
+              to: message.to,
+              messageSid: response.sid,
+              status: response.status,
+            },
           });
           
           // NEW: Auto-update lead status based on communication
@@ -183,6 +189,12 @@ export const smsService = {
               body: text,
               occurredAt: new Date(),
               createdById: userSmsSettings.userId,
+              metadata: {
+                from,
+                to,
+                messageSid: messageId,
+                status: smsStatus,
+              },
             });
             
             logger.info('Incoming SMS stored in communication history', { 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useLeads } from "@/hooks/useLeads";
 import { useSettings } from "@/hooks/useSettings";
 import { Card } from "@/components/ui/card";
@@ -7,25 +7,18 @@ import { ValidatedInput } from "@/components/ui/validated-input";
 import { Label } from "@/components/ui/label";
 import { PendingFileUploader, type PendingFileItem } from "@/components/PendingFileUploader";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Checkbox } from "@/components/ui/checkbox";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
 import { 
   ArrowLeft, 
   Save, 
   User, 
   Phone, 
   Mail, 
-  Calendar as CalendarIcon,
   Building,
-  MapPin,
   Briefcase,
   Upload
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { 
   validateEmail, 
   validateName, 
@@ -33,18 +26,14 @@ import {
 } from "@/utils/validation";
 import { validatePhoneNumber } from "@/utils/phoneValidation";
 import { PhoneInput } from "@/components/PhoneInput";
-import { API_BASE } from "@/config/api";
 
 const AddVendorLead = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { createLead } = useLeads();
-  const { markets, leadSources, isLoading: settingsLoading } = useSettings();
+  const { leadSources, isLoading: settingsLoading } = useSettings();
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [pendingFiles, setPendingFiles] = useState<PendingFileItem[]>([]);
-  const [pipelineStages, setPipelineStages] = useState<any[]>([]);
-  const [loadingStages, setLoadingStages] = useState(true);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -53,10 +42,8 @@ const AddVendorLead = () => {
     phoneNumber: "",
     emailAddress: "",
     leadSource: "",
-    pipelineStageId: "",
     company: "",
-    industry: "",
-    markets: [] as string[]
+    industry: ""
   });
 
   const industries = [
@@ -69,47 +56,10 @@ const AddVendorLead = () => {
     "Other"
   ];
 
-  // Load pipeline stages (ACQUISITIONS for vendors)
-  useEffect(() => {
-    const loadPipelineStages = async () => {
-      try {
-        setLoadingStages(true);
-        const response = await fetch(`${API_BASE}/pipeline/ACQUISITIONS/stages`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          setPipelineStages(data.data || []);
-        }
-      } catch (error) {
-        console.error('Error loading pipeline stages:', error);
-        toast({
-          title: "Warning",
-          description: "Could not load pipeline stages.",
-          variant: "destructive"
-        });
-      } finally {
-        setLoadingStages(false);
-      }
-    };
-    
-    loadPipelineStages();
-  }, [toast]);
-
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
-    }));
-  };
-
-  const handleMultiSelectChange = (field: string, value: string, checked: boolean) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: checked 
-        ? [...(prev[field as keyof typeof prev] as string[]), value]
-        : (prev[field as keyof typeof prev] as string[]).filter(item => item !== value)
     }));
   };
 
@@ -131,7 +81,6 @@ const AddVendorLead = () => {
       // Create lead data according to API schema
       const leadData = {
         type: 'VENDOR' as const,
-        pipelineStageId: formData.pipelineStageId || undefined,
         vendor: {
           firstName: formData.firstName.trim(),
           lastName: formData.lastName.trim(),
@@ -139,7 +88,7 @@ const AddVendorLead = () => {
           email: formData.emailAddress.trim(),
           company: formData.company.trim(),
           industry: formData.industry,
-          marketIds: formData.markets.length > 0 ? formData.markets : undefined
+          marketIds: undefined
         }
       };
       
@@ -217,15 +166,8 @@ const AddVendorLead = () => {
   };
 
   const isFormValid = () => {
-    return formData.firstName && 
-           formData.lastName && 
-           formData.phoneNumber && 
-           formData.emailAddress && 
-           formData.leadSource &&
-           formData.pipelineStageId &&
-           formData.company &&
-           formData.industry &&
-           selectedDate;
+    // Keep vendor business required; contact is optional
+    return Boolean(formData.leadSource && formData.company && formData.industry);
   };
 
   return (
@@ -269,9 +211,8 @@ const AddVendorLead = () => {
                     name="firstName"
                     value={formData.firstName}
                     onValueChange={(value) => handleInputChange('firstName', value)}
-                    validator={(value) => validateName(value, 'First name')}
+                  validator={(value) => value.trim() ? validateName(value, 'First name') : ({ isValid: true })}
                     placeholder="First Name"
-                    required
                     showValidation={true}
                     icon={<User className="w-4 h-4" />}
                   />
@@ -280,9 +221,8 @@ const AddVendorLead = () => {
                     name="lastName"
                     value={formData.lastName}
                     onValueChange={(value) => handleInputChange('lastName', value)}
-                    validator={(value) => validateName(value, 'Last name')}
+                    validator={(value) => value.trim() ? validateName(value, 'Last name') : ({ isValid: true })}
                     placeholder="Last Name"
-                    required
                     showValidation={true}
                   />
                 </div>
@@ -291,7 +231,7 @@ const AddVendorLead = () => {
               {/* Phone Number */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-700">
-                  Primary Phone Number *
+                  Primary Phone Number
                 </Label>
                 <PhoneInput
                   label=""
@@ -313,9 +253,8 @@ const AddVendorLead = () => {
                   type="email"
                   value={formData.emailAddress}
                   onValueChange={(value) => handleInputChange('emailAddress', value)}
-                  validator={validateEmail}
+                  validator={(value) => value.trim() ? validateEmail(value) : ({ isValid: true })}
                   placeholder="email@example.com"
-                  required
                   icon={<Mail className="w-4 h-4" />}
                 />
               </div>
@@ -345,72 +284,6 @@ const AddVendorLead = () => {
                 </Select>
               </div>
 
-              {/* Pipeline Stage */}
-              <div className="space-y-2">
-                <Label htmlFor="pipelineStageId" className="text-sm font-medium text-gray-700">
-                  Pipeline Stage *
-                </Label>
-                <Select 
-                  value={formData.pipelineStageId} 
-                  onValueChange={(value) => handleInputChange('pipelineStageId', value)}
-                  disabled={loadingStages}
-                >
-                  <SelectTrigger className="h-10 border-gray-300 focus:border-blue-500 focus:ring-blue-500/20">
-                    <SelectValue placeholder={loadingStages ? "Loading..." : "Select Pipeline Stage"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {pipelineStages.map((stage) => (
-                      <SelectItem key={stage.id} value={stage.id}>
-                        {stage.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {pipelineStages.length === 0 && !loadingStages && (
-                  <p className="text-xs text-amber-600">⚠ No stages available for your role</p>
-                )}
-              </div>
-
-              {/* Date Created */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">
-                  Date Created *
-                </Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "h-10 w-full justify-start text-left font-normal border-gray-300 focus:border-blue-500 focus:ring-blue-500/20",
-                        !selectedDate && "text-muted-foreground"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {selectedDate ? format(selectedDate, "M/d/yyyy") : "M/d/yyyy"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={selectedDate}
-                      onSelect={setSelectedDate}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-
-              {/* Market */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">
-                  Market *
-                </Label>
-                <Select value="Primary Market" disabled>
-                  <SelectTrigger className="h-10 border-gray-300 bg-gray-50">
-                    <SelectValue placeholder="Primary Market" />
-                  </SelectTrigger>
-                </Select>
-              </div>
             </div>
           </Card>
 
@@ -457,35 +330,6 @@ const AddVendorLead = () => {
                 </div>
               </div>
 
-              {/* Market Selection */}
-              <div className="space-y-4">
-                <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                  <MapPin className="w-4 h-4" />
-                  Market
-                </Label>
-                <p className="text-xs text-gray-500">Select the markets this vendor works within (optional)</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {markets.map((market) => (
-                    <div key={market.id} className="flex items-center space-x-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
-                      <Checkbox
-                        id={`market-${market.id}`}
-                        checked={formData.markets.includes(market.id)}
-                        onCheckedChange={(checked) => 
-                          handleMultiSelectChange('markets', market.id, checked as boolean)
-                        }
-                        className="border-gray-300"
-                        disabled={settingsLoading}
-                      />
-                      <Label 
-                        htmlFor={`market-${market.id}`} 
-                        className="text-sm font-medium text-gray-700 cursor-pointer flex-1"
-                      >
-                        {market.name}
-                      </Label>
-                    </div>
-                  ))}
-                </div>
-              </div>
             </div>
           </Card>
 

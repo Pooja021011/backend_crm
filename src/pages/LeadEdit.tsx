@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -131,6 +131,17 @@ const LeadEdit: React.FC = () => {
   const [lead, setLead] = useState<LeadData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // Autosave state (Lead Detail page)
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'dirty' | 'saving' | 'saved' | 'error'>('idle');
+  const [autoSaveError, setAutoSaveError] = useState<string>('');
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoSaveInFlightRef = useRef<Promise<void> | null>(null);
+  const autoSavePendingRef = useRef(false);
+  const lastSavedPayloadRef = useRef<string>('');
+  const lastSavedAtRef = useRef<number | null>(null);
+  const suppressNextAutoSaveRef = useRef(true);
+  const autoSaveDraftKey = id ? `lead-edit-draft:${id}` : null;
   const [activeTab, setActiveTab] = useState('acquisitions');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [agents, setAgents] = useState<any[]>([]);
@@ -271,6 +282,23 @@ const LeadEdit: React.FC = () => {
   const [underwritingTimeline, setUnderwritingTimeline] = useState(6);
   const [underwritingRehabCost, setUnderwritingRehabCost] = useState(0);
   const [finalOffer, setFinalOffer] = useState(0);
+
+  // ARV (top box) - stored in customFields.arv and synced to underwritingArv
+  const [arvValue, setArvValue] = useState(0);
+  const [arvDisplay, setArvDisplay] = useState('');
+
+  const formatCurrency = useCallback((value: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: 0,
+    }).format(value);
+  }, []);
+
+  const parseCurrencyInput = useCallback((raw: string): number => {
+    const digits = raw.replace(/[^\d]/g, '');
+    return digits ? Number(digits) : 0;
+  }, []);
   
   // Files
   const [files, setFiles] = useState<any[]>([]);
@@ -376,16 +404,49 @@ const LeadEdit: React.FC = () => {
     }
   }, [lead?.stageEnteredAt, lead?.updatedAt, lead?.lastContactAt]);
 
+  const requestStageMove = useCallback(
+    async (stageId: string) => {
+      if (!id || !canEditLead) return;
+
+      try {
+        const stageResponse = await makeApiCall(`${API_BASE}/pipeline/leads/${id}/move`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stageId }),
+        });
+
+        if (!stageResponse.ok) {
+          const stageError = await stageResponse.json().catch(() => ({}));
+          throw new Error(stageError.message || 'Failed to change pipeline stage');
+        }
+
+        setPipelineStatus(stageId);
+        // Stage move is its own persisted action; mark autosave as clean
+        setAutoSaveStatus('saved');
+      } catch (e: any) {
+        toast({
+          title: 'Stage Change Failed',
+          description: e?.message || 'Failed to change pipeline stage',
+          variant: 'destructive',
+        });
+
+        // Revert UI selection back to server-known stage
+        setPipelineStatus(lead?.pipelineStageId || '');
+      }
+    },
+    [id, canEditLead, toast, lead?.pipelineStageId]
+  );
+
   // Handler for pipeline status changes with validation
   const handlePipelineStatusChange = (newStageId: string) => {
-    const newStage = pipelineStages.find(s => s.id === newStageId);
+    const newStage = pipelineStages.find((s) => s.id === newStageId);
     if (!newStage) {
-      setPipelineStatus(newStageId);
+      void requestStageMove(newStageId);
       return;
     }
-    
-    const stageName = newStage.name.toLowerCase();
-    
+
+    const stageName = (newStage.name || '').toLowerCase();
+
     // Check if validation popup is needed
     if (stageName.includes('appointment') && stageName.includes('complete')) {
       setPendingPipelineStatus(newStageId);
@@ -402,9 +463,9 @@ const LeadEdit: React.FC = () => {
       setShowOfferMadePopup(true);
       return;
     }
-    
-    // No validation needed, proceed with change
-    setPipelineStatus(newStageId);
+
+    // No validation needed, move immediately
+    void requestStageMove(newStageId);
   };
 
   useEffect(() => {
@@ -466,6 +527,9 @@ const LeadEdit: React.FC = () => {
         setPipelineStatus(leadData.pipelineStageId || '');
         setAcquisitionsAgent(leadData.assignedUserId || '');
         setDispositionsAgent(leadData.dispositionAgentId || '');
+
+        // Reset autosave baseline after hydrating the page to prevent immediate autosave
+        suppressNextAutoSaveRef.current = true;
         
         // Load property info from customFields
         const customFields = leadData.customFields || {};
@@ -500,6 +564,16 @@ const LeadEdit: React.FC = () => {
         if (customFields.rehabToggledItems) setRehabToggledItems(customFields.rehabToggledItems);
         if (customFields.rehabNumberOfWindows) setRehabNumberOfWindows(customFields.rehabNumberOfWindows);
         setLeadSourceData(customFields.leadSourceData || {});
+
+        // Establish baseline after state hydration completes (best-effort)
+        setTimeout(() => {
+          try {
+            lastSavedPayloadRef.current = JSON.stringify(buildLeadPatchPayload());
+            setAutoSaveStatus('idle');
+          } catch (e) {
+            // ignore
+          }
+        }, 0);
         
         // Load Underwriting Calculator values from customFields
         console.log('📖 Loading underwriting values from customFields:', {
@@ -510,6 +584,14 @@ const LeadEdit: React.FC = () => {
           finalOffer: customFields.finalOffer
         });
         
+        // Load ARV (top box). Prefer explicit `customFields.arv`, fallback to underwritingArv.
+        const loadedArv = customFields.arv ?? customFields.underwritingArv ?? 0;
+        setArvValue(Number(loadedArv) || 0);
+        setArvDisplay(loadedArv ? formatCurrency(Number(loadedArv) || 0) : '');
+        if (loadedArv && !customFields.underwritingArv) {
+          setUnderwritingArv(Number(loadedArv) || 0);
+        }
+
         if (customFields.underwritingArv) setUnderwritingArv(customFields.underwritingArv);
         if (customFields.underwritingTaxes) setUnderwritingTaxes(customFields.underwritingTaxes);
         if (customFields.underwritingTimeline) setUnderwritingTimeline(customFields.underwritingTimeline);
@@ -905,6 +987,344 @@ const LeadEdit: React.FC = () => {
     setEditOwnerForm(ownerData);
   };
 
+  const buildPropertyDetails = useCallback(() => {
+    return {
+      // ARV is stored separately from underwriting (but we keep underwritingArv in sync).
+      arv: arvValue || null,
+      propertyType: propertyType || null,
+      sqft: sqft ? parseInt(sqft) : null,
+      lotSize: lotSize || null,
+      bedrooms: bedrooms ? parseInt(bedrooms) : null,
+      bathrooms: bathrooms ? parseFloat(bathrooms) : null,
+      yearBuilt: yearBuilt ? parseInt(yearBuilt) : null,
+      roofType: roofType || null,
+      roofAge: roofAge ? parseInt(roofAge) : null,
+      hvacType: hvacType || null,
+      hvacAge: hvacAge ? parseInt(hvacAge) : null,
+      waterHeaterAge: waterHeaterAge ? parseInt(waterHeaterAge) : null,
+      waterType: waterType || null,
+      sewerType: sewerType || null,
+      estimatedValue: estimatedValue ? parseInt(estimatedValue) : null,
+      askingPrice: askingPrice ? parseInt(askingPrice) : null,
+      appointmentDate: appointmentDate || null,
+      rehabBudget: rehabBudget ? parseInt(rehabBudget) : null,
+      rehabItems: rehabItems || [],
+      rehabFinishLevel: rehabFinishLevel || null,
+      rehabToggledItems: rehabToggledItems || {},
+      rehabNumberOfWindows: rehabNumberOfWindows || null,
+      leadSourceData: leadSourceData || {},
+      // Underwriting Calculator values
+      underwritingArv: underwritingArv || null,
+      underwritingTaxes: underwritingTaxes || null,
+      underwritingTimeline: underwritingTimeline || null,
+      underwritingRehabCost: underwritingRehabCost || null,
+      finalOffer: finalOffer || null,
+    };
+  }, [
+    arvValue,
+    propertyType,
+    sqft,
+    lotSize,
+    bedrooms,
+    bathrooms,
+    yearBuilt,
+    roofType,
+    roofAge,
+    hvacType,
+    hvacAge,
+    waterHeaterAge,
+    waterType,
+    sewerType,
+    estimatedValue,
+    askingPrice,
+    appointmentDate,
+    rehabBudget,
+    rehabItems,
+    rehabFinishLevel,
+    rehabToggledItems,
+    rehabNumberOfWindows,
+    leadSourceData,
+    underwritingArv,
+    underwritingTaxes,
+    underwritingTimeline,
+    underwritingRehabCost,
+    finalOffer,
+  ]);
+
+  const buildLeadPatchPayload = useCallback(() => {
+    // Note: pipeline stage moves are handled separately via the pipeline move endpoint.
+    const updates: any = {};
+
+    // Contacts (primary + multi-contact support)
+    const filteredContacts = (contacts || []).filter((c) => c?.name || c?.phone || c?.email);
+    const primaryContact = filteredContacts[0];
+
+    if (lead?.leadType === 'SELLER') {
+      updates.seller = primaryContact?.name
+        ? {
+            firstName: primaryContact.name.split(' ')[0] || primaryContact.name,
+            lastName: primaryContact.name.split(' ').slice(1).join(' ') || '',
+            phone: primaryContact.phone || '',
+            email: primaryContact.email || '',
+            motivation: lead.seller?.motivation || null,
+            notes: lead.seller?.notes || null,
+          }
+        : {
+            firstName: '',
+            lastName: '',
+            phone: '',
+            email: '',
+            motivation: lead.seller?.motivation || null,
+            notes: lead.seller?.notes || null,
+          };
+    } else if (lead?.leadType === 'BUYER') {
+      updates.buyer = primaryContact?.name
+        ? {
+            firstName: primaryContact.name.split(' ')[0] || primaryContact.name,
+            lastName: primaryContact.name.split(' ').slice(1).join(' ') || '',
+            phone: primaryContact.phone || '',
+            email: primaryContact.email || '',
+            vip: lead.buyer?.vip || false,
+            blacklisted: (lead.buyer as any)?.blacklisted || false,
+          }
+        : {
+            firstName: '',
+            lastName: '',
+            phone: '',
+            email: '',
+            vip: lead.buyer?.vip || false,
+            blacklisted: (lead.buyer as any)?.blacklisted || false,
+          };
+    } else if (lead?.leadType === 'VENDOR') {
+      updates.vendor = primaryContact?.name
+        ? {
+            firstName: primaryContact.name.split(' ')[0] || primaryContact.name,
+            lastName: primaryContact.name.split(' ').slice(1).join(' ') || '',
+            phone: primaryContact.phone || '',
+            email: primaryContact.email || '',
+            companyName: (lead.vendor as any)?.companyName || null,
+            serviceType: (lead.vendor as any)?.serviceType || null,
+          }
+        : {
+            firstName: '',
+            lastName: '',
+            phone: '',
+            email: '',
+            companyName: (lead.vendor as any)?.companyName || null,
+            serviceType: (lead.vendor as any)?.serviceType || null,
+          };
+    }
+
+    // Custom fields: merge to avoid wiping unknown keys
+    const propertyDetails = buildPropertyDetails();
+    updates.customFields = {
+      ...(lead?.customFields || {}),
+      ...propertyDetails,
+      contacts: filteredContacts,
+    };
+
+    // Address: only send when editing address (so we don't clobber unintentionally)
+    if (editingAddress) {
+      updates.address = {
+        address1: editAddressForm.address1 || '',
+        city: editAddressForm.city || '',
+        state: editAddressForm.state || '',
+        zipCode: editAddressForm.zipCode || '',
+      };
+    }
+
+    // Assigned agents (allow clearing)
+    if ((lead?.assignedUserId || '') !== (acquisitionsAgent || '')) {
+      updates.assignedUserId = acquisitionsAgent ? acquisitionsAgent : null;
+    }
+    if ((lead?.dispositionAgentId || '') !== (dispositionsAgent || '')) {
+      updates.dispositionAgentId = dispositionsAgent ? dispositionsAgent : null;
+    }
+
+    // Lead source
+    if (leadSource) {
+      const source = leadSources.find((s) => s.name === leadSource || s.id === leadSource);
+      updates.leadSourceId = source?.id || null;
+    } else if (lead?.leadSource?.id) {
+      updates.leadSourceId = null;
+    }
+
+    // Lead status
+    if (leadStatus) {
+      const status = leadStatuses.find((s) => s.id === leadStatus || s.name === leadStatus);
+      updates.leadStatusId = status?.id || null;
+    } else if (lead?.leadStatus?.id) {
+      updates.leadStatusId = null;
+    }
+
+    return updates;
+  }, [
+    contacts,
+    lead,
+    buildPropertyDetails,
+    editingAddress,
+    editAddressForm.address1,
+    editAddressForm.city,
+    editAddressForm.state,
+    editAddressForm.zipCode,
+    acquisitionsAgent,
+    dispositionsAgent,
+    leadSource,
+    leadStatus,
+    leadSources,
+    leadStatuses,
+  ]);
+
+  const flushAutoSave = useCallback(
+    async (reason: 'debounce' | 'blur' | 'manual' | 'pending' = 'manual') => {
+      if (!id || !lead || !canEditLead) return;
+
+      // Coalesce saves: if one is in-flight, request another run once it finishes
+      if (autoSaveInFlightRef.current) {
+        autoSavePendingRef.current = true;
+        return;
+      }
+
+      const payload = buildLeadPatchPayload();
+      const payloadStr = JSON.stringify(payload);
+
+      // No actual lead changes → do nothing (prevents flicker from unrelated inputs like task dialogs)
+      if (!payloadStr || payloadStr === lastSavedPayloadRef.current) {
+        if (autoSaveStatus === 'dirty') setAutoSaveStatus('idle');
+        return;
+      }
+
+      // Cancel any pending debounce timer since we're saving now
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+
+      setAutoSaveError('');
+      setAutoSaveStatus('saving');
+
+      const run = (async () => {
+        try {
+          const response = await makeApiCall(`${API_BASE}/leads/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.message || 'Failed to auto-save lead');
+          }
+
+          lastSavedPayloadRef.current = payloadStr;
+          lastSavedAtRef.current = Date.now();
+          setAutoSaveStatus('saved');
+          if (autoSaveDraftKey) {
+            try {
+              localStorage.removeItem(autoSaveDraftKey);
+            } catch (e) {
+              // ignore
+            }
+          }
+
+          // Track price changes (best-effort; don't block autosave)
+          try {
+            const oldEstimatedValue = lead?.customFields?.estimatedValue || null;
+            const newEstimatedValue = estimatedValue ? parseInt(estimatedValue) : null;
+            const oldAskingPrice = lead?.customFields?.askingPrice || null;
+            const newAskingPrice = askingPrice ? parseInt(askingPrice) : null;
+            const oldRehabBudget = lead?.customFields?.rehabBudget || null;
+            const newRehabBudget = rehabBudget ? parseInt(rehabBudget) : null;
+
+            await trackPriceChanges([
+              { fieldName: 'estimatedValue', oldValue: oldEstimatedValue, newValue: newEstimatedValue },
+              { fieldName: 'askingPrice', oldValue: oldAskingPrice, newValue: newAskingPrice },
+              { fieldName: 'rehabBudget', oldValue: oldRehabBudget, newValue: newRehabBudget },
+            ]);
+          } catch (e) {
+            // ignore
+          }
+        } catch (e: any) {
+          setAutoSaveStatus('error');
+          setAutoSaveError(e?.message || 'Auto-save failed');
+          if (autoSaveDraftKey) {
+            try {
+              localStorage.setItem(autoSaveDraftKey, payloadStr);
+            } catch (err) {
+              // ignore
+            }
+          }
+        } finally {
+          autoSaveInFlightRef.current = null;
+
+          if (autoSavePendingRef.current) {
+            autoSavePendingRef.current = false;
+            // Run again immediately to capture any edits that happened during the in-flight save
+            await flushAutoSave('pending');
+          }
+        }
+      })();
+
+      autoSaveInFlightRef.current = run;
+      await run;
+
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const _reason = reason;
+    },
+    [
+      id,
+      lead,
+      canEditLead,
+      buildLeadPatchPayload,
+      autoSaveStatus,
+      estimatedValue,
+      askingPrice,
+      rehabBudget,
+      trackPriceChanges,
+      autoSaveDraftKey,
+    ]
+  );
+
+  const scheduleAutoSave = useCallback(() => {
+    if (!id || !lead || !canEditLead) return;
+
+    // Skip the very first run after load/hydrate
+    if (suppressNextAutoSaveRef.current) {
+      suppressNextAutoSaveRef.current = false;
+      lastSavedPayloadRef.current = JSON.stringify(buildLeadPatchPayload());
+      return;
+    }
+
+    const payloadStr = JSON.stringify(buildLeadPatchPayload());
+    if (!payloadStr || payloadStr === lastSavedPayloadRef.current) return;
+
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    setAutoSaveStatus((prev) => (prev === 'saving' ? prev : 'dirty'));
+
+    autoSaveTimerRef.current = setTimeout(() => {
+      void flushAutoSave('debounce');
+    }, 800);
+  }, [id, lead, canEditLead, buildLeadPatchPayload, flushAutoSave]);
+
+  // On mount (and when lead is loaded), if we have a pending draft payload, try to flush it
+  useEffect(() => {
+    if (!autoSaveDraftKey || !id || !lead || !canEditLead) return;
+
+    try {
+      const draft = localStorage.getItem(autoSaveDraftKey);
+      if (!draft) return;
+
+      // Mark UI so user knows something is pending
+      setAutoSaveStatus('dirty');
+
+      // Best-effort: attempt to persist whatever is currently in state.
+      // We don't rehydrate all local UI state from the stored payload; we only ensure it gets saved.
+      void flushAutoSave('manual');
+    } catch (e) {
+      // ignore
+    }
+  }, [autoSaveDraftKey, id, lead, canEditLead, flushAutoSave]);
+
   const handleSave = async () => {
     // Validate phone numbers before saving
     const invalidPhones: string[] = [];
@@ -952,7 +1372,8 @@ const LeadEdit: React.FC = () => {
         rehabToggledItems: rehabToggledItems || {},
         rehabNumberOfWindows: rehabNumberOfWindows || null,
         leadSourceData: leadSourceData || {},
-        // Underwriting Calculator values
+      // ARV (top box) + Underwriting Calculator values
+      arv: arvValue || null,
         underwritingArv: underwritingArv || null,
         underwritingTaxes: underwritingTaxes || null,
         underwritingTimeline: underwritingTimeline || null,
@@ -1232,20 +1653,20 @@ const LeadEdit: React.FC = () => {
   };
 
   // Helper function to track price changes
-  const trackPriceChanges = async (changes: Array<{ fieldName: string; oldValue: number | null; newValue: number | null }>) => {
-    const validChanges = changes.filter(c => c.newValue !== null && c.newValue !== c.oldValue);
+  async function trackPriceChanges(changes: Array<{ fieldName: string; oldValue: number | null; newValue: number | null }>) {
+    const validChanges = changes.filter((c) => c.newValue !== null && c.newValue !== c.oldValue);
     if (validChanges.length === 0) return;
 
     try {
       await makeApiCall(`${API_BASE}/leads/${id}/price-history/track-batch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ changes: validChanges })
+        body: JSON.stringify({ changes: validChanges }),
       });
     } catch (error) {
       console.error('Error tracking price changes:', error);
     }
-  };
+  }
 
   const loadNotes = async () => {
     try {
@@ -2296,7 +2717,12 @@ const LeadEdit: React.FC = () => {
 
   return (
     <>
-      <div className="space-y-2">
+      <div
+        className="space-y-2"
+        onInputCapture={() => scheduleAutoSave()}
+        onChangeCapture={() => scheduleAutoSave()}
+        onBlurCapture={() => void flushAutoSave('blur')}
+      >
         {/* Header with Back Button and Save */}
         <div className="flex items-center justify-between">
           <Button variant="outline" className="h-5 text-[9px] px-2 py-1 rounded-md inline-flex items-center justify-center" onClick={() => navigate('/leads')}>
@@ -2316,9 +2742,23 @@ const LeadEdit: React.FC = () => {
                 </Badge>
               )}
             </div>
-            <Button className="h-5 text-[9px] bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md inline-flex items-center justify-center" onClick={handleSave} disabled={saving || !canEditLead}>
+            {/* Autosave status */}
+            {canEditLead && (
+              <div className="text-[9px] text-slate-500 min-w-[64px] text-right">
+                {autoSaveStatus === 'saving' && 'Saving…'}
+                {autoSaveStatus === 'dirty' && 'Not saved'}
+                {autoSaveStatus === 'saved' && 'Saved'}
+                {autoSaveStatus === 'error' && 'Error'}
+              </div>
+            )}
+            <Button
+              className="h-5 text-[9px] bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md inline-flex items-center justify-center"
+              onClick={() => void flushAutoSave('manual')}
+              disabled={saving || autoSaveStatus === 'saving' || !canEditLead}
+              title={autoSaveError ? autoSaveError : 'Save now'}
+            >
               <Save className="w-2.5 h-2.5 mr-0.5" />
-              {saving ? 'Saving...' : 'Save'}
+              {autoSaveStatus === 'saving' || saving ? 'Saving...' : 'Save now'}
             </Button>
           </div>
         </div>
@@ -2541,7 +2981,10 @@ const LeadEdit: React.FC = () => {
                 <Label className="text-[9px] text-slate-500">ACQ Agent</Label>
                 <Select
                   value={acquisitionsAgent || 'unassigned'}
-                  onValueChange={(value) => setAcquisitionsAgent(value === 'unassigned' ? '' : value)}
+                  onValueChange={(value) => {
+                    setAcquisitionsAgent(value === 'unassigned' ? '' : value);
+                    scheduleAutoSave();
+                  }}
                   disabled={!canEditLead}
                 >
                   <SelectTrigger className="h-5 text-[10px]"><SelectValue placeholder="ACQ Agent" /></SelectTrigger>
@@ -2566,7 +3009,10 @@ const LeadEdit: React.FC = () => {
                 <Label className="text-[9px] text-slate-500">DISP Agent</Label>
                 <Select
                   value={dispositionsAgent || 'unassigned'}
-                  onValueChange={(value) => setDispositionsAgent(value === 'unassigned' ? '' : value)}
+                  onValueChange={(value) => {
+                    setDispositionsAgent(value === 'unassigned' ? '' : value);
+                    scheduleAutoSave();
+                  }}
                   disabled={!canEditLead}
                 >
                   <SelectTrigger className="h-5 text-[10px]"><SelectValue placeholder="DISP Agent" /></SelectTrigger>
@@ -2838,6 +3284,17 @@ const LeadEdit: React.FC = () => {
                 {/* 3. Comparable Properties */}
                 <CompsManager 
                   leadId={id!} 
+                  arv={arvValue}
+                  arvDisplay={arvDisplay}
+                  onArvDisplayChange={(raw) => {
+                    setArvDisplay(raw);
+                    const v = parseCurrencyInput(raw);
+                    setArvValue(v);
+                    // Sync underwriting immediately
+                    setUnderwritingArv(v);
+                  }}
+                  onArvBlur={() => setArvDisplay(arvValue ? formatCurrency(arvValue) : '')}
+                  canEditArv={canEditLead}
                   leadAddress={lead?.address ? {
                     address1: lead.address.address1,
                     city: lead.address.city,
@@ -3112,9 +3569,23 @@ const LeadEdit: React.FC = () => {
             <div className="sticky top-2 border border-slate-200 rounded-lg bg-white p-1.5 max-h-[calc(100vh-120px)] overflow-hidden flex flex-col">
               {/* Unified Communication Feed (includes Tasks, Calls, SMS, Emails, Notes) */}
               <UnifiedCommunicationFeed
+                leadId={id!}
                 communications={communications}
                 tasks={tasks}
                 loadingCommunications={loadingCommunications}
+                currentUser={user ? { id: user.id, roles: user.roles as any } : undefined}
+                canEditLead={canEditLead}
+                onRefreshCommunications={loadCommunications}
+                onRefreshTasks={loadTasks}
+                onNoteUpdated={(updated) => {
+                  if (!updated?.id) return;
+                  setCommunications((prev) => (prev || []).map((c: any) => (c?.id === updated.id ? { ...c, ...updated } : c)));
+                  setNotes((prev) => (prev || []).map((n: any) => (n?.id === updated.id ? { ...n, ...updated } : n)));
+                }}
+                onTaskUpdated={(updated) => {
+                  if (!updated?.id) return;
+                  setTasks((prev) => (prev || []).map((t: any) => (t?.id === updated.id ? { ...t, ...updated } : t)));
+                }}
                 smsText={smsText}
                 setSmsText={setSmsText}
                 sendingSMS={sendingSMS}
@@ -3294,19 +3765,7 @@ const LeadEdit: React.FC = () => {
             
             // Now move the lead to the new stage using the backend API
             if (pendingPipelineStatus) {
-              const stageResponse = await makeApiCall(`${API_BASE}/pipeline/leads/${id}/move`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ stageId: pendingPipelineStatus })
-              });
-              
-              if (stageResponse.ok) {
-                setPipelineStatus(pendingPipelineStatus);
-                console.log('✅ Stage changed successfully');
-              } else {
-                const errorData = await stageResponse.json();
-                throw new Error(errorData.error || 'Failed to change stage');
-              }
+              await requestStageMove(pendingPipelineStatus);
             }
             
             setShowAppointmentPopup(false);
@@ -3361,19 +3820,7 @@ const LeadEdit: React.FC = () => {
             
             // Now move the lead to the new stage using the backend API
             if (pendingPipelineStatus) {
-              const stageResponse = await makeApiCall(`${API_BASE}/pipeline/leads/${id}/move`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ stageId: pendingPipelineStatus })
-              });
-              
-              if (stageResponse.ok) {
-                setPipelineStatus(pendingPipelineStatus);
-                console.log('✅ Stage changed successfully');
-              } else {
-                const errorData = await stageResponse.json();
-                throw new Error(errorData.error || 'Failed to change stage');
-              }
+              await requestStageMove(pendingPipelineStatus);
             }
             
             setShowDueDiligencePopup(false);
@@ -3435,19 +3882,7 @@ const LeadEdit: React.FC = () => {
             
             // Now move the lead to the new stage using the backend API
             if (pendingPipelineStatus) {
-              const stageResponse = await makeApiCall(`${API_BASE}/pipeline/leads/${id}/move`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ stageId: pendingPipelineStatus })
-              });
-              
-              if (stageResponse.ok) {
-                setPipelineStatus(pendingPipelineStatus);
-                console.log('✅ Stage changed successfully');
-              } else {
-                const errorData = await stageResponse.json();
-                throw new Error(errorData.error || 'Failed to change stage');
-              }
+              await requestStageMove(pendingPipelineStatus);
             }
             
             setShowOfferMadePopup(false);

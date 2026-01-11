@@ -273,9 +273,6 @@ export function ProjectionsSheet({
         <div className="flex items-center gap-1">
           <TrendingUp className="w-3 h-3 text-slate-500" />
           <span className="text-xs font-medium text-slate-600">Projections (Full Sheet)</span>
-          <span className="text-xs text-blue-600 font-semibold ml-2">
-            Profit: {formatCurrency(projections.profit)}
-          </span>
         </div>
         <Button
           size="sm"

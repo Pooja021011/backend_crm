@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useLeads } from "@/hooks/useLeads";
 import { useSettings } from "@/hooks/useSettings";
 import { useAgents } from "@/hooks/useAgents";
@@ -9,19 +9,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PendingFileUploader, type PendingFileItem } from "@/components/PendingFileUploader";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
 import { 
   ArrowLeft, 
   Save, 
   User, 
   Phone, 
   Mail, 
-  Calendar as CalendarIcon,
   Users,
   UserCheck,
   Target,
@@ -30,14 +26,12 @@ import {
   MapPin,
   Upload
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { 
   validateEmail, 
   validateName
 } from "@/utils/validation";
 import { validatePhoneNumber } from "@/utils/phoneValidation";
 import { PhoneInput } from "@/components/PhoneInput";
-import { API_BASE } from "@/config/api";
 
 const AddBuyerLead = () => {
   const navigate = useNavigate();
@@ -46,10 +40,7 @@ const AddBuyerLead = () => {
   const { markets, leadSources, assetClasses, priceRanges, isLoading: settingsLoading } = useSettings();
   const { getActiveAgents, isLoading: agentsLoading } = useAgents();
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [pendingFiles, setPendingFiles] = useState<PendingFileItem[]>([]);
-  const [pipelineStages, setPipelineStages] = useState<any[]>([]);
-  const [loadingStages, setLoadingStages] = useState(true);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -59,7 +50,6 @@ const AddBuyerLead = () => {
     emailAddress: "",
     leadSource: "",
     dispositionAgentId: "",
-    pipelineStageId: "",
     leadMarkets: [] as string[],
     priceRanges: [] as string[],
     assetClasses: [] as string[],
@@ -74,34 +64,6 @@ const AddBuyerLead = () => {
   const dispositionAgents = getActiveAgents().filter(agent => 
     agent.roles.some(role => role.role.name === 'DISP')
   );
-
-  // Load pipeline stages (DISPOSITIONS for buyer leads)
-  useEffect(() => {
-    const loadPipelineStages = async () => {
-      try {
-        setLoadingStages(true);
-        const response = await fetch(`${API_BASE}/pipeline/DISPOSITIONS/stages`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          setPipelineStages(data.data || []);
-        }
-      } catch (error) {
-        console.error('Error loading pipeline stages:', error);
-        toast({
-          title: "Warning",
-          description: "Could not load pipeline stages.",
-          variant: "destructive"
-        });
-      } finally {
-        setLoadingStages(false);
-      }
-    };
-    
-    loadPipelineStages();
-  }, [toast]);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({
@@ -146,12 +108,11 @@ const AddBuyerLead = () => {
       
       const leadData: any = {
         type: 'BUYER' as const,
-        pipelineStageId: formData.pipelineStageId || undefined,
         buyer: {
-          firstName: formData.firstName.trim(),
-          lastName: formData.lastName.trim(),
-          phone: formData.phoneNumber.trim(),
-          email: formData.emailAddress.trim(),
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+        phone: formData.phoneNumber.trim(),
+        email: formData.emailAddress.trim(),
           vip: false,
           propertiesPurchased: parseInt(formData.propertiesPurchased) || 0,
           creditScore: formData.creditScore || undefined,
@@ -241,13 +202,8 @@ const AddBuyerLead = () => {
   };
 
   const isFormValid = () => {
-    return formData.firstName && 
-           formData.lastName && 
-           formData.phoneNumber && 
-           formData.emailAddress && 
-           formData.leadSource &&
-           formData.pipelineStageId &&
-           selectedDate;
+    // Only require lead source + assigned agent; contact can be blank.
+    return Boolean(formData.leadSource && formData.dispositionAgentId);
   };
 
   return (
@@ -286,9 +242,8 @@ const AddBuyerLead = () => {
                 name="firstName"
                 value={formData.firstName}
                 onValueChange={(value) => handleInputChange('firstName', value)}
-                validator={(value) => validateName(value, 'First name')}
+                validator={(value) => value.trim() ? validateName(value, 'First name') : ({ isValid: true })}
                 placeholder="First Name"
-                required
                 showValidation={true}
                 icon={<User className="w-4 h-4" />}
               />
@@ -299,9 +254,8 @@ const AddBuyerLead = () => {
                 name="lastName"
                 value={formData.lastName}
                 onValueChange={(value) => handleInputChange('lastName', value)}
-                validator={(value) => validateName(value, 'Last name')}
+                validator={(value) => value.trim() ? validateName(value, 'Last name') : ({ isValid: true })}
                 placeholder="Last Name"
-                required
                 showValidation={true}
                 icon={<User className="w-4 h-4" />}
               />
@@ -309,7 +263,7 @@ const AddBuyerLead = () => {
               {/* Phone Number */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-700">
-                  Primary Phone Number *
+                  Primary Phone Number
                 </Label>
                 <PhoneInput
                   label=""
@@ -327,9 +281,8 @@ const AddBuyerLead = () => {
                 type="email"
                 value={formData.emailAddress}
                 onValueChange={(value) => handleInputChange('emailAddress', value)}
-                validator={validateEmail}
+                validator={(value) => value.trim() ? validateEmail(value) : ({ isValid: true })}
                 placeholder="email@example.com"
-                required
                 icon={<Mail className="w-4 h-4" />}
               />
             </div>
@@ -358,60 +311,6 @@ const AddBuyerLead = () => {
                 </Select>
               </div>
 
-              {/* Pipeline Stage */}
-              <div className="space-y-2">
-                <Label htmlFor="pipelineStageId" className="text-sm font-medium text-gray-700">
-                  Pipeline Stage *
-                </Label>
-                <Select 
-                  value={formData.pipelineStageId} 
-                  onValueChange={(value) => handleInputChange('pipelineStageId', value)}
-                  disabled={loadingStages}
-                >
-                  <SelectTrigger className="h-10 border-gray-300 focus:border-blue-500 focus:ring-blue-500/20">
-                    <SelectValue placeholder={loadingStages ? "Loading..." : "Select Pipeline Stage"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {pipelineStages.map((stage) => (
-                      <SelectItem key={stage.id} value={stage.id}>
-                        {stage.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {pipelineStages.length === 0 && !loadingStages && (
-                  <p className="text-xs text-amber-600">⚠ No stages available for your role</p>
-                )}
-              </div>
-
-              {/* Date Created */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">
-                  Date Created *
-                </Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "h-10 w-full justify-start text-left font-normal border-gray-300 focus:border-blue-500 focus:ring-blue-500/20",
-                        !selectedDate && "text-muted-foreground"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {selectedDate ? format(selectedDate, "M/d/yyyy") : "M/d/yyyy"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={selectedDate}
-                      onSelect={setSelectedDate}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
             </div>
           </Card>
 

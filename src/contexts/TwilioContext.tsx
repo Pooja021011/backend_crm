@@ -11,8 +11,9 @@ interface TwilioContextType {
   isInitializing: boolean;
   isMuted: boolean;
   currentCallNumber: string;
+  currentCallLeadId: string;
   initializeDevice: () => Promise<Device | null>;
-  makeCall: (phoneNumber: string) => Promise<void>;
+  makeCall: (phoneNumber: string, leadId?: string) => Promise<void>;
   hangUp: () => void;
   toggleMute: () => boolean;
   answerCall: () => Promise<void>;
