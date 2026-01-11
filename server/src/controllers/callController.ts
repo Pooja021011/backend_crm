@@ -8,6 +8,8 @@ import twilio from 'twilio';
 import { voicePresenceService } from '../services/voicePresenceService.js';
 import { leadRepository } from '../repositories/leadRepository.js';
 import { Readable } from 'node:stream';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const AccessToken = twilio.jwt.AccessToken;
 const VoiceGrant = AccessToken.VoiceGrant;
@@ -60,7 +62,7 @@ function buildVoicemailTwiml(baseUrl: string) {
 */
 
 
-function buildVoicemailTwiml(baseUrl: string) {
+function buildVoicemailTwiml(baseUrl: string, greetingUrl?: string | null) {
   const voicemailActionUrl = `${baseUrl}/api/v1/calls/voicemail-action`;
   const recordingStatusUrl = `${baseUrl}/api/v1/calls/recording-status`;
 
@@ -69,10 +71,11 @@ function buildVoicemailTwiml(baseUrl: string) {
     <!-- Phone ringing sound (~10 seconds) -->
     <Play loop="2">${baseUrl}/phone-ring.mp3</Play>
 
-    <!-- US-style forwarded voicemail message -->
-    <Say voice="alice">
-        Your call has been forwarded to voicemail. Please leave a message after the tone.
-    </Say>
+    ${
+      greetingUrl
+        ? `<!-- User voicemail greeting -->\n    <Play>${greetingUrl}</Play>`
+        : `<!-- Default voicemail message -->\n    <Say voice="alice">\n        Your call has been forwarded to voicemail. Please leave a message after the tone.\n    </Say>`
+    }
 
     <!-- Beep + record voicemail -->
     <Record
@@ -198,11 +201,19 @@ export const callController = {
       const wasAnswered = dialCallStatus === 'completed';
       const baseUrl = getPublicBaseUrl(req);
 
+      // Resolve greeting based on destination phone number (To)
+      const toNormalized = typeof to === 'string' ? to.replace(/[\s\(\)\-]/g, '') : String(to || '');
+      const smsSettingsRepository = await import('../repositories/smsSettingsRepository.js');
+      const userSettings = await smsSettingsRepository.smsSettingsRepository.findByPhoneNumber(toNormalized);
+      const greetingUrl = userSettings?.userId
+        ? `${baseUrl}/api/v1/calls/voicemail-greeting/${encodeURIComponent(userSettings.userId)}`
+        : null;
+
       // If not answered (busy, no-answer, canceled, failed, or any other non-completed status),
       // route the caller to voicemail so they can leave a message
       const twiml = wasAnswered
         ? `<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>`
-        : buildVoicemailTwiml(baseUrl);
+        : buildVoicemailTwiml(baseUrl, greetingUrl);
       
       console.log('📞 DIAL ACTION RESPONSE:', {
         wasAnswered,
@@ -353,12 +364,20 @@ export const callController = {
 
       // Find matching lead for this agent; otherwise auto-create Unknown Caller lead
       const lead = from ? await callService.findLeadByPhoneNumber(from, userId) : null;
+
+      // If this is a brand-new inbound-call lead, set leadSource to "Mailer" (from DB)
+      const mailerSource = await prisma.leadSource.findFirst({
+        where: { active: true, name: { equals: 'Mailer', mode: 'insensitive' as any } },
+        select: { id: true },
+      });
+
       const ensuredLead =
         lead ||
         (await leadRepository.create(
           {
             type: 'SELLER',
             assignedUserId: userId,
+            leadSourceId: mailerSource?.id,
             address: { address1: 'Unknown', city: 'Unknown', state: 'NA', zip: '00000' },
             seller: {
               firstName: 'Unknown',
@@ -443,6 +462,30 @@ export const callController = {
     res.setHeader('Content-Type', 'audio/mpeg');
     const nodeStream = Readable.fromWeb(resp.body as any);
     nodeStream.pipe(res);
+  },
+
+  /**
+   * Stream a user's voicemail greeting WAV for Twilio <Play> (NO AUTH).
+   * Returns 404 if not configured.
+   */
+  async streamVoicemailGreeting(req: Request, res: Response) {
+    const userId = String(req.params.userId || '');
+    if (!userId) return res.status(400).send('userId required');
+
+    const sms = await prisma.userSmsSettings.findUnique({
+      where: { userId },
+      select: { voicemailGreetingPath: true },
+    });
+
+    const key = sms?.voicemailGreetingPath;
+    if (!key) return res.status(404).send('No voicemail greeting configured');
+
+    const greetingsDir = path.resolve(process.cwd(), 'server', 'uploads', 'voicemail-greetings');
+    const filePath = path.join(greetingsDir, key);
+    if (!fs.existsSync(filePath)) return res.status(404).send('Voicemail greeting not found');
+
+    res.setHeader('Content-Type', 'audio/wav');
+    return fs.createReadStream(filePath).pipe(res);
   },
 
   /**
@@ -953,6 +996,9 @@ export const callController = {
       const smsSettingsRepository = await import('../repositories/smsSettingsRepository.js');
       const toNormalized = typeof to === 'string' ? to.replace(/[\s\(\)\-]/g, '') : to;
       const userSettings = await smsSettingsRepository.smsSettingsRepository.findByPhoneNumber(toNormalized);
+      const greetingUrl = userSettings?.userId
+        ? `${baseUrl}/api/v1/calls/voicemail-greeting/${encodeURIComponent(userSettings.userId)}`
+        : null;
 
       if (userSettings && userSettings.user) {
         // Route call to the user's browser client ONLY if they're online.
@@ -978,7 +1024,7 @@ export const callController = {
     <Client>${clientIdentity}</Client>
   </Dial>
 </Response>`
-          : buildVoicemailTwiml(baseUrl);
+          : buildVoicemailTwiml(baseUrl, greetingUrl);
 
         res.type('text/xml');
         res.send(twiml);
@@ -1068,7 +1114,15 @@ export const callController = {
           
           if (accountSid && authToken) {
             const baseUrl = getPublicBaseUrl(req);
-            const voicemailTwiml = buildVoicemailTwiml(baseUrl);
+            // Resolve greeting based on destination phone number (To) if available
+            const toNum = typeof req.body?.to === 'string' ? req.body.to : '';
+            const toNormalized = toNum ? toNum.replace(/[\s\(\)\-]/g, '') : '';
+            const smsSettingsRepository = await import('../repositories/smsSettingsRepository.js');
+            const userSettings = toNormalized ? await smsSettingsRepository.smsSettingsRepository.findByPhoneNumber(toNormalized) : null;
+            const greetingUrl = userSettings?.userId
+              ? `${baseUrl}/api/v1/calls/voicemail-greeting/${encodeURIComponent(userSettings.userId)}`
+              : null;
+            const voicemailTwiml = buildVoicemailTwiml(baseUrl, greetingUrl);
             
             console.log('🔄 REDIRECTING PARENT CALL TO VOICEMAIL:', {
               parentCallSid: callSid,

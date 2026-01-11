@@ -2,6 +2,8 @@ import type { Request, Response } from 'express';
 import { settingsService } from '../services/settingsService.js';
 import { smsSettingsRepository } from '../repositories/smsSettingsRepository.js';
 import { prisma } from '../config/db.js';
+import fs from 'node:fs';
+import path from 'node:path';
 
 export const settingsController = {
   // Markets
@@ -290,6 +292,70 @@ export const settingsController = {
     } catch (error: any) {
       console.error('Error saving SMS settings:', error);
       res.status(500).json({ success: false, error: 'Failed to save SMS settings' });
+    }
+  },
+
+  // Voicemail Greeting (per-user) - upload WAV and associate to UserSmsSettings
+  uploadVoicemailGreeting: async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user?.id as string | undefined;
+      if (!userId) {
+        return res.status(401).json({ success: false, error: 'User not authenticated' });
+      }
+
+      const file = (req as any).file as Express.Multer.File | undefined;
+      if (!file) {
+        return res.status(400).json({ success: false, error: 'No file provided' });
+      }
+
+      // Basic type guard: ensure it is audio (we primarily expect WAV)
+      if (!String(file.mimetype || '').startsWith('audio/')) {
+        return res.status(400).json({ success: false, error: 'Voicemail greeting must be an audio file' });
+      }
+
+      // Move the uploaded file into a stable location by userId
+      const greetingsDir = path.resolve(process.cwd(), 'server', 'uploads', 'voicemail-greetings');
+      fs.mkdirSync(greetingsDir, { recursive: true });
+
+      const safeUserId = String(userId).replace(/[^a-zA-Z0-9_-]/g, '_');
+      const targetFilename = `${safeUserId}.wav`;
+      const targetPath = path.join(greetingsDir, targetFilename);
+
+      // Multer saved the file into server/uploads already; move/replace to stable path
+      try {
+        fs.renameSync(file.path, targetPath);
+      } catch {
+        // Cross-device rename fallback
+        fs.copyFileSync(file.path, targetPath);
+        fs.unlinkSync(file.path);
+      }
+
+      // Ensure UserSmsSettings exists and store greeting pointer
+      const updated = await prisma.userSmsSettings.upsert({
+        where: { userId },
+        update: {
+          voicemailGreetingPath: targetFilename,
+          voicemailGreetingUpdatedAt: new Date(),
+        },
+        create: {
+          userId,
+          active: true,
+          voicemailGreetingPath: targetFilename,
+          voicemailGreetingUpdatedAt: new Date(),
+        },
+      });
+
+      return res.json({
+        success: true,
+        data: {
+          userId,
+          voicemailGreetingPath: updated.voicemailGreetingPath,
+          voicemailGreetingUpdatedAt: updated.voicemailGreetingUpdatedAt,
+        },
+      });
+    } catch (error: any) {
+      console.error('Error uploading voicemail greeting:', error);
+      return res.status(500).json({ success: false, error: 'Failed to upload voicemail greeting' });
     }
   },
 };

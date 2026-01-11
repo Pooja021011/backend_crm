@@ -207,6 +207,10 @@ model UserSmsSettings {
   // Display settings
   displayName  String?  // How the number appears to the user
   
+  // Optional per-user voicemail greeting (WAV) stored on server
+  voicemailGreetingPath      String?
+  voicemailGreetingUpdatedAt DateTime?
+
   // Status
   active       Boolean  @default(true)
   

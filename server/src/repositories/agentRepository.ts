@@ -3,19 +3,11 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 export const agentRepository = {
-  // List all agents with their roles (excluding admin-only users)
+  // List all active users with their roles (used for task assignment, mentions, etc.)
   listAgents: async () => {
     return prisma.user.findMany({
       where: {
-        roles: {
-          some: {
-            role: {
-              name: {
-                in: ['ACQ', 'DISP', 'MANAGER', 'TC']
-              }
-            }
-          }
-        }
+        status: 'active',
       },
       select: {
         id: true,

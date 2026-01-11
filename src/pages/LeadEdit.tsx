@@ -22,6 +22,7 @@ import {
   X,
   Save,
   ArrowLeft,
+  ChevronDown,
   FileText,
   MessageSquare,
   CheckSquare,
@@ -59,6 +60,10 @@ import { UnifiedCommunicationFeed } from '@/components/UnifiedCommunicationFeed'
 import { PhoneInput } from '@/components/PhoneInput';
 import { validatePhoneNumber } from '@/utils/phoneValidation';
 import { LeadOwnerSection, type LeadOwnerSectionRef } from '@/components/LeadOwnerSection';
+import { LeadPhotoGallery } from '@/components/LeadPhotoGallery';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar as UiCalendar } from '@/components/ui/calendar';
 
 interface Contact {
   id?: string;
@@ -192,6 +197,11 @@ const LeadEdit: React.FC = () => {
     dueAt: '',
     assignedToId: ''
   });
+  const [taskDuePickerOpen, setTaskDuePickerOpen] = useState(false);
+  const [taskDueDate, setTaskDueDate] = useState<Date | null>(null);
+  const [taskDueHour, setTaskDueHour] = useState<string>('');
+  const [taskDueMinute, setTaskDueMinute] = useState<string>('');
+  const [taskDueAmPm, setTaskDueAmPm] = useState<'AM' | 'PM'>('AM');
   const [savingTask, setSavingTask] = useState(false);
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   
@@ -224,6 +234,10 @@ const LeadEdit: React.FC = () => {
   const [waterHeaterAge, setWaterHeaterAge] = useState('');
   const [waterType, setWaterType] = useState('');
   const [sewerType, setSewerType] = useState('');
+
+  // Collapsible sections (Acquisitions tab)
+  const [isAdditionalInfoOpen, setIsAdditionalInfoOpen] = useState(false);
+  const [isPhotosOpen, setIsPhotosOpen] = useState(false);
   
   // Notes and communications
   const [noteText, setNoteText] = useState('');
@@ -828,13 +842,65 @@ const LeadEdit: React.FC = () => {
     }
   };
 
+  const formatTaskDueDisplay = (iso: string) => {
+    try {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return 'Select due date & time';
+      return d.toLocaleString(undefined, {
+        month: 'short',
+        day: '2-digit',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      });
+    } catch {
+      return 'Select due date & time';
+    }
+  };
+
+  const setTaskDueFromDateTime = (dt: Date) => {
+    if (!dt || Number.isNaN(dt.getTime())) return;
+
+    const dateOnly = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+    const hours24 = dt.getHours();
+    const ampm: 'AM' | 'PM' = hours24 >= 12 ? 'PM' : 'AM';
+    const hour12 = hours24 % 12 || 12;
+    const minute = dt.getMinutes();
+
+    setTaskDueDate(dateOnly);
+    setTaskDueHour(String(hour12));
+    setTaskDueMinute(String(minute).padStart(2, '0'));
+    setTaskDueAmPm(ampm);
+
+    setTaskForm((prev) => ({
+      ...prev,
+      dueAt: dt.toISOString(),
+    }));
+  };
+
+  const computeTaskDueIso = (date: Date | null, hourStr: string, minuteStr: string, ampm: 'AM' | 'PM') => {
+    if (!date) return '';
+    const hour12 = parseInt(hourStr || '', 10);
+    const minute = parseInt(minuteStr || '', 10);
+    if (!hour12 || Number.isNaN(minute)) return '';
+
+    const hour24 = ampm === 'PM' ? ((hour12 % 12) + 12) : (hour12 % 12);
+    const dt = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour24, minute, 0, 0);
+    if (Number.isNaN(dt.getTime())) return '';
+    return dt.toISOString();
+  };
+
   const openTaskDialog = (task?: any) => {
+    const nowPlusOneHour = new Date(Date.now() + 60 * 60 * 1000);
+    const baseDate = task?.dueAt ? new Date(task.dueAt) : nowPlusOneHour;
+    const initial = Number.isNaN(baseDate.getTime()) ? nowPlusOneHour : baseDate;
+
     if (task) {
       setEditingTask(task);
       setTaskForm({
         title: task.title || '',
         description: task.description || '',
-        dueAt: task.dueAt ? new Date(task.dueAt).toISOString().slice(0, 16) : '',
+        dueAt: initial.toISOString(),
         assignedToId: task.assignedToId || ''
       });
     } else {
@@ -842,10 +908,14 @@ const LeadEdit: React.FC = () => {
       setTaskForm({
         title: '',
         description: '',
-        dueAt: '',
+        dueAt: initial.toISOString(),
         assignedToId: ''
       });
     }
+
+    // hydrate picker UI
+    setTaskDueFromDateTime(initial);
+    setTaskDuePickerOpen(false);
     setShowTaskDialog(true);
   };
 
@@ -858,6 +928,11 @@ const LeadEdit: React.FC = () => {
       dueAt: '',
       assignedToId: ''
     });
+    setTaskDuePickerOpen(false);
+    setTaskDueDate(null);
+    setTaskDueHour('');
+    setTaskDueMinute('');
+    setTaskDueAmPm('AM');
   };
 
   const handleTaskSubmit = async () => {
@@ -3182,104 +3257,94 @@ const LeadEdit: React.FC = () => {
               {/* Acquisitions Tab */}
               <TabsContent value="acquisitions" className="space-y-2 mt-2">
                 {/* 1. Additional Property Information */}
-                <div className="border border-slate-200 rounded-lg bg-white p-2">
-                  <span className="text-xs font-medium text-slate-600 block mb-2">Additional Property Information</span>
-                  <div className="grid grid-cols-7 gap-2">
-                    <div><Label className="text-[10px] text-slate-500">Roof</Label><Input value={roofType} onChange={(e) => setRoofType(e.target.value)} placeholder="Type" className="h-6 text-xs" /></div>
-                    <div><Label className="text-[10px] text-slate-500">Roof Age</Label><Input type="number" value={roofAge} onChange={(e) => setRoofAge(e.target.value)} placeholder="Yrs" className="h-6 text-xs" /></div>
-                    <div><Label className="text-[10px] text-slate-500">HVAC</Label><Input value={hvacType} onChange={(e) => setHvacType(e.target.value)} placeholder="Type" className="h-6 text-xs" /></div>
-                    <div><Label className="text-[10px] text-slate-500">HVAC Age</Label><Input type="number" value={hvacAge} onChange={(e) => setHvacAge(e.target.value)} placeholder="Yrs" className="h-6 text-xs" /></div>
-                    <div><Label className="text-[10px] text-slate-500">WH Age</Label><Input type="number" value={waterHeaterAge} onChange={(e) => setWaterHeaterAge(e.target.value)} placeholder="Yrs" className="h-6 text-xs" /></div>
-                    <div><Label className="text-[10px] text-slate-500">Water</Label><Input value={waterType} onChange={(e) => setWaterType(e.target.value)} placeholder="Type" className="h-6 text-xs" /></div>
-                    <div><Label className="text-[10px] text-slate-500">Sewer</Label><Input value={sewerType} onChange={(e) => setSewerType(e.target.value)} placeholder="Type" className="h-6 text-xs" /></div>
+                <Collapsible open={isAdditionalInfoOpen} onOpenChange={setIsAdditionalInfoOpen}>
+                  <div className="border border-slate-200 rounded-lg bg-white p-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-slate-600">Additional Property Information</span>
+                      <CollapsibleTrigger asChild>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0"
+                          aria-label={isAdditionalInfoOpen ? 'Collapse section' : 'Expand section'}
+                        >
+                          <ChevronDown className={`h-4 w-4 transition-transform ${isAdditionalInfoOpen ? 'rotate-180' : ''}`} />
+                        </Button>
+                      </CollapsibleTrigger>
+                    </div>
+
+                    <CollapsibleContent className="mt-2">
+                      <div className="grid grid-cols-7 gap-2">
+                        <div><Label className="text-[10px] text-slate-500">Roof</Label><Input value={roofType} onChange={(e) => setRoofType(e.target.value)} placeholder="Type" className="h-6 text-xs" /></div>
+                        <div><Label className="text-[10px] text-slate-500">Roof Age</Label><Input type="number" value={roofAge} onChange={(e) => setRoofAge(e.target.value)} placeholder="Yrs" className="h-6 text-xs" /></div>
+                        <div><Label className="text-[10px] text-slate-500">HVAC</Label><Input value={hvacType} onChange={(e) => setHvacType(e.target.value)} placeholder="Type" className="h-6 text-xs" /></div>
+                        <div><Label className="text-[10px] text-slate-500">HVAC Age</Label><Input type="number" value={hvacAge} onChange={(e) => setHvacAge(e.target.value)} placeholder="Yrs" className="h-6 text-xs" /></div>
+                        <div><Label className="text-[10px] text-slate-500">WH Age</Label><Input type="number" value={waterHeaterAge} onChange={(e) => setWaterHeaterAge(e.target.value)} placeholder="Yrs" className="h-6 text-xs" /></div>
+                        <div><Label className="text-[10px] text-slate-500">Water</Label><Input value={waterType} onChange={(e) => setWaterType(e.target.value)} placeholder="Type" className="h-6 text-xs" /></div>
+                        <div><Label className="text-[10px] text-slate-500">Sewer</Label><Input value={sewerType} onChange={(e) => setSewerType(e.target.value)} placeholder="Type" className="h-6 text-xs" /></div>
+                      </div>
+                    </CollapsibleContent>
                   </div>
-                </div>
+                </Collapsible>
 
                 {/* 2. Photos */}
-                <div className="border border-slate-200 rounded-lg bg-white p-2">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-medium text-slate-600">Photos</span>
-                    <Button 
-                      size="sm" 
-                      variant="ghost" 
-                      className="h-6 text-xs px-2" 
-                      disabled={uploadingPhoto}
-                      onClick={() => document.getElementById('photo-upload')?.click()}
-                    >
-                      <Plus className="w-3 h-3 mr-1" />
-                      {uploadingPhoto ? 'Uploading...' : 'Add'}
-                    </Button>
-                    <input 
-                      id="photo-upload" 
-                      type="file" 
-                      accept="image/*" 
-                      multiple
-                      className="hidden" 
-                      onChange={handlePhotoUpload} 
-                      disabled={uploadingPhoto} 
-                    />
+                <Collapsible open={isPhotosOpen} onOpenChange={setIsPhotosOpen}>
+                  <div className="border border-slate-200 rounded-lg bg-white p-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-slate-600">Photos</span>
+                      <div className="flex items-center gap-1">
+                        <Button 
+                          size="sm" 
+                          variant="ghost" 
+                          className="h-6 text-xs px-2" 
+                          disabled={uploadingPhoto}
+                          onClick={() => document.getElementById('photo-upload')?.click()}
+                        >
+                          <Plus className="w-3 h-3 mr-1" />
+                          {uploadingPhoto ? 'Uploading...' : 'Add'}
+                        </Button>
+                        <CollapsibleTrigger asChild>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0"
+                            aria-label={isPhotosOpen ? 'Collapse section' : 'Expand section'}
+                          >
+                            <ChevronDown className={`h-4 w-4 transition-transform ${isPhotosOpen ? 'rotate-180' : ''}`} />
+                          </Button>
+                        </CollapsibleTrigger>
+                        <input 
+                          id="photo-upload" 
+                          type="file" 
+                          accept="image/*" 
+                          multiple
+                          className="hidden" 
+                          onChange={handlePhotoUpload} 
+                          disabled={uploadingPhoto} 
+                        />
+                      </div>
+                    </div>
+
+                    <CollapsibleContent className="mt-2">
+                      <LeadPhotoGallery
+                        photos={photos}
+                        onDeletePhoto={async (photo) => {
+                          if (confirm('Delete this photo?')) {
+                            try {
+                              await makeApiCall(`${API_BASE}/files/${photo.id}`, { method: 'DELETE' });
+                              toast({ title: 'Success', description: 'Photo deleted' });
+                              loadPhotos();
+                            } catch (error) {
+                              toast({ title: 'Error', description: 'Failed to delete photo', variant: 'destructive' });
+                            }
+                          }
+                        }}
+                      />
+                    </CollapsibleContent>
                   </div>
-                  
-                  {photos.length > 0 ? (
-                    <div className="grid grid-cols-4 gap-2">
-                      {photos.map((photo: any) => {
-                        const accessToken = localStorage.getItem('accessToken');
-                        const previewUrl = `${API_BASE}/files/${photo.id}/preview?token=${accessToken}`;
-                        
-                        return (
-                          <div key={photo.id} className="relative border border-slate-200 rounded-lg bg-white hover:shadow-md transition-shadow group">
-                            {/* Photo */}
-                            <div className="relative w-full h-24 bg-slate-100 rounded-t-lg overflow-hidden">
-                              <img 
-                                src={previewUrl} 
-                                alt={photo.originalName}
-                                className="w-full h-full object-cover cursor-pointer"
-                                onClick={() => window.open(`${API_BASE}/files/${photo.id}/download`, '_blank')}
-                                onError={(e) => {
-                                  const parent = e.currentTarget.parentElement;
-                                  if (parent) {
-                                    parent.innerHTML = '<div class="flex items-center justify-center h-full text-slate-400"><svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg></div>';
-                                  }
-                                }}
-                              />
-                              {/* Delete button - shows on hover */}
-                              <Button 
-                                size="sm" 
-                                variant="ghost" 
-                                className="absolute top-1 right-1 h-5 w-5 p-0 bg-red-500 hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity" 
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  if (confirm('Delete this photo?')) {
-                                    try {
-                                      await makeApiCall(`${API_BASE}/files/${photo.id}`, { method: 'DELETE' });
-                                      toast({ title: 'Success', description: 'Photo deleted' });
-                                      loadPhotos();
-                                    } catch (error) {
-                                      toast({ title: 'Error', description: 'Failed to delete photo', variant: 'destructive' });
-                                    }
-                                  }
-                                }}
-                              >
-                                <X className="w-3 h-3 text-white" />
-                              </Button>
-                            </div>
-                            
-                            {/* Photo Info */}
-                            <div className="p-1.5">
-                              <span className="text-[10px] text-slate-500 truncate block" title={photo.originalName}>
-                                {photo.originalName || 'Photo'}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="text-center py-4 bg-slate-50 rounded text-xs text-slate-500">
-                      No photos yet. Click "Add" to upload photos.
-                    </div>
-                  )}
-                </div>
+                </Collapsible>
 
                 {/* 3. Comparable Properties */}
                 <CompsManager 
@@ -3477,19 +3542,21 @@ const LeadEdit: React.FC = () => {
                     <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">
                       {files.map((file: any) => {
                         const isImage = file.mimeType?.startsWith('image/');
-                        const accessToken = localStorage.getItem('accessToken');
-                        const previewUrl = isImage ? `${API_BASE}/files/${file.id}/preview?token=${accessToken}` : null;
+                        const accessToken = localStorage.getItem('accessToken') || '';
+                        const tokenParam = encodeURIComponent(accessToken);
+                        const previewUrl = `${API_BASE}/files/${file.id}/preview?token=${tokenParam}`;
+                        const downloadUrl = `${API_BASE}/files/${file.id}/download?token=${tokenParam}`;
                         
                         return (
                           <div key={file.id} className="border border-slate-200 rounded-lg bg-white hover:shadow-md transition-shadow">
                             {/* Thumbnail */}
-                            {isImage && previewUrl ? (
+                            {isImage ? (
                               <div className="relative w-full h-32 bg-slate-100 rounded-t-lg overflow-hidden">
                                 <img 
                                   src={previewUrl} 
                                   alt={file.originalName}
                                   className="w-full h-full object-cover cursor-pointer"
-                                  onClick={() => window.open(`${API_BASE}/files/${file.id}/download`, '_blank')}
+                                  onClick={() => window.open(previewUrl, '_blank')}
                                   onError={(e) => {
                                     // Fallback if preview fails - show file icon instead
                                     const parent = e.currentTarget.parentElement;
@@ -3501,7 +3568,14 @@ const LeadEdit: React.FC = () => {
                               </div>
                             ) : (
                               <div className="w-full h-32 bg-slate-100 rounded-t-lg flex items-center justify-center">
-                                <FileText className="w-12 h-12 text-slate-400" />
+                                <div
+                                  className="flex flex-col items-center justify-center h-full w-full cursor-pointer"
+                                  onClick={() => window.open(previewUrl, '_blank')}
+                                  title="Preview"
+                                >
+                                  <FileText className="w-12 h-12 text-slate-400" />
+                                  <span className="text-[10px] text-slate-500 mt-1">Preview</span>
+                                </div>
                               </div>
                             )}
                             
@@ -3523,11 +3597,22 @@ const LeadEdit: React.FC = () => {
                                   {((file.size || 0) / 1024).toFixed(0)}KB
                                 </span>
                                 <div className="flex gap-1">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-6 w-6 p-0 hover:bg-slate-50"
+                                    onClick={() => window.open(previewUrl, '_blank')}
+                                    title="Preview"
+                                  >
+                                    <FileText className="w-3 h-3 text-slate-600" />
+                                  </Button>
                                   <Button 
                                     size="sm" 
                                     variant="ghost" 
                                     className="h-6 w-6 p-0 hover:bg-blue-50" 
-                                    onClick={() => window.open(`${API_BASE}/files/${file.id}/download`, '_blank')} 
+                                    onClick={() => {
+                                      window.open(downloadUrl, '_blank');
+                                    }} 
                                     title="Download"
                                   >
                                     <Download className="w-3 h-3 text-blue-600" />
@@ -3665,13 +3750,121 @@ const LeadEdit: React.FC = () => {
 
             <div className="space-y-2">
               <Label htmlFor="task-due-date">Due Date *</Label>
-              <Input
-                id="task-due-date"
-                type="datetime-local"
-                value={taskForm.dueAt}
-                onChange={(e) => setTaskForm({ ...taskForm, dueAt: e.target.value })}
-                disabled={savingTask}
-              />
+              <Popover open={taskDuePickerOpen} onOpenChange={setTaskDuePickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    id="task-due-date"
+                    type="button"
+                    variant="outline"
+                    className="w-full justify-between font-normal"
+                    disabled={savingTask}
+                  >
+                    {taskForm.dueAt ? formatTaskDueDisplay(taskForm.dueAt) : 'Select due date & time'}
+                    <Calendar className="w-4 h-4 opacity-60" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-3" align="start">
+                  <div className="space-y-3">
+                    <UiCalendar
+                      mode="single"
+                      selected={taskDueDate || undefined}
+                      onSelect={(d) => {
+                        if (!d) return;
+                        setTaskDueDate(d);
+                        const iso = computeTaskDueIso(d, taskDueHour, taskDueMinute, taskDueAmPm);
+                        if (iso) setTaskForm((prev) => ({ ...prev, dueAt: iso }));
+                      }}
+                      initialFocus
+                    />
+
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-slate-500">Hour</Label>
+                        <Select
+                          value={taskDueHour}
+                          onValueChange={(v) => {
+                            setTaskDueHour(v);
+                            const iso = computeTaskDueIso(taskDueDate, v, taskDueMinute, taskDueAmPm);
+                            if (iso) setTaskForm((prev) => ({ ...prev, dueAt: iso }));
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Hour" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 12 }).map((_, i) => {
+                              const hour = String(i + 1);
+                              return (
+                                <SelectItem key={hour} value={hour}>
+                                  {hour}
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-slate-500">Minute</Label>
+                        <Select
+                          value={taskDueMinute}
+                          onValueChange={(v) => {
+                            setTaskDueMinute(v);
+                            const iso = computeTaskDueIso(taskDueDate, taskDueHour, v, taskDueAmPm);
+                            if (iso) setTaskForm((prev) => ({ ...prev, dueAt: iso }));
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Min" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 12 }).map((_, i) => {
+                              const m = String(i * 5).padStart(2, '0');
+                              return (
+                                <SelectItem key={m} value={m}>
+                                  {m}
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-slate-500">AM/PM</Label>
+                        <Select
+                          value={taskDueAmPm}
+                          onValueChange={(v: 'AM' | 'PM') => {
+                            setTaskDueAmPm(v);
+                            const iso = computeTaskDueIso(taskDueDate, taskDueHour, taskDueMinute, v);
+                            if (iso) setTaskForm((prev) => ({ ...prev, dueAt: iso }));
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="AM">AM</SelectItem>
+                            <SelectItem value="PM">PM</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-8 text-xs"
+                        onClick={() => setTaskDuePickerOpen(false)}
+                      >
+                        Done
+                      </Button>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
 
             <div className="space-y-2">

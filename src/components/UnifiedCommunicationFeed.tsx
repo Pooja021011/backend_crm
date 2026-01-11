@@ -5,6 +5,8 @@ import { Textarea } from './ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { Calendar as UiCalendar } from './ui/calendar';
 import { API_BASE, makeApiCall } from '@/config/api';
 import { useToast } from '@/hooks/use-toast';
 import { 
@@ -178,34 +180,70 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
   const [taskEditForm, setTaskEditForm] = useState({
     title: '',
     description: '',
-    dueAtLocal: '',
+    dueAtIso: '',
     assignedToId: '',
     status: 'OPEN',
   });
+  const [taskEditDuePickerOpen, setTaskEditDuePickerOpen] = useState(false);
+  const [taskEditDueDate, setTaskEditDueDate] = useState<Date | null>(null);
+  const [taskEditDueHour, setTaskEditDueHour] = useState<string>('');
+  const [taskEditDueMinute, setTaskEditDueMinute] = useState<string>('');
+  const [taskEditDueAmPm, setTaskEditDueAmPm] = useState<'AM' | 'PM'>('AM');
   
   // User mention state
   const [users, setUsers] = useState<Array<{id: string; firstName: string; lastName: string}>>([]);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [mentionSearchTerm, setMentionSearchTerm] = useState('');
   const [cursorPosition, setCursorPosition] = useState(0);
+  const [mentionAtIndex, setMentionAtIndex] = useState<number | null>(null);
   const noteInputRef = useRef<HTMLTextAreaElement>(null);
+  const feedRef = useRef<HTMLDivElement>(null);
+  const didInitialScrollRef = useRef(false);
 
   // Recording playback state (recordingSid -> object URL)
   const [recordingUrls, setRecordingUrls] = useState<Record<string, string>>({});
   const [recordingLoading, setRecordingLoading] = useState<Record<string, boolean>>({});
 
-  const toLocalDateTimeInput = (iso?: string) => {
-    if (!iso) return '';
+  const formatTaskDueDisplay = (iso?: string) => {
+    if (!iso) return 'Select due date & time';
     const d = new Date(iso);
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    if (Number.isNaN(d.getTime())) return 'Select due date & time';
+    return d.toLocaleString(undefined, {
+      month: 'short',
+      day: '2-digit',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
   };
 
-  const fromLocalDateTimeInput = (value?: string) => {
-    if (!value) return undefined;
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return undefined;
-    return d.toISOString();
+  const setTaskEditDueFromDateTime = (dt: Date) => {
+    if (!dt || Number.isNaN(dt.getTime())) return;
+
+    const dateOnly = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+    const hours24 = dt.getHours();
+    const ampm: 'AM' | 'PM' = hours24 >= 12 ? 'PM' : 'AM';
+    const hour12 = hours24 % 12 || 12;
+    const minute = dt.getMinutes();
+
+    setTaskEditDueDate(dateOnly);
+    setTaskEditDueHour(String(hour12));
+    setTaskEditDueMinute(String(minute).padStart(2, '0'));
+    setTaskEditDueAmPm(ampm);
+
+    setTaskEditForm((prev) => ({ ...prev, dueAtIso: dt.toISOString() }));
+  };
+
+  const computeTaskDueIso = (date: Date | null, hourStr: string, minuteStr: string, ampm: 'AM' | 'PM') => {
+    if (!date) return '';
+    const hour12 = parseInt(hourStr || '', 10);
+    const minute = parseInt(minuteStr || '', 10);
+    if (!hour12 || Number.isNaN(minute)) return '';
+
+    const hour24 = ampm === 'PM' ? ((hour12 % 12) + 12) : (hour12 % 12);
+    const dt = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour24, minute, 0, 0);
+    if (Number.isNaN(dt.getTime())) return '';
+    return dt.toISOString();
   };
 
   const formatFromToLine = (item: any) => {
@@ -273,13 +311,18 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
 
   const openEditTask = (item: any) => {
     setEditingTask(item);
+    const nowPlusOneHour = new Date(Date.now() + 60 * 60 * 1000);
+    const baseDate = item?.dueAt ? new Date(item.dueAt) : nowPlusOneHour;
+    const initial = Number.isNaN(baseDate.getTime()) ? nowPlusOneHour : baseDate;
     setTaskEditForm({
       title: item.title || '',
       description: item.description || '',
-      dueAtLocal: toLocalDateTimeInput(item.dueAt),
+      dueAtIso: initial.toISOString(),
       assignedToId: item.assignedToId || '',
       status: item.status || 'OPEN',
     });
+    setTaskEditDueFromDateTime(initial);
+    setTaskEditDuePickerOpen(false);
   };
 
   const saveEditedTask = async () => {
@@ -291,8 +334,7 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
         description: taskEditForm.description,
         status: taskEditForm.status,
       };
-      const dueAtIso = fromLocalDateTimeInput(taskEditForm.dueAtLocal);
-      if (dueAtIso) payload.dueAt = dueAtIso;
+      if (taskEditForm.dueAtIso) payload.dueAt = taskEditForm.dueAtIso;
       payload.assignedToId = taskEditForm.assignedToId || null;
 
       const response = await makeApiCall(`${API_BASE}/leads/${leadId}/tasks/${editingTask.id}`, {
@@ -309,6 +351,7 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
       if (updated?.id) onTaskUpdated?.(updated);
       toast({ title: 'Updated', description: 'Task updated' });
       setEditingTask(null);
+      setTaskEditDuePickerOpen(false);
       await Promise.resolve(onRefreshTasks?.());
     } catch (e: any) {
       toast({ title: 'Error', description: e?.message || 'Failed to update task', variant: 'destructive' });
@@ -317,7 +360,7 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
     }
   };
   
-  // Load users for @ mentions - only users who have access to this lead
+  // Load users for @ mentions (all active users)
   useEffect(() => {
     const loadUsers = async () => {
       try {
@@ -325,51 +368,20 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
         if (response.ok) {
           const data = await response.json();
           const allUsers = data.data || [];
-          
-          console.log('🔍 Lead info for mention filtering:', lead);
-          console.log('📋 All users:', allUsers.length);
-          console.log('📝 Tasks:', tasks.length);
-          
-          // Filter users who have access to this lead
-          const allowedUsers = allUsers.filter((user: any) => {
-            // Always allow ADMIN, MANAGER, and Transaction Coordinator
-            if (user.roles?.includes('ADMIN') || user.roles?.includes('MANAGER') || user.roles?.includes('TC')) {
-              return true;
-            }
-            
-            // Allow if user is ACQ agent (assigned to the lead)
-            if (lead?.assignedUserId === user.id) {
-              return true;
-            }
-            
-            // Allow if user is DISP agent
-            if (lead?.dispAgentId === user.id) {
-              return true;
-            }
-            
-            // Allow if user created the lead
-            if (lead?.createdById === user.id) {
-              return true;
-            }
-            
-            // Allow if user has REAL tasks assigned on this lead (not auto-generated mention tasks)
-            const realTasks = tasks.filter(t => !t.title?.startsWith('Review note on '));
-            if (realTasks.some(task => task.assignedToId === user.id)) {
-              return true;
-            }
-            
-            return false;
-          });
-          
-          console.log('✅ Allowed users for mentions:', allowedUsers.map(u => `${u.firstName} ${u.lastName}`));
-          setUsers(allowedUsers);
+
+          const activeUsers = allUsers
+            .filter((u: any) => (u?.status ? String(u.status).toLowerCase() === 'active' : true))
+            .map((u: any) => ({ id: u.id, firstName: u.firstName, lastName: u.lastName }))
+            .filter((u: any) => u?.id && u?.firstName && u?.lastName);
+
+          setUsers(activeUsers);
         }
       } catch (error) {
         console.error('Error loading users:', error);
       }
     };
     loadUsers();
-  }, [lead, tasks]);
+  }, []);
 
   const loadRecording = async (recordingSid: string) => {
     if (!recordingSid) return;
@@ -442,6 +454,19 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
     return dateA - dateB;
   });
 
+  // Auto-scroll to bottom on initial load (when entering lead)
+  useEffect(() => {
+    if (loadingCommunications) return;
+    if (didInitialScrollRef.current) return;
+    if (!feedRef.current) return;
+
+    didInitialScrollRef.current = true;
+    requestAnimationFrame(() => {
+      if (!feedRef.current) return;
+      feedRef.current.scrollTop = feedRef.current.scrollHeight;
+    });
+  }, [loadingCommunications, sortedItems.length]);
+
   const getIconForType = (type: string) => {
     switch (type) {
       case 'CALL':
@@ -504,50 +529,66 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
     const cursorPos = e.target.selectionStart;
     setNoteText(value);
     setCursorPosition(cursorPos);
-    
-    // Check if user typed @
+
+    // Detect mention query near cursor (supports "@S" or "@Sam F" etc.)
     const textBeforeCursor = value.substring(0, cursorPos);
-    const lastAtIndex = textBeforeCursor.lastIndexOf('@');
-    
-    if (lastAtIndex !== -1) {
-      const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
-      // Check if there's a space after @ (which means they finished the mention)
-      if (!textAfterAt.includes(' ') && textAfterAt.length <= 20) {
-        setMentionSearchTerm(textAfterAt.toLowerCase());
-        setShowUserDropdown(true);
-        return;
-      }
+    const re = /(^|\s)@([^\n@]{0,30})$/;
+    const match = re.exec(textBeforeCursor);
+
+    if (match) {
+      const atIndex = (match.index ?? 0) + match[1].length;
+      const query = (match[2] || '').trim().toLowerCase();
+      setMentionAtIndex(atIndex);
+      setMentionSearchTerm(query);
+      setShowUserDropdown(true);
+      return;
     }
-    
+
+    setMentionAtIndex(null);
     setShowUserDropdown(false);
   };
   
   const handleUserSelect = (user: {id: string; firstName: string; lastName: string}) => {
-    const textBeforeCursor = noteText.substring(0, cursorPosition);
     const textAfterCursor = noteText.substring(cursorPosition);
-    const lastAtIndex = textBeforeCursor.lastIndexOf('@');
-    
-    if (lastAtIndex !== -1) {
-      const beforeAt = textBeforeCursor.substring(0, lastAtIndex);
-      const mention = `@${user.firstName} ${user.lastName}`;
-      const newText = beforeAt + mention + ' ' + textAfterCursor;
-      setNoteText(newText);
-      setShowUserDropdown(false);
-      
-      // Focus back on textarea
-      setTimeout(() => {
-        if (noteInputRef.current) {
-          noteInputRef.current.focus();
-          const newCursorPos = beforeAt.length + mention.length + 1;
-          noteInputRef.current.setSelectionRange(newCursorPos, newCursorPos);
-        }
-      }, 0);
-    }
+
+    const start = mentionAtIndex ?? noteText.substring(0, cursorPosition).lastIndexOf('@');
+    if (start === null || start < 0) return;
+
+    const beforeAt = noteText.substring(0, start);
+    const mention = `@${user.firstName} ${user.lastName}`;
+    const newText = beforeAt + mention + ' ' + textAfterCursor;
+    setNoteText(newText);
+    setShowUserDropdown(false);
+    setMentionAtIndex(null);
+
+    // Focus back on textarea
+    setTimeout(() => {
+      if (noteInputRef.current) {
+        noteInputRef.current.focus();
+        const newCursorPos = beforeAt.length + mention.length + 1;
+        noteInputRef.current.setSelectionRange(newCursorPos, newCursorPos);
+      }
+    }, 0);
   };
   
-  const filteredUsers = users.filter(user => 
-    `${user.firstName} ${user.lastName}`.toLowerCase().includes(mentionSearchTerm)
-  );
+  const filteredUsers = users
+    .filter((user) => {
+      const q = mentionSearchTerm.trim();
+      if (!q) return true;
+
+      const tokens = q.split(/\s+/).filter(Boolean);
+      const first = user.firstName.toLowerCase();
+      const last = user.lastName.toLowerCase();
+      const full = `${first} ${last}`;
+
+      // Each token must match the START of first/last/full name (prefix matching)
+      return tokens.every((t) => first.startsWith(t) || last.startsWith(t) || full.startsWith(t));
+    })
+    .sort((a, b) => {
+      const an = `${a.firstName} ${a.lastName}`.toLowerCase();
+      const bn = `${b.firstName} ${b.lastName}`.toLowerCase();
+      return an.localeCompare(bn);
+    });
 
   return (
     <div className="flex flex-col h-full">
@@ -561,7 +602,7 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
       </div>
 
       {/* Unified Feed - All Items */}
-      <div className="flex-1 overflow-y-auto space-y-1 min-h-[300px] max-h-[420px] pr-1 mb-2">
+      <div ref={feedRef} className="flex-1 overflow-y-auto space-y-1 min-h-[300px] max-h-[420px] pr-1 mb-2">
         {loadingCommunications ? (
           <div className="flex items-center justify-center py-8 text-slate-500">
             <Loader2 className="w-5 h-5 animate-spin mr-2" />
@@ -1011,7 +1052,6 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Edit Task</DialogTitle>
-            <DialogDescription>Edit title/description/due date/assignee/status.</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
@@ -1033,12 +1073,120 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
             </div>
             <div>
               <Label className="text-sm">Due</Label>
-              <Input
-                type="datetime-local"
-                value={taskEditForm.dueAtLocal}
-                onChange={(e) => setTaskEditForm((p) => ({ ...p, dueAtLocal: e.target.value }))}
-                disabled={savingTaskEdit}
-              />
+              <Popover open={taskEditDuePickerOpen} onOpenChange={setTaskEditDuePickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full justify-between font-normal"
+                    disabled={savingTaskEdit}
+                  >
+                    {formatTaskDueDisplay(taskEditForm.dueAtIso)}
+                    <Calendar className="w-4 h-4 opacity-60" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-3" align="start">
+                  <div className="space-y-3">
+                    <UiCalendar
+                      mode="single"
+                      selected={taskEditDueDate || undefined}
+                      onSelect={(d) => {
+                        if (!d) return;
+                        setTaskEditDueDate(d);
+                        const iso = computeTaskDueIso(d, taskEditDueHour, taskEditDueMinute, taskEditDueAmPm);
+                        if (iso) setTaskEditForm((p) => ({ ...p, dueAtIso: iso }));
+                      }}
+                      initialFocus
+                    />
+
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-slate-500">Hour</Label>
+                        <Select
+                          value={taskEditDueHour}
+                          onValueChange={(v) => {
+                            setTaskEditDueHour(v);
+                            const iso = computeTaskDueIso(taskEditDueDate, v, taskEditDueMinute, taskEditDueAmPm);
+                            if (iso) setTaskEditForm((p) => ({ ...p, dueAtIso: iso }));
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Hour" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 12 }).map((_, i) => {
+                              const hour = String(i + 1);
+                              return (
+                                <SelectItem key={hour} value={hour}>
+                                  {hour}
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-slate-500">Minute</Label>
+                        <Select
+                          value={taskEditDueMinute}
+                          onValueChange={(v) => {
+                            setTaskEditDueMinute(v);
+                            const iso = computeTaskDueIso(taskEditDueDate, taskEditDueHour, v, taskEditDueAmPm);
+                            if (iso) setTaskEditForm((p) => ({ ...p, dueAtIso: iso }));
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Min" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 12 }).map((_, i) => {
+                              const m = String(i * 5).padStart(2, '0');
+                              return (
+                                <SelectItem key={m} value={m}>
+                                  {m}
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-slate-500">AM/PM</Label>
+                        <Select
+                          value={taskEditDueAmPm}
+                          onValueChange={(v: 'AM' | 'PM') => {
+                            setTaskEditDueAmPm(v);
+                            const iso = computeTaskDueIso(taskEditDueDate, taskEditDueHour, taskEditDueMinute, v);
+                            if (iso) setTaskEditForm((p) => ({ ...p, dueAtIso: iso }));
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="AM">AM</SelectItem>
+                            <SelectItem value="PM">PM</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-8 text-xs"
+                        onClick={() => setTaskEditDuePickerOpen(false)}
+                      >
+                        Done
+                      </Button>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
             <div>
               <Label className="text-sm">Status</Label>

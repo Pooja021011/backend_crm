@@ -54,9 +54,13 @@ import {
   UserCheck,
   MessageSquare,
   UserX,
-  Shield
+  Shield,
+  Mic,
+  Square,
+  Play,
+  Upload
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { API_BASE, makeApiCall } from "@/config/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -67,7 +71,6 @@ import { EditAgentDialog } from "@/components/EditAgentDialog";
 import { MarketingPlatformSettings } from "@/components/MarketingPlatformSettings";
 import { PipelineSettings } from "@/components/PipelineSettings";
 import { LeadDistributionSettings } from "@/components/LeadDistributionSettings";
-import { GoogleSheetsConfig } from "@/components/GoogleSheetsConfig";
 import { LeadStatusSettings } from "@/components/LeadStatusSettings";
 import { LeadSourceSettings } from "@/components/LeadSourceSettings";
 import { safeDateFormat } from "@/utils/validation";
@@ -135,6 +138,212 @@ const Settings = () => {
   const [smsSettings, setSmsSettings] = useState<any>(null);
   const [loadingSmsSettings, setLoadingSmsSettings] = useState(false);
   const [savingSmsSettings, setSavingSmsSettings] = useState(false);
+
+  // Voicemail greeting state (per-user)
+  const [voicemailBlob, setVoicemailBlob] = useState<Blob | null>(null);
+  const [voicemailUrl, setVoicemailUrl] = useState<string>('');
+  const [savedVoicemailAt, setSavedVoicemailAt] = useState<string>('');
+  const [isRecordingVoicemail, setIsRecordingVoicemail] = useState(false);
+  const [savingVoicemailGreeting, setSavingVoicemailGreeting] = useState(false);
+  const voicemailRecorderRef = useRef<MediaRecorder | null>(null);
+  const voicemailChunksRef = useRef<Blob[]>([]);
+  const voicemailObjectUrlRef = useRef<string>('');
+
+  // Cleanup voicemail preview URL
+  useEffect(() => {
+    return () => {
+      if (voicemailObjectUrlRef.current) {
+        try {
+          URL.revokeObjectURL(voicemailObjectUrlRef.current);
+        } catch {
+          // ignore
+        }
+      }
+    };
+  }, []);
+
+  const encodeWav = (audioBuffer: AudioBuffer) => {
+    const numChannels = audioBuffer.numberOfChannels;
+    const sampleRate = audioBuffer.sampleRate;
+    const numFrames = audioBuffer.length;
+
+    // Interleave channels
+    const interleaved = new Float32Array(numFrames * numChannels);
+    for (let ch = 0; ch < numChannels; ch++) {
+      const channelData = audioBuffer.getChannelData(ch);
+      for (let i = 0; i < numFrames; i++) {
+        interleaved[i * numChannels + ch] = channelData[i];
+      }
+    }
+
+    // 16-bit PCM
+    const bytesPerSample = 2;
+    const blockAlign = numChannels * bytesPerSample;
+    const byteRate = sampleRate * blockAlign;
+    const dataSize = interleaved.length * bytesPerSample;
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+
+    const writeString = (offset: number, str: string) => {
+      for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+    };
+
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true); // PCM chunk size
+    view.setUint16(20, 1, true); // PCM format
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, byteRate, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, 16, true); // bits per sample
+    writeString(36, 'data');
+    view.setUint32(40, dataSize, true);
+
+    // PCM samples
+    let offset = 44;
+    for (let i = 0; i < interleaved.length; i++) {
+      let s = Math.max(-1, Math.min(1, interleaved[i]));
+      const int16 = s < 0 ? s * 0x8000 : s * 0x7fff;
+      view.setInt16(offset, int16, true);
+      offset += 2;
+    }
+
+    return new Blob([buffer], { type: 'audio/wav' });
+  };
+
+  const blobToWav = async (input: Blob) => {
+    const arrayBuffer = await input.arrayBuffer();
+    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+    const wav = encodeWav(decoded);
+    try {
+      await audioCtx.close();
+    } catch {
+      // ignore
+    }
+    return wav;
+  };
+
+  const startVoicemailRecording = async () => {
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        toast({ title: 'Error', description: 'Microphone not supported in this browser', variant: 'destructive' });
+        return;
+      }
+
+      // Clear previous preview
+      if (voicemailObjectUrlRef.current) {
+        try {
+          URL.revokeObjectURL(voicemailObjectUrlRef.current);
+        } catch {
+          // ignore
+        }
+        voicemailObjectUrlRef.current = '';
+      }
+      setVoicemailUrl('');
+      setVoicemailBlob(null);
+      setSavedVoicemailAt('');
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const options: MediaRecorderOptions = {};
+      // Use a broadly supported mime type; we’ll convert to WAV after recording
+      if (MediaRecorder.isTypeSupported('audio/webm')) options.mimeType = 'audio/webm';
+      const recorder = new MediaRecorder(stream, options);
+      voicemailRecorderRef.current = recorder;
+      voicemailChunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) voicemailChunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        // Stop tracks to release mic
+        stream.getTracks().forEach((t) => t.stop());
+
+        try {
+          const raw = new Blob(voicemailChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+          const wav = await blobToWav(raw);
+          setVoicemailBlob(wav);
+          const url = URL.createObjectURL(wav);
+          voicemailObjectUrlRef.current = url;
+          setVoicemailUrl(url);
+        } catch (err) {
+          console.error('Voicemail WAV conversion failed:', err);
+          toast({ title: 'Error', description: 'Failed to process recording. Please try again.', variant: 'destructive' });
+        }
+      };
+
+      recorder.start();
+      setIsRecordingVoicemail(true);
+    } catch (err: any) {
+      console.error('Mic recording error:', err);
+      toast({ title: 'Error', description: err?.message || 'Microphone permission denied', variant: 'destructive' });
+    }
+  };
+
+  const stopVoicemailRecording = () => {
+    const r = voicemailRecorderRef.current;
+    if (!r) return;
+    if (r.state !== 'inactive') r.stop();
+    voicemailRecorderRef.current = null;
+    setIsRecordingVoicemail(false);
+  };
+
+  const saveVoicemailGreeting = async () => {
+    if (!voicemailBlob) {
+      toast({ title: 'Error', description: 'Record a voicemail greeting first', variant: 'destructive' });
+      return;
+    }
+
+    setSavingVoicemailGreeting(true);
+    try {
+      const accessToken = localStorage.getItem('accessToken');
+      const formData = new FormData();
+      formData.append('file', voicemailBlob, 'voicemail.wav');
+
+      const resp = await fetch(`${API_BASE}/settings/sms/voicemail-greeting`, {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok || !json.success) {
+        throw new Error(json.error || 'Failed to save voicemail greeting');
+      }
+
+      // Switch preview to server-backed URL so it persists across reloads
+      if (voicemailObjectUrlRef.current) {
+        try {
+          URL.revokeObjectURL(voicemailObjectUrlRef.current);
+        } catch {
+          // ignore
+        }
+        voicemailObjectUrlRef.current = '';
+      }
+
+      const updatedAt = json?.data?.voicemailGreetingUpdatedAt || new Date().toISOString();
+      setSavedVoicemailAt(updatedAt);
+      if (user?.id) {
+        setVoicemailUrl(`${API_BASE}/calls/voicemail-greeting/${encodeURIComponent(user.id)}`);
+      }
+
+      // Keep blob optional; UI should show preview even after refresh.
+      setVoicemailBlob(null);
+
+      toast({ title: 'Saved', description: 'Voicemail greeting saved successfully' });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err?.message || 'Failed to save voicemail greeting', variant: 'destructive' });
+    } finally {
+      setSavingVoicemailGreeting(false);
+    }
+  };
 
   // Test SMS and Call state
   const [sendingTestSMS, setSendingTestSMS] = useState(false);
@@ -273,11 +482,20 @@ const Settings = () => {
           const result = await response.json();
           
           if (result.success) {
-            setSmsSettings(result.data || {
+            const data = result.data || {
               phoneNumber: '',
               displayName: '',
               active: true
-            });
+            };
+            setSmsSettings(data);
+
+            // If a greeting exists in DB, show it as “Saved” and allow preview
+            if (data?.voicemailGreetingPath && user?.id) {
+              setSavedVoicemailAt(data?.voicemailGreetingUpdatedAt || '');
+              // Use server-backed URL (persists)
+              setVoicemailUrl(`${API_BASE}/calls/voicemail-greeting/${encodeURIComponent(user.id)}`);
+              setVoicemailBlob(null);
+            }
           }
         } catch (error) {
           console.error('Failed to load SMS settings:', error);
@@ -293,7 +511,7 @@ const Settings = () => {
 
       loadSmsSettings();
     }
-  }, [activeTab]);
+  }, [activeTab, user?.id]);
 
   // SMS Settings functions
   const saveSmsSettings = async () => {
@@ -1299,6 +1517,77 @@ const Settings = () => {
                         </div>
                       </div>
 
+                      {/* Voicemail Greeting */}
+                      <div className="space-y-6 pt-6 border-t">
+                        <div className="flex items-center gap-3">
+                          <Mic className="w-5 h-5 text-primary" />
+                          <h3 className="text-lg font-semibold">Voicemail Greeting</h3>
+                          {savedVoicemailAt && (
+                            <Badge variant="secondary" className="text-xs">
+                              Saved
+                              <span className="ml-2 text-muted-foreground">
+                                {new Date(savedVoicemailAt).toLocaleString()}
+                              </span>
+                            </Badge>
+                          )}
+                        </div>
+
+                        <p className="text-sm text-muted-foreground">
+                          Record a voicemail greeting for your phone number. Callers will hear this message when the call goes to voicemail.
+                        </p>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            variant={isRecordingVoicemail ? 'destructive' : 'default'}
+                            onClick={isRecordingVoicemail ? stopVoicemailRecording : startVoicemailRecording}
+                            className="gap-2"
+                          >
+                            {isRecordingVoicemail ? (
+                              <>
+                                <Square className="w-4 h-4" />
+                                Stop Recording
+                              </>
+                            ) : (
+                              <>
+                                <Mic className="w-4 h-4" />
+                                Record Greeting
+                              </>
+                            )}
+                          </Button>
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={saveVoicemailGreeting}
+                            disabled={!voicemailBlob || savingVoicemailGreeting}
+                            className="gap-2"
+                          >
+                            {savingVoicemailGreeting ? (
+                              <>
+                                <RefreshCw className="w-4 h-4 animate-spin" />
+                                Saving...
+                              </>
+                            ) : (
+                              <>
+                                <Upload className="w-4 h-4" />
+                                Save Greeting
+                              </>
+                            )}
+                          </Button>
+                        </div>
+
+                        {voicemailUrl && (
+                          <div className="rounded-lg border border-border bg-background/50 p-4">
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <div className="text-sm font-medium">Preview</div>
+                              <div className="text-xs text-muted-foreground">WAV</div>
+                            </div>
+                            <audio controls src={voicemailUrl} className="w-full" />
+                          </div>
+                        )}
+                      </div>
+
                       {/* Save Button - Admin Only */}
                       {isAdminOrManager && (
                         <div className="flex justify-end pt-6 border-t">
@@ -1694,31 +1983,7 @@ const Settings = () => {
             </div>
           )}
 
-          {/* Google Sheets Integration Tab - Only show when activeTab is 'google-sheets' */}
-          {activeTab === 'google-sheets' && (
-            <div className="space-y-8">
-              {!isAdminOrManager ? (
-                <Card>
-                  <CardContent className="flex items-center justify-center py-12">
-                    <div className="text-center max-w-md">
-                      <div className="mb-4">
-                        <Shield className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-                      </div>
-                      <h3 className="text-xl font-semibold mb-2">Access Denied</h3>
-                      <p className="text-muted-foreground mb-4">
-                        You don't have the required permissions to access this page.
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        Please contact your administrator if you believe this is an error.
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              ) : (
-                <GoogleSheetsConfig />
-              )}
-            </div>
-          )}
+          {/* Google Sheets section removed */}
 
           {/* Lead Status Settings Tab - Only show when activeTab is 'lead-statuses' */}
           {activeTab === 'lead-statuses' && (

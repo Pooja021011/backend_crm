@@ -42,15 +42,6 @@ const ResetPassword = () => {
       return;
     }
 
-    if (newPassword.length < 8) {
-      toast({
-        title: 'Error',
-        description: 'Password must be at least 8 characters',
-        variant: 'destructive',
-      });
-      return;
-    }
-
     if (newPassword !== confirmPassword) {
       toast({
         title: 'Error',
@@ -199,7 +190,7 @@ const ResetPassword = () => {
                 </button>
               </div>
               <p className="text-xs text-gray-500">
-                Must be at least 8 characters
+                Choose any password you want
               </p>
             </div>
 

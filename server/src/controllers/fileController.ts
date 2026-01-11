@@ -18,6 +18,8 @@ const allowedMimeTypes = [
   'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'text/plain',
+  // Audio (voicemail greetings)
+  'audio/wav', 'audio/x-wav', 'audio/wave',
   // Videos
   'video/mp4', 'video/avi', 'video/quicktime', 'video/x-msvideo', 'video/webm',
   // Archives

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { settingsController } from '../controllers/settingsController.js';
 import { authenticate, requireRoles } from '../middleware/auth.js';
 import marketingPlatformRoutes from './marketingPlatformRoutes.js';
+import { uploader as fileUploader } from '../controllers/fileController.js';
 
 const router = Router();
 
@@ -30,6 +31,9 @@ router.post('/email/mark-read', (req, res, next) => settingsController.markEmail
 // Per-user SMS Settings (any authenticated user)
 router.get('/sms', (req, res, next) => settingsController.getUserSmsSettings(req, res).catch(next));
 router.post('/sms', (req, res, next) => settingsController.upsertUserSmsSettings(req, res).catch(next));
+router.post('/sms/voicemail-greeting', fileUploader.single('file'), (req, res, next) =>
+  settingsController.uploadVoicemailGreeting(req, res).catch(next)
+);
 
 // Mutations (ADMIN only)
 router.use(requireRoles('ADMIN'));

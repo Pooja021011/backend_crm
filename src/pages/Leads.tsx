@@ -221,11 +221,16 @@ const Leads = () => {
   const [selectedStatus, setSelectedStatus] = useState("");
   const [selectedPipelineStatus, setSelectedPipelineStatus] = useState("");
   const [selectedDateRange, setSelectedDateRange] = useState("");
+  const [customDateFrom, setCustomDateFrom] = useState("");
+  const [customDateTo, setCustomDateTo] = useState("");
+  const [selectedAcqAgentId, setSelectedAcqAgentId] = useState("");
+  const [selectedDispAgentId, setSelectedDispAgentId] = useState("");
   
   // Dynamic filter data
   const [filterMarkets, setFilterMarkets] = useState<any[]>([]);
   const [pipelineStages, setPipelineStages] = useState<any[]>([]);
   const [leadStatuses, setLeadStatuses] = useState<Array<{id: string; name: string; color?: string}>>([]);
+  const [agents, setAgents] = useState<any[]>([]);
   const [loadingFilters, setLoadingFilters] = useState(false);
   
   // URL parameter handling for direct lead access
@@ -338,6 +343,15 @@ const Leads = () => {
         const statusesData = await statusesResponse.json();
         setLeadStatuses(statusesData.data || []);
       }
+
+      // Fetch agents for ACQ/DISP filters
+      const agentsResponse = await fetch(`${API_BASE}/agents`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
+      });
+      if (agentsResponse.ok) {
+        const agentsData = await agentsResponse.json();
+        setAgents(agentsData.data || []);
+      }
       
     } catch (error) {
       console.error('Error loading filter data:', error);
@@ -353,6 +367,10 @@ const Leads = () => {
     setSelectedStatus("");
     setSelectedPipelineStatus("");
     setSelectedDateRange("");
+    setCustomDateFrom("");
+    setCustomDateTo("");
+    setSelectedAcqAgentId("");
+    setSelectedDispAgentId("");
   }, [activeTab]);
 
 
@@ -383,6 +401,14 @@ const Leads = () => {
         return lead.pipelineStageId === selectedPipelineStatus;
       });
     }
+
+    // Agent filters (tab-specific)
+    if (activeTab === 'SELLER' && selectedAcqAgentId) {
+      filteredLeads = filteredLeads.filter((lead: any) => lead.assignedUserId === selectedAcqAgentId);
+    }
+    if (activeTab === 'BUYER' && selectedDispAgentId) {
+      filteredLeads = filteredLeads.filter((lead: any) => lead.assignedUserId === selectedDispAgentId);
+    }
     
     if (selectedDateRange) {
       const now = new Date();
@@ -409,6 +435,20 @@ const Leads = () => {
           filterDate.setFullYear(now.getFullYear(), 0, 1);
           filteredLeads = filteredLeads.filter(lead => new Date(lead.createdAt) >= filterDate);
           break;
+        case 'custom': {
+          const from = customDateFrom ? new Date(customDateFrom) : null;
+          const to = customDateTo ? new Date(customDateTo) : null;
+          if (from) from.setHours(0, 0, 0, 0);
+          if (to) to.setHours(23, 59, 59, 999);
+
+          filteredLeads = filteredLeads.filter((lead) => {
+            const createdAt = new Date(lead.createdAt);
+            if (from && createdAt < from) return false;
+            if (to && createdAt > to) return false;
+            return true;
+          });
+          break;
+        }
       }
     }
     
@@ -418,7 +458,7 @@ const Leads = () => {
     }
     
     return filteredLeads;
-  }, [getLeadsByType, activeTab, searchQuery, searchLeads, selectedMarket, selectedStatus, selectedPipelineStatus, selectedDateRange, sortConfig, sortLeads]);
+  }, [getLeadsByType, activeTab, searchQuery, searchLeads, selectedMarket, selectedStatus, selectedPipelineStatus, selectedDateRange, customDateFrom, customDateTo, selectedAcqAgentId, selectedDispAgentId, sortConfig, sortLeads]);
 
   const getLeadCount = (type: "SELLER" | "BUYER" | "VENDOR") => {
     return getLeadsByType(type).length;
@@ -910,7 +950,7 @@ const Leads = () => {
 
               {/* Pipeline Status Filter */}
               <div className="space-y-1">
-                <label className="text-xs font-medium text-gray-700">Pipeline Status</label>
+                <label className="text-xs font-medium text-gray-700">Pipeline Statuses</label>
                 <select 
                   className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                   value={selectedPipelineStatus}
@@ -940,8 +980,83 @@ const Leads = () => {
                   <option value="month">This Month ({new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })})</option>
                   <option value="quarter">This Quarter</option>
                   <option value="year">This Year ({new Date().getFullYear()})</option>
+                  <option value="custom">Custom Range…</option>
                 </select>
+
+                {selectedDateRange === 'custom' && (
+                  <div className="grid grid-cols-2 gap-2 pt-2">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-medium text-gray-600">From</label>
+                      <input
+                        type="date"
+                        value={customDateFrom}
+                        onChange={(e) => setCustomDateFrom(e.target.value)}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-medium text-gray-600">To</label>
+                      <input
+                        type="date"
+                        value={customDateTo}
+                        onChange={(e) => setCustomDateTo(e.target.value)}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
+            </div>
+
+            {/* Agent Filters (tab-specific) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
+              {activeTab === 'SELLER' && (
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-gray-700">Acquisitions Agent</label>
+                  <select
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    value={selectedAcqAgentId}
+                    onChange={(e) => setSelectedAcqAgentId(e.target.value)}
+                    disabled={loadingFilters}
+                  >
+                    <option value="">All ACQ Agents</option>
+                    {agents
+                      .filter((a: any) => {
+                        const roles = (a.roles || []).map((r: any) => r?.role?.name || r?.name || r);
+                        return roles.includes('ACQ');
+                      })
+                      .map((a: any) => (
+                        <option key={a.id} value={a.id}>
+                          {a.firstName} {a.lastName}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              )}
+
+              {activeTab === 'BUYER' && (
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-gray-700">Dispositions Agent</label>
+                  <select
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    value={selectedDispAgentId}
+                    onChange={(e) => setSelectedDispAgentId(e.target.value)}
+                    disabled={loadingFilters}
+                  >
+                    <option value="">All DISP Agents</option>
+                    {agents
+                      .filter((a: any) => {
+                        const roles = (a.roles || []).map((r: any) => r?.role?.name || r?.name || r);
+                        return roles.includes('DISP');
+                      })
+                      .map((a: any) => (
+                        <option key={a.id} value={a.id}>
+                          {a.firstName} {a.lastName}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              )}
             </div>
 
             {/* Filter Actions */}
@@ -960,6 +1075,10 @@ const Leads = () => {
                     setSelectedStatus("");
                     setSelectedPipelineStatus("");
                     setSelectedDateRange("");
+                    setCustomDateFrom("");
+                    setCustomDateTo("");
+                    setSelectedAcqAgentId("");
+                    setSelectedDispAgentId("");
                   }}
                 >
                   Clear Filters

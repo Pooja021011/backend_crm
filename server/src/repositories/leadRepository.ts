@@ -2,9 +2,9 @@ import { prisma } from '../config/db.js';
 import type { LeadType, TaskStatus } from '@prisma/client';
 
 export type LeadCreateInput =
-  | { type: 'SELLER'; marketId?: string; address: { address1: string; city: string; state: string; zip: string; countyId?: string }; seller: { firstName: string; lastName: string; phone: string; email: string; motivation?: string; notes?: string }; assignedUserId?: string; pipelineStageId?: string }
-  | { type: 'BUYER'; marketId?: string; buyer: { firstName: string; lastName: string; phone: string; email: string; vip?: boolean }; criteria?: { marketIds?: string[]; assetClassIds?: string[]; priceRangeIds?: string[] }; assignedUserId?: string; pipelineStageId?: string }
-  | { type: 'VENDOR'; marketId?: string; vendor: { firstName: string; lastName: string; phone: string; email: string; company: string; industry: string; marketIds?: string[] }; assignedUserId?: string; pipelineStageId?: string };
+  | { type: 'SELLER'; marketId?: string; leadSourceId?: string; address: { address1: string; city: string; state: string; zip: string; countyId?: string }; seller: { firstName: string; lastName: string; phone: string; email: string; motivation?: string; notes?: string }; assignedUserId?: string; pipelineStageId?: string }
+  | { type: 'BUYER'; marketId?: string; leadSourceId?: string; buyer: { firstName: string; lastName: string; phone: string; email: string; vip?: boolean }; criteria?: { marketIds?: string[]; assetClassIds?: string[]; priceRangeIds?: string[] }; assignedUserId?: string; pipelineStageId?: string }
+  | { type: 'VENDOR'; marketId?: string; leadSourceId?: string; vendor: { firstName: string; lastName: string; phone: string; email: string; company: string; industry: string; marketIds?: string[] }; assignedUserId?: string; pipelineStageId?: string };
 
 export const leadRepository = {
   async create(input: LeadCreateInput, createdById?: string) {
@@ -76,7 +76,7 @@ export const leadRepository = {
     };
 
     if (input.type === 'SELLER') {
-      const { address, seller, marketId, assignedUserId } = input;
+      const { address, seller, marketId, assignedUserId, leadSourceId } = input;
       let { pipelineStageId } = input;
       
       // If no pipelineStageId provided, get default stage
@@ -99,6 +99,7 @@ export const leadRepository = {
           assignedUserId: assignedUserId || null,
           pipelineStageId: pipelineStageId,
           leadStatusId: defaultStatus?.id || null,
+          leadSourceId: leadSourceId || null,
           stageEnteredAt: new Date(),
           createdById: createdById || null,
           address: { create: address },
@@ -119,7 +120,7 @@ export const leadRepository = {
       });
     }
     if (input.type === 'BUYER') {
-      const { buyer, criteria, marketId, assignedUserId } = input;
+      const { buyer, criteria, marketId, assignedUserId, leadSourceId } = input;
       let { pipelineStageId } = input;
       
       console.log('📥 Creating BUYER lead with criteria:', JSON.stringify(criteria, null, 2));
@@ -144,6 +145,7 @@ export const leadRepository = {
           assignedUserId: assignedUserId || null,
           pipelineStageId: pipelineStageId,
           leadStatusId: defaultStatus?.id || null,
+          leadSourceId: leadSourceId || null,
           stageEnteredAt: new Date(),
           createdById: createdById || null,
           buyer: { create: buyer },
@@ -167,7 +169,7 @@ export const leadRepository = {
       return lead;
     }
     if (input.type === 'VENDOR') {
-      const { vendor, marketId, assignedUserId } = input;
+      const { vendor, marketId, assignedUserId, leadSourceId } = input;
       let { pipelineStageId } = input;
       
       // If no pipelineStageId provided, get default stage
@@ -190,6 +192,7 @@ export const leadRepository = {
           assignedUserId: assignedUserId || null,
           pipelineStageId: pipelineStageId,
           leadStatusId: defaultStatus?.id || null,
+          leadSourceId: leadSourceId || null,
           stageEnteredAt: new Date(),
           createdById: createdById || null,
           vendor: { create: vendor },

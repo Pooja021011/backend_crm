@@ -185,12 +185,19 @@ export const callService = {
         const existing = safeFrom ? await this.findLeadByPhoneNumber(safeFrom, userId) : null;
         if (existing) return existing;
 
+        // If this is a brand-new inbound-call lead, set leadSource to "Mailer" (from DB)
+        const mailerSource = await prisma.leadSource.findFirst({
+          where: { active: true, name: { equals: 'Mailer', mode: 'insensitive' as any } },
+          select: { id: true },
+        });
+
         // Auto-create a minimal SELLER lead for unknown inbound caller (so missed calls always show up)
         // Note: SELLER leads require an address, so we create a safe placeholder.
         const created = await leadRepository.create(
           {
             type: 'SELLER',
             assignedUserId: userId,
+            leadSourceId: mailerSource?.id,
             address: {
               address1: 'Unknown',
               city: 'Unknown',

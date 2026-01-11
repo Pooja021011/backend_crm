@@ -46,6 +46,11 @@ router.post('/recording-status', (req, res, next) =>
   callController.recordingStatus(req, res).catch(next)
 );
 
+// Stream voicemail greeting audio for Twilio <Play> (no auth)
+router.get('/voicemail-greeting/:userId', (req, res, next) =>
+  callController.streamVoicemailGreeting(req, res).catch(next)
+);
+
 // Stream a recording securely to authenticated users
 router.get('/recordings/:recordingSid', (req, res, next) =>
   callController.streamRecording(req, res).catch(next)
