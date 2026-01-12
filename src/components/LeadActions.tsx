@@ -31,6 +31,7 @@ import { useLeads } from "@/hooks/useLeads";
 import { useTwilioContext } from "@/contexts/TwilioContext";
 import { useToast } from "@/hooks/use-toast";
 import type { Lead } from "@/hooks/useLeads";
+import { normalizeUsPhoneToE164 } from "@/utils/phone";
 
 interface LeadActionsProps {
   lead: Lead;
@@ -66,9 +67,8 @@ export const LeadActions: React.FC<LeadActionsProps> = ({ lead, onLeadUpdated })
     const phoneNumber = lead.seller?.phone || lead.buyer?.phone || lead.vendor?.phone;
     if (phoneNumber) {
       try {
-        // Format phone number to E.164 format
-        const cleanPhone = phoneNumber.replace(/\D/g, '');
-        const formattedPhone = cleanPhone.startsWith('1') ? `+${cleanPhone}` : `+1${cleanPhone}`;
+        const formattedPhone = normalizeUsPhoneToE164(phoneNumber);
+        if (!formattedPhone) return;
         
         // Make browser-to-phone call using shared Twilio Device instance
         await makeCall(formattedPhone);
@@ -91,9 +91,9 @@ export const LeadActions: React.FC<LeadActionsProps> = ({ lead, onLeadUpdated })
   const handleSMS = () => {
     const phoneNumber = lead.seller?.phone || lead.buyer?.phone || lead.vendor?.phone;
     if (phoneNumber) {
-      // Remove non-numeric characters and format for sms: link
-      const cleanPhone = phoneNumber.replace(/\D/g, '');
-      window.location.href = `sms:+1${cleanPhone}`;
+      const formattedPhone = normalizeUsPhoneToE164(phoneNumber);
+      if (!formattedPhone) return;
+      window.location.href = `sms:${formattedPhone}`;
     }
   };
 

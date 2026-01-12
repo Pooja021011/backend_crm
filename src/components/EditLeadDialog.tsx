@@ -34,15 +34,14 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { 
   validateEmail, 
-  validatePhoneNumber, 
   validateName, 
   validateAddress,
   validateCity,
   validateState,
   validateZipCode,
   validateCompanyName,
-  formatPhoneNumber 
 } from "@/utils/validation";
+import { formatUsPhoneForDisplay, normalizeUsPhoneToE164 } from "@/utils/phone";
 import type { Lead } from "@/hooks/useLeads";
 import { Input } from "@/components/ui/input";
 import { API_BASE } from "@/config/api";
@@ -284,7 +283,7 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
         updateData.seller = {
           firstName: formData.firstName.trim(),
           lastName: formData.lastName.trim(),
-          phone: formData.phone.trim(),
+          phone: (normalizeUsPhoneToE164(formData.phone) || formData.phone).trim(),
           email: formData.email.trim(),
           motivation: formData.motivation,
           notes: formData.notes.trim()
@@ -302,7 +301,7 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
         updateData.buyer = {
           firstName: formData.firstName.trim(),
           lastName: formData.lastName.trim(),
-          phone: formData.phone.trim(),
+          phone: (normalizeUsPhoneToE164(formData.phone) || formData.phone).trim(),
           email: formData.email.trim(),
           propertiesPurchased: parseInt(formData.propertiesPurchased) || 0,
           creditScore: formData.creditScore || undefined,
@@ -326,7 +325,7 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
         updateData.vendor = {
           firstName: formData.firstName.trim(),
           lastName: formData.lastName.trim(),
-          phone: formData.phone.trim(),
+          phone: (normalizeUsPhoneToE164(formData.phone) || formData.phone).trim(),
           email: formData.email.trim(),
           company: formData.company.trim(),
           industry: formData.serviceType,
@@ -577,10 +576,16 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
                     <ValidatedInput
                       label="Phone Number"
                       name="phone"
-                      value={formData.phone}
+                      value={formatUsPhoneForDisplay(formData.phone)}
                       onValueChange={(value) => handleInputChange('phone', value)}
-                      validator={(value) => value.trim() ? validatePhoneNumber(value) : ({ isValid: true })}
-                      formatter={formatPhoneNumber}
+                      validator={(value) =>
+                        value.trim()
+                          ? ({
+                              isValid: Boolean(normalizeUsPhoneToE164(value)),
+                              error: 'Enter a valid 10-digit phone number',
+                            })
+                          : ({ isValid: true })
+                      }
                       placeholder="(555) 123-4567"
                       icon={<Phone className="w-4 h-4" />}
                     />

@@ -175,17 +175,11 @@ export const LeadForm: React.FC<LeadFormProps> = ({ type, onSubmit, onCancel, is
     }
   };
 
-  const formatPhoneNumber = (value: string) => {
-    const cleaned = value.replace(/\D/g, '');
-    if (cleaned.length >= 10) {
-      return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6, 10)}`;
-    }
-    return cleaned;
-  };
-
   const handlePhoneChange = (fieldName: string, value: string) => {
-    const formatted = formatPhoneNumber(value);
-    setValue(fieldName as any, formatted);
+    // UI: show without +1; Storage: keep +1 E.164
+    const digits = value.replace(/\D/g, '');
+    const normalized = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+    setValue(fieldName as any, normalized.slice(0, 10));
   };
 
   const onFormSubmit = async (data: any) => {

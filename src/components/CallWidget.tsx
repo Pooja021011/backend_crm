@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Phone, RefreshCw, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { API_BASE, makeApiCall } from "@/config/api";
+import { formatUsPhoneForDisplay } from "@/utils/phone";
 
 interface CallHistoryEntry {
   id: string;
@@ -223,7 +224,7 @@ const CallWidget: React.FC = () => {
                               {call.contactName || 'Unknown'}
                             </div>
                             <div className="text-sm text-muted-foreground font-mono">
-                              {call.phoneNumber}
+                              {formatUsPhoneForDisplay(call.phoneNumber)}
                             </div>
                           </div>
                         </TableCell>
@@ -289,7 +290,7 @@ const CallWidget: React.FC = () => {
                   <Badge variant={call.direction === 'OUTBOUND' ? 'default' : 'secondary'} className="text-xs px-1 py-0">
                     {call.direction === 'OUTBOUND' ? 'Out' : 'In'}
                   </Badge>
-                  <span className="font-mono">{call.phoneNumber}</span>
+                  <span className="font-mono">{formatUsPhoneForDisplay(call.phoneNumber)}</span>
                 </div>
                 <span className="text-muted-foreground">
                   {new Date(call.timestamp).toLocaleDateString()}

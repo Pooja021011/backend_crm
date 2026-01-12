@@ -65,6 +65,7 @@ import { useSearchParams } from "react-router-dom";
 import { API_BASE, makeApiCall } from "@/config/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { formatUsPhoneForDisplay, normalizeUsPhoneToE164 } from "@/utils/phone";
 import { useAgents, type Agent } from "@/hooks/useAgents";
 import { AddAgentDialog } from "@/components/AddAgentDialog";
 import { EditAgentDialog } from "@/components/EditAgentDialog";
@@ -563,7 +564,7 @@ const Settings = () => {
       if (result.success) {
         toast({
           title: "SMS Connection Test Successful",
-          description: `SMS is working correctly with your number ${smsSettings.phoneNumber}`,
+          description: `SMS is working correctly with your number ${formatUsPhoneForDisplay(smsSettings.phoneNumber)}`,
           variant: "default"
         });
       } else {
@@ -597,7 +598,7 @@ const Settings = () => {
       if (result.success) {
         toast({
           title: "Call Connection Test Successful",
-          description: `Call functionality is working correctly with your number ${smsSettings.phoneNumber}`,
+          description: `Call functionality is working correctly with your number ${formatUsPhoneForDisplay(smsSettings.phoneNumber)}`,
           variant: "default"
         });
       } else {
@@ -1087,9 +1088,15 @@ const Settings = () => {
                           <Input 
                             id="phone" 
                             type="tel" 
-                            value={profileData.phone}
-                            onChange={(e) => setProfileData(prev => ({ ...prev, phone: e.target.value }))}
-                            placeholder="+1 (555) 123-4567"
+                            value={formatUsPhoneForDisplay(profileData.phone)}
+                            onChange={(e) =>
+                              setProfileData((prev) => ({
+                                ...prev,
+                                // Store as +1 E.164 (or raw while typing); UI will hide +1 regardless
+                                phone: normalizeUsPhoneToE164(e.target.value) || e.target.value,
+                              }))
+                            }
+                            placeholder="(555) 123-4567"
                             className="bg-input border-border focus:ring-primary focus:border-primary"
                             disabled={!isAdminOrManager}
                             readOnly={!isAdminOrManager}

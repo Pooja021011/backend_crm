@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { validatePhoneNumber, formatPhoneNumber, COUNTRY_CODES } from '@/utils/phoneValidation';
 import { AlertCircle } from 'lucide-react';
+import { extractDigits, normalizeUsPhoneToE164 } from '@/utils/phone';
 
 interface PhoneInputProps {
   label?: string;
@@ -21,13 +20,12 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
   value,
   onChange,
   error: externalError,
-  placeholder = 'Enter phone number',
+  placeholder = 'Enter 10-digit phone number',
   required = false,
   disabled = false,
   className = ''
 }) => {
-  const [countryCode, setCountryCode] = useState('+1');
-  const [phoneNumber, setPhoneNumber] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState(''); // digits only (US 10-digit)
   const [internalError, setInternalError] = useState('');
   const isInternalChange = useRef(false);
 
@@ -39,70 +37,28 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
       return;
     }
 
-    if (value) {
-      // Check if value has country code
-      if (value.startsWith('+')) {
-        // Prefer matching against known country codes to avoid greedy parsing
-        const normalized = value.trim();
-        const codeMatch = [...COUNTRY_CODES]
-          .sort((a, b) => b.code.length - a.code.length)
-          .find((c) => normalized.startsWith(c.code));
+    const digits = extractDigits(value || '');
+    if (!digits) return setPhoneNumber('');
 
-        if (codeMatch) {
-          setCountryCode(codeMatch.code);
-          setPhoneNumber(normalized.slice(codeMatch.code.length).replace(/[^\d]/g, ''));
-        } else {
-          // Fallback: split on first 1-3 digits after +
-          const match = normalized.match(/^(\+\d{1,3})(.*)$/);
-          if (match) {
-            setCountryCode(match[1]);
-            setPhoneNumber(match[2].replace(/[^\d]/g, ''));
-          }
-        }
-      } else {
-        setPhoneNumber(value.replace(/[^\d]/g, ''));
-      }
-    } else {
-      // Clear phone number if value is empty
-      setPhoneNumber('');
-    }
+    // Hide +1 in UI; keep only 10 digits
+    const normalized = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+    setPhoneNumber(normalized.slice(0, 10));
   }, [value]);
 
   const handlePhoneChange = (newPhone: string) => {
-    // Allow only digits, spaces, dashes, parentheses
-    const cleaned = newPhone.replace(/[^\d\s\-()]/g, '');
-    setPhoneNumber(cleaned);
+    const digits = extractDigits(newPhone).slice(0, 10);
+    setPhoneNumber(digits);
 
-    // Combine country code with phone number
-    const fullNumber = countryCode + cleaned.replace(/[^\d]/g, '');
-    
-    // Validate
-    const validation = validatePhoneNumber(fullNumber, countryCode);
-    
-    if (cleaned && !validation.isValid) {
-      setInternalError(validation.error || '');
-    } else {
-      setInternalError('');
-    }
+    // Validate: if user typed something, it must be exactly 10 digits (US-only)
+    if (digits && digits.length !== 10) setInternalError('Enter a valid 10-digit US phone number');
+    else setInternalError('');
 
     // Mark this as an internal change
     isInternalChange.current = true;
-    
-    // Pass formatted value to parent
-    onChange(validation.formatted || fullNumber);
-  };
 
-  const handleCountryCodeChange = (newCode: string) => {
-    setCountryCode(newCode);
-    
-    // Update full number with new country code
-    const fullNumber = newCode + phoneNumber.replace(/[^\d]/g, '');
-    const validation = validatePhoneNumber(fullNumber, newCode);
-    
-    // Mark this as an internal change
-    isInternalChange.current = true;
-    
-    onChange(validation.formatted || fullNumber);
+    // Store E.164 (+1XXXXXXXXXX) in state/backend payloads, but never show +1 in UI.
+    const e164 = normalizeUsPhoneToE164(digits);
+    onChange(e164 || (digits ? `+1${digits}` : ''));
   };
 
   const displayError = externalError || internalError;
@@ -116,24 +72,7 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
         </Label>
       )}
       <div className="flex gap-2">
-        {/* Country Code Selector */}
-        <Select value={countryCode} onValueChange={handleCountryCodeChange} disabled={disabled}>
-          <SelectTrigger className="w-[120px] h-6 border-gray-300 focus:border-blue-500 focus:ring-blue-500/20">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {COUNTRY_CODES.map((item) => (
-              <SelectItem key={item.code} value={item.code}>
-                <span className="flex items-center gap-1.5">
-                  <span>{item.flag}</span>
-                  <span>{item.code}</span>
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {/* Phone Number Input */}
+        {/* Phone Number Input (US-only, no +1 shown) */}
         <div className="flex-1">
           <Input
             type="tel"

@@ -29,8 +29,8 @@ import {
   validateState,
   validateZipCode
 } from "@/utils/validation";
-import { validatePhoneNumber } from "@/utils/phoneValidation";
 import { PhoneInput } from "@/components/PhoneInput";
+import { normalizeUsPhoneToE164 } from "@/utils/phone";
 
 const AddSellerLead = () => {
   const navigate = useNavigate();
@@ -95,7 +95,8 @@ const AddSellerLead = () => {
         error = value.trim() ? (validateName(value, 'Last name').error || '') : '';
         break;
       case 'phoneNumber':
-        error = value.trim() ? (validatePhoneNumber(value) ? '' : 'Please enter a valid phone number with country code') : '';
+        // US-only: allow blank, otherwise must be a valid 10-digit US number (stored as +1 E.164 by PhoneInput)
+        error = value.trim() && !normalizeUsPhoneToE164(value) ? 'Please enter a valid 10-digit phone number' : '';
         break;
       case 'emailAddress':
         error = value.trim() ? (validateEmail(value).error || '') : '';

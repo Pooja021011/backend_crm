@@ -61,7 +61,7 @@ import { UnderwritingCalculator } from '@/components/UnderwritingCalculator';
 import { ProjectionsSheet } from '@/components/ProjectionsSheet';
 import { UnifiedCommunicationFeed } from '@/components/UnifiedCommunicationFeed';
 import { PhoneInput } from '@/components/PhoneInput';
-import { validatePhoneNumber } from '@/utils/phoneValidation';
+import { normalizeUsPhoneToE164 } from '@/utils/phone';
 import { LeadOwnerSection, type LeadOwnerSectionRef } from '@/components/LeadOwnerSection';
 import { LeadPhotoGallery } from '@/components/LeadPhotoGallery';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -1442,8 +1442,7 @@ const LeadEdit: React.FC = () => {
     const invalidPhones: string[] = [];
     contacts.forEach((contact, index) => {
       if (contact.phone) {
-        const validation = validatePhoneNumber(contact.phone);
-        if (!validation.isValid) {
+        if (!normalizeUsPhoneToE164(contact.phone)) {
           invalidPhones.push(`Contact ${index + 1}: ${contact.name || 'Unnamed'}`);
         }
       }
@@ -1452,7 +1451,7 @@ const LeadEdit: React.FC = () => {
     if (invalidPhones.length > 0) {
       toast({
         title: 'Invalid Phone Numbers',
-        description: `Please add country code to: ${invalidPhones.join(', ')}`,
+        description: `Please enter a valid 10-digit phone number for: ${invalidPhones.join(', ')}`,
         variant: 'destructive'
       });
       return;
@@ -2649,7 +2648,7 @@ const LeadEdit: React.FC = () => {
 
   const createNewBuyer = async () => {
     try {
-      if (!newBuyerFirstName || !newBuyerLastName || !newBuyerEmail || !newBuyerPhone) {
+      if (!newBuyerFirstName || !newBuyerLastName || !newBuyerEmail || !normalizeUsPhoneToE164(newBuyerPhone)) {
         toast({
           title: "Error",
           description: "All buyer fields are required",
@@ -3532,7 +3531,15 @@ const LeadEdit: React.FC = () => {
                         <Input placeholder="First" value={newBuyerFirstName} onChange={(e) => setNewBuyerFirstName(e.target.value)} className="h-7 text-xs" />
                         <Input placeholder="Last" value={newBuyerLastName} onChange={(e) => setNewBuyerLastName(e.target.value)} className="h-7 text-xs" />
                         <Input type="email" placeholder="Email" value={newBuyerEmail} onChange={(e) => setNewBuyerEmail(e.target.value)} className="h-7 text-xs" />
-                        <Input type="tel" placeholder="Phone" value={newBuyerPhone} onChange={(e) => setNewBuyerPhone(e.target.value)} className="h-7 text-xs" />
+                        <div className="flex items-center">
+                          <PhoneInput
+                            label=""
+                            value={newBuyerPhone}
+                            onChange={(value) => setNewBuyerPhone(value)}
+                            placeholder="Phone"
+                            className="w-full"
+                          />
+                        </div>
                         <Select value={newBuyerSegmentation} onValueChange={setNewBuyerSegmentation}>
                           <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Seg" /></SelectTrigger>
                           <SelectContent><SelectItem value="hot">Hot</SelectItem><SelectItem value="warm">Warm</SelectItem><SelectItem value="cold">Cold</SelectItem><SelectItem value="vip">VIP</SelectItem></SelectContent>

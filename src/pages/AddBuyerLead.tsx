@@ -30,7 +30,6 @@ import {
   validateEmail, 
   validateName
 } from "@/utils/validation";
-import { validatePhoneNumber } from "@/utils/phoneValidation";
 import { PhoneInput } from "@/components/PhoneInput";
 
 const AddBuyerLead = () => {

@@ -3,6 +3,7 @@ import { Phone, PhoneOff, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { IncomingCallInfo } from '@/hooks/useTwilioDevice';
 import { API_BASE, makeApiCall } from '@/config/api';
+import { formatUsPhoneForDisplay } from '@/utils/phone';
 
 interface IncomingCallPopupProps {
   incomingCall: IncomingCallInfo;
@@ -64,21 +65,6 @@ export const IncomingCallPopup: React.FC<IncomingCallPopupProps> = ({
     fetchLeadInfo();
   }, [incomingCall.from]);
 
-  // Format phone number for display
-  const formatPhoneNumber = (phone: string) => {
-    // Remove +1 or any non-digit characters
-    const cleaned = phone.replace(/\D/g, '');
-    
-    if (cleaned.length === 11 && cleaned.startsWith('1')) {
-      const number = cleaned.substring(1);
-      return `+1 (${number.substring(0, 3)}) ${number.substring(3, 6)}-${number.substring(6)}`;
-    } else if (cleaned.length === 10) {
-      return `(${cleaned.substring(0, 3)}) ${cleaned.substring(3, 6)}-${cleaned.substring(6)}`;
-    }
-    
-    return phone;
-  };
-
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999] flex items-center justify-center animate-in fade-in duration-200">
       <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4 animate-in zoom-in-95 duration-300">
@@ -118,7 +104,7 @@ export const IncomingCallPopup: React.FC<IncomingCallPopupProps> = ({
                 </span>
               )}
               <p className="text-sm text-gray-500 mt-2">
-                {formatPhoneNumber(incomingCall.from)}
+                {formatUsPhoneForDisplay(incomingCall.from)}
               </p>
             </div>
           ) : (
@@ -127,7 +113,7 @@ export const IncomingCallPopup: React.FC<IncomingCallPopupProps> = ({
                 Unknown Caller
               </p>
               <p className="text-sm text-gray-600">
-                {formatPhoneNumber(incomingCall.from)}
+                {formatUsPhoneForDisplay(incomingCall.from)}
               </p>
             </div>
           )}

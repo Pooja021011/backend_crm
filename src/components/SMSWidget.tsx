@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from '@/components/ui/badge';
 import { MessageSquare, Send, Phone, Loader2, CheckCircle, XCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { formatUsPhoneForDisplay, normalizeUsPhoneToE164 } from '@/utils/phone';
 
 interface SMSMessage {
   to: string;
@@ -33,21 +34,6 @@ const SMSWidget: React.FC = () => {
   const [recentMessages, setRecentMessages] = useState<SMSResponse[]>([]);
   const { toast } = useToast();
 
-  const formatPhoneNumber = (phone: string) => {
-    const digits = phone.replace(/\D/g, '');
-    if (digits.length === 10) {
-      return `+1${digits}`;
-    } else if (digits.length === 11 && digits.startsWith('1')) {
-      return `+${digits}`;
-    }
-    return phone;
-  };
-
-  const validatePhoneNumber = (phone: string) => {
-    const phoneRegex = /^\+[1-9]\d{1,14}$/;
-    return phoneRegex.test(phone);
-  };
-
   const sendSMS = async () => {
     if (!phoneNumber.trim() || !message.trim()) {
       toast({
@@ -58,11 +44,11 @@ const SMSWidget: React.FC = () => {
       return;
     }
 
-    const formattedPhone = formatPhoneNumber(phoneNumber);
-    if (!validatePhoneNumber(formattedPhone)) {
+    const formattedPhone = normalizeUsPhoneToE164(phoneNumber);
+    if (!formattedPhone) {
       toast({
         title: "Invalid Phone Number",
-        description: "Please enter a valid phone number (e.g., +1234567890)",
+        description: "Please enter a valid 10-digit phone number",
         variant: "destructive",
       });
       return;
@@ -92,7 +78,7 @@ const SMSWidget: React.FC = () => {
         setMessage('');
         toast({
           title: "SMS Sent Successfully",
-          description: `Message sent to ${formattedPhone}`,
+          description: `Message sent to ${formatUsPhoneForDisplay(formattedPhone)}`,
         });
       } else {
         throw new Error(result.error || 'Failed to send SMS');
@@ -148,8 +134,8 @@ const SMSWidget: React.FC = () => {
             <div className="relative">
               <Phone className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
               <Input
-                placeholder="+1234567890 or 1234567890"
-                value={phoneNumber}
+                placeholder="(555) 123-4567"
+                value={formatUsPhoneForDisplay(phoneNumber)}
                 onChange={(e) => setPhoneNumber(e.target.value)}
                 className="pl-10"
                 disabled={isSending}
@@ -207,7 +193,7 @@ const SMSWidget: React.FC = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <Badge variant={msg.success ? "default" : "destructive"} className="text-xs">
-                          {msg.data?.to || 'Unknown'}
+                          {formatUsPhoneForDisplay(msg.data?.to || '') || 'Unknown'}
                         </Badge>
                         {msg.data?.sentAt && (
                           <span className="text-gray-500">

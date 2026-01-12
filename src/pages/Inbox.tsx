@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { API_BASE, makeApiCall } from "@/config/api";
 import { useToast } from "@/hooks/use-toast";
 import { useTwilioContext } from "@/contexts/TwilioContext";
+import { formatUsPhoneForDisplay } from "@/utils/phone";
 
 // CSS styles for email content
 const emailContentStyles = `
@@ -776,7 +777,7 @@ const Inbox = () => {
         setSmsMessage('');
         toast({
           title: "SMS Sent",
-          description: `Message sent to ${phoneNumber}`,
+          description: `Message sent to ${formatUsPhoneForDisplay(phoneNumber)}`,
         });
         
         // Auto-clear notifications for ACQ/DISP agents
@@ -1853,7 +1854,7 @@ const Inbox = () => {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-3 mb-1">
                               <span className="font-medium text-gray-900">
-                                {conversation.contactName || conversation.phoneNumber}
+                                {conversation.contactName || formatUsPhoneForDisplay(conversation.phoneNumber)}
                               </span>
                               {conversation.unreadCount > 0 && (
                                 <Badge className="bg-green-500 text-white text-xs">
@@ -1862,7 +1863,7 @@ const Inbox = () => {
                               )}
                             </div>
                             <div className="text-sm text-gray-500 mb-1">
-                              {conversation.phoneNumber}
+                              {formatUsPhoneForDisplay(conversation.phoneNumber)}
                             </div>
                             <div className="text-sm text-gray-600 truncate">
                               {conversation.lastMessage}
@@ -1973,7 +1974,7 @@ const Inbox = () => {
                             </div>
                             <div className="flex items-center gap-3 mt-1">
                               <span className="text-sm text-gray-600 font-mono">
-                                {call.phoneNumber}
+                                {formatUsPhoneForDisplay(call.phoneNumber)}
                               </span>
                               {call.duration > 0 && (
                                 <span className="text-sm text-gray-500">
@@ -2515,7 +2516,7 @@ const Inbox = () => {
               <div>
                 <DialogTitle className="flex items-center gap-2">
                   <MessageSquare className="w-5 h-5 text-green-600" />
-                  {selectedConversation?.contactName || selectedConversation?.phoneNumber}
+                  {selectedConversation?.contactName || formatUsPhoneForDisplay(selectedConversation?.phoneNumber)}
                   <span className="text-sm font-normal text-gray-500">
                     ({selectedConversation?.messages?.length || 0})
                   </span>
@@ -2532,7 +2533,7 @@ const Inbox = () => {
                     </button>
                   )}
                 </DialogTitle>
-                <p className="text-sm text-gray-600 mt-1">{selectedConversation?.phoneNumber}</p>
+                <p className="text-sm text-gray-600 mt-1">{formatUsPhoneForDisplay(selectedConversation?.phoneNumber)}</p>
               </div>
             </div>
           </DialogHeader>

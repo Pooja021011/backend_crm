@@ -3,6 +3,7 @@ import { Phone, PhoneOff, User, Voicemail, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { IncomingCallInfo } from '@/hooks/useTwilioDevice';
 import { API_BASE, makeApiCall } from '@/config/api';
+import { formatUsPhoneForDisplay } from '@/utils/phone';
 
 interface CallWaitingPopupProps {
   incomingCall: IncomingCallInfo;
@@ -66,21 +67,6 @@ export const CallWaitingPopup: React.FC<CallWaitingPopupProps> = ({
     fetchLeadInfo();
   }, [incomingCall.from]);
 
-  // Format phone number for display
-  const formatPhoneNumber = (phone: string) => {
-    // Remove +1 or any non-digit characters
-    const cleaned = phone.replace(/\D/g, '');
-    
-    if (cleaned.length === 11 && cleaned.startsWith('1')) {
-      const number = cleaned.substring(1);
-      return `+1 (${number.substring(0, 3)}) ${number.substring(3, 6)}-${number.substring(6)}`;
-    } else if (cleaned.length === 10) {
-      return `(${cleaned.substring(0, 3)}) ${cleaned.substring(3, 6)}-${cleaned.substring(6)}`;
-    }
-    
-    return phone;
-  };
-
   // Format call duration
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
@@ -135,7 +121,7 @@ export const CallWaitingPopup: React.FC<CallWaitingPopupProps> = ({
                 </span>
               )}
               <p className="text-sm text-gray-500 mt-2">
-                {formatPhoneNumber(incomingCall.from)}
+                {formatUsPhoneForDisplay(incomingCall.from)}
               </p>
             </div>
           ) : (
@@ -144,7 +130,7 @@ export const CallWaitingPopup: React.FC<CallWaitingPopupProps> = ({
                 Unknown Caller
               </p>
               <p className="text-sm text-gray-600">
-                {formatPhoneNumber(incomingCall.from)}
+                {formatUsPhoneForDisplay(incomingCall.from)}
               </p>
             </div>
           )}
