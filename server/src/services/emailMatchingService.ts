@@ -65,6 +65,23 @@ export const emailMatchingService = {
     
     if (vendorLead) return vendorLead.id;
     
+    // Search in lead owners
+    const ownerLead = await prisma.lead.findFirst({
+      where: {
+        owners: {
+          some: {
+            email: {
+              equals: searchEmail,
+              mode: 'insensitive'
+            }
+          }
+        }
+      },
+      select: { id: true }
+    });
+    
+    if (ownerLead) return ownerLead.id;
+    
     // Search in lead contacts (stored in customFields)
     // Note: This is a simplified search - in production you might want to use a more sophisticated approach
     const leadsWithContacts = await prisma.lead.findMany({

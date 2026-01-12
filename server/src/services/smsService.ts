@@ -239,7 +239,7 @@ export const smsService = {
       // #region agent log
       fetch('http://127.0.0.1:7242/ingest/06111847-3345-4786-9a5d-89cc38601516',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'smsService.ts:155',message:'Finding lead by phone',data:{phoneNumber,phoneLength:phoneNumber?.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
       // #endregion
-      // Search in lead detail tables (seller, buyer, vendor) for phone numbers
+      // Search in lead detail tables (seller, buyer, vendor, owners) for phone numbers
       const lead = await prisma.lead.findFirst({
         where: {
           OR: [
@@ -252,12 +252,16 @@ export const smsService = {
             { vendor: { phone: phoneNumber } },
             { vendor: { phone: phoneNumber.replace(/\D/g, '') } },
             { vendor: { phone: phoneNumber.replace(/^\+1/, '') } },
+            { owners: { some: { phone: phoneNumber } } },
+            { owners: { some: { phone: phoneNumber.replace(/\D/g, '') } } },
+            { owners: { some: { phone: phoneNumber.replace(/^\+1/, '') } } },
           ]
         },
         include: {
           seller: true,
           buyer: true,
           vendor: true,
+          owners: true,
         }
       });
       // #region agent log
