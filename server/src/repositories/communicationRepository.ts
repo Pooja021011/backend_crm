@@ -16,13 +16,6 @@ export const communicationRepository = {
             lastName: true,
             smsSettings: true
           }
-        },
-        assignedTo: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true
-          }
         }
       },
       orderBy: { occurredAt: 'desc' },
