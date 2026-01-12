@@ -247,6 +247,11 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
     return dt.toISOString();
   };
 
+  const formatPhonesInText = (text: string) => {
+    // Replace E.164 phone numbers embedded in log strings (e.g. "+19647868545") with US display format.
+    return String(text || '').replace(/\+\d{10,15}/g, (m) => formatUsPhoneForDisplay(m));
+  };
+
   const formatFromToLine = (item: any) => {
     if (!item || !['CALL', 'SMS', 'EMAIL'].includes(item.type)) return null;
 
@@ -257,7 +262,7 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
     const toVal =
       Array.isArray(toValRaw) ? toValRaw.filter(Boolean).join(', ') : String(toValRaw || 'Unknown');
 
-    return `${direction} • From: ${String(fromVal || 'Unknown')} → To: ${toVal}`;
+    return formatPhonesInText(`${direction} • From: ${String(fromVal || 'Unknown')} → To: ${toVal}`);
   };
 
   const canEditNoteItem = (item: any) => {
@@ -711,7 +716,7 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
                 {/* Body / Description */}
                 {(item.body || item.description) && (
                   <p className="text-xs text-slate-600 whitespace-pre-wrap">
-                    {item.body || item.description}
+                    {formatPhonesInText(item.body || item.description)}
                   </p>
                 )}
 
