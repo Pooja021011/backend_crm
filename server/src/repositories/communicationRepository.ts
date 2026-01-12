@@ -8,6 +8,27 @@ export const communicationRepository = {
         ...(filters?.type ? { type: filters.type as any } : {}),
         ...(filters?.from || filters?.to ? { occurredAt: { gte: filters?.from || undefined, lte: filters?.to || undefined } } : {}),
       },
+      include: {
+        createdBy: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            smsSettings: {
+              select: {
+                phoneNumber: true
+              }
+            }
+          }
+        },
+        assignedTo: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true
+          }
+        }
+      },
       orderBy: { occurredAt: 'desc' },
     }),
   create: (leadId: string, data: { type: string; direction: string; subject?: string; body?: string; occurredAt: Date; createdById?: string; attachmentFileIds?: string[]; metadata?: any }) =>
