@@ -350,11 +350,23 @@ const Inbox = () => {
       }
     } catch (error: any) {
       console.error('Gmail fetch error:', error);
-      toast({
-        title: "Gmail Sync Failed",
-        description: error.message || "Failed to sync Gmail emails. Please check your IMAP settings.",
-        variant: "destructive",
-      });
+      // Suppress the noisy destructive toast for common auth failures (invalid/expired Gmail credentials).
+      // Users can reconnect Gmail from Settings.
+      const errorMessage = String(error?.message ?? '');
+      const lower = errorMessage.toLowerCase();
+      const shouldSuppressToast =
+        lower.includes('invalid credentials') ||
+        lower.includes('invalid_grant') ||
+        lower.includes('unauthorized') ||
+        lower.includes('authentication');
+
+      if (!shouldSuppressToast) {
+        toast({
+          title: "Gmail Sync Failed",
+          description: errorMessage || "Failed to sync Gmail emails. Please check your IMAP settings.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setLoadingEmails(false);
     }
