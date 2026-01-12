@@ -429,7 +429,7 @@ export const callService = {
    */
   async findLeadByPhoneNumber(phoneNumber: string, userId?: string): Promise<any> {
     try {
-      // Search in lead detail tables (seller, buyer, vendor) for phone numbers
+      // Search in lead detail tables (seller, buyer, vendor, owners) for phone numbers
       const lead = await prisma.lead.findFirst({
         where: {
           AND: [
@@ -444,6 +444,9 @@ export const callService = {
                 { vendor: { phone: phoneNumber } },
                 { vendor: { phone: phoneNumber.replace(/\D/g, '') } },
                 { vendor: { phone: phoneNumber.replace(/^\+1/, '') } },
+                { owners: { some: { phone: phoneNumber } } },
+                { owners: { some: { phone: phoneNumber.replace(/\D/g, '') } } },
+                { owners: { some: { phone: phoneNumber.replace(/^\+1/, '') } } },
               ],
             },
             ...(userId
@@ -459,6 +462,7 @@ export const callService = {
           seller: true,
           buyer: true,
           vendor: true,
+          owners: true,
         }
       });
       
