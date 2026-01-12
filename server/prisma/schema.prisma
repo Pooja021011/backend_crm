@@ -10,45 +10,46 @@ generator client {
 }
 
 model User {
-  id            String       @id @default(uuid())
-  firstName     String
-  lastName      String
-  email         String       @unique
-  phone         String?
-  passwordHash  String
-  status        String       @default("active")
-  resetOtp      String?
-  resetOtpExpiry DateTime?
-  roles         UserRole[]
-  refreshTokens RefreshToken[]
-  auditLogs     AuditLog[]   @relation("UserAuditLogs")
-  assignedLeads Lead[]       @relation("AssignedUserLeads")
-  dispLeads     Lead[]       @relation("DispAgentLeads")
-  createdLeads  Lead[]       @relation("CreatedByUserLeads")
-  assignedTasks Task[]       @relation("AssignedToUserTasks")
-  createdTasks  Task[]       @relation("CreatedByUserTasks")
-  taskReads     TaskRead[]
-  uploadedFiles File[]       @relation("UploadedByUser")
-  uploadedFileVersions FileVersion[] @relation("VersionUploadedByUser")
-  createdScenarios UnderwritingScenario[] @relation("CreatedByUser")
-  createdCommunications Communication[] @relation("CreatedByUser")
-  communicationReads CommunicationRead[]
-  gmailEmailReads GmailEmailRead[]
-  createdMarketingLinks MarketingLink[] @relation("CreatedByUser")
-  emailSettings UserEmailSettings?
-  targetedNotifications Notification[] @relation("NotificationTarget")
-  triggeredNotifications Notification[] @relation("NotificationTriggeredBy")
-  smsSettings UserSmsSettings?
+  id                       String                    @id @default(uuid())
+  firstName                String
+  lastName                 String
+  email                    String                    @unique
+  phone                    String?
+  passwordHash             String
+  status                   String                    @default("active")
+  resetOtp                 String?
+  resetOtpExpiry           DateTime?
+  roles                    UserRole[]
+  refreshTokens            RefreshToken[]
+  auditLogs                AuditLog[]                @relation("UserAuditLogs")
+  assignedLeads            Lead[]                    @relation("AssignedUserLeads")
+  dispLeads                Lead[]                    @relation("DispAgentLeads")
+  createdLeads             Lead[]                    @relation("CreatedByUserLeads")
+  assignedTasks            Task[]                    @relation("AssignedToUserTasks")
+  createdTasks             Task[]                    @relation("CreatedByUserTasks")
+  taskReads                TaskRead[]
+  uploadedFiles            File[]                    @relation("UploadedByUser")
+  uploadedFileVersions     FileVersion[]             @relation("VersionUploadedByUser")
+  uploadedLeadCompPdfs     LeadCompPdf[]
+  createdScenarios         UnderwritingScenario[]    @relation("CreatedByUser")
+  createdCommunications    Communication[]           @relation("CreatedByUser")
+  communicationReads       CommunicationRead[]
+  gmailEmailReads          GmailEmailRead[]
+  createdMarketingLinks    MarketingLink[]           @relation("CreatedByUser")
+  emailSettings            UserEmailSettings?
+  targetedNotifications    Notification[]            @relation("NotificationTarget")
+  triggeredNotifications   Notification[]            @relation("NotificationTriggeredBy")
+  smsSettings              UserSmsSettings?
   leadDistributionSettings LeadDistributionSettings?
-  priceHistoryChanges PriceHistory[] @relation("PriceChangedByUser")
+  priceHistoryChanges      PriceHistory[]            @relation("PriceChangedByUser")
   underwritingCalculations UnderwritingCalculation[] @relation("CalculatedByUser")
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
 }
 
 model Role {
-  id    String    @id @default(uuid())
-  name  RoleName  @unique
+  id    String     @id @default(uuid())
+  name  RoleName   @unique
   users UserRole[]
 }
 
@@ -63,20 +64,20 @@ enum RoleName {
 model UserRole {
   userId String
   roleId String
-  user   User @relation(fields: [userId], references: [id])
-  role   Role @relation(fields: [roleId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+  role   Role   @relation(fields: [roleId], references: [id])
 
   @@id([userId, roleId])
   @@index([roleId])
 }
 
 model RefreshToken {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   userId    String
-  tokenHash String   @unique
+  tokenHash String    @unique
   expiresAt DateTime
   revokedAt DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id])
 
@@ -99,40 +100,40 @@ model AuditLog {
 
 // Settings & Catalogs
 model Market {
-  id        String   @id @default(uuid())
-  name      String   @unique
-  counties  County[]
-  leads     Lead[]
+  id       String   @id @default(uuid())
+  name     String   @unique
+  counties County[]
+  leads    Lead[]
 }
 
 model County {
-  id        String  @id @default(uuid())
-  name      String
-  marketId  String
-  market    Market  @relation(fields: [marketId], references: [id])
+  id            String        @id @default(uuid())
+  name          String
+  marketId      String
+  market        Market        @relation(fields: [marketId], references: [id])
   leadAddresses LeadAddress[]
 
   @@unique([name, marketId])
 }
 
 model LeadSource {
-  id      String  @id @default(uuid())
-  name    String  @unique
-  active  Boolean @default(true)
-  leads   Lead[]
+  id     String  @id @default(uuid())
+  name   String  @unique
+  active Boolean @default(true)
+  leads  Lead[]
 }
 
 model AssetClass {
-  id      String  @id @default(uuid())
-  name    String  @unique
-  active  Boolean @default(true)
+  id     String  @id @default(uuid())
+  name   String  @unique
+  active Boolean @default(true)
 }
 
 model PriceRange {
-  id      String  @id @default(uuid())
-  label   String  @unique
-  min     Int?
-  max     Int?
+  id    String @id @default(uuid())
+  label String @unique
+  min   Int?
+  max   Int?
 }
 
 model LeadStatus {
@@ -146,125 +147,125 @@ model LeadStatus {
   leads       Lead[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  
+
   @@index([orderIndex])
 }
 
 model DocCategory {
-  id      String  @id @default(uuid())
-  name    String  @unique
+  id                  String               @id @default(uuid())
+  name                String               @unique
   fileCategorizations FileCategorization[]
 }
 
 model AppSetting {
-  id    String @id @default("global")
-  data  Json
+  id   String @id @default("global")
+  data Json
 }
 
 // Per-user email (SMTP/Gmail) settings
 model UserEmailSettings {
-  userId       String   @id
-  user         User     @relation(fields: [userId], references: [id])
+  userId String @id
+  user   User   @relation(fields: [userId], references: [id])
 
   // Preferred sender email, prefilled from user but editable
-  email        String
+  email String
 
   // Provider selection: SMTP or GMAIL
-  provider     String   @default("SMTP")
+  provider String @default("SMTP")
 
   // SMTP configuration
-  smtpHost     String?
-  smtpPort     Int?
-  smtpSecure   Boolean? // true for TLS/SSL
-  smtpUser     String?
-  smtpPass     String?
+  smtpHost   String?
+  smtpPort   Int?
+  smtpSecure Boolean? // true for TLS/SSL
+  smtpUser   String?
+  smtpPass   String?
 
   // IMAP configuration for email fetching
-  imapHost     String?
-  imapPort     Int?
-  imapSecure   Boolean? // true for SSL/TLS
-  imapUser     String?
-  imapPass     String?
+  imapHost   String?
+  imapPort   Int?
+  imapSecure Boolean? // true for SSL/TLS
+  imapUser   String?
+  imapPass   String?
 
   // Gmail sync placeholders
-  gmailConnected Boolean  @default(false)
+  gmailConnected Boolean   @default(false)
   gmailTokens    Json?
-  syncEnabled    Boolean  @default(false)
+  syncEnabled    Boolean   @default(false)
   lastSyncAt     DateTime?
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // Per-user SMS settings (Twilio)
 model UserSmsSettings {
-  userId       String   @id
-  user         User     @relation(fields: [userId], references: [id])
+  userId String @id
+  user   User   @relation(fields: [userId], references: [id])
 
   // Twilio phone number (from address) - user-specific
-  phoneNumber  String?  // E.164 format: +1234567890
-  
+  phoneNumber String? // E.164 format: +1234567890
+
   // Display settings
-  displayName  String?  // How the number appears to the user
-  
+  displayName String? // How the number appears to the user
+
   // Optional per-user voicemail greeting (WAV) stored on server
   voicemailGreetingPath      String?
   voicemailGreetingUpdatedAt DateTime?
 
   // Status
-  active       Boolean  @default(true)
-  
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // Lead Distribution Settings for ACQ agents
 model LeadDistributionSettings {
-  id                      String   @id @default(uuid())
-  userId                  String   @unique
-  user                    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // Whether this agent receives auto-assigned leads
-  receiveLeads            Boolean  @default(true)
-  
+  receiveLeads Boolean @default(true)
+
   // Percentage of leads to receive (0-100)
   // When all agents have equal distribution, this is calculated automatically
-  distributionPercentage  Int      @default(0)
-  
+  distributionPercentage Int @default(0)
+
   // Active status
-  isActive                Boolean  @default(true)
-  
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // Google Sheets Integration Settings
 model GoogleSheetsConfig {
-  id              String   @id @default("global")
-  
+  id String @id @default("global")
+
   // Google Sheets credentials (stored as JSON)
-  credentials     Json?    // Service account credentials
-  
+  credentials Json? // Service account credentials
+
   // Sheet configuration
-  spreadsheetId   String?  // The ID of the Google Sheet
-  sheetName       String?  // Name of the specific sheet/tab
-  headerRow       Int      @default(1) // Which row contains headers
-  
+  spreadsheetId String? // The ID of the Google Sheet
+  sheetName     String? // Name of the specific sheet/tab
+  headerRow     Int     @default(1) // Which row contains headers
+
   // Sync settings
-  syncEnabled     Boolean  @default(false)
-  syncInterval    Int      @default(60) // Minutes between syncs
-  lastSyncAt      DateTime?
-  lastSyncStatus  String?  // 'success', 'error', 'running'
-  lastSyncError   String?
-  
+  syncEnabled    Boolean   @default(false)
+  syncInterval   Int       @default(60) // Minutes between syncs
+  lastSyncAt     DateTime?
+  lastSyncStatus String? // 'success', 'error', 'running'
+  lastSyncError  String?
+
   // Column mappings (optional - defaults to column names)
-  columnMappings  Json?
-  
+  columnMappings Json?
+
   // Stats
-  totalLeadsSynced Int     @default(0)
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  totalLeadsSynced Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // Pipelines
@@ -275,28 +276,28 @@ enum PipelineKey {
 }
 
 model PipelineDefinition {
-  id      String      @id @default(uuid())
-  key     PipelineKey @unique
-  name    String
-  stages  PipelineStage[]
-  active  Boolean     @default(true)
+  id     String          @id @default(uuid())
+  key    PipelineKey     @unique
+  name   String
+  stages PipelineStage[]
+  active Boolean         @default(true)
 }
 
 model PipelineStage {
-  id          String             @id @default(uuid())
-  pipelineId  String
-  pipeline    PipelineDefinition @relation(fields: [pipelineId], references: [id])
-  name        String
-  orderIndex  Int
-  color       String?
-  description String?
-  isDefault   Boolean            @default(false) // For system default stages
-  requiresAction Boolean         @default(false) // For needs attention logic
-  attentionThresholdHours Int?   // Hours before flagged as needing attention
-  leads       Lead[]
-  fromStageHistory StageHistory[] @relation("FromStage")
-  toStageHistory   StageHistory[] @relation("ToStage")
-  rolePermissions StageRolePermission[]
+  id                      String                @id @default(uuid())
+  pipelineId              String
+  pipeline                PipelineDefinition    @relation(fields: [pipelineId], references: [id])
+  name                    String
+  orderIndex              Int
+  color                   String?
+  description             String?
+  isDefault               Boolean               @default(false) // For system default stages
+  requiresAction          Boolean               @default(false) // For needs attention logic
+  attentionThresholdHours Int? // Hours before flagged as needing attention
+  leads                   Lead[]
+  fromStageHistory        StageHistory[]        @relation("FromStage")
+  toStageHistory          StageHistory[]        @relation("ToStage")
+  rolePermissions         StageRolePermission[]
 
   @@index([pipelineId, orderIndex])
 }
@@ -326,68 +327,69 @@ enum TaskStatus {
 }
 
 model Lead {
-  id               String         @id @default(uuid())
-  leadType         LeadType
-  status           String?        // Legacy field for backward compatibility
-  leadStatusId     String?
-  leadStatus       LeadStatus?    @relation(fields: [leadStatusId], references: [id])
-  marketId         String?
-  market           Market?        @relation(fields: [marketId], references: [id])
-  assignedUserId   String?
-  assignedUser     User?          @relation("AssignedUserLeads", fields: [assignedUserId], references: [id])
-  pipelineStageId  String?
-  pipelineStage    PipelineStage? @relation(fields: [pipelineStageId], references: [id])
-  createdById      String?
-  createdBy        User?          @relation("CreatedByUserLeads", fields: [createdById], references: [id])
-  customFields     Json?
-  
-  // Pipeline-specific fields
-  priceReduction   Boolean        @default(false)
-  clearToClose     Boolean        @default(false)
-  sold             Boolean        @default(false)
-  lastContactAt    DateTime?
-  stageEnteredAt   DateTime?      // When lead entered current stage
-  needsAttention   Boolean        @default(false)
-  attentionReason  String?        // Why it needs attention
-  leadSourceId     String?        // Reference to lead source for filtering
-  leadSource       LeadSource?    @relation(fields: [leadSourceId], references: [id])
-  
-  // Disposition agent (separate from ACQ agent)
-  dispAgentId      String?
-  dispAgent        User?          @relation("DispAgentLeads", fields: [dispAgentId], references: [id])
-  
-  // DocuSign E-Signature fields
-  docusignEnvelopeId  String?    // DocuSign envelope ID
-  contractSentAt      DateTime?  // When contract was sent
-  contractVoidAt      DateTime?  // When contract expires/voids
-  contractSignedAt    DateTime?  // When contract was signed
-  contractStatus      String?    // SENT, COMPLETED, VOIDED, DECLINED, EXPIRED
-  esignProvider       String?    @default("docusign") // E-signature provider
-  
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  id              String         @id @default(uuid())
+  leadType        LeadType
+  status          String? // Legacy field for backward compatibility
+  leadStatusId    String?
+  leadStatus      LeadStatus?    @relation(fields: [leadStatusId], references: [id])
+  marketId        String?
+  market          Market?        @relation(fields: [marketId], references: [id])
+  assignedUserId  String?
+  assignedUser    User?          @relation("AssignedUserLeads", fields: [assignedUserId], references: [id])
+  pipelineStageId String?
+  pipelineStage   PipelineStage? @relation(fields: [pipelineStageId], references: [id])
+  createdById     String?
+  createdBy       User?          @relation("CreatedByUserLeads", fields: [createdById], references: [id])
+  customFields    Json?
 
-  address          LeadAddress?
-  seller           SellerDetail?
-  buyer            BuyerDetail?
-  buyerCriteria    BuyerCriteria?
-  vendor           VendorDetail?
-  tasks            Task[]
-  stageHistory     StageHistory[]
-  leadBuyers       LeadBuyer[]
+  // Pipeline-specific fields
+  priceReduction  Boolean     @default(false)
+  clearToClose    Boolean     @default(false)
+  sold            Boolean     @default(false)
+  lastContactAt   DateTime?
+  stageEnteredAt  DateTime? // When lead entered current stage
+  needsAttention  Boolean     @default(false)
+  attentionReason String? // Why it needs attention
+  leadSourceId    String? // Reference to lead source for filtering
+  leadSource      LeadSource? @relation(fields: [leadSourceId], references: [id])
+
+  // Disposition agent (separate from ACQ agent)
+  dispAgentId String?
+  dispAgent   User?   @relation("DispAgentLeads", fields: [dispAgentId], references: [id])
+
+  // DocuSign E-Signature fields
+  docusignEnvelopeId String? // DocuSign envelope ID
+  contractSentAt     DateTime? // When contract was sent
+  contractVoidAt     DateTime? // When contract expires/voids
+  contractSignedAt   DateTime? // When contract was signed
+  contractStatus     String? // SENT, COMPLETED, VOIDED, DECLINED, EXPIRED
+  esignProvider      String?   @default("docusign") // E-signature provider
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  address               LeadAddress?
+  seller                SellerDetail?
+  buyer                 BuyerDetail?
+  buyerCriteria         BuyerCriteria?
+  vendor                VendorDetail?
+  tasks                 Task[]
+  stageHistory          StageHistory[]
+  leadBuyers            LeadBuyer[]
   underwritingScenarios UnderwritingScenario[]
-  communications   Communication[]
-  marketingLinks   MarketingLink[]
-  leadFiles        LeadFile[]
-  deal             Deal?
-  leadComparables  LeadComparable[]
-  buyerOffers      BuyerOffer[]
-  marketingResources MarketingResource[]
-  notifications    Notification[]
-  priceHistory     PriceHistory[]
-  owners           LeadOwner[]
-  rehabBudget      RehabBudget?
-  underwritingCalcs UnderwritingCalculation[]
+  communications        Communication[]
+  marketingLinks        MarketingLink[]
+  leadFiles             LeadFile[]
+  deal                  Deal?
+  leadComparables       LeadComparable[]
+  leadCompPdfs          LeadCompPdf[]
+  buyerOffers           BuyerOffer[]
+  marketingResources    MarketingResource[]
+  notifications         Notification[]
+  priceHistory          PriceHistory[]
+  owners                LeadOwner[]
+  rehabBudget           RehabBudget?
+  underwritingCalcs     UnderwritingCalculation[]
 
   @@index([leadType])
   @@index([marketId])
@@ -397,19 +399,19 @@ model Lead {
 }
 
 model LeadAddress {
-  leadId   String   @id
-  lead     Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId   String  @id
+  lead     Lead    @relation(fields: [leadId], references: [id], onDelete: Cascade)
   address1 String
   city     String
   state    String
   zip      String
   countyId String?
-  county   County?  @relation(fields: [countyId], references: [id])
+  county   County? @relation(fields: [countyId], references: [id])
 }
 
 model SellerDetail {
-  leadId     String @id
-  lead       Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId     String  @id
+  lead       Lead    @relation(fields: [leadId], references: [id], onDelete: Cascade)
   firstName  String
   lastName   String
   phone      String
@@ -436,23 +438,23 @@ model BuyerDetail {
 }
 
 model BuyerCriteria {
-  leadId         String   @id
-  lead           Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  marketIds      String[]
-  assetClassIds  String[]
-  priceRangeIds  String[]
+  leadId        String   @id
+  lead          Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  marketIds     String[]
+  assetClassIds String[]
+  priceRangeIds String[]
 }
 
 model VendorDetail {
-  leadId     String  @id
-  lead       Lead    @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  firstName  String
-  lastName   String
-  phone      String
-  email      String
-  company    String
-  industry   String
-  marketIds  String[]
+  leadId    String   @id
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  firstName String
+  lastName  String
+  phone     String
+  email     String
+  company   String
+  industry  String
+  marketIds String[]
 }
 
 model StageHistory {
@@ -463,9 +465,9 @@ model StageHistory {
   changedById String?
   changedAt   DateTime @default(now())
 
-  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  fromStage   PipelineStage? @relation("FromStage", fields: [fromStageId], references: [id])
-  toStage     PipelineStage  @relation("ToStage", fields: [toStageId], references: [id])
+  lead      Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  fromStage PipelineStage? @relation("FromStage", fields: [fromStageId], references: [id])
+  toStage   PipelineStage  @relation("ToStage", fields: [toStageId], references: [id])
 
   @@index([leadId, changedAt])
 }
@@ -485,7 +487,7 @@ model Task {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  reads        TaskRead[]
+  reads TaskRead[]
 
   @@index([leadId])
   @@index([dueAt])
@@ -516,25 +518,26 @@ model GmailEmailRead {
 
 // Documents & Files
 model File {
-  id           String   @id @default(uuid())
-  filename     String
-  originalName String
-  mimeType     String
-  size         Int
-  storageKey   String   @unique
-  description  String?
-  tags         String[] // Array of tag strings
-  isPublic     Boolean  @default(false)
-  category     String   @default("other") // Direct category field
-  uploadedById String?
-  uploadedBy   User?    @relation("UploadedByUser", fields: [uploadedById], references: [id])
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  versions     FileVersion[]
-  leadFiles    LeadFile[]
-  categories   FileCategorization[]
+  id                       String                    @id @default(uuid())
+  filename                 String
+  originalName             String
+  mimeType                 String
+  size                     Int
+  storageKey               String                    @unique
+  description              String?
+  tags                     String[] // Array of tag strings
+  isPublic                 Boolean                   @default(false)
+  category                 String                    @default("other") // Direct category field
+  uploadedById             String?
+  uploadedBy               User?                     @relation("UploadedByUser", fields: [uploadedById], references: [id])
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  versions                 FileVersion[]
+  leadFiles                LeadFile[]
+  categories               FileCategorization[]
   communicationAttachments CommunicationAttachment[]
-  marketingResources MarketingResource[]
+  leadCompPdfs             LeadCompPdf[]
+  marketingResources       MarketingResource[]
 }
 
 model FileVersion {
@@ -565,8 +568,8 @@ model FileCategorization {
 model LeadFile {
   leadId String
   fileId String
-  lead   Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  file   File @relation(fields: [fileId], references: [id])
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  file   File   @relation(fields: [fileId], references: [id])
 
   @@id([leadId, fileId])
 }
@@ -589,29 +592,29 @@ model UnderwritingScenario {
 
 // Buyers and offers per lead
 model Buyer {
-  id           String  @id @default(uuid())
+  id           String       @id @default(uuid())
   firstName    String
   lastName     String
   phone        String
   email        String
   segmentation String?
   criteria     Json?
-  createdAt    DateTime @default(now())
+  createdAt    DateTime     @default(now())
   leadBuyers   LeadBuyer[]
   buyerOffers  BuyerOffer[]
 }
 
 model LeadBuyer {
-  id        String   @id @default(uuid())
-  leadId    String
-  buyerId   String
-  status    String   // interested|offered|declined
+  id          String   @id @default(uuid())
+  leadId      String
+  buyerId     String
+  status      String // interested|offered|declined
   offerAmount Int?
-  terms     Json?
-  updatedAt DateTime @default(now())
+  terms       Json?
+  updatedAt   DateTime @default(now())
 
-  lead   Lead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  buyer  Buyer @relation(fields: [buyerId], references: [id])
+  lead  Lead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  buyer Buyer @relation(fields: [buyerId], references: [id])
 
   @@index([leadId, buyerId])
 }
@@ -630,19 +633,19 @@ enum Direction {
 }
 
 model Communication {
-  id          String     @id @default(uuid())
+  id          String    @id @default(uuid())
   leadId      String
-  lead        Lead       @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lead        Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
   type        CommType
   direction   Direction
   subject     String?
   body        String?
   externalId  String?
-  metadata    Json?      // Store call metadata (status, duration, callSid, etc.)
+  metadata    Json? // Store call metadata (status, duration, callSid, etc.)
   occurredAt  DateTime
   createdById String?
-  createdBy   User?      @relation("CreatedByUser", fields: [createdById], references: [id])
-  createdAt   DateTime   @default(now())
+  createdBy   User?     @relation("CreatedByUser", fields: [createdById], references: [id])
+  createdAt   DateTime  @default(now())
 
   attachments CommunicationAttachment[]
   reads       CommunicationRead[]
@@ -663,11 +666,11 @@ model CommunicationRead {
 }
 
 model CommunicationAttachment {
-  id              String         @id @default(uuid())
+  id              String        @id @default(uuid())
   communicationId String
   fileId          String
-  communication   Communication  @relation(fields: [communicationId], references: [id])
-  file            File           @relation(fields: [fileId], references: [id])
+  communication   Communication @relation(fields: [communicationId], references: [id])
+  file            File          @relation(fields: [fileId], references: [id])
 }
 
 // Marketing links
@@ -685,30 +688,30 @@ model MarketingLink {
 
 // Deals/Financials
 model Deal {
-  id            String   @id @default(uuid())
-  leadId        String   @unique
-  lead          Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  id     String @id @default(uuid())
+  leadId String @unique
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   contractPrice Int?
   soldPrice     Int?
-  netProfit     Int?     // direct profit amount if known
+  netProfit     Int? // direct profit amount if known
 
-  contractedAt  DateTime?
-  closedAt      DateTime?
+  contractedAt DateTime?
+  closedAt     DateTime?
 
   notifications Notification[]
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // Comparable sales (internal DB)
 // Lead-specific comparables (no global database)
 model LeadComparable {
-  id           String     @id @default(uuid())
-  leadId       String
-  lead         Lead       @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(uuid())
+  leadId String
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
   // Property details
   address      String
   city         String
@@ -723,9 +726,9 @@ model LeadComparable {
   dom          Int?
   dateSold     DateTime?
   images       String[]
-  
-  addedAt      DateTime   @default(now())
-  createdAt    DateTime   @default(now())
+
+  addedAt   DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([leadId])
 }
@@ -742,77 +745,77 @@ model LeadCompPdf {
   file       File  @relation(fields: [fileId], references: [id], onDelete: Cascade)
   uploadedBy User? @relation(fields: [uploadedById], references: [id])
 
-  @@index([leadId, createdAt])
   @@unique([leadId, fileId])
+  @@index([leadId, createdAt])
 }
 
 // Buyer offers and negotiations
 model BuyerOffer {
-  id          String   @id @default(uuid())
-  leadId      String
-  buyerId     String
-  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  buyer       Buyer    @relation(fields: [buyerId], references: [id])
-  
+  id      String @id @default(uuid())
+  leadId  String
+  buyerId String
+  lead    Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  buyer   Buyer  @relation(fields: [buyerId], references: [id])
+
   offerAmount Int
-  terms       Json?    // financing, closing date, contingencies, etc.
-  status      String   // pending, accepted, rejected, countered
+  terms       Json? // financing, closing date, contingencies, etc.
+  status      String // pending, accepted, rejected, countered
   notes       String?
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([leadId, buyerId])
 }
 
 // Marketing resources (flyers, photos, videos, etc.)
 model MarketingResource {
-  id          String   @id @default(uuid())
-  leadId      String
-  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  
-  title       String
-  type        String   // flyer, photo, video, listing_link, campaign_link
-  url         String?  // for external links
-  fileId      String?  // for uploaded files
-  file        File?    @relation(fields: [fileId], references: [id])
-  
+  id     String @id @default(uuid())
+  leadId String
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  title  String
+  type   String // flyer, photo, video, listing_link, campaign_link
+  url    String? // for external links
+  fileId String? // for uploaded files
+  file   File?   @relation(fields: [fileId], references: [id])
+
   description String?
-  isActive    Boolean  @default(true)
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([leadId, type])
 }
 
 // Event-based Notifications
 model Notification {
-  id            String   @id @default(uuid())
-  type          String   // 'NEW_CONTRACT', 'NEW_LEAD', 'NEW_DEAL_ASSIGNED'
-  title         String
-  message       String
-  priority      String   @default("MEDIUM") // 'LOW', 'MEDIUM', 'HIGH', 'URGENT'
-  isRead        Boolean  @default(false)
-  
+  id       String  @id @default(uuid())
+  type     String // 'NEW_CONTRACT', 'NEW_LEAD', 'NEW_DEAL_ASSIGNED'
+  title    String
+  message  String
+  priority String  @default("MEDIUM") // 'LOW', 'MEDIUM', 'HIGH', 'URGENT'
+  isRead   Boolean @default(false)
+
   // Target user information
-  targetUserId  String?
-  targetUser    User?    @relation("NotificationTarget", fields: [targetUserId], references: [id])
-  targetRoles   String[] // Array of role names to target
-  
+  targetUserId String?
+  targetUser   User?    @relation("NotificationTarget", fields: [targetUserId], references: [id])
+  targetRoles  String[] // Array of role names to target
+
   // Related entities
-  leadId        String?
-  lead          Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  dealId        String?
-  deal          Deal?    @relation(fields: [dealId], references: [id], onDelete: Cascade)
-  
+  leadId String?
+  lead   Lead?   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  dealId String?
+  deal   Deal?   @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
   // Metadata
-  data          Json?    // Additional data for the notification
-  triggeredBy   String?  // User ID who triggered the event
-  triggeredUser User?    @relation("NotificationTriggeredBy", fields: [triggeredBy], references: [id])
-  
-  createdAt     DateTime @default(now())
-  readAt        DateTime?
+  data          Json? // Additional data for the notification
+  triggeredBy   String? // User ID who triggered the event
+  triggeredUser User?   @relation("NotificationTriggeredBy", fields: [triggeredBy], references: [id])
+
+  createdAt DateTime  @default(now())
+  readAt    DateTime?
 
   @@index([targetUserId, isRead])
   @@index([targetRoles, isRead])
@@ -821,37 +824,37 @@ model Notification {
 
 // Marketing Platform Settings
 model MarketingPlatform {
-  id            String   @id @default(uuid())
-  name          String
-  type          String   // 'listing', 'social', 'email', 'advertising', 'analytics', 'other'
-  baseUrl       String
-  description   String?
-  isActive      Boolean  @default(true)
-  apiEndpoint   String?
-  authRequired  Boolean  @default(false)
-  configFields  Json     // Array of field configurations
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String  @id @default(uuid())
+  name         String
+  type         String // 'listing', 'social', 'email', 'advertising', 'analytics', 'other'
+  baseUrl      String
+  description  String?
+  isActive     Boolean @default(true)
+  apiEndpoint  String?
+  authRequired Boolean @default(false)
+  configFields Json // Array of field configurations
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([type, isActive])
 }
 
 // Price History Tracking
 model PriceHistory {
-  id          String   @id @default(uuid())
-  leadId      String
-  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  
-  fieldName   String   // e.g., "estimatedValue", "contractPrice", "rehabBudget", "askingPrice", "offerAmount", "soldPrice", "netProfit"
+  id     String @id @default(uuid())
+  leadId String
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  fieldName   String // e.g., "estimatedValue", "contractPrice", "rehabBudget", "askingPrice", "offerAmount", "soldPrice", "netProfit"
   oldValue    Int?
   newValue    Int
   changedById String?
-  changedBy   User?    @relation("PriceChangedByUser", fields: [changedById], references: [id])
+  changedBy   User?   @relation("PriceChangedByUser", fields: [changedById], references: [id])
   note        String?
-  
-  createdAt   DateTime @default(now())
-  
+
+  createdAt DateTime @default(now())
+
   @@index([leadId, fieldName])
   @@index([leadId, createdAt])
 }
@@ -869,55 +872,54 @@ model LeadOwner {
   order     Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
+
   @@index([leadId])
   @@index([leadId, isPrimary])
 }
 
 // Rehab Budget Calculator
 model RehabBudget {
-  id                String   @id @default(uuid())
-  leadId            String   @unique
-  lead              Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(uuid())
+  leadId String @unique
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
   // Finish level selection
-  finishLevel       String?  // "high_end", "mid_range", "low_end"
-  
+  finishLevel String? // "high_end", "mid_range", "low_end"
+
   // Toggle states and custom values (JSON for flexibility)
-  toggledItems      Json     // { permits: true, demolition: false, ... }
-  customValues      Json?    // { numberOfBathrooms: 2, numberOfWindows: 10, ... }
-  
+  toggledItems Json // { permits: true, demolition: false, ... }
+  customValues Json? // { numberOfBathrooms: 2, numberOfWindows: 10, ... }
+
   // Calculated totals
-  subtotal          Float    @default(0)
-  contingencyAmount Float    @default(0)
-  totalCost         Float    @default(0)
-  
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  subtotal          Float @default(0)
+  contingencyAmount Float @default(0)
+  totalCost         Float @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // Underwriting Calculations
 model UnderwritingCalculation {
-  id           String   @id @default(uuid())
-  leadId       String
-  lead         Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(uuid())
+  leadId String
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
   // Input values
-  arv          Float
-  rehabCost    Float
-  taxes        Float    @default(1000)
-  timeline     Int      @default(6)
-  
+  arv       Float
+  rehabCost Float
+  taxes     Float @default(1000)
+  timeline  Int   @default(6)
+
   // Calculated values
-  finalOffer   Float
-  
+  finalOffer Float
+
   // Metadata
   calculatedBy String?
-  user         User?    @relation("CalculatedByUser", fields: [calculatedBy], references: [id])
+  user         User?   @relation("CalculatedByUser", fields: [calculatedBy], references: [id])
   notes        String?
-  
-  createdAt    DateTime @default(now())
-  
+
+  createdAt DateTime @default(now())
+
   @@index([leadId, createdAt])
 }
-
