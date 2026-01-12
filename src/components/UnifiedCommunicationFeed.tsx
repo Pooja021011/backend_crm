@@ -709,7 +709,7 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
                 {/* Email Subject */}
                 {item.subject && (
                   <p className="text-xs font-medium text-slate-700 mb-0.5">
-                    {item.subject}
+                    {formatPhonesInText(item.subject)}
                   </p>
                 )}
 
