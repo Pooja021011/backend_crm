@@ -1024,7 +1024,7 @@ const Leads = () => {
                     {agents
                       .filter((a: any) => {
                         const roles = (a.roles || []).map((r: any) => r?.role?.name || r?.name || r);
-                        return roles.includes('ACQ');
+                        return roles.includes('ACQ') || roles.includes('MANAGER');
                       })
                       .map((a: any) => (
                         <option key={a.id} value={a.id}>
@@ -1048,7 +1048,7 @@ const Leads = () => {
                     {agents
                       .filter((a: any) => {
                         const roles = (a.roles || []).map((r: any) => r?.role?.name || r?.name || r);
-                        return roles.includes('DISP');
+                        return roles.includes('DISP') || roles.includes('MANAGER');
                       })
                       .map((a: any) => (
                         <option key={a.id} value={a.id}>
