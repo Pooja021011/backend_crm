@@ -199,7 +199,6 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
   const [mentionAtIndex, setMentionAtIndex] = useState<number | null>(null);
   const noteInputRef = useRef<HTMLTextAreaElement>(null);
   const feedRef = useRef<HTMLDivElement>(null);
-  const didInitialScrollRef = useRef(false);
 
   // Recording playback state (recordingSid -> object URL)
   const [recordingUrls, setRecordingUrls] = useState<Record<string, string>>({});
@@ -460,13 +459,13 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
     return dateA - dateB;
   });
 
-  // Auto-scroll to bottom on initial load (when entering lead)
+  // Keep the feed anchored to the latest message (bottom).
+  // We reload communications after actions (add note, calls, etc.) which can temporarily reset scroll.
+  // Requirement: always focus the latest message.
   useEffect(() => {
     if (loadingCommunications) return;
-    if (didInitialScrollRef.current) return;
     if (!feedRef.current) return;
 
-    didInitialScrollRef.current = true;
     requestAnimationFrame(() => {
       if (!feedRef.current) return;
       feedRef.current.scrollTop = feedRef.current.scrollHeight;

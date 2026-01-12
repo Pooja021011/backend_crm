@@ -40,6 +40,10 @@ export const useTwilioDevice = () => {
   const deviceRef = useRef<Device | null>(null);
   const activeCallRef = useRef<Call | null>(null);
   const incomingCallRef = useRef<IncomingCallInfo | null>(null);
+  // Track answered calls to suppress missed-call races.
+  const answeredCallSidsRef = useRef<Set<string>>(new Set());
+  // Guard against duplicate 'incoming' events for the same CallSid.
+  const seenIncomingCallSidsRef = useRef<Set<string>>(new Set());
   const { toast } = useToast();
 
   const currentIdentityKey = user?.email || user?.id || '';
@@ -392,6 +396,13 @@ export const useTwilioDevice = () => {
           const params = call.parameters;
           const from = params.From || 'Unknown';
           const callSid = call.parameters.CallSid || '';
+
+          // Duplicate guard (some environments emit multiple incoming events for same call)
+          if (callSid && seenIncomingCallSidsRef.current.has(callSid)) {
+            console.log('🔁 Duplicate incoming event ignored (call waiting):', callSid);
+            return;
+          }
+          if (callSid) seenIncomingCallSidsRef.current.add(callSid);
           
           // Set incoming call state - this will show the call waiting popup
           setIncomingCall({
@@ -488,6 +499,13 @@ export const useTwilioDevice = () => {
         const params = call.parameters;
         const from = params.From || 'Unknown';
         const callSid = call.parameters.CallSid || '';
+
+        // Duplicate guard
+        if (callSid && seenIncomingCallSidsRef.current.has(callSid)) {
+          console.log('🔁 Duplicate incoming event ignored:', callSid);
+          return;
+        }
+        if (callSid) seenIncomingCallSidsRef.current.add(callSid);
         
         console.log('📞 Real incoming call from:', from, 'CallSid:', callSid);
         
@@ -509,6 +527,13 @@ export const useTwilioDevice = () => {
         // Handle call cancellation (caller hangs up before answer)
         call.on('cancel', () => {
           console.log('📞 Incoming call was cancelled (caller hung up)');
+
+          // If we already answered this call, suppress the missed-call toast (race condition).
+          if (callSid && answeredCallSidsRef.current.has(callSid)) {
+            console.log('✅ Suppressing missed-call toast (call already answered):', callSid);
+            setIncomingCall(null);
+            return;
+          }
           
           // Stop ringtone immediately
           if (ringtoneRef.current) {
@@ -543,6 +568,13 @@ export const useTwilioDevice = () => {
         // Auto-dismiss after 20 seconds (standard phone ring timeout)
         const missedCallTimeout = setTimeout(() => {
           console.log('📞 Incoming call timed out (20 seconds)');
+
+          // If we already answered this call, do nothing (race condition).
+          if (callSid && answeredCallSidsRef.current.has(callSid)) {
+            console.log('✅ Suppressing timeout reject (call already answered):', callSid);
+            setIncomingCall(null);
+            return;
+          }
           
           // Stop ringtone
           if (ringtoneRef.current) {
@@ -961,6 +993,9 @@ export const useTwilioDevice = () => {
       console.log('📞 Answering incoming call');
       
       const call = incomingCall.call;
+      const sid = incomingCall.callSid || call.parameters?.CallSid || '';
+      if (sid) answeredCallSidsRef.current.add(sid);
+      (call as any).__wasAnswered = true;
       
       // Clear missed call timeout
       if ((call as any).missedCallTimeout) {
@@ -972,34 +1007,39 @@ export const useTwilioDevice = () => {
         ringtoneRef.current.pause();
         ringtoneRef.current.currentTime = 0;
       }
+
+      // Close popup immediately to prevent stuck UI while we log/network.
+      setIncomingCall(null);
       
       // Store the caller's number
       setCurrentCallNumber(incomingCall.from);
       setCurrentCallLeadId(''); // Unknown for inbound; UI will resolve via phone lookup if needed
       
-      // Log to backend that call was answered
-      try {
-        await makeApiCall(`${API_BASE}/calls/log-answer`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            callSid: incomingCall.callSid,
-            from: incomingCall.from,
-            action: 'answered'
-          })
-        });
-      } catch (logError) {
-        console.error('Failed to log call answer:', logError);
-        // Continue anyway - don't block the call
-      }
-      
       // Accept the call
       call.accept();
       
       // Set as active call
+      // Update ref immediately to avoid races with duplicate incoming events.
+      activeCallRef.current = call;
       setActiveCall(call);
-      setIncomingCall(null);
       setCallStatus({ status: 'connected', duration: 0 });
+
+      // Log to backend that call was answered (best-effort, do not block call accept)
+      void (async () => {
+        try {
+          await makeApiCall(`${API_BASE}/calls/log-answer`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              callSid: incomingCall.callSid,
+              from: incomingCall.from,
+              action: 'answered'
+            })
+          });
+        } catch (logError) {
+          console.error('Failed to log call answer:', logError);
+        }
+      })();
       
       // Start duration counter
       let seconds = 0;
