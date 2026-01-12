@@ -397,6 +397,21 @@ const Inbox = () => {
     if (email.type === 'communication' && email.leadId) {
       console.log('💬 Navigating to communication lead ID:', email.leadId);
       navigate(`/leads/${email.leadId}/edit`);
+
+      // Inbox dismiss: remove immediately + persist read so it won't reappear on refresh
+      setLeadCommunications((prev) => prev.filter((c) => c.id !== email.id));
+      try {
+        const accessToken = localStorage.getItem('accessToken');
+        await fetch(`${API_BASE}/inbox/communications/${email.id}/mark-read`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+          },
+        });
+      } catch (e) {
+        console.error('Failed to mark communication as read:', e);
+      }
       
       toast({
         title: "Lead Opened",
