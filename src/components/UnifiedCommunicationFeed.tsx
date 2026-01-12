@@ -257,18 +257,19 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
     const direction = item.direction ? String(item.direction).toUpperCase() : 'UNKNOWN';
     const meta = (item as any)?.metadata || {};
     
-    // Debug logging
-    if (item.type === 'CALL' && direction === 'OUTBOUND') {
-      console.log('🔍 OUTBOUND CALL metadata:', {
-        hasMetadata: !!item.metadata,
-        metadata: item.metadata,
-        from: meta?.from,
-        to: meta?.to,
-        fullItem: item
-      });
+    // For OUTBOUND calls/SMS, if metadata.from is missing, try to get user's phone number
+    let fromVal = meta?.from;
+    if (!fromVal && direction === 'OUTBOUND' && (item.type === 'CALL' || item.type === 'SMS')) {
+      // Try to get from user who created it
+      if (item.user) {
+        fromVal = `${item.user.firstName} ${item.user.lastName}`;
+      } else {
+        fromVal = 'Unknown';
+      }
+    } else if (!fromVal) {
+      fromVal = 'Unknown';
     }
     
-    const fromVal = meta?.from ?? 'Unknown';
     const toValRaw = meta?.to ?? 'Unknown';
     const toVal =
       Array.isArray(toValRaw) ? toValRaw.filter(Boolean).join(', ') : String(toValRaw || 'Unknown');
