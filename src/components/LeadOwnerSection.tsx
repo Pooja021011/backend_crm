@@ -6,6 +6,7 @@ import { Label } from './ui/label';
 import { Plus, Trash2, Star, Phone, Mail, User, Pencil } from 'lucide-react';
 import { API_BASE } from '@/config/api';
 import { useToast } from '@/hooks/use-toast';
+import { formatUsPhoneForDisplay, normalizeUsPhoneToE164 } from '@/utils/phone';
 
 interface LeadOwner {
   id: string;
@@ -316,9 +317,9 @@ export const LeadOwnerSection = forwardRef<LeadOwnerSectionRef, LeadOwnerSection
                   <Label className="text-[10px] text-slate-500">Phone</Label>
                   <Input
                     className="h-6 text-xs"
-                    value={editOwner.phone}
+                    value={formatUsPhoneForDisplay(editOwner.phone)}
                     onChange={(e) => {
-                      const updated = { ...editOwner, phone: e.target.value };
+                      const updated = { ...editOwner, phone: normalizeUsPhoneToE164(e.target.value) || e.target.value };
                       setEditOwner(updated);
                       onEditingChange?.(true, editingOwnerId, updated);
                     }}
@@ -365,7 +366,7 @@ export const LeadOwnerSection = forwardRef<LeadOwnerSectionRef, LeadOwnerSection
                 <div className="flex items-center gap-2 text-slate-600">
                   <span className="flex items-center gap-0.5">
                     <Phone className="h-2 w-2" />
-                    {owner.phone}
+                    {formatUsPhoneForDisplay(owner.phone)}
                   </span>
                   <span className="flex items-center gap-0.5">
                     <Mail className="h-2 w-2" />
@@ -437,8 +438,8 @@ export const LeadOwnerSection = forwardRef<LeadOwnerSectionRef, LeadOwnerSection
                 <Label className="text-[10px] text-slate-500">Phone</Label>
                 <Input
                   className="h-6 text-xs"
-                  value={newOwner.phone}
-                  onChange={(e) => setNewOwner({ ...newOwner, phone: e.target.value })}
+                  value={formatUsPhoneForDisplay(newOwner.phone)}
+                  onChange={(e) => setNewOwner({ ...newOwner, phone: normalizeUsPhoneToE164(e.target.value) || e.target.value })}
                   placeholder="555-123-4567"
                 />
               </div>

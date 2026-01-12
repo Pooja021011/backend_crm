@@ -64,6 +64,7 @@ import { generateCSVTemplate } from "@/utils/csvUtils";
 import { toast } from "@/hooks/use-toast";
 import { API_BASE } from "@/config/api";
 import { useSettings } from "@/hooks/useSettings";
+import { formatUsPhoneForDisplay } from "@/utils/phone";
 
 const Leads = () => {
   const navigate = useNavigate();
@@ -1468,7 +1469,7 @@ const Leads = () => {
                         <TableCell>
                           <div className="flex items-center gap-1 text-gray-600">
                             <Phone className="w-2.5 h-2.5 flex-shrink-0" />
-                            <span className="truncate">{getLeadPhone(lead)}</span>
+                            <span className="truncate">{formatUsPhoneForDisplay(getLeadPhone(lead))}</span>
                           </div>
                           <div className="flex items-center gap-1 text-gray-500">
                             <Mail className="w-2.5 h-2.5 flex-shrink-0" />
@@ -1587,7 +1588,7 @@ const Leads = () => {
                         <TableCell>
                           <div className="flex items-center gap-1 text-gray-600">
                             <Phone className="w-2.5 h-2.5 flex-shrink-0" />
-                            <span className="truncate">{getLeadPhone(lead)}</span>
+                            <span className="truncate">{formatUsPhoneForDisplay(getLeadPhone(lead))}</span>
                           </div>
                           <div className="flex items-center gap-1 text-gray-500">
                             <Mail className="w-2.5 h-2.5 flex-shrink-0" />
@@ -1724,7 +1725,7 @@ const Leads = () => {
                         <TableCell>
                           <div className="flex items-center gap-1 text-gray-600">
                             <Phone className="w-2.5 h-2.5 flex-shrink-0" />
-                            <span className="truncate">{getLeadPhone(lead)}</span>
+                            <span className="truncate">{formatUsPhoneForDisplay(getLeadPhone(lead))}</span>
                           </div>
                           <div className="flex items-center gap-1 text-gray-500">
                             <Mail className="w-2.5 h-2.5 flex-shrink-0" />

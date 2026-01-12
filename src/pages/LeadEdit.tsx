@@ -62,6 +62,7 @@ import { ProjectionsSheet } from '@/components/ProjectionsSheet';
 import { UnifiedCommunicationFeed } from '@/components/UnifiedCommunicationFeed';
 import { PhoneInput } from '@/components/PhoneInput';
 import { normalizeUsPhoneToE164 } from '@/utils/phone';
+import { formatUsPhoneForDisplay } from '@/utils/phone';
 import { LeadOwnerSection, type LeadOwnerSectionRef } from '@/components/LeadOwnerSection';
 import { LeadPhotoGallery } from '@/components/LeadPhotoGallery';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -4194,7 +4195,7 @@ const LeadEdit: React.FC = () => {
                         </span>
                       )}
                     </div>
-                    <div className="text-sm text-gray-600 mt-1 font-mono">{phone.number}</div>
+                    <div className="text-sm text-gray-600 mt-1 font-mono">{formatUsPhoneForDisplay(phone.number)}</div>
                     <div className="text-xs text-gray-500 mt-1 capitalize">{phone.type}</div>
                   </div>
                   <Phone className="w-5 h-5 text-gray-400 group-hover:text-purple-600 transition-colors" />

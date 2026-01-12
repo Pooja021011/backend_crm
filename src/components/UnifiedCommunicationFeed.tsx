@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Calendar as UiCalendar } from './ui/calendar';
 import { API_BASE, makeApiCall } from '@/config/api';
 import { useToast } from '@/hooks/use-toast';
+import { formatUsPhoneForDisplay } from '@/utils/phone';
 import { 
   Phone, 
   MessageSquare, 
@@ -865,7 +866,7 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
                           <Phone className="w-3 h-3" />
                           <div className="flex flex-col">
                             <span className="font-medium">{phone.label}</span>
-                            <span className="text-xs text-gray-500">{phone.number}</span>
+                            <span className="text-xs text-gray-500">{formatUsPhoneForDisplay(phone.number)}</span>
                           </div>
                         </div>
                       </SelectItem>
@@ -879,7 +880,7 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
             {availablePhoneNumbers && availablePhoneNumbers.length === 1 && (
               <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded flex items-center gap-2">
                 <Phone className="w-4 h-4" />
-                <span>{availablePhoneNumbers[0].number}</span>
+                <span>{formatUsPhoneForDisplay(availablePhoneNumbers[0].number)}</span>
               </div>
             )}
             
