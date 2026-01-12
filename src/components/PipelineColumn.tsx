@@ -20,6 +20,8 @@ interface PipelineColumnProps {
     dateCreated: Date | string;
     statusChangedDate: Date | string;
     lastContactDate?: Date | string;
+    lastTouchedAt?: Date | string;
+    lastActivityAt?: Date | string;
     priceReduction: boolean;
     clearToClose: boolean;
     originalPrice?: number;

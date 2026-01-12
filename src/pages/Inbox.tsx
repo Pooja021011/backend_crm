@@ -2162,39 +2162,13 @@ const Inbox = () => {
                           </div>
                           
                           {/* Time + Task actions */}
-                          <div className="flex-shrink-0 flex items-center gap-2">
-                            <div className="text-sm text-gray-500">
-                              {message.time}
-                            </div>
-
-                            {message.type === 'task' && (
-                              <div className="flex items-center gap-1">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 px-2 text-xs"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    openTaskEdit(message);
-                                  }}
-                                >
-                                  <Pencil className="w-3 h-3 mr-1" />
-                                  Edit
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  className="h-7 px-2 text-xs bg-green-600 hover:bg-green-700"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    markTaskComplete(message);
-                                  }}
-                                >
-                                  <Check className="w-3 h-3 mr-1" />
-                                  Complete
-                                </Button>
+                          {message.type !== 'task' && (
+                            <div className="flex-shrink-0 flex items-center gap-2">
+                              <div className="text-sm text-gray-500">
+                                {message.time}
                               </div>
-                            )}
-                          </div>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>

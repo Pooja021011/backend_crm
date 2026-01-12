@@ -283,14 +283,15 @@ export const useTwilioDevice = () => {
 
     setIsInitializing(true);
     try {
-      // Get access token from backend
-      const response = await makeApiCall(`${API_BASE}/calls/token`);
-      
-      if (!response.ok) {
-        throw new Error('Failed to get access token');
-      }
+      const fetchTwilioToken = async () => {
+        const response = await makeApiCall(`${API_BASE}/calls/token`);
+        if (!response.ok) throw new Error('Failed to get access token');
+        const data = await response.json();
+        return data as { token: string; identity?: string };
+      };
 
-      const data = await response.json();
+      // Get access token from backend
+      const data = await fetchTwilioToken();
       const token = data.token;
       // Prefer the identity returned by backend (it may normalize emails to lowercase)
       lastIdentityRef.current = data.identity || currentIdentityKey || '';
@@ -340,8 +341,32 @@ export const useTwilioDevice = () => {
         setVoicePresence(true).catch(() => {});
       });
 
+      // Refresh token automatically before it expires
+      newDevice.on('tokenWillExpire', async () => {
+        try {
+          console.log('🔄 Twilio tokenWillExpire: refreshing token...');
+          const t = await fetchTwilioToken();
+          if (t?.token) {
+            newDevice.updateToken(t.token);
+            console.log('✅ Twilio token updated');
+          }
+        } catch (e) {
+          console.warn('⚠️ Failed to refresh Twilio token:', e);
+          // best-effort: next call attempt will re-init if needed
+        }
+      });
+
       newDevice.on('error', (error) => {
         console.error('Twilio Device error:', error);
+        // If token is invalid/expired, try refreshing token once
+        const msg = String((error as any)?.message || '').toLowerCase();
+        if (msg.includes('jwt') || msg.includes('token')) {
+          fetchTwilioToken()
+            .then((t) => {
+              if (t?.token) newDevice.updateToken(t.token);
+            })
+            .catch(() => {});
+        }
         toast({
           title: 'Device Error',
           description: error.message || 'Failed to initialize calling device',

@@ -343,11 +343,21 @@ export const pipelineController = {
       const userId = user?.id;
       const leadSourceId = (req.query.leadSourceId as string) || (req.query.sourceId as string);
       const assignedUserId = (req.query.assignedUserId as string) || undefined;
+      const dispAgentId = (req.query.dispAgentId as string) || undefined;
+      const createdFrom = (req.query.createdFrom as string) || undefined;
+      const createdTo = (req.query.createdTo as string) || undefined;
+      const lastTouchedFrom = (req.query.lastTouchedFrom as string) || undefined;
+      const lastTouchedTo = (req.query.lastTouchedTo as string) || undefined;
       
       const filters = {
         needsAttention: req.query.needsAttention === 'true',
         leadSourceId,
         assignedUserId,
+        dispAgentId,
+        createdFrom,
+        createdTo,
+        lastTouchedFrom,
+        lastTouchedTo,
         userRole: userRoles[0], // Primary role
         userId: userId
       };

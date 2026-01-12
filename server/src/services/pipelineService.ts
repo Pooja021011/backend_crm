@@ -6,6 +6,11 @@ export interface PipelineLeadFilters {
   needsAttention?: boolean;
   assignedUserId?: string;
   leadSourceId?: string;
+  dispAgentId?: string;
+  createdFrom?: string;
+  createdTo?: string;
+  lastTouchedFrom?: string;
+  lastTouchedTo?: string;
   userRole?: string;
   userId?: string;
 }
@@ -382,6 +387,9 @@ export const pipelineService = {
    */
   async getPipelineLeads(pipelineKey: string, filters: PipelineLeadFilters = {}) {
     try {
+      const parseRangeStart = (v?: string) => (v ? new Date(v.length <= 10 ? `${v}T00:00:00.000Z` : v) : undefined);
+      const parseRangeEnd = (v?: string) => (v ? new Date(v.length <= 10 ? `${v}T23:59:59.999Z` : v) : undefined);
+
       const pipeline = await prisma.pipelineDefinition.findUnique({
         where: { key: pipelineKey as any },
         select: { id: true }
@@ -420,8 +428,26 @@ export const pipelineService = {
         whereClause.assignedUserId = filters.assignedUserId;
       }
 
+      if (filters.dispAgentId) {
+        whereClause.dispAgentId = filters.dispAgentId;
+      }
+
       if (filters.leadSourceId) {
         whereClause.leadSourceId = filters.leadSourceId;
+      }
+
+      if (filters.createdFrom || filters.createdTo) {
+        whereClause.createdAt = {
+          ...(filters.createdFrom ? { gte: parseRangeStart(filters.createdFrom) } : {}),
+          ...(filters.createdTo ? { lte: parseRangeEnd(filters.createdTo) } : {}),
+        };
+      }
+
+      if (filters.lastTouchedFrom || filters.lastTouchedTo) {
+        whereClause.lastContactAt = {
+          ...(filters.lastTouchedFrom ? { gte: parseRangeStart(filters.lastTouchedFrom) } : {}),
+          ...(filters.lastTouchedTo ? { lte: parseRangeEnd(filters.lastTouchedTo) } : {}),
+        };
       }
 
       if (filters.needsAttention) {
@@ -452,14 +478,15 @@ export const pipelineService = {
             }
           },
           communications: {
-            orderBy: { createdAt: 'desc' },
-            take: 5, // Get recent communications for counting
+            orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }],
+            take: 10, // Get recent communications for last touched/activity + counts
             select: {
               id: true,
               type: true,
               direction: true,
               createdAt: true,
-              occurredAt: true
+              occurredAt: true,
+              metadata: true
             }
           },
           leadBuyers: {
@@ -509,7 +536,19 @@ export const pipelineService = {
           )
         );
 
-        const lastContact = lastCommAt || lead.createdAt;
+        const contactComms = lead.communications.filter((c: any) => {
+          const t = String(c.type || '').toUpperCase();
+          if (!['CALL', 'SMS', 'EMAIL'].includes(t)) return false;
+          if (t === 'CALL') {
+            const status = String((c.metadata as any)?.status || '').toLowerCase();
+            if (status === 'missed' || status === 'ringing') return false;
+          }
+          return true;
+        });
+        const lastTouchedCommAt = contactComms[0]?.occurredAt || contactComms[0]?.createdAt;
+        const lastTouchedAt = lead.lastContactAt || lastTouchedCommAt || lead.createdAt;
+
+        const lastContact = lastTouchedAt;
         const now = new Date();
         
         // Calculate time in current status
@@ -533,6 +572,7 @@ export const pipelineService = {
           dateCreated: lead.createdAt,
           statusChangedDate: lead.updatedAt,
           lastContactDate: lastContact,
+          lastTouchedAt: lastTouchedAt,
           lastActivityAt: lastActivityAt,
           timeInCurrentStatus: timeInCurrentStatus,
           timeInCurrentStatusText: timeInCurrentStatus === 1 ? '1 day' : `${timeInCurrentStatus} days`,

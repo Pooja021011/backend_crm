@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { callService } from '../services/callService.js';
 import { logger } from '../config/logger.js';
+import { env } from '../config/env.js';
 import { communicationRepository } from '../repositories/communicationRepository.js';
 import { communicationResponseService } from '../services/communicationResponseService.js';
 import { prisma } from '../config/db.js';
@@ -128,7 +129,7 @@ export const callController = {
       const identity = normalizeTwilioIdentity(userEmail || userId);
       const token = new AccessToken(accountSid, apiKey, apiSecret, {
         identity,
-        ttl: 3600 // 1 hour
+        ttl: Math.min(Math.max(env.TWILIO_CLIENT_TTL_SECONDS || 3600, 300), 86400) // 5m..24h
       });
 
       console.log('🔑 GENERATING TWILIO TOKEN:', {

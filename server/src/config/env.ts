@@ -11,6 +11,9 @@ export const env = {
   // Twilio Configuration
   TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID || '',
   TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN || '',
+  // Twilio client token TTL (seconds). Used by /calls/token for browser calling.
+  // Default: 8 hours. Keep <= 24h for safety.
+  TWILIO_CLIENT_TTL_SECONDS: Number(process.env.TWILIO_CLIENT_TTL_SECONDS || 28800),
   // Public base URL used for external callbacks (Twilio webhooks, etc.). Should be your HTTPS domain.
   // Example: https://realestate.withai.agency
   PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL || '',

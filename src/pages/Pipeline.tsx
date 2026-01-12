@@ -16,9 +16,13 @@ import {
   Users, 
   AlertTriangle,
   Workflow,
-  Loader2
+  Loader2,
+  Filter
 } from "lucide-react";
-import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCenter } from "@dnd-kit/core";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, closestCenter, useSensor, useSensors } from "@dnd-kit/core";
 import { snapCenterToCursor } from "@dnd-kit/modifiers";
 import { differenceInHours, isToday, addDays } from "date-fns";
 import { API_BASE, makeApiCall } from "@/config/api";
@@ -45,6 +49,18 @@ const Pipeline = () => {
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [needsAttentionCount, setNeedsAttentionCount] = useState(0);
+
+  // Admin/Manager filters (applied to pipeline)
+  const isAdminOrManager = user?.roles?.includes('ADMIN') || user?.roles?.includes('MANAGER');
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [agents, setAgents] = useState<any[]>([]);
+
+  const [createdFrom, setCreatedFrom] = useState<string>('');
+  const [createdTo, setCreatedTo] = useState<string>('');
+  const [lastTouchedFrom, setLastTouchedFrom] = useState<string>('');
+  const [lastTouchedTo, setLastTouchedTo] = useState<string>('');
+  const [filterAcqAgentId, setFilterAcqAgentId] = useState<string>('all');
+  const [filterDispAgentId, setFilterDispAgentId] = useState<string>('all');
   
   // ViewLeadDialog state
   const [selectedLead, setSelectedLead] = useState<any>(null);
@@ -60,6 +76,16 @@ const Pipeline = () => {
     stageName: string;
     leadToMove: any;
   } | null>(null);
+
+  // Drag behavior: long-press to drag (so click opens lead reliably)
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        delay: 150,
+        tolerance: 4,
+      },
+    })
+  );
 
   // Sample data - replace with API calls
   const sampleStages = [
@@ -205,6 +231,9 @@ const Pipeline = () => {
     const initializePipeline = async () => {
       const accessData = await loadPipelineAccess(); // Wait for access to load first
       loadLeadSources();
+      if (isAdminOrManager) {
+        loadAgents();
+      }
       // Pass the pipeline key directly to avoid state timing issues
       if (accessData?.allowedPipelines?.[0]) {
         loadPipelineData(accessData.allowedPipelines[0]);
@@ -218,7 +247,7 @@ const Pipeline = () => {
     if (pipelineAccess) {
       loadPipelineData();
     }
-  }, [transactionPipelineView, needsAttentionView, selectedLeadSource, currentPipeline, pipelineAccess]);
+  }, [transactionPipelineView, needsAttentionView, selectedLeadSource, currentPipeline, pipelineAccess, createdFrom, createdTo, lastTouchedFrom, lastTouchedTo, filterAcqAgentId, filterDispAgentId]);
 
   const loadPipelineAccess = async () => {
     try {
@@ -257,6 +286,18 @@ const Pipeline = () => {
       }
     } catch (error) {
       console.error('Failed to load lead sources:', error);
+    }
+  };
+
+  const loadAgents = async () => {
+    try {
+      const response = await makeApiCall(`${API_BASE}/agents`);
+      if (response.ok) {
+        const data = await response.json();
+        setAgents(data.data || []);
+      }
+    } catch (error) {
+      console.error('Failed to load agents:', error);
     }
   };
 
@@ -368,6 +409,16 @@ const Pipeline = () => {
         filters.append('leadSourceId', selectedLeadSource);
       }
 
+      // Admin/Manager filters
+      if (isAdminOrManager) {
+        if (createdFrom) filters.append('createdFrom', createdFrom);
+        if (createdTo) filters.append('createdTo', createdTo);
+        if (lastTouchedFrom) filters.append('lastTouchedFrom', lastTouchedFrom);
+        if (lastTouchedTo) filters.append('lastTouchedTo', lastTouchedTo);
+        if (filterAcqAgentId && filterAcqAgentId !== 'all') filters.append('assignedUserId', filterAcqAgentId);
+        if (filterDispAgentId && filterDispAgentId !== 'all') filters.append('dispAgentId', filterDispAgentId);
+      }
+
       // Load leads based on role
       let leadsResponse;
       let allLeadsData: any[] = [];
@@ -453,6 +504,7 @@ const Pipeline = () => {
             dateCreated: lead.createdAt,
             statusChangedDate: lead.stageEnteredAt || lead.updatedAt,
             lastContactDate: lead.lastContactAt || lead.updatedAt,
+            lastTouchedAt: lead.lastTouchedAt || lead.lastContactAt || lead.updatedAt,
             lastActivityAt: lead.lastActivityAt || lead.updatedAt,
             priceReduction: lead.priceReduction || false,
             clearToClose: lead.clearToClose || false,
@@ -729,6 +781,102 @@ const Pipeline = () => {
         
         <div className="flex items-center gap-4">
           {/* Role-based controls */}
+          {isAdminOrManager && (
+            <>
+              <Button
+                variant="outline"
+                className="h-8"
+                onClick={() => setIsFilterOpen(true)}
+              >
+                <Filter className="h-4 w-4 mr-2" />
+                Filters
+              </Button>
+              <Dialog open={isFilterOpen} onOpenChange={setIsFilterOpen}>
+                <DialogContent className="max-w-lg">
+                  <DialogHeader>
+                    <DialogTitle>Pipeline Filters</DialogTitle>
+                  </DialogHeader>
+
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label>Lead created (from)</Label>
+                        <Input type="date" value={createdFrom} onChange={(e) => setCreatedFrom(e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label>Lead created (to)</Label>
+                        <Input type="date" value={createdTo} onChange={(e) => setCreatedTo(e.target.value)} />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label>Last touched (from)</Label>
+                        <Input type="date" value={lastTouchedFrom} onChange={(e) => setLastTouchedFrom(e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label>Last touched (to)</Label>
+                        <Input type="date" value={lastTouchedTo} onChange={(e) => setLastTouchedTo(e.target.value)} />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label>Acquisitions agent</Label>
+                        <select
+                          value={filterAcqAgentId}
+                          onChange={(e) => setFilterAcqAgentId(e.target.value)}
+                          className="w-full px-3 py-2 border rounded-md text-sm"
+                        >
+                          <option value="all">All</option>
+                          {agents.map((a: any) => (
+                            <option key={a.id} value={a.id}>
+                              {a.firstName} {a.lastName}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label>Dispositions agent</Label>
+                        <select
+                          value={filterDispAgentId}
+                          onChange={(e) => setFilterDispAgentId(e.target.value)}
+                          className="w-full px-3 py-2 border rounded-md text-sm"
+                        >
+                          <option value="all">All</option>
+                          {agents.map((a: any) => (
+                            <option key={a.id} value={a.id}>
+                              {a.firstName} {a.lastName}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <DialogFooter className="gap-2 sm:gap-0">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setCreatedFrom('');
+                        setCreatedTo('');
+                        setLastTouchedFrom('');
+                        setLastTouchedTo('');
+                        setFilterAcqAgentId('all');
+                        setFilterDispAgentId('all');
+                      }}
+                    >
+                      Clear
+                    </Button>
+                    <Button type="button" onClick={() => setIsFilterOpen(false)}>
+                      Apply
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </>
+          )}
           {pipelineAccess?.availableToggles?.includes('TRANSACTION_PIPELINE') && (
             <div className="flex items-center space-x-2">
             <Switch
@@ -777,6 +925,7 @@ const Pipeline = () => {
       {/* Drag and Drop Pipeline */}
         <DndContext
           collisionDetection={closestCenter}
+          sensors={sensors}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         modifiers={[snapCenterToCursor]}
