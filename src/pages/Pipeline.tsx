@@ -55,12 +55,21 @@ const Pipeline = () => {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [agents, setAgents] = useState<any[]>([]);
 
-  const [createdFrom, setCreatedFrom] = useState<string>('');
-  const [createdTo, setCreatedTo] = useState<string>('');
-  const [lastTouchedFrom, setLastTouchedFrom] = useState<string>('');
-  const [lastTouchedTo, setLastTouchedTo] = useState<string>('');
-  const [filterAcqAgentId, setFilterAcqAgentId] = useState<string>('all');
-  const [filterDispAgentId, setFilterDispAgentId] = useState<string>('all');
+  // Applied filters (used in API calls and useEffect)
+  const [appliedCreatedFrom, setAppliedCreatedFrom] = useState<string>('');
+  const [appliedCreatedTo, setAppliedCreatedTo] = useState<string>('');
+  const [appliedLastTouchedFrom, setAppliedLastTouchedFrom] = useState<string>('');
+  const [appliedLastTouchedTo, setAppliedLastTouchedTo] = useState<string>('');
+  const [appliedAcqAgentId, setAppliedAcqAgentId] = useState<string>('all');
+  const [appliedDispAgentId, setAppliedDispAgentId] = useState<string>('all');
+
+  // Draft filters (temporary, used in dialog before applying)
+  const [draftCreatedFrom, setDraftCreatedFrom] = useState<string>('');
+  const [draftCreatedTo, setDraftCreatedTo] = useState<string>('');
+  const [draftLastTouchedFrom, setDraftLastTouchedFrom] = useState<string>('');
+  const [draftLastTouchedTo, setDraftLastTouchedTo] = useState<string>('');
+  const [draftAcqAgentId, setDraftAcqAgentId] = useState<string>('all');
+  const [draftDispAgentId, setDraftDispAgentId] = useState<string>('all');
   
   // ViewLeadDialog state
   const [selectedLead, setSelectedLead] = useState<any>(null);
@@ -247,7 +256,19 @@ const Pipeline = () => {
     if (pipelineAccess) {
       loadPipelineData();
     }
-  }, [transactionPipelineView, needsAttentionView, selectedLeadSource, currentPipeline, pipelineAccess, createdFrom, createdTo, lastTouchedFrom, lastTouchedTo, filterAcqAgentId, filterDispAgentId]);
+  }, [transactionPipelineView, needsAttentionView, selectedLeadSource, currentPipeline, pipelineAccess, appliedCreatedFrom, appliedCreatedTo, appliedLastTouchedFrom, appliedLastTouchedTo, appliedAcqAgentId, appliedDispAgentId]);
+
+  // Sync draft values from applied values when dialog opens
+  useEffect(() => {
+    if (isFilterOpen) {
+      setDraftCreatedFrom(appliedCreatedFrom);
+      setDraftCreatedTo(appliedCreatedTo);
+      setDraftLastTouchedFrom(appliedLastTouchedFrom);
+      setDraftLastTouchedTo(appliedLastTouchedTo);
+      setDraftAcqAgentId(appliedAcqAgentId);
+      setDraftDispAgentId(appliedDispAgentId);
+    }
+  }, [isFilterOpen, appliedCreatedFrom, appliedCreatedTo, appliedLastTouchedFrom, appliedLastTouchedTo, appliedAcqAgentId, appliedDispAgentId]);
 
   const loadPipelineAccess = async () => {
     try {
@@ -411,12 +432,12 @@ const Pipeline = () => {
 
       // Admin/Manager filters
       if (isAdminOrManager) {
-        if (createdFrom) filters.append('createdFrom', createdFrom);
-        if (createdTo) filters.append('createdTo', createdTo);
-        if (lastTouchedFrom) filters.append('lastTouchedFrom', lastTouchedFrom);
-        if (lastTouchedTo) filters.append('lastTouchedTo', lastTouchedTo);
-        if (filterAcqAgentId && filterAcqAgentId !== 'all') filters.append('assignedUserId', filterAcqAgentId);
-        if (filterDispAgentId && filterDispAgentId !== 'all') filters.append('dispAgentId', filterDispAgentId);
+        if (appliedCreatedFrom) filters.append('createdFrom', appliedCreatedFrom);
+        if (appliedCreatedTo) filters.append('createdTo', appliedCreatedTo);
+        if (appliedLastTouchedFrom) filters.append('lastTouchedFrom', appliedLastTouchedFrom);
+        if (appliedLastTouchedTo) filters.append('lastTouchedTo', appliedLastTouchedTo);
+        if (appliedAcqAgentId && appliedAcqAgentId !== 'all') filters.append('assignedUserId', appliedAcqAgentId);
+        if (appliedDispAgentId && appliedDispAgentId !== 'all') filters.append('dispAgentId', appliedDispAgentId);
       }
 
       // Load leads based on role
@@ -801,22 +822,22 @@ const Pipeline = () => {
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
                         <Label>Lead created (from)</Label>
-                        <Input type="date" value={createdFrom} onChange={(e) => setCreatedFrom(e.target.value)} />
+                        <Input type="date" value={draftCreatedFrom} onChange={(e) => setDraftCreatedFrom(e.target.value)} />
                       </div>
                       <div className="space-y-1">
                         <Label>Lead created (to)</Label>
-                        <Input type="date" value={createdTo} onChange={(e) => setCreatedTo(e.target.value)} />
+                        <Input type="date" value={draftCreatedTo} onChange={(e) => setDraftCreatedTo(e.target.value)} />
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
                         <Label>Last touched (from)</Label>
-                        <Input type="date" value={lastTouchedFrom} onChange={(e) => setLastTouchedFrom(e.target.value)} />
+                        <Input type="date" value={draftLastTouchedFrom} onChange={(e) => setDraftLastTouchedFrom(e.target.value)} />
                       </div>
                       <div className="space-y-1">
                         <Label>Last touched (to)</Label>
-                        <Input type="date" value={lastTouchedTo} onChange={(e) => setLastTouchedTo(e.target.value)} />
+                        <Input type="date" value={draftLastTouchedTo} onChange={(e) => setDraftLastTouchedTo(e.target.value)} />
                       </div>
                     </div>
 
@@ -824,8 +845,8 @@ const Pipeline = () => {
                       <div className="space-y-1">
                         <Label>Acquisitions agent</Label>
                         <select
-                          value={filterAcqAgentId}
-                          onChange={(e) => setFilterAcqAgentId(e.target.value)}
+                          value={draftAcqAgentId}
+                          onChange={(e) => setDraftAcqAgentId(e.target.value)}
                           className="w-full px-3 py-2 border rounded-md text-sm"
                         >
                           <option value="all">All</option>
@@ -839,8 +860,8 @@ const Pipeline = () => {
                       <div className="space-y-1">
                         <Label>Dispositions agent</Label>
                         <select
-                          value={filterDispAgentId}
-                          onChange={(e) => setFilterDispAgentId(e.target.value)}
+                          value={draftDispAgentId}
+                          onChange={(e) => setDraftDispAgentId(e.target.value)}
                           className="w-full px-3 py-2 border rounded-md text-sm"
                         >
                           <option value="all">All</option>
@@ -859,17 +880,37 @@ const Pipeline = () => {
                       type="button"
                       variant="outline"
                       onClick={() => {
-                        setCreatedFrom('');
-                        setCreatedTo('');
-                        setLastTouchedFrom('');
-                        setLastTouchedTo('');
-                        setFilterAcqAgentId('all');
-                        setFilterDispAgentId('all');
+                        // Clear draft states
+                        setDraftCreatedFrom('');
+                        setDraftCreatedTo('');
+                        setDraftLastTouchedFrom('');
+                        setDraftLastTouchedTo('');
+                        setDraftAcqAgentId('all');
+                        setDraftDispAgentId('all');
+                        
+                        // Clear applied states (this will trigger useEffect and reload with no filters)
+                        setAppliedCreatedFrom('');
+                        setAppliedCreatedTo('');
+                        setAppliedLastTouchedFrom('');
+                        setAppliedLastTouchedTo('');
+                        setAppliedAcqAgentId('all');
+                        setAppliedDispAgentId('all');
                       }}
                     >
                       Clear
                     </Button>
-                    <Button type="button" onClick={() => setIsFilterOpen(false)}>
+                    <Button type="button" onClick={() => {
+                      // Copy draft values to applied values (this will trigger useEffect and reload data)
+                      setAppliedCreatedFrom(draftCreatedFrom);
+                      setAppliedCreatedTo(draftCreatedTo);
+                      setAppliedLastTouchedFrom(draftLastTouchedFrom);
+                      setAppliedLastTouchedTo(draftLastTouchedTo);
+                      setAppliedAcqAgentId(draftAcqAgentId);
+                      setAppliedDispAgentId(draftDispAgentId);
+                      
+                      // Close the dialog
+                      setIsFilterOpen(false);
+                    }}>
                       Apply
                     </Button>
                   </DialogFooter>
