@@ -256,6 +256,18 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
 
     const direction = item.direction ? String(item.direction).toUpperCase() : 'UNKNOWN';
     const meta = (item as any)?.metadata || {};
+    
+    // Debug logging
+    if (item.type === 'CALL' && direction === 'OUTBOUND') {
+      console.log('🔍 OUTBOUND CALL metadata:', {
+        hasMetadata: !!item.metadata,
+        metadata: item.metadata,
+        from: meta?.from,
+        to: meta?.to,
+        fullItem: item
+      });
+    }
+    
     const fromVal = meta?.from ?? 'Unknown';
     const toValRaw = meta?.to ?? 'Unknown';
     const toVal =
