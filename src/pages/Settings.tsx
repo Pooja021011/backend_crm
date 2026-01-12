@@ -1220,6 +1220,26 @@ const Settings = () => {
                       {/* IMAP Server Configuration */}
                       <div className="space-y-6">
                         <h4 className="text-lg font-medium text-foreground mb-4">IMAP Server Configuration</h4>
+                        {/* Info box for App Password */}
+                        <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg mb-4">
+                          <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                          <div className="space-y-2 text-sm">
+                            <p className="text-blue-900 font-medium">Gmail App Password Required</p>
+                            <p className="text-blue-800">
+                              To connect Gmail, you need a <strong>16-character App Password</strong> (not your regular Gmail password).
+                            </p>
+                            <div className="space-y-1 text-blue-700">
+                              <p>Steps to generate:</p>
+                              <ol className="list-decimal list-inside space-y-1 ml-2">
+                                <li>Enable 2-Factor Authentication on your Google account</li>
+                                <li>Visit: <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer" className="underline font-medium hover:text-blue-900">myaccount.google.com/apppasswords</a></li>
+                                <li>Generate a new App Password for "Mail"</li>
+                                <li>Copy the 16-character password and paste it below</li>
+                              </ol>
+                            </div>
+                          </div>
+                        </div>
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="space-y-2">
                             <Label htmlFor="imapHost">IMAP Host</Label>
@@ -1251,11 +1271,14 @@ const Settings = () => {
                             />
                           </div>
                           <div className="space-y-2">
-                            <Label htmlFor="imapPass">App Password (IMAP Password)</Label>
+                            <Label htmlFor="imapPass" className="flex items-center gap-2">
+                              App Password (IMAP Password)
+                              <span className="text-xs text-muted-foreground font-normal">(16 characters)</span>
+                            </Label>
                             <Input
                               id="imapPass"
                               type="password"
-                              placeholder="Your Gmail App Password"
+                              placeholder="xxxx xxxx xxxx xxxx"
                               value={emailSettings?.imapPass || ''}
                               onChange={(e) => setEmailSettings(s => s ? { ...s, imapPass: e.target.value } : s)}
                             />
