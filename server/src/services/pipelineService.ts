@@ -429,6 +429,7 @@ export const pipelineService = {
       }
 
       if (filters.dispAgentId) {
+        console.log('🔍 Applying DISP agent filter in backend:', filters.dispAgentId);
         whereClause.dispAgentId = filters.dispAgentId;
       }
 

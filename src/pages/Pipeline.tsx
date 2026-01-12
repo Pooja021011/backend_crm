@@ -437,8 +437,13 @@ const Pipeline = () => {
         if (appliedLastTouchedFrom) filters.append('lastTouchedFrom', appliedLastTouchedFrom);
         if (appliedLastTouchedTo) filters.append('lastTouchedTo', appliedLastTouchedTo);
         if (appliedAcqAgentId && appliedAcqAgentId !== 'all') filters.append('assignedUserId', appliedAcqAgentId);
-        if (appliedDispAgentId && appliedDispAgentId !== 'all') filters.append('dispAgentId', appliedDispAgentId);
+        if (appliedDispAgentId && appliedDispAgentId !== 'all') {
+          console.log('🔍 Applying DISP agent filter:', appliedDispAgentId);
+          filters.append('dispAgentId', appliedDispAgentId);
+        }
       }
+      
+      console.log('📊 Final filter params:', filters.toString());
 
       // Load leads based on role
       let leadsResponse;
