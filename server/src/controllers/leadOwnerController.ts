@@ -32,19 +32,28 @@ export const leadOwnerController = {
       const { leadId } = req.params;
       const { firstName, lastName, phone, email, isPrimary } = req.body;
 
-      if (!firstName || !lastName || !phone || !email) {
+      const payload = {
+        firstName: String(firstName || '').trim(),
+        lastName: String(lastName || '').trim(),
+        phone: String(phone || '').trim(),
+        email: String(email || '').trim(),
+        isPrimary: Boolean(isPrimary),
+      };
+
+      // All fields optional, but don't create a completely blank owner row
+      if (!payload.firstName && !payload.lastName && !payload.phone && !payload.email) {
         return res.status(400).json({
           success: false,
-          error: 'Missing required fields: firstName, lastName, phone, email'
+          error: 'At least one field is required (firstName, lastName, phone, email)'
         });
       }
 
       const owner = await leadOwnerService.addOwner(leadId, {
-        firstName,
-        lastName,
-        phone,
-        email,
-        isPrimary
+        firstName: payload.firstName,
+        lastName: payload.lastName,
+        phone: payload.phone,
+        email: payload.email,
+        isPrimary: payload.isPrimary
       });
 
       res.status(201).json({

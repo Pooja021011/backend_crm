@@ -85,10 +85,18 @@ export const LeadOwnerSection = forwardRef<LeadOwnerSectionRef, LeadOwnerSection
   };
 
   const handleAddOwner = async () => {
-    if (!newOwner.firstName || !newOwner.lastName || !newOwner.phone || !newOwner.email) {
+    const payload = {
+      firstName: (newOwner.firstName || '').trim(),
+      lastName: (newOwner.lastName || '').trim(),
+      phone: (newOwner.phone || '').trim(),
+      email: (newOwner.email || '').trim(),
+    };
+
+    // All fields optional, but don't create a completely blank owner row
+    if (!payload.firstName && !payload.lastName && !payload.phone && !payload.email) {
       toast({
         title: 'Validation Error',
-        description: 'Please fill in all fields',
+        description: 'Please enter at least one field',
         variant: 'destructive'
       });
       return;
@@ -102,7 +110,7 @@ export const LeadOwnerSection = forwardRef<LeadOwnerSectionRef, LeadOwnerSection
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(newOwner)
+        body: JSON.stringify(payload)
       });
 
       if (response.ok) {
@@ -203,10 +211,18 @@ export const LeadOwnerSection = forwardRef<LeadOwnerSectionRef, LeadOwnerSection
   };
 
   const handleUpdateOwner = async (ownerId: string) => {
-    if (!editOwner.firstName || !editOwner.lastName || !editOwner.phone || !editOwner.email) {
+    const payload = {
+      firstName: (editOwner.firstName || '').trim(),
+      lastName: (editOwner.lastName || '').trim(),
+      phone: (editOwner.phone || '').trim(),
+      email: (editOwner.email || '').trim(),
+    };
+
+    // Allow partial updates, but prevent saving a completely blank owner row.
+    if (!payload.firstName && !payload.lastName && !payload.phone && !payload.email) {
       toast({
         title: 'Validation Error',
-        description: 'Please fill in all fields',
+        description: 'Please enter at least one field (or delete the owner)',
         variant: 'destructive'
       });
       return;
@@ -220,7 +236,7 @@ export const LeadOwnerSection = forwardRef<LeadOwnerSectionRef, LeadOwnerSection
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(editOwner)
+        body: JSON.stringify(payload)
       });
 
       if (response.ok) {

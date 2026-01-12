@@ -18,17 +18,32 @@ export const leadOwnerService = {
    * Add a new owner
    */
   async addOwner(leadId: string, ownerData: {
-    firstName: string;
-    lastName: string;
-    phone: string;
-    email: string;
+    firstName?: string;
+    lastName?: string;
+    phone?: string;
+    email?: string;
     isPrimary?: boolean;
   }) {
     try {
-      // Validate email format
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(ownerData.email)) {
-        throw new Error('Invalid email format');
+      const normalized = {
+        firstName: String(ownerData.firstName || '').trim(),
+        lastName: String(ownerData.lastName || '').trim(),
+        phone: String(ownerData.phone || '').trim(),
+        email: String(ownerData.email || '').trim(),
+        isPrimary: ownerData.isPrimary,
+      };
+
+      // All fields optional, but don't create a completely blank owner row
+      if (!normalized.firstName && !normalized.lastName && !normalized.phone && !normalized.email) {
+        throw new Error('At least one owner field is required');
+      }
+
+      // Validate email format only if provided
+      if (normalized.email) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(normalized.email)) {
+          throw new Error('Invalid email format');
+        }
       }
 
       // Get current owners count for order
@@ -36,11 +51,14 @@ export const leadOwnerService = {
       const order = existingOwners.length;
 
       // If no owners exist, make this one primary
-      const isPrimary = existingOwners.length === 0 ? true : (ownerData.isPrimary || false);
+      const isPrimary = existingOwners.length === 0 ? true : (normalized.isPrimary || false);
 
       return await leadOwnerRepository.create({
         leadId,
-        ...ownerData,
+        firstName: normalized.firstName,
+        lastName: normalized.lastName,
+        phone: normalized.phone,
+        email: normalized.email,
         isPrimary,
         order
       });
