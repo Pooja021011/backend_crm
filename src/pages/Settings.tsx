@@ -936,10 +936,18 @@ const Settings = () => {
             throw new Error(saveResult.error || 'Failed to save Gmail connection');
           }
         } else {
-          throw new Error(result.error || 'IMAP connection failed');
+          // IMAP test failed - show specific error
+          const errorMsg = result.error || 'IMAP connection failed';
+          toast({
+            title: "Cannot Connect Gmail",
+            description: `IMAP credentials are invalid. ${errorMsg}. Please verify your App Password and try again.`,
+            variant: "destructive",
+          });
+          return; // Exit early, don't throw to avoid duplicate error toast
         }
       }
     } catch (error: any) {
+      // Only show this for unexpected errors (not IMAP validation failure)
       toast({
         title: "Gmail Connection Failed",
         description: error.message || "Failed to connect Gmail account. Please check your IMAP settings.",
