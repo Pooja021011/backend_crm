@@ -53,7 +53,8 @@ const Pipeline = () => {
   // Admin/Manager filters (applied to pipeline)
   const isAdminOrManager = user?.roles?.includes('ADMIN') || user?.roles?.includes('MANAGER');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [agents, setAgents] = useState<any[]>([]);
+  const [acqAgents, setAcqAgents] = useState<any[]>([]);
+  const [dispAgents, setDispAgents] = useState<any[]>([]);
 
   // Applied filters (used in API calls and useEffect)
   const [appliedCreatedFrom, setAppliedCreatedFrom] = useState<string>('');
@@ -312,10 +313,23 @@ const Pipeline = () => {
 
   const loadAgents = async () => {
     try {
-      const response = await makeApiCall(`${API_BASE}/agents`);
-      if (response.ok) {
-        const data = await response.json();
-        setAgents(data.data || []);
+      // Load ACQ agents
+      const acqResponse = await makeApiCall(`${API_BASE}/agents`);
+      if (acqResponse.ok) {
+        const acqData = await acqResponse.json();
+        setAcqAgents(acqData.data || []);
+      }
+
+      // Load all users and filter for DISP role
+      const usersResponse = await makeApiCall(`${API_BASE}/users`);
+      if (usersResponse.ok) {
+        const usersData = await usersResponse.json();
+        const users = usersData.data || [];
+        // Filter users who have DISP or MANAGER role (managers can be DISP agents)
+        const dispUsers = users.filter((u: any) => 
+          u.roles?.some((r: any) => r.role?.name === 'DISP' || r.role?.name === 'MANAGER')
+        );
+        setDispAgents(dispUsers);
       }
     } catch (error) {
       console.error('Failed to load agents:', error);
@@ -855,7 +869,7 @@ const Pipeline = () => {
                           className="w-full px-3 py-2 border rounded-md text-sm"
                         >
                           <option value="all">All</option>
-                          {agents.map((a: any) => (
+                          {acqAgents.map((a: any) => (
                             <option key={a.id} value={a.id}>
                               {a.firstName} {a.lastName}
                             </option>
@@ -870,7 +884,7 @@ const Pipeline = () => {
                           className="w-full px-3 py-2 border rounded-md text-sm"
                         >
                           <option value="all">All</option>
-                          {agents.map((a: any) => (
+                          {dispAgents.map((a: any) => (
                             <option key={a.id} value={a.id}>
                               {a.firstName} {a.lastName}
                             </option>

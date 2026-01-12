@@ -455,6 +455,8 @@ export const pipelineService = {
         whereClause.needsAttention = true;
       }
 
+      console.log('🔍 Final whereClause:', JSON.stringify(whereClause, null, 2));
+
       const leads = await prisma.lead.findMany({
         where: whereClause,
         include: {
@@ -472,6 +474,13 @@ export const pipelineService = {
             }
           },
           assignedUser: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true
+            }
+          },
+          dispAgent: {
             select: {
               id: true,
               firstName: true,
@@ -519,6 +528,16 @@ export const pipelineService = {
           { id: 'asc' },
         ]
       });
+
+      console.log(`🔍 Query returned ${leads.length} leads`);
+      if (filters.dispAgentId) {
+        const leadsWithDisp = leads.filter(l => l.dispAgentId);
+        console.log(`🔍 Leads with dispAgentId set: ${leadsWithDisp.length}`, leadsWithDisp.map(l => ({
+          id: l.id,
+          dispAgentId: l.dispAgentId,
+          dispAgent: l.dispAgent?.firstName + ' ' + l.dispAgent?.lastName
+        })));
+      }
 
       const stageOrderIndexByLeadId = new Map<string, number>();
       for (const lead of leads) {
