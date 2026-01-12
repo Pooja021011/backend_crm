@@ -722,14 +722,14 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
 
                 {/* Voicemail / Call recording playback (CALL only) */}
                 {item.type === 'CALL' && (item as any)?.metadata?.recordingSid && (
-                  <div className="mt-1.5 rounded border border-slate-200 bg-white p-1.5">
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <div className="text-xs text-slate-600">
+                  <div className="mt-1 rounded border border-slate-200 bg-white px-2 py-1">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <div className="text-[10px] text-slate-600">
                         <span className="font-semibold">
-                          {(item as any)?.metadata?.isVoicemail ? 'Voicemail' : 'Call recording'}
+                          {(item as any)?.metadata?.isVoicemail ? 'Voicemail' : 'Recording'}
                         </span>
                         {Number((item as any)?.metadata?.recordingDuration || 0) ? (
-                          <span className="ml-2">({Number((item as any)?.metadata?.recordingDuration || 0)}s)</span>
+                          <span className="ml-1">({Number((item as any)?.metadata?.recordingDuration || 0)}s)</span>
                         ) : null}
                       </div>
                       {recordingLoading[(item as any)?.metadata?.recordingSid] && (
@@ -739,7 +739,7 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
 
                     {recordingUrls[(item as any)?.metadata?.recordingSid] && (
                       <audio
-                        className="w-full"
+                        className="w-full h-7"
                         controls
                         src={recordingUrls[(item as any)?.metadata?.recordingSid]}
                       />
