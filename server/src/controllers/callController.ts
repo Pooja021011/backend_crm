@@ -429,18 +429,32 @@ export const callController = {
     const recordingSid = String(req.params.recordingSid || '');
     if (!recordingSid) return res.status(400).json({ error: 'recordingSid required' });
 
-    const isPrivileged = roles.includes('ADMIN') || roles.includes('MANAGER') || roles.includes('TC') || roles.includes('EXECUTIVE');
-
     // Ensure the user is allowed to access this recording based on the Communication/Lead ownership
     const comm = await prisma.communication.findFirst({
       where: { metadata: { path: ['recordingSid'], equals: recordingSid } },
-      include: { lead: { select: { assignedUserId: true, createdById: true } } },
+      include: {
+        lead: {
+          select: {
+            assignedUserId: true,
+            createdById: true,
+            pipelineStage: {
+              select: {
+                pipeline: { select: { key: true } },
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!comm) return res.status(404).json({ error: 'Recording not found' });
 
+    const leadPipelineKey = (comm as any)?.lead?.pipelineStage?.pipeline?.key as string | undefined;
+    const isAcqPrivileged =
+      (roles.includes('ADMIN') || roles.includes('MANAGER')) && leadPipelineKey === 'ACQUISITIONS';
+
     if (
-      !isPrivileged &&
+      !isAcqPrivileged &&
       comm.createdById !== userId &&
       comm.lead?.assignedUserId !== userId &&
       comm.lead?.createdById !== userId

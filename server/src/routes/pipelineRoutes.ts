@@ -25,6 +25,9 @@ router.get('/:pipelineKey/needs-attention', pipelineController.getNeedsAttention
 // Get pipeline access for current user
 router.get('/access', pipelineController.getPipelineAccess);
 
+// Get previous/next lead IDs for navigation (used when LeadEdit is opened without Pipeline context)
+router.get('/nav', pipelineController.getPipelineLeadNav);
+
 // Update needs attention status
 router.post('/update-attention', pipelineController.updateNeedsAttention);
 

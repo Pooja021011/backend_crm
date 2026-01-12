@@ -435,7 +435,15 @@ export const pipelineService = {
           seller: true,
           buyer: true,
           leadStatus: true,
-          pipelineStage: true,
+          pipelineStage: {
+            include: {
+              pipeline: {
+                select: {
+                  key: true,
+                }
+              }
+            }
+          },
           assignedUser: {
             select: {
               id: true,
@@ -450,7 +458,8 @@ export const pipelineService = {
               id: true,
               type: true,
               direction: true,
-              createdAt: true
+              createdAt: true,
+              occurredAt: true
             }
           },
           leadBuyers: {
@@ -465,21 +474,42 @@ export const pipelineService = {
             }
           },
           tasks: {
-            where: { status: 'OPEN' },
             select: {
               id: true,
               dueAt: true,
-              title: true
-            }
+              title: true,
+              status: true,
+              createdAt: true,
+              updatedAt: true
+            },
+            orderBy: { updatedAt: 'desc' }
           },
           deal: true
         },
-        orderBy: { updatedAt: 'desc' }
+        orderBy: [
+          { pipelineStage: { orderIndex: 'asc' } },
+          { id: 'asc' },
+        ]
       });
+
+      const stageOrderIndexByLeadId = new Map<string, number>();
+      for (const lead of leads) {
+        stageOrderIndexByLeadId.set(lead.id, lead.pipelineStage?.orderIndex ?? 0);
+      }
 
       // Transform leads to match frontend format with pipeline card data
       const transformedLeads = leads.map(lead => {
-        const lastContact = lead.communications[0]?.createdAt || lead.createdAt;
+        const lastCommAt = lead.communications[0]?.occurredAt || lead.communications[0]?.createdAt;
+        const lastTaskAt = lead.tasks[0]?.updatedAt || lead.tasks[0]?.createdAt;
+        const lastActivityAt = new Date(
+          Math.max(
+            new Date(lead.updatedAt).getTime(),
+            lastCommAt ? new Date(lastCommAt).getTime() : 0,
+            lastTaskAt ? new Date(lastTaskAt).getTime() : 0
+          )
+        );
+
+        const lastContact = lastCommAt || lead.createdAt;
         const now = new Date();
         
         // Calculate time in current status
@@ -503,6 +533,7 @@ export const pipelineService = {
           dateCreated: lead.createdAt,
           statusChangedDate: lead.updatedAt,
           lastContactDate: lastContact,
+          lastActivityAt: lastActivityAt,
           timeInCurrentStatus: timeInCurrentStatus,
           timeInCurrentStatusText: timeInCurrentStatus === 1 ? '1 day' : `${timeInCurrentStatus} days`,
           
@@ -540,8 +571,8 @@ export const pipelineService = {
           attentionReason: lead.attentionReason,
           
           // Tasks
-          openTasks: lead.tasks.length,
-          overdueTasks: lead.tasks.filter(task => new Date(task.dueAt) < now).length
+          openTasks: lead.tasks.filter(task => task.status === 'OPEN').length,
+          overdueTasks: lead.tasks.filter(task => task.status === 'OPEN' && new Date(task.dueAt) < now).length
         };
       });
 
@@ -559,14 +590,55 @@ export const pipelineService = {
           );
         });
         
-        return filteredLeads;
+        return filteredLeads.sort((a: any, b: any) => {
+          const aStageIndex = stageOrderIndexByLeadId.get(a.id) ?? 0;
+          const bStageIndex = stageOrderIndexByLeadId.get(b.id) ?? 0;
+          if (aStageIndex !== bStageIndex) return aStageIndex - bStageIndex;
+          const aAt = new Date(a.lastActivityAt).getTime();
+          const bAt = new Date(b.lastActivityAt).getTime();
+          if (aAt !== bAt) return aAt - bAt;
+          return String(a.id).localeCompare(String(b.id));
+        });
       }
 
-      return transformedLeads;
+      // Final sort: stage order asc, lastActivityAt asc (least recently touched at top)
+      return transformedLeads.sort((a: any, b: any) => {
+        const aStageIndex = stageOrderIndexByLeadId.get(a.id) ?? 0;
+        const bStageIndex = stageOrderIndexByLeadId.get(b.id) ?? 0;
+        if (aStageIndex !== bStageIndex) return aStageIndex - bStageIndex;
+        const aAt = new Date(a.lastActivityAt).getTime();
+        const bAt = new Date(b.lastActivityAt).getTime();
+        if (aAt !== bAt) return aAt - bAt;
+        return String(a.id).localeCompare(String(b.id));
+      });
     } catch (error: any) {
       logger.error('Error getting pipeline leads', { pipelineKey, filters, error: error.message });
       throw error;
     }
+  },
+
+  /**
+   * Compute previous/next lead IDs in the same order as Pipeline view.
+   * For multiple pipeline keys (Admin/Manager combined view), results are concatenated in the given pipelineKeys order.
+   */
+  async getPipelineLeadNav(pipelineKeys: string[], currentLeadId: string, filters: PipelineLeadFilters = {}) {
+    const keys = (pipelineKeys || []).map((k) => k.toUpperCase()).filter(Boolean);
+    if (!keys.length) {
+      return { prevLeadId: null as string | null, nextLeadId: null as string | null };
+    }
+
+    const lists = await Promise.all(keys.map((k) => this.getPipelineLeads(k, filters)));
+    const orderedLeadIds = lists.flat().map((l: any) => l.id).filter(Boolean);
+
+    const idx = orderedLeadIds.indexOf(currentLeadId);
+    if (idx === -1) {
+      return { prevLeadId: null as string | null, nextLeadId: null as string | null };
+    }
+
+    return {
+      prevLeadId: idx > 0 ? orderedLeadIds[idx - 1] : null,
+      nextLeadId: idx < orderedLeadIds.length - 1 ? orderedLeadIds[idx + 1] : null,
+    };
   },
 
   /**

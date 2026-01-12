@@ -25,11 +25,13 @@ import { API_BASE, makeApiCall } from "@/config/api";
 import { safeDate } from "@/utils/validation";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePipelineNav } from "@/contexts/PipelineNavContext";
 
 const Pipeline = () => {
   const { toast } = useToast();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { setFromPipelineView } = usePipelineNav();
   const [needsAttentionView, setNeedsAttentionView] = useState(false);
   const [transactionPipelineView, setTransactionPipelineView] = useState(false);
   const [selectedLeadSource, setSelectedLeadSource] = useState<string>('all');
@@ -363,7 +365,7 @@ const Pipeline = () => {
       
       // Apply lead source filter if applicable
       if (selectedLeadSource !== 'all') {
-        filters.append('sourceId', selectedLeadSource);
+        filters.append('leadSourceId', selectedLeadSource);
       }
 
       // Load leads based on role
@@ -451,6 +453,7 @@ const Pipeline = () => {
             dateCreated: lead.createdAt,
             statusChangedDate: lead.stageEnteredAt || lead.updatedAt,
             lastContactDate: lead.lastContactAt || lead.updatedAt,
+            lastActivityAt: lead.lastActivityAt || lead.updatedAt,
             priceReduction: lead.priceReduction || false,
             clearToClose: lead.clearToClose || false,
             originalPrice: lead.deal?.contractPrice || 0,
@@ -467,6 +470,23 @@ const Pipeline = () => {
         
         setLeads(transformedLeads);
         setNeedsAttentionCount(transformedLeads.filter((l: any) => l.status === 'urgent').length);
+
+        // Store navigation order + view metadata for LeadEdit next/prev arrows
+        setFromPipelineView(
+          transformedLeads.map((l: any) => l.id),
+          {
+            pipelineKey: transactionPipelineView ? 'TRANSACTION' : currentPipeline,
+            pipelineKeys: transactionPipelineView
+              ? ['TRANSACTION']
+              : (pipelineAccess?.allowedPipelines?.includes('ACQUISITIONS') && pipelineAccess?.allowedPipelines?.includes('DISPOSITIONS') && (user?.roles?.includes('ADMIN') || user?.roles?.includes('MANAGER')))
+                ? ['ACQUISITIONS', 'DISPOSITIONS']
+                : [currentPipeline],
+            transactionPipelineView,
+            needsAttentionView,
+            leadSourceId: selectedLeadSource !== 'all' ? selectedLeadSource : undefined,
+            assignedUserId: pipelineAccess?.canViewAssignedOnly ? (user?.id || undefined) : undefined,
+          }
+        );
         
         // Fallback to basic leads API if no leads found
         if (transformedLeads.length === 0) {

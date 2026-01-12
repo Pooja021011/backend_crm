@@ -183,6 +183,70 @@ export const pipelineController = {
   },
 
   /**
+   * Get previous/next lead IDs for pipeline navigation.
+   * Used as a fallback when LeadEdit is loaded without PipelineNavContext (e.g., refresh/direct link).
+   */
+  async getPipelineLeadNav(req: Request, res: Response) {
+    try {
+      const user = (req as any).user;
+      const userRoles = user?.roles || [];
+      const userId = user?.id;
+
+      const currentLeadId = (req.query.currentLeadId as string) || (req.query.leadId as string);
+      if (!currentLeadId) {
+        return res.status(400).json({ success: false, error: 'currentLeadId is required' });
+      }
+
+      const leadSourceId = (req.query.leadSourceId as string) || (req.query.sourceId as string);
+      const needsAttention = req.query.needsAttention === 'true';
+      const transactionPipelineView = req.query.transactionPipelineView === 'true';
+
+      // Determine pipeline keys to consider
+      const pipelineKeysRaw = (req.query.pipelineKeys as string) || '';
+      const pipelineKeyRaw = (req.query.pipelineKey as string) || '';
+
+      let pipelineKeys: string[] = [];
+      if (pipelineKeysRaw) {
+        pipelineKeys = pipelineKeysRaw.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
+      } else if (pipelineKeyRaw) {
+        pipelineKeys = [pipelineKeyRaw.toUpperCase()];
+      } else {
+        // Default behavior: match Pipeline page defaults by role
+        const access = pipelineService.getPipelineAccess(userRoles);
+        if (transactionPipelineView && access.allowedPipelines.includes('TRANSACTION')) {
+          pipelineKeys = ['TRANSACTION'];
+        } else if (userRoles.includes('ADMIN') || userRoles.includes('MANAGER') || userRoles.includes('EXECUTIVE')) {
+          // Pipeline.tsx shows Acquisitions then Dispositions for Admin/Manager
+          pipelineKeys = ['ACQUISITIONS', 'DISPOSITIONS'];
+        } else {
+          // For ACQ/DISP/TC, use allowed pipelines order
+          pipelineKeys = access.allowedPipelines.filter((k) => k !== 'TRANSACTION' || transactionPipelineView);
+          if (pipelineKeys.length === 0 && access.allowedPipelines.length > 0) {
+            pipelineKeys = [access.allowedPipelines[0]];
+          }
+        }
+      }
+
+      // Enforce assigned-only navigation for roles that have assigned-only access
+      const access = pipelineService.getPipelineAccess(userRoles);
+      const assignedUserId = access.canViewAssignedOnly ? userId : (req.query.assignedUserId as string | undefined);
+
+      const result = await pipelineService.getPipelineLeadNav(pipelineKeys, currentLeadId, {
+        needsAttention,
+        leadSourceId,
+        assignedUserId,
+        userRole: userRoles[0],
+        userId,
+      });
+
+      return res.json({ success: true, data: result });
+    } catch (error: any) {
+      logger.error('Error in getPipelineLeadNav controller', { error: error.message });
+      return res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  },
+
+  /**
    * Update needs attention status for leads
    */
   async updateNeedsAttention(req: Request, res: Response) {
@@ -277,10 +341,13 @@ export const pipelineController = {
       const user = (req as any).user;
       const userRoles = user?.roles || [];
       const userId = user?.id;
+      const leadSourceId = (req.query.leadSourceId as string) || (req.query.sourceId as string);
+      const assignedUserId = (req.query.assignedUserId as string) || undefined;
       
       const filters = {
         needsAttention: req.query.needsAttention === 'true',
-        leadSourceId: req.query.leadSourceId as string,
+        leadSourceId,
+        assignedUserId,
         userRole: userRoles[0], // Primary role
         userId: userId
       };

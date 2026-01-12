@@ -23,6 +23,8 @@ import {
   Save,
   ArrowLeft,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   FileText,
   MessageSquare,
   CheckSquare,
@@ -45,6 +47,7 @@ import { API_BASE, makeApiCall } from '@/config/api';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTwilioContext } from '@/contexts/TwilioContext';
+import { usePipelineNav } from '@/contexts/PipelineNavContext';
 import { CompsManager } from '@/components/CompsManager';
 import { LeadTimeline } from '@/components/LeadTimeline';
 import { 
@@ -121,8 +124,42 @@ interface LeadData {
 const LeadEdit: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { state: pipelineNavState, getPrevNext } = usePipelineNav();
   const { toast } = useToast();
   const { user } = useAuth();
+  const hasPipelineNavContext = !!pipelineNavState?.leadIds?.length;
+  const { prevLeadId, nextLeadId } = getPrevNext(id || '');
+  const [fallbackNav, setFallbackNav] = useState<{ prevLeadId: string | null; nextLeadId: string | null } | null>(null);
+
+  const effectivePrevLeadId = hasPipelineNavContext ? prevLeadId : (fallbackNav?.prevLeadId ?? null);
+  const effectiveNextLeadId = hasPipelineNavContext ? nextLeadId : (fallbackNav?.nextLeadId ?? null);
+
+  // Fallback: if LeadEdit is opened via refresh/direct link, fetch prev/next from backend
+  useEffect(() => {
+    const run = async () => {
+      if (!id) return;
+      if (hasPipelineNavContext) {
+        setFallbackNav(null);
+        return;
+      }
+
+      try {
+        const response = await makeApiCall(`${API_BASE}/pipeline/nav?currentLeadId=${encodeURIComponent(id)}`);
+        if (!response.ok) return;
+        const data = await response.json();
+        if (data?.success && data?.data) {
+          setFallbackNav({
+            prevLeadId: data.data.prevLeadId ?? null,
+            nextLeadId: data.data.nextLeadId ?? null,
+          });
+        }
+      } catch {
+        // silent fallback: keep buttons disabled if nav can't be computed
+      }
+    };
+
+    void run();
+  }, [id, hasPipelineNavContext]);
 
   const userRoles = (user?.roles || []) as string[];
   const isAcqOnlyUser =
@@ -2835,6 +2872,27 @@ const LeadEdit: React.FC = () => {
               <Save className="w-2.5 h-2.5 mr-0.5" />
               {autoSaveStatus === 'saving' || saving ? 'Saving...' : 'Save now'}
             </Button>
+            {/* Prev / Next lead navigation (from Pipeline view) */}
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                className="h-5 w-6 p-0 rounded-md inline-flex items-center justify-center"
+                onClick={() => effectivePrevLeadId && navigate(`/leads/${effectivePrevLeadId}/edit`)}
+                disabled={!effectivePrevLeadId}
+                title={effectivePrevLeadId ? 'Previous lead' : 'No previous lead'}
+              >
+                <ChevronLeft className="w-3 h-3" />
+              </Button>
+              <Button
+                variant="outline"
+                className="h-5 w-6 p-0 rounded-md inline-flex items-center justify-center"
+                onClick={() => effectiveNextLeadId && navigate(`/leads/${effectiveNextLeadId}/edit`)}
+                disabled={!effectiveNextLeadId}
+                title={effectiveNextLeadId ? 'Next lead' : 'No next lead'}
+              >
+                <ChevronRight className="w-3 h-3" />
+              </Button>
+            </div>
           </div>
         </div>
 

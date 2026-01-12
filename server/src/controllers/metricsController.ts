@@ -127,6 +127,14 @@ export const metricsController = {
     const data = await metricsService.getTeamKpis(timeframe);
     return res.json({ data });
   },
+  majorKpis: async (req: Request, res: Response) => {
+    const timeframe = (req.query.timeframe as 'This Month'|'Last Month'|'This Quarter') || 'This Month';
+    const user = (req as any).user as { id: string; roles: string[] } | undefined;
+    if (!user?.id) return res.status(401).json({ error: 'Unauthorized' });
+
+    const data = await metricsService.getMajorKpis(timeframe, user);
+    return res.json({ data });
+  },
 };
 
 

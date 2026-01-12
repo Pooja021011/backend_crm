@@ -109,6 +109,82 @@ export const metricsRepository = {
       },
       select: { contractPrice: true, soldPrice: true, netProfit: true, leadId: true, contractedAt: true, closedAt: true },
     }),
+
+  getDealsContractedBetween: (from: Date, to: Date, filters?: { pipelineKey?: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION'; leadType?: any; assignedUserId?: string }) =>
+    prisma.deal.findMany({
+      where: {
+        contractedAt: { gte: from, lt: to },
+        ...(filters?.pipelineKey || filters?.leadType || filters?.assignedUserId
+          ? {
+              lead: {
+                ...(filters?.pipelineKey ? { pipelineStage: { pipeline: { key: filters.pipelineKey as any } } } : {}),
+                ...(filters?.leadType ? { leadType: filters.leadType } : {}),
+                ...(filters?.assignedUserId ? { assignedUserId: filters.assignedUserId } : {}),
+              },
+            }
+          : {}),
+      },
+      select: { leadId: true, contractedAt: true },
+    }),
+
+  getDealsClosedBetween: (from: Date, to: Date, filters?: { pipelineKey?: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION'; leadType?: any; assignedUserId?: string }) =>
+    prisma.deal.findMany({
+      where: {
+        closedAt: { gte: from, lt: to },
+        ...(filters?.pipelineKey || filters?.leadType || filters?.assignedUserId
+          ? {
+              lead: {
+                ...(filters?.pipelineKey ? { pipelineStage: { pipeline: { key: filters.pipelineKey as any } } } : {}),
+                ...(filters?.leadType ? { leadType: filters.leadType } : {}),
+                ...(filters?.assignedUserId ? { assignedUserId: filters.assignedUserId } : {}),
+              },
+            }
+          : {}),
+      },
+      select: { leadId: true, closedAt: true, netProfit: true },
+    }),
+
+  getLeadsCreatedBetweenScoped: (from: Date, to: Date, filters: { pipelineKey: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION'; leadType?: any; assignedUserId?: string; excludeLeadStatusNames?: string[] }) =>
+    prisma.lead.findMany({
+      where: {
+        createdAt: { gte: from, lt: to },
+        pipelineStage: { pipeline: { key: filters.pipelineKey as any } },
+        ...(filters.leadType ? { leadType: filters.leadType } : {}),
+        ...(filters.assignedUserId ? { assignedUserId: filters.assignedUserId } : {}),
+        ...(filters.excludeLeadStatusNames?.length
+          ? { NOT: { leadStatus: { name: { in: filters.excludeLeadStatusNames } } } }
+          : {}),
+      },
+      select: { id: true, createdAt: true, updatedAt: true },
+    }),
+
+  getActiveLeadsWithActivityByPipeline: (filters: { pipelineKey: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION'; leadType?: any; assignedUserId?: string; excludeLeadStatusNames?: string[] }) =>
+    prisma.lead.findMany({
+      where: {
+        pipelineStage: { pipeline: { key: filters.pipelineKey as any } },
+        ...(filters.leadType ? { leadType: filters.leadType } : {}),
+        ...(filters.assignedUserId ? { assignedUserId: filters.assignedUserId } : {}),
+        ...(filters.excludeLeadStatusNames?.length
+          ? { NOT: { leadStatus: { name: { in: filters.excludeLeadStatusNames } } } }
+          : {}),
+      },
+      select: {
+        id: true,
+        createdAt: true,
+        updatedAt: true,
+        lastContactAt: true,
+        communications: {
+          orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }],
+          take: 1,
+          select: { occurredAt: true, createdAt: true },
+        },
+        tasks: {
+          orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+          take: 1,
+          select: { updatedAt: true, createdAt: true },
+        },
+      },
+    }),
 };
 
 

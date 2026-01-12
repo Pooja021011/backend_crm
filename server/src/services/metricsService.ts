@@ -6,8 +6,8 @@ type MonthlyFlow = { name: string; totalLeads: number; contractedLeads: number; 
 
 /**
  * Helper function to check if a lead is mishandled based on business hours rules
- * Business hours: 6 AM - 8 PM (2-hour threshold)
- * After hours: 8 PM - 6 AM (16-hour threshold)
+ * Business hours: 8 AM - 5 PM ET (2-hour threshold)
+ * After hours: 5 PM - 8 AM ET (16-hour threshold)
  */
 function isLeadMishandled(createdAt: Date, lastContactAt: Date | null): boolean {
   const now = dayjs();
@@ -32,6 +32,43 @@ function isLeadMishandled(createdAt: Date, lastContactAt: Date | null): boolean 
     // After hours: 16-hour threshold
     return hoursSinceCreation > 16;
   }
+}
+
+const HIDDEN_PIPELINE_LEAD_STATUSES = ['Long Term Follow Up', 'Dead'] as const;
+
+function getEtHour(d: Date): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    hour: '2-digit',
+    hour12: false,
+  }).formatToParts(d);
+  const hourPart = parts.find((p) => p.type === 'hour')?.value || '0';
+  const n = parseInt(hourPart, 10);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function getSlaThresholdHoursEt(createdAt: Date): number {
+  const hourEt = getEtHour(createdAt);
+  // 8am–5pm ET => 2h SLA; else 16h SLA
+  return hourEt >= 8 && hourEt < 17 ? 2 : 16;
+}
+
+function computeLastActivityAt(lead: {
+  updatedAt: Date;
+  communications?: Array<{ occurredAt: Date | null; createdAt: Date }>;
+  tasks?: Array<{ updatedAt: Date; createdAt: Date }>;
+}): Date {
+  const comm = lead.communications?.[0];
+  const task = lead.tasks?.[0];
+  const commAt = comm?.occurredAt || comm?.createdAt || null;
+  const taskAt = task?.updatedAt || task?.createdAt || null;
+  return new Date(
+    Math.max(
+      lead.updatedAt?.getTime?.() ?? 0,
+      commAt ? new Date(commAt).getTime() : 0,
+      taskAt ? new Date(taskAt).getTime() : 0
+    )
+  );
 }
 
 export const metricsService = {
@@ -147,6 +184,135 @@ export const metricsService = {
       averageSoldPrice,
       averageDealProfit,
     };
+  },
+
+  async getMajorKpis(timeframe: 'This Month' | 'Last Month' | 'This Quarter', user: { id: string; roles: string[] }) {
+    const roles = user?.roles || [];
+    const userId = user?.id;
+
+    const now = dayjs();
+    let start: dayjs.Dayjs;
+    let end: dayjs.Dayjs;
+    if (timeframe === 'This Month') {
+      start = now.startOf('month');
+      end = now.endOf('month');
+    } else if (timeframe === 'Last Month') {
+      start = now.subtract(1, 'month').startOf('month');
+      end = now.subtract(1, 'month').endOf('month');
+    } else {
+      start = now.startOf('quarter');
+      end = now.endOf('quarter');
+    }
+
+    const isAdminLike = roles.includes('ADMIN') || roles.includes('EXECUTIVE');
+    const isManager = roles.includes('MANAGER');
+    const isAcqAgent = roles.includes('ACQ') && !isAdminLike && !isManager;
+
+    // Admin KPIs (company-wide)
+    if (isAdminLike) {
+      // Contracts signed: ACQ properties contracted this month
+      const acqContractedDeals = await metricsRepository.getDealsContractedBetween(start.toDate(), end.toDate(), {
+        pipelineKey: 'ACQUISITIONS',
+        leadType: 'SELLER',
+      });
+      const contractsSigned = new Set(acqContractedDeals.map((d) => d.leadId)).size;
+
+      // Contracts sold: DISP properties closed this month
+      const dispClosedDeals = await metricsRepository.getDealsClosedBetween(start.toDate(), end.toDate(), {
+        pipelineKey: 'DISPOSITIONS',
+        leadType: 'SELLER',
+      });
+      const contractsSold = new Set(dispClosedDeals.map((d) => d.leadId)).size;
+
+      const totalProfit = dispClosedDeals.reduce((sum, d) => sum + (d.netProfit || 0), 0);
+
+      return {
+        mode: 'admin' as const,
+        contractsSigned,
+        contractsSold,
+        totalProfit,
+      };
+    }
+
+    // ACQ Manager + ACQ Agent KPIs
+    if (isManager || isAcqAgent) {
+      const assignedUserId = isAcqAgent ? userId : undefined;
+
+      // Total contracts (this month): ACQ leads under contract this month
+      const contractedDeals = await metricsRepository.getDealsContractedBetween(start.toDate(), end.toDate(), {
+        pipelineKey: 'ACQUISITIONS',
+        leadType: 'SELLER',
+        assignedUserId,
+      });
+      const totalContracts = new Set(contractedDeals.map((d) => d.leadId)).size;
+
+      // Leads received this month
+      const leadsReceived = await metricsRepository.getLeadsCreatedBetweenScoped(start.toDate(), end.toDate(), {
+        pipelineKey: 'ACQUISITIONS',
+        leadType: 'SELLER',
+        assignedUserId,
+        excludeLeadStatusNames: [...HIDDEN_PIPELINE_LEAD_STATUSES],
+      });
+      const leadsReceivedCount = leadsReceived.length;
+
+      const leadsPerContractPct = leadsReceivedCount
+        ? (totalContracts / leadsReceivedCount) * 100
+        : 0;
+
+      // Mishandled = SLA breaches on new leads this month + stale 48h on all active ACQ leads
+      const activeLeads = await metricsRepository.getActiveLeadsWithActivityByPipeline({
+        pipelineKey: 'ACQUISITIONS',
+        leadType: 'SELLER',
+        assignedUserId,
+        excludeLeadStatusNames: [...HIDDEN_PIPELINE_LEAD_STATUSES],
+      });
+
+      const nowDt = new Date();
+
+      // SLA breaches for leads created this month (2h/16h ET) using lastActivityAt
+      const createdThisMonthIds = new Set(leadsReceived.map((l) => l.id));
+      const slaBreaches = activeLeads.filter((l) => {
+        if (!createdThisMonthIds.has(l.id)) return false;
+        const lastActivityAt = computeLastActivityAt(l);
+        const thresholdHours = getSlaThresholdHoursEt(l.createdAt);
+        const hoursToTouch = (lastActivityAt.getTime() - l.createdAt.getTime()) / (1000 * 60 * 60);
+        return hoursToTouch > thresholdHours;
+      }).length;
+
+      // 48h stale across all active leads
+      const stale48h = activeLeads.filter((l) => {
+        const lastActivityAt = computeLastActivityAt(l);
+        const hoursSince = (nowDt.getTime() - lastActivityAt.getTime()) / (1000 * 60 * 60);
+        return hoursSince >= 48;
+      }).length;
+
+      const leadsMishandled = slaBreaches + stale48h;
+
+      return {
+        mode: 'acq' as const,
+        totalContracts,
+        leadsPerContract: Number(leadsPerContractPct.toFixed(2)),
+        leadsReceived: leadsReceivedCount,
+        leadsMishandled,
+        slaBreaches,
+        stale48h,
+      };
+    }
+
+    // Default fallback: return admin-like so UI doesn't break
+    const acqContractedDeals = await metricsRepository.getDealsContractedBetween(start.toDate(), end.toDate(), {
+      pipelineKey: 'ACQUISITIONS',
+      leadType: 'SELLER',
+    });
+    const contractsSigned = new Set(acqContractedDeals.map((d) => d.leadId)).size;
+    const dispClosedDeals = await metricsRepository.getDealsClosedBetween(start.toDate(), end.toDate(), {
+      pipelineKey: 'DISPOSITIONS',
+      leadType: 'SELLER',
+    });
+    const contractsSold = new Set(dispClosedDeals.map((d) => d.leadId)).size;
+    const totalProfit = dispClosedDeals.reduce((sum, d) => sum + (d.netProfit || 0), 0);
+
+    return { mode: 'admin' as const, contractsSigned, contractsSold, totalProfit };
   },
 
   async getPipelineOverview(timeframe: 'This Month' | 'Last Month' | 'This Quarter', pipelineKey: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION' = 'ACQUISITIONS') {

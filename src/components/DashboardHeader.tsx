@@ -12,10 +12,15 @@ import { API_BASE } from "@/config/api";
 import { useNavigate } from "react-router-dom";
 
 interface KPIData {
-  contractsSigned: number;
-  contractsSold: number;
-  projectedProfit: number | null;
-  closedProfit: number | null;
+  mode: 'admin' | 'acq';
+  // Admin
+  contractsSigned?: number;
+  contractsSold?: number;
+  totalProfit?: number;
+  // Acquisitions (Manager/Agent)
+  totalContracts?: number;
+  leadsPerContract?: number; // percentage, 2 decimals
+  leadsMishandled?: number;
 }
 
 interface SearchResult {
@@ -30,7 +35,7 @@ interface KPICardProps {
   title: string;
   value: string;
   trend?: string;
-  color: "blue" | "green" | "purple" | "orange";
+  color: "blue" | "green" | "purple" | "orange" | "yellow" | "red";
 }
 
 const KPICard = ({ title, value, trend, color }: KPICardProps) => {
@@ -60,6 +65,20 @@ const KPICard = ({ title, value, trend, color }: KPICardProps) => {
       bg: "bg-orange-500",
       text: "text-white",
       border: "border-orange-500", 
+      label: "text-white",
+      trend: "bg-white/20 text-white"
+    },
+    yellow: {
+      bg: "bg-yellow-500",
+      text: "text-white",
+      border: "border-yellow-500",
+      label: "text-white",
+      trend: "bg-white/20 text-white"
+    },
+    red: {
+      bg: "bg-red-500",
+      text: "text-white",
+      border: "border-red-500",
       label: "text-white",
       trend: "bg-white/20 text-white"
     }
@@ -97,10 +116,10 @@ export const DashboardHeader = () => {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [kpiData, setKpiData] = useState<KPIData>({
+    mode: 'admin',
     contractsSigned: 0,
     contractsSold: 0,
-    projectedProfit: null,
-    closedProfit: null,
+    totalProfit: 0,
   });
   const [isLoadingKpis, setIsLoadingKpis] = useState(true);
   const searchRef = useRef<HTMLDivElement>(null);
@@ -228,7 +247,7 @@ export const DashboardHeader = () => {
       setIsLoadingKpis(true);
       try {
         const accessToken = localStorage.getItem('accessToken');
-        const response = await fetch(`${API_BASE}/metrics/company-kpis?timeframe=This Month`, {
+        const response = await fetch(`${API_BASE}/metrics/major-kpis?timeframe=This Month`, {
           headers: {
             'Authorization': `Bearer ${accessToken}`,
             'Content-Type': 'application/json',
@@ -237,12 +256,22 @@ export const DashboardHeader = () => {
 
         if (response.ok) {
           const result = await response.json();
-          setKpiData({
-            contractsSigned: result.data?.contractsSigned || 0,
-            contractsSold: result.data?.contractsSold || 0,
-            projectedProfit: result.data?.projectedProfit || null,
-            closedProfit: result.data?.closedProfit || null,
-          });
+          const data = result.data || {};
+          if (data.mode === 'acq') {
+            setKpiData({
+              mode: 'acq',
+              totalContracts: data.totalContracts || 0,
+              leadsPerContract: typeof data.leadsPerContract === 'number' ? data.leadsPerContract : 0,
+              leadsMishandled: data.leadsMishandled || 0,
+            });
+          } else {
+            setKpiData({
+              mode: 'admin',
+              contractsSigned: data.contractsSigned || 0,
+              contractsSold: data.contractsSold || 0,
+              totalProfit: data.totalProfit || 0,
+            });
+          }
         } else {
           console.error('Failed to fetch KPI data:', response.statusText);
         }
@@ -255,14 +284,14 @@ export const DashboardHeader = () => {
 
     fetchKpiData();
     
-    // Refresh KPI data every 5 minutes
-    const intervalId = setInterval(fetchKpiData, 5 * 60 * 1000);
+    // Refresh KPI data frequently for near-live updates
+    const intervalId = setInterval(fetchKpiData, 30 * 1000);
     
     return () => clearInterval(intervalId);
   }, []);
 
   // Format currency values
-  const formatCurrency = (value: number | null): string => {
+  const formatCurrency = (value: number | null | undefined): string => {
     if (value === null || value === undefined) return '$0';
     if (value >= 1000000) {
       return `$${(value / 1000000).toFixed(1)}M`;
@@ -270,6 +299,18 @@ export const DashboardHeader = () => {
       return `$${Math.round(value / 1000)}K`;
     }
     return `$${value.toLocaleString()}`;
+  };
+
+  const formatPct2 = (value: number | null | undefined): string => {
+    const n = typeof value === 'number' && Number.isFinite(value) ? value : 0;
+    return n.toFixed(2);
+  };
+
+  const mishandledColor = (count: number): KPICardProps['color'] => {
+    if (count >= 10) return 'red';
+    if (count >= 5) return 'orange';
+    if (count >= 1) return 'yellow';
+    return 'green';
   };
 
   const getResultIcon = (type: string) => {
@@ -383,21 +424,43 @@ export const DashboardHeader = () => {
 
           {/* Compact KPIs - 30% width */}
           <div className="flex gap-2 min-w-fit">
-            <KPICard
-              title="CONTRACTS SIGNED"
-              value={isLoadingKpis ? "..." : kpiData.contractsSigned.toString()}
-              color="blue"
-            />
-            <KPICard
-              title="CONTRACTS SOLD"
-              value={isLoadingKpis ? "..." : kpiData.contractsSold.toString()}
-              color="green"
-            />
-            <KPICard
-              title="TOTAL PROFIT"
-              value={isLoadingKpis ? "..." : formatCurrency(kpiData.closedProfit)}
-              color="purple"
-            />
+            {kpiData.mode === 'acq' ? (
+              <>
+                <KPICard
+                  title="TOTAL CONTRACTS"
+                  value={isLoadingKpis ? "..." : String(kpiData.totalContracts || 0)}
+                  color="blue"
+                />
+                <KPICard
+                  title="LEADS PER CONTRACT"
+                  value={isLoadingKpis ? "..." : formatPct2(kpiData.leadsPerContract)}
+                  color="purple"
+                />
+                <KPICard
+                  title="LEADS MISHANDLED"
+                  value={isLoadingKpis ? "..." : String(kpiData.leadsMishandled || 0)}
+                  color={mishandledColor(kpiData.leadsMishandled || 0)}
+                />
+              </>
+            ) : (
+              <>
+                <KPICard
+                  title="CONTRACTS SIGNED"
+                  value={isLoadingKpis ? "..." : String(kpiData.contractsSigned || 0)}
+                  color="blue"
+                />
+                <KPICard
+                  title="CONTRACTS SOLD"
+                  value={isLoadingKpis ? "..." : String(kpiData.contractsSold || 0)}
+                  color="green"
+                />
+                <KPICard
+                  title="TOTAL PROFIT"
+                  value={isLoadingKpis ? "..." : formatCurrency(kpiData.totalProfit)}
+                  color="purple"
+                />
+              </>
+            )}
           </div>
 
           {/* User Menu */}

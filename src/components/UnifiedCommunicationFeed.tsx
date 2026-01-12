@@ -648,29 +648,28 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
                       </span>
                     )}
                   </div>
-                  <span className="text-[10px] text-slate-400 flex-shrink-0">
-                    {formatDateTime(item.occurredAt || item.createdAt || '')}
-                  </span>
-                </div>
-
-                {(canEditNoteItem(item) || canEditTaskItem(item)) && (
-                  <div className="flex justify-end mb-1">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="h-6 w-6 p-0"
-                      title={item.type === 'NOTE' ? 'Edit note' : 'Edit'}
-                      onClick={() => {
-                        if (item.type === 'NOTE') openEditNote(item);
-                        if (item.type === 'TASK') openEditTask(item);
-                      }}
-                    >
-                      <Edit2 className="w-3 h-3" />
-                      <span className="sr-only">Edit</span>
-                    </Button>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <span className="text-[10px] text-slate-400">
+                      {formatDateTime(item.occurredAt || item.createdAt || '')}
+                    </span>
+                    {(canEditNoteItem(item) || canEditTaskItem(item)) && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 w-6 p-0"
+                        title={item.type === 'NOTE' ? 'Edit note' : 'Edit'}
+                        onClick={() => {
+                          if (item.type === 'NOTE') openEditNote(item);
+                          if (item.type === 'TASK') openEditTask(item);
+                        }}
+                      >
+                        <Edit2 className="w-3 h-3" />
+                        <span className="sr-only">Edit</span>
+                      </Button>
+                    )}
                   </div>
-                )}
+                </div>
 
                 {/* Direction + From/To (CALL/SMS/EMAIL) */}
                 {formatFromToLine(item) && (

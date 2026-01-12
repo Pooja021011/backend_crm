@@ -18,6 +18,7 @@ router.get('/transactions-overview', (req, res, next) => metricsController.trans
 router.get('/acquisitions-leaderboard', (req, res, next) => metricsController.acquisitionsLeaderboard(req, res).catch(next));
 router.get('/dispositions-leaderboard', (req, res, next) => metricsController.dispositionsLeaderboard(req, res).catch(next));
 router.get('/team-kpis', (req, res, next) => metricsController.teamKpis(req, res).catch(next));
+router.get('/major-kpis', (req, res, next) => metricsController.majorKpis(req, res).catch(next));
 
 export default router;
 
