@@ -14,11 +14,7 @@ export const communicationRepository = {
             id: true,
             firstName: true,
             lastName: true,
-            smsSettings: {
-              select: {
-                phoneNumber: true
-              }
-            }
+            smsSettings: true
           }
         },
         assignedTo: {
