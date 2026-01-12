@@ -14,7 +14,9 @@ router.use((req, res, next) => {
     req.path === '/twiml-incoming' ||
     req.path === '/dial-action' ||
     req.path === '/voicemail-action' ||
-    req.path === '/recording-status'
+    req.path === '/recording-status' ||
+    // Voicemail greeting audio must be publicly accessible for Twilio <Play> and for <audio src="..."> previews
+    req.path.startsWith('/voicemail-greeting/')
   ) {
     return next();
   }
