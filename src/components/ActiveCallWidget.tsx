@@ -297,16 +297,8 @@ export const ActiveCallWidget: React.FC<ActiveCallWidgetProps> = ({
               </span>
             </div>
           ) : null}
-          {display.email ? (
-            <div className="flex items-center justify-center gap-1 text-xs text-gray-700">
-              <Mail className="w-3 h-3" />
-              <span className="truncate" title={display.email}>
-                {display.email}
-              </span>
-            </div>
-          ) : null}
 
-          {!display.name && !display.phone && !display.email && !display.address ? (
+          {!display.name && !display.phone && !display.address ? (
             <div className="text-xs text-gray-600">
               {leadLoading ? 'Loading lead…' : phoneNumber ? phoneNumber : 'Unknown'}
             </div>

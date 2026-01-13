@@ -341,11 +341,6 @@ const Inbox = () => {
         setGmailEmails(transformedEmails);
         
         console.log('📊 Total lead-linked emails in list:', transformedEmails.length);
-        
-        toast({
-          title: "Gmail Sync Complete",
-          description: `${transformedEmails.length} lead-linked emails synced`,
-        });
       } else {
         throw new Error(json.error || 'Failed to fetch emails');
       }
