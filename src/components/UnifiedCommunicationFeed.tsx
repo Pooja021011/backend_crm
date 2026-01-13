@@ -175,6 +175,13 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
   const [editingNote, setEditingNote] = useState<any | null>(null);
   const [editNoteBody, setEditNoteBody] = useState('');
   const [savingNoteEdit, setSavingNoteEdit] = useState(false);
+  
+  // Edit note mention state
+  const [editNoteCursorPosition, setEditNoteCursorPosition] = useState(0);
+  const [editNoteMentionAtIndex, setEditNoteMentionAtIndex] = useState<number | null>(null);
+  const [editNoteMentionSearchTerm, setEditNoteMentionSearchTerm] = useState('');
+  const [showEditNoteUserDropdown, setShowEditNoteUserDropdown] = useState(false);
+  const editNoteInputRef = useRef<HTMLTextAreaElement>(null);
 
   const [editingTask, setEditingTask] = useState<any | null>(null);
   const [savingTaskEdit, setSavingTaskEdit] = useState(false);
@@ -490,7 +497,7 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
       if (!feedRef.current) return;
       feedRef.current.scrollTop = feedRef.current.scrollHeight;
     });
-  }, [loadingCommunications, sortedItems.length]);
+  }, [loadingCommunications, sortedItems.length, leadId]);
 
   const getIconForType = (type: string) => {
     switch (type) {
@@ -595,6 +602,59 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
       }
     }, 0);
   };
+  
+  // Edit note mention handlers
+  const handleEditNoteInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    const cursorPos = e.target.selectionStart;
+    setEditNoteBody(value);
+    setEditNoteCursorPosition(cursorPos);
+
+    // Detect mention query near cursor
+    const textBeforeCursor = value.substring(0, cursorPos);
+    const re = /(^|\s)@([^\n@]{0,30})$/;
+    const match = re.exec(textBeforeCursor);
+
+    if (match) {
+      const atIndex = (match.index ?? 0) + match[1].length;
+      const query = (match[2] || '').trim().toLowerCase();
+      setEditNoteMentionAtIndex(atIndex);
+      setEditNoteMentionSearchTerm(query);
+      setShowEditNoteUserDropdown(true);
+      return;
+    }
+
+    setEditNoteMentionAtIndex(null);
+    setShowEditNoteUserDropdown(false);
+  };
+  
+  const handleEditNoteUserSelect = (user: {id: string; firstName: string; lastName: string}) => {
+    const textAfterCursor = editNoteBody.substring(editNoteCursorPosition);
+    const start = editNoteMentionAtIndex ?? editNoteBody.substring(0, editNoteCursorPosition).lastIndexOf('@');
+    if (start === null || start < 0) return;
+
+    const beforeAt = editNoteBody.substring(0, start);
+    const mention = `@${user.firstName} ${user.lastName}`;
+    const newText = beforeAt + mention + ' ' + textAfterCursor;
+    setEditNoteBody(newText);
+    setShowEditNoteUserDropdown(false);
+    setEditNoteMentionAtIndex(null);
+
+    // Focus back on textarea
+    setTimeout(() => {
+      if (editNoteInputRef.current) {
+        editNoteInputRef.current.focus();
+        const newCursorPos = beforeAt.length + mention.length + 1;
+        editNoteInputRef.current.setSelectionRange(newCursorPos, newCursorPos);
+      }
+    }, 0);
+  };
+  
+  const filteredEditNoteUsers = users.filter(u => {
+    const query = editNoteMentionSearchTerm.toLowerCase();
+    const fullName = `${u.firstName} ${u.lastName}`.toLowerCase();
+    return fullName.includes(query);
+  });
   
   const filteredUsers = users
     .filter((user) => {
@@ -1042,25 +1102,55 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
           if (!open) {
             setEditingNote(null);
             setEditNoteBody('');
+            setShowEditNoteUserDropdown(false);
+            setEditNoteMentionAtIndex(null);
           }
         }}
       >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Edit Note</DialogTitle>
-            <DialogDescription>Update the note body (mentions will be re-processed).</DialogDescription>
+            <DialogDescription>Update the note body. Use @ to mention users.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
+          <div className="space-y-2 relative">
             <Label className="text-sm">Note</Label>
-            <Textarea
-              value={editNoteBody}
-              onChange={(e) => setEditNoteBody(e.target.value)}
-              className="min-h-[140px]"
-              disabled={savingNoteEdit}
-            />
+            <div className="relative">
+              <Textarea
+                ref={editNoteInputRef}
+                value={editNoteBody}
+                onChange={handleEditNoteInputChange}
+                className="min-h-[140px]"
+                disabled={savingNoteEdit}
+                placeholder="Type @ to mention a user..."
+              />
+              
+              {/* User dropdown for mentions */}
+              {showEditNoteUserDropdown && filteredEditNoteUsers.length > 0 && (
+                <div className="absolute bottom-full mb-1 left-0 right-0 z-50 bg-white border border-slate-200 rounded shadow-lg max-h-48 overflow-y-auto">
+                  {filteredEditNoteUsers.map(u => (
+                    <button
+                      key={u.id}
+                      type="button"
+                      className="w-full px-3 py-2 text-left hover:bg-slate-100 text-sm"
+                      onClick={() => handleEditNoteUserSelect(u)}
+                    >
+                      {u.firstName} {u.lastName}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setEditingNote(null)} disabled={savingNoteEdit}>
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => {
+                setEditingNote(null);
+                setShowEditNoteUserDropdown(false);
+              }} 
+              disabled={savingNoteEdit}
+            >
               Cancel
             </Button>
             <Button type="button" onClick={saveEditedNote} disabled={savingNoteEdit}>

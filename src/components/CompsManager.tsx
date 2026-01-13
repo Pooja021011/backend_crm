@@ -412,34 +412,6 @@ export const CompsManager: React.FC<CompsManagerProps> = ({
               disabled={uploadingPdf}
             />
 
-            <Dialog open={showAddCompDialog} onOpenChange={setShowAddCompDialog}>
-              <DialogTrigger asChild>
-                <Button size="sm" variant="outline" className="h-5 text-[10px] px-2">
-                  Add Manual Comp
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-md">
-                <DialogHeader><DialogTitle className="text-sm">Add Comparable</DialogTitle></DialogHeader>
-                <div className="grid grid-cols-4 gap-1 max-h-64 overflow-y-auto">
-                  <div className="col-span-2"><Label className="text-[10px]">Address</Label><Input value={newComp.address} onChange={(e) => setNewComp(prev => ({ ...prev, address: e.target.value }))} placeholder="123 Main St" className="h-6 text-xs" /></div>
-                  <div><Label className="text-[10px]">City</Label><Input value={newComp.city} onChange={(e) => setNewComp(prev => ({ ...prev, city: e.target.value }))} className="h-6 text-xs" /></div>
-                  <div><Label className="text-[10px]">State</Label><Input value={newComp.state} onChange={(e) => setNewComp(prev => ({ ...prev, state: e.target.value }))} className="h-6 text-xs" /></div>
-                  <div><Label className="text-[10px]">ZIP</Label><Input value={newComp.zip} onChange={(e) => setNewComp(prev => ({ ...prev, zip: e.target.value }))} className="h-6 text-xs" /></div>
-                  <div><Label className="text-[10px]">Beds</Label><Input type="number" value={newComp.beds} onChange={(e) => setNewComp(prev => ({ ...prev, beds: e.target.value }))} className="h-6 text-xs" /></div>
-                  <div><Label className="text-[10px]">Baths</Label><Input type="number" step="0.5" value={newComp.baths} onChange={(e) => setNewComp(prev => ({ ...prev, baths: e.target.value }))} className="h-6 text-xs" /></div>
-                  <div><Label className="text-[10px]">SqFt</Label><Input type="number" value={newComp.sqft} onChange={(e) => setNewComp(prev => ({ ...prev, sqft: e.target.value }))} className="h-6 text-xs" /></div>
-                  <div><Label className="text-[10px]">Year</Label><Input type="number" value={newComp.yearBuilt} onChange={(e) => setNewComp(prev => ({ ...prev, yearBuilt: e.target.value }))} className="h-6 text-xs" /></div>
-                  <div><Label className="text-[10px]">Price</Label><Input type="number" value={newComp.salePrice} onChange={(e) => setNewComp(prev => ({ ...prev, salePrice: e.target.value }))} className="h-6 text-xs" /></div>
-                  <div><Label className="text-[10px]">DOM</Label><Input type="number" value={newComp.dom} onChange={(e) => setNewComp(prev => ({ ...prev, dom: e.target.value }))} className="h-6 text-xs" /></div>
-                  <div className="col-span-2"><Label className="text-[10px]">Date Sold</Label><Input type="date" value={newComp.dateSold} onChange={(e) => setNewComp(prev => ({ ...prev, dateSold: e.target.value }))} className="h-6 text-xs" /></div>
-                </div>
-                <div className="flex justify-end gap-1 mt-2">
-                  <Button variant="outline" size="sm" className="h-6 text-xs" onClick={() => setShowAddCompDialog(false)}>Cancel</Button>
-                  <Button size="sm" className="h-6 text-xs" onClick={createComparable}>Add</Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-
             <Button
               size="sm"
               variant="ghost"
@@ -468,9 +440,6 @@ export const CompsManager: React.FC<CompsManagerProps> = ({
                   placeholder="$0"
                   disabled={!canEditArv}
                 />
-              </div>
-              <div className="col-span-12 sm:col-span-8 text-[10px] text-slate-500">
-                {arvHelpText}
               </div>
             </div>
           )}
@@ -587,53 +556,6 @@ export const CompsManager: React.FC<CompsManagerProps> = ({
                   className="right-1 top-1/2 -translate-y-1/2 bg-white/90 shadow-sm hover:bg-white"
                 />
               </Carousel>
-            )}
-          </div>
-
-          {/* Manual comps table */}
-          <div>
-            <div className="flex items-center gap-1.5 mb-1">
-              <Home className="h-3.5 w-3.5 text-slate-500" />
-              <span className="text-xs font-medium text-slate-600">Manual Comps</span>
-            </div>
-            {isLoading ? (
-              <div className="text-center py-2 text-[10px] text-muted-foreground">Loading comparables...</div>
-            ) : leadComps.length === 0 ? (
-              <div className="text-center py-2 text-[10px] text-muted-foreground">No comps yet</div>
-            ) : (
-              <div className="overflow-x-auto max-h-40">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="text-[10px]">
-                      <TableHead className="py-1 px-1">Address</TableHead>
-                      <TableHead className="py-1 px-1">Beds/Baths</TableHead>
-                      <TableHead className="py-1 px-1">Sq Ft</TableHead>
-                      <TableHead className="py-1 px-1">Sale Price</TableHead>
-                      <TableHead className="py-1 px-1">Price/Sq Ft</TableHead>
-                      <TableHead className="py-1 px-1">DOM</TableHead>
-                      <TableHead className="py-1 px-1">Date Sold</TableHead>
-                      <TableHead className="py-1 px-1"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {leadComps.map((comp) => (
-                      <TableRow key={comp.id} className="text-[10px]">
-                        <TableCell className="py-1 px-1">
-                          <div className="font-medium">{comp.address}</div>
-                          <div className="text-slate-400">{comp.city}, {comp.state}</div>
-                        </TableCell>
-                        <TableCell className="py-1 px-1">{comp.beds || '-'}/{comp.baths || '-'}</TableCell>
-                        <TableCell className="py-1 px-1">{comp.sqft?.toLocaleString() || '-'}</TableCell>
-                        <TableCell className="py-1 px-1">{formatCurrency(comp.salePrice)}</TableCell>
-                        <TableCell className="py-1 px-1">{formatCurrency(comp.pricePerSqft)}</TableCell>
-                        <TableCell className="py-1 px-1">{comp.dom || '-'}</TableCell>
-                        <TableCell className="py-1 px-1">{formatDate(comp.dateSold)}</TableCell>
-                        <TableCell className="py-1 px-1"><Button size="sm" variant="ghost" className="h-4 w-4 p-0" onClick={() => deleteComparable(comp.id)}><Trash2 className="h-2.5 w-2.5" /></Button></TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
             )}
           </div>
 
