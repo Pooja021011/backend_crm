@@ -44,6 +44,20 @@ export const leadService = {
       await dealRepository.upsertByLeadId(leadId, { closedAt: new Date() });
     }
     
+    // NEW: Auto-update lead status to "Closed" when moving to Closed stage
+    if (name === 'closed') {
+      const closedStatus = await prisma.leadStatus.findFirst({
+        where: { name: { equals: 'Closed', mode: 'insensitive' } }
+      });
+      
+      if (closedStatus) {
+        await prisma.lead.update({
+          where: { id: leadId },
+          data: { leadStatusId: closedStatus.id }
+        });
+      }
+    }
+    
     // NEW: Execute post-transition actions (task creation)
     if (userId) {
       await stageTransitionService.executePostTransitionActions(leadId, toStageId, userId);
