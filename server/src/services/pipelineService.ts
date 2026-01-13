@@ -25,19 +25,15 @@ export interface PipelineAccess {
 }
 
 export const pipelineService = {
-  // LeadStatus values that should not appear in Pipeline view
-  hiddenPipelineLeadStatuses: ['Long Term Follow Up', 'Dead'] as const,
-
   async getVisibleLeadCountsByStage(stageIds: string[]) {
     if (!stageIds.length) return new Map<string, number>();
-    const hidden = [...this.hiddenPipelineLeadStatuses];
 
     const grouped = await prisma.lead.groupBy({
       by: ['pipelineStageId'],
       where: {
         pipelineStageId: { in: stageIds },
-        NOT: {
-          leadStatus: { name: { in: hidden } },
+        leadStatus: {
+          name: { equals: 'Pipeline', mode: 'insensitive' }
         },
       },
       _count: { _all: true },
@@ -403,8 +399,8 @@ export const pipelineService = {
         pipelineStage: {
           pipelineId: pipeline.id
         },
-        NOT: {
-          leadStatus: { name: { in: [...this.hiddenPipelineLeadStatuses] } },
+        leadStatus: {
+          name: { equals: 'Pipeline', mode: 'insensitive' }
         },
       };
 

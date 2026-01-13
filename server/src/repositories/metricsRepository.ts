@@ -144,28 +144,28 @@ export const metricsRepository = {
       select: { leadId: true, closedAt: true, netProfit: true },
     }),
 
-  getLeadsCreatedBetweenScoped: (from: Date, to: Date, filters: { pipelineKey: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION'; leadType?: any; assignedUserId?: string; excludeLeadStatusNames?: string[] }) =>
+  getLeadsCreatedBetweenScoped: (from: Date, to: Date, filters: { pipelineKey: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION'; leadType?: any; assignedUserId?: string; onlyPipelineStatus?: boolean }) =>
     prisma.lead.findMany({
       where: {
         createdAt: { gte: from, lt: to },
         pipelineStage: { pipeline: { key: filters.pipelineKey as any } },
         ...(filters.leadType ? { leadType: filters.leadType } : {}),
         ...(filters.assignedUserId ? { assignedUserId: filters.assignedUserId } : {}),
-        ...(filters.excludeLeadStatusNames?.length
-          ? { NOT: { leadStatus: { name: { in: filters.excludeLeadStatusNames } } } }
+        ...(filters.onlyPipelineStatus
+          ? { leadStatus: { name: { equals: 'Pipeline', mode: 'insensitive' } } }
           : {}),
       },
       select: { id: true, createdAt: true, updatedAt: true },
     }),
 
-  getActiveLeadsWithActivityByPipeline: (filters: { pipelineKey: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION'; leadType?: any; assignedUserId?: string; excludeLeadStatusNames?: string[] }) =>
+  getActiveLeadsWithActivityByPipeline: (filters: { pipelineKey: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION'; leadType?: any; assignedUserId?: string; onlyPipelineStatus?: boolean }) =>
     prisma.lead.findMany({
       where: {
         pipelineStage: { pipeline: { key: filters.pipelineKey as any } },
         ...(filters.leadType ? { leadType: filters.leadType } : {}),
         ...(filters.assignedUserId ? { assignedUserId: filters.assignedUserId } : {}),
-        ...(filters.excludeLeadStatusNames?.length
-          ? { NOT: { leadStatus: { name: { in: filters.excludeLeadStatusNames } } } }
+        ...(filters.onlyPipelineStatus
+          ? { leadStatus: { name: { equals: 'Pipeline', mode: 'insensitive' } } }
           : {}),
       },
       select: {

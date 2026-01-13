@@ -34,7 +34,7 @@ function isLeadMishandled(createdAt: Date, lastContactAt: Date | null): boolean 
   }
 }
 
-const HIDDEN_PIPELINE_LEAD_STATUSES = ['Long Term Follow Up', 'Dead'] as const;
+// Removed: Now using whitelist approach - only "Pipeline" status shows in pipeline
 
 function getEtHour(d: Date): number {
   const parts = new Intl.DateTimeFormat('en-US', {
@@ -251,7 +251,7 @@ export const metricsService = {
         pipelineKey: 'ACQUISITIONS',
         leadType: 'SELLER',
         assignedUserId,
-        excludeLeadStatusNames: [...HIDDEN_PIPELINE_LEAD_STATUSES],
+        onlyPipelineStatus: true,
       });
       const leadsReceivedCount = leadsReceived.length;
 
@@ -264,7 +264,7 @@ export const metricsService = {
         pipelineKey: 'ACQUISITIONS',
         leadType: 'SELLER',
         assignedUserId,
-        excludeLeadStatusNames: [...HIDDEN_PIPELINE_LEAD_STATUSES],
+        onlyPipelineStatus: true,
       });
 
       const nowDt = new Date();
