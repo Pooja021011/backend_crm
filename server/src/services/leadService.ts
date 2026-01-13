@@ -46,15 +46,20 @@ export const leadService = {
     
     // NEW: Auto-update lead status to "Closed" when moving to Closed stage
     if (name.includes('closed')) {
+      console.log('🔍 DEBUG: Pipeline stage contains "closed":', name);
       const closedStatus = await prisma.leadStatus.findFirst({
         where: { name: { equals: 'Closed', mode: 'insensitive' } }
       });
+      console.log('🔍 DEBUG: Found Closed LeadStatus:', closedStatus);
       
       if (closedStatus) {
-        await prisma.lead.update({
+        const result = await prisma.lead.update({
           where: { id: leadId },
           data: { leadStatusId: closedStatus.id }
         });
+        console.log('✅ DEBUG: Updated lead status to Closed for lead:', leadId);
+      } else {
+        console.log('❌ DEBUG: Closed LeadStatus not found in database!');
       }
     }
     
