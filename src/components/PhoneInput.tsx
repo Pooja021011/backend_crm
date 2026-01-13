@@ -80,7 +80,7 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
             onChange={(e) => handlePhoneChange(e.target.value)}
             placeholder={placeholder}
             disabled={disabled}
-            className={`h-6 border-gray-300 focus:border-blue-500 focus:ring-blue-500/20 ${displayError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
+            className={`h-10 border-gray-300 focus:border-blue-500 focus:ring-blue-500/20 ${displayError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
           />
         </div>
       </div>

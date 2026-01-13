@@ -146,10 +146,6 @@ export const compsController = {
         res.status(400).json({ error: 'No file provided' });
         return;
       }
-      if (file.mimetype !== 'application/pdf') {
-        res.status(400).json({ error: 'Only PDF files are allowed' });
-        return;
-      }
 
       const userId = (req as any).user?.id;
       const created = await compsService.createLeadCompPdf({

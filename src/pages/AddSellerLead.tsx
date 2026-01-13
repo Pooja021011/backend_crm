@@ -43,22 +43,19 @@ const AddSellerLead = () => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pendingFiles, setPendingFiles] = useState<PendingFileItem[]>([]);
 
-  // Check if current user is an ACQ agent
-  const isACQAgent = user?.roles?.includes('ACQ');
-
   // Get active agents with ACQ role for the dropdown
   const acquisitionsAgents = getActiveAgents().filter(agent => 
     agent.roles.some(role => role.role.name === 'ACQ')
   );
 
-  // Form state - initialize acquisitionsAgentId with current user if ACQ agent
+  // Form state - NO auto-selection, user must manually select agent
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
     phoneNumber: "",
     emailAddress: "",
     leadSource: "",
-    acquisitionsAgentId: isACQAgent && user?.id ? user.id : "",
+    acquisitionsAgentId: "", // Empty - user must select manually
     propertyAddress: "",
     city: "",
     state: "",
@@ -379,29 +376,24 @@ const AddSellerLead = () => {
                     handleInputChange('acquisitionsAgentId', value);
                     validateField('acquisitionsAgentId', value);
                   }}
-                  disabled={agentsLoading || isACQAgent}
+                  disabled={agentsLoading}
                 >
                   <SelectTrigger className="h-10 border-gray-300 focus:border-blue-500 focus:ring-blue-500/20">
                     <SelectValue placeholder={agentsLoading ? "Loading agents..." : "Select acquisitions agent"} />
                   </SelectTrigger>
                   <SelectContent>
                     {acquisitionsAgents.map((agent) => {
-                      const initials = `${agent.firstName.charAt(0)}${agent.lastName.charAt(0)}`;
                       const fullName = `${agent.firstName} ${agent.lastName}`;
-                      const roleNames = agent.roles.map(r => r.role.name).join(', ');
+                      // Show only ADMIN and MANAGER roles
+                      const importantRoles = agent.roles
+                        .filter(r => r.role.name === 'ADMIN' || r.role.name === 'MANAGER')
+                        .map(r => r.role.name)
+                        .join(', ');
+                      const displayName = importantRoles ? `${fullName} (${importantRoles})` : fullName;
+                      
                       return (
                         <SelectItem key={agent.id} value={agent.id}>
-                          <div className="flex flex-col">
-                            <div className="flex items-center gap-2">
-                              <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
-                                <span className="text-xs font-medium text-blue-600">
-                                  {initials}
-                                </span>
-                              </div>
-                              <span className="font-medium">{fullName}</span>
-                            </div>
-                            <span className="text-xs text-gray-500 ml-8">{roleNames}</span>
-                          </div>
+                          <span className="font-medium">{displayName}</span>
                         </SelectItem>
                       );
                     })}

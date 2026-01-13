@@ -5,10 +5,11 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Badge } from './ui/badge';
 import { TabsContent } from './ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from './ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
-import { Home, Plus, Search, TrendingUp, Calendar, MapPin, Trash2, ExternalLink, ChevronDown, ChevronUp, FileText } from 'lucide-react';
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from './ui/carousel';
+import { Home, Plus, Search, TrendingUp, Calendar, MapPin, Trash2, ExternalLink, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, FileText, Download, X } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 import { API_BASE, makeApiCall } from '../config/api';
 
@@ -71,6 +72,20 @@ export const CompsManager: React.FC<CompsManagerProps> = ({
   // Comps PDFs
   const [pdfs, setPdfs] = useState<any[]>([]);
   const [uploadingPdf, setUploadingPdf] = useState(false);
+  const [showPdfPreview, setShowPdfPreview] = useState(false);
+  const [activePdfIndex, setActivePdfIndex] = useState(0);
+  
+  const activePdf = pdfs[activePdfIndex];
+  const canGoPrevPdf = activePdfIndex > 0;
+  const canGoNextPdf = activePdfIndex < pdfs.length - 1;
+
+  const goPrevPdf = () => {
+    setActivePdfIndex((idx) => Math.max(0, idx - 1));
+  };
+
+  const goNextPdf = () => {
+    setActivePdfIndex((idx) => Math.min(pdfs.length - 1, idx + 1));
+  };
   
   // Search filters
   const [searchFilters, setSearchFilters] = useState({
@@ -105,6 +120,20 @@ export const CompsManager: React.FC<CompsManagerProps> = ({
   });
 
   const { toast } = useToast();
+
+  // Keyboard navigation for PDF preview
+  useEffect(() => {
+    if (!showPdfPreview) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") goPrevPdf();
+      if (e.key === "ArrowRight") goNextPdf();
+      if (e.key === "Escape") setShowPdfPreview(false);
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showPdfPreview, goPrevPdf, goNextPdf]);
 
   useEffect(() => {
     loadLeadComps();
@@ -172,11 +201,6 @@ export const CompsManager: React.FC<CompsManagerProps> = ({
     if (!file) return;
     event.target.value = '';
 
-    if (file.type !== 'application/pdf') {
-      toast({ title: 'Invalid file', description: 'Please upload a PDF', variant: 'destructive' });
-      return;
-    }
-
     setUploadingPdf(true);
     try {
       const formData = new FormData();
@@ -189,13 +213,13 @@ export const CompsManager: React.FC<CompsManagerProps> = ({
 
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
-        throw new Error(err?.error || err?.message || 'Failed to upload PDF');
+        throw new Error(err?.error || err?.message || 'Failed to upload file');
       }
 
-      toast({ title: 'Success', description: 'Comp PDF uploaded' });
+      toast({ title: 'Success', description: 'File uploaded successfully' });
       await loadLeadCompPdfs();
     } catch (e: any) {
-      toast({ title: 'Error', description: e?.message || 'Failed to upload PDF', variant: 'destructive' });
+      toast({ title: 'Error', description: e?.message || 'Failed to upload file', variant: 'destructive' });
     } finally {
       setUploadingPdf(false);
     }
@@ -383,7 +407,6 @@ export const CompsManager: React.FC<CompsManagerProps> = ({
             <input
               id={`comps-pdf-upload-${leadId}`}
               type="file"
-              accept="application/pdf"
               className="hidden"
               onChange={handlePdfUpload}
               disabled={uploadingPdf}
@@ -461,30 +484,109 @@ export const CompsManager: React.FC<CompsManagerProps> = ({
             {pdfs.length === 0 ? (
               <div className="text-center py-2 text-[10px] text-muted-foreground">No PDFs yet</div>
             ) : (
-              <div className="space-y-1">
-                {pdfs.map((p: any) => (
-                  <div key={p.id} className="flex items-center justify-between text-[10px] border border-slate-200 rounded px-2 py-1 bg-slate-50">
-                    <div className="truncate">
-                      <span className="font-medium">{p.file?.originalName || 'PDF'}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {p.previewUrl && (
-                        <Button size="sm" variant="ghost" className="h-5 text-[10px] px-2" onClick={() => window.open(`${API_BASE}${p.previewUrl.replace('/api/v1', '')}`, '_blank')}>
-                          Preview
-                        </Button>
-                      )}
-                      {p.downloadUrl && (
-                        <Button size="sm" variant="ghost" className="h-5 text-[10px] px-2" onClick={() => window.open(`${API_BASE}${p.downloadUrl.replace('/api/v1', '')}`, '_blank')}>
-                          Download
-                        </Button>
-                      )}
-                      <Button size="sm" variant="ghost" className="h-5 w-5 p-0" onClick={() => deletePdf(p.id)} title="Delete PDF">
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <Carousel
+                opts={{
+                  align: "start",
+                  loop: false,
+                }}
+                className="relative px-8"
+              >
+                <CarouselContent>
+                  {pdfs.map((p: any) => (
+                    <CarouselItem
+                      key={p.id}
+                      className="basis-1/2 sm:basis-1/3 md:basis-1/4 lg:basis-1/5 xl:basis-1/6"
+                    >
+                      <div className="relative border border-slate-200 rounded-lg bg-white hover:shadow-md transition-shadow group">
+                        {/* File Thumbnail */}
+                        {p.file?.mimeType?.startsWith('image/') ? (
+                          <div className="relative w-full h-24 bg-slate-100 rounded-t-lg overflow-hidden">
+                            <img
+                              src={`${API_BASE}${p.previewUrl?.replace('/api/v1', '')}`}
+                              alt={p.file?.originalName || 'File'}
+                              className="w-full h-full object-cover cursor-pointer"
+                              onClick={() => {
+                                setActivePdfIndex(pdfs.findIndex(pdf => pdf.id === p.id));
+                                setShowPdfPreview(true);
+                              }}
+                              onError={(e) => {
+                                const parent = e.currentTarget.parentElement;
+                                if (parent) {
+                                  parent.innerHTML =
+                                    '<div class="flex items-center justify-center h-full text-slate-400"><svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg></div>';
+                                }
+                              }}
+                            />
+                          </div>
+                        ) : (
+                          <div 
+                            className="w-full h-24 bg-slate-100 rounded-t-lg flex items-center justify-center cursor-pointer"
+                            onClick={() => {
+                              setActivePdfIndex(pdfs.findIndex(pdf => pdf.id === p.id));
+                              setShowPdfPreview(true);
+                            }}
+                          >
+                            <FileText className="w-8 h-8 text-slate-400" />
+                          </div>
+                        )}
+
+                        {/* Action Buttons Overlay */}
+                        <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {p.downloadUrl && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0 bg-blue-500 hover:bg-blue-600"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(`${API_BASE}${p.downloadUrl.replace('/api/v1', '')}`, '_blank');
+                              }}
+                              title="Download"
+                            >
+                              <Download className="w-3.5 h-3.5 text-white" />
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0 bg-red-500 hover:bg-red-600"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deletePdf(p.id);
+                            }}
+                            title="Delete file"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-white" />
+                          </Button>
+                        </div>
+
+                        {/* File Info */}
+                        <div className="p-1.5">
+                          <span
+                            className="text-[10px] text-slate-700 font-medium truncate block"
+                            title={p.file?.originalName || 'File'}
+                          >
+                            {p.file?.originalName || 'File'}
+                          </span>
+                          <span className="text-[9px] text-slate-500">
+                            {p.file?.size ? `${((p.file.size || 0) / 1024).toFixed(0)}KB` : ''}
+                          </span>
+                        </div>
+                      </div>
+                    </CarouselItem>
+                  ))}
+                </CarouselContent>
+
+                {/* Navigation Arrows */}
+                <CarouselPrevious
+                  variant="ghost"
+                  className="left-1 top-1/2 -translate-y-1/2 bg-white/90 shadow-sm hover:bg-white"
+                />
+                <CarouselNext
+                  variant="ghost"
+                  className="right-1 top-1/2 -translate-y-1/2 bg-white/90 shadow-sm hover:bg-white"
+                />
+              </Carousel>
             )}
           </div>
 
@@ -617,6 +719,101 @@ export const CompsManager: React.FC<CompsManagerProps> = ({
                   <p>No images available for this property</p>
                 </div>
               )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* PDF Preview Dialog */}
+        <Dialog open={showPdfPreview} onOpenChange={setShowPdfPreview}>
+          <DialogContent className="max-w-5xl p-0 overflow-hidden [&>button.absolute]:hidden">
+            <div className="relative bg-black">
+              <DialogClose asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-3 top-3 z-10 text-white hover:text-white bg-black/40 hover:bg-black/60"
+                  aria-label="Close"
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              </DialogClose>
+
+              {activePdf && (
+                <>
+                  {activePdf.file?.mimeType === 'application/pdf' ? (
+                    <iframe
+                      src={`${API_BASE}${activePdf.previewUrl?.replace('/api/v1', '')}`}
+                      className="w-full h-[80vh]"
+                      title={activePdf.file?.originalName || 'PDF Preview'}
+                    />
+                  ) : activePdf.file?.mimeType?.startsWith('image/') ? (
+                    <img
+                      src={`${API_BASE}${activePdf.previewUrl?.replace('/api/v1', '')}`}
+                      alt={activePdf.file?.originalName || 'File'}
+                      className="w-full max-h-[80vh] object-contain"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-[60vh] text-white">
+                      <FileText className="w-24 h-24 mb-4" />
+                      <p className="text-lg mb-2">{activePdf.file?.originalName || 'File'}</p>
+                      <p className="text-sm text-gray-400 mb-4">
+                        {activePdf.file?.size ? `${((activePdf.file.size || 0) / 1024).toFixed(0)}KB` : ''}
+                      </p>
+                      <Button
+                        onClick={() => activePdf.previewUrl && window.open(`${API_BASE}${activePdf.previewUrl.replace('/api/v1', '')}`, '_blank')}
+                        className="bg-white text-black hover:bg-gray-200"
+                      >
+                        <FileText className="w-4 h-4 mr-2" />
+                        Open Preview
+                      </Button>
+                    </div>
+                  )}
+                </>
+              )}
+
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-white bg-black/40 hover:bg-black/60 disabled:opacity-40"
+                onClick={goPrevPdf}
+                disabled={!canGoPrevPdf}
+                aria-label="Previous file"
+              >
+                <ChevronLeft className="h-6 w-6" />
+              </Button>
+
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-white bg-black/40 hover:bg-black/60 disabled:opacity-40"
+                onClick={goNextPdf}
+                disabled={!canGoNextPdf}
+                aria-label="Next file"
+              >
+                <ChevronRight className="h-6 w-6" />
+              </Button>
+            </div>
+
+            <div className="flex items-center justify-between px-4 py-3 border-t bg-background">
+              <div className="text-sm text-muted-foreground truncate flex-1">
+                {activePdf?.file?.originalName || 'File'}
+              </div>
+              <div className="flex items-center gap-3">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => activePdf?.downloadUrl && window.open(`${API_BASE}${activePdf.downloadUrl.replace('/api/v1', '')}`, '_blank')}
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Download
+                </Button>
+                <div className="text-xs text-muted-foreground">
+                  {pdfs.length > 0 ? `${activePdfIndex + 1} / ${pdfs.length}` : ""}
+                </div>
+              </div>
             </div>
           </DialogContent>
         </Dialog>

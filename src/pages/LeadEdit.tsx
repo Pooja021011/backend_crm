@@ -65,6 +65,7 @@ import { normalizeUsPhoneToE164 } from '@/utils/phone';
 import { formatUsPhoneForDisplay } from '@/utils/phone';
 import { LeadOwnerSection, type LeadOwnerSectionRef } from '@/components/LeadOwnerSection';
 import { LeadPhotoGallery } from '@/components/LeadPhotoGallery';
+import { LeadFileGallery } from '@/components/LeadFileGallery';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar as UiCalendar } from '@/components/ui/calendar';
@@ -3596,120 +3597,28 @@ const LeadEdit: React.FC = () => {
               {/* Files Tab */}
               <TabsContent value="files" className="mt-2">
                 <div className="border border-slate-200 rounded-lg bg-white p-2">
-                  <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-medium text-slate-600">Files</span>
-                    <Button size="sm" variant="ghost" className="h-5 text-[10px] px-1" disabled={uploading}>
-                      <Upload className="w-2.5 h-2.5 mr-0.5" />
-                      <label htmlFor="file-upload" className="cursor-pointer">{uploading ? '...' : 'Upload'}</label>
-                      <input id="file-upload" type="file" className="hidden" onChange={handleFileUpload} disabled={uploading} />
+                    <Button size="sm" variant="ghost" className="h-6 text-xs px-2" disabled={uploading}>
+                      <Upload className="w-3 h-3 mr-1" />
+                      <label htmlFor="file-upload" className="cursor-pointer">{uploading ? 'Uploading...' : 'Upload'}</label>
+                      <input id="file-upload" type="file" className="hidden" onChange={handleFileUpload} disabled={uploading} multiple />
                     </Button>
                   </div>
-                  {files.length > 0 ? (
-                    <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">
-                      {files.map((file: any) => {
-                        const isImage = file.mimeType?.startsWith('image/');
-                        const accessToken = localStorage.getItem('accessToken') || '';
-                        const tokenParam = encodeURIComponent(accessToken);
-                        const previewUrl = `${API_BASE}/files/${file.id}/preview?token=${tokenParam}`;
-                        const downloadUrl = `${API_BASE}/files/${file.id}/download?token=${tokenParam}`;
-                        
-                        return (
-                          <div key={file.id} className="border border-slate-200 rounded-lg bg-white hover:shadow-md transition-shadow">
-                            {/* Thumbnail */}
-                            {isImage ? (
-                              <div className="relative w-full h-32 bg-slate-100 rounded-t-lg overflow-hidden">
-                                <img 
-                                  src={previewUrl} 
-                                  alt={file.originalName}
-                                  className="w-full h-full object-cover cursor-pointer"
-                                  onClick={() => window.open(previewUrl, '_blank')}
-                                  onError={(e) => {
-                                    // Fallback if preview fails - show file icon instead
-                                    const parent = e.currentTarget.parentElement;
-                                    if (parent) {
-                                      parent.innerHTML = '<div class="flex flex-col items-center justify-center h-full text-slate-400"><svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg><span class="text-xs mt-1">No preview</span></div>';
-                                    }
-                                  }}
-                                />
-                              </div>
-                            ) : (
-                              <div className="w-full h-32 bg-slate-100 rounded-t-lg flex items-center justify-center">
-                                <div
-                                  className="flex flex-col items-center justify-center h-full w-full cursor-pointer"
-                                  onClick={() => window.open(previewUrl, '_blank')}
-                                  title="Preview"
-                                >
-                                  <FileText className="w-12 h-12 text-slate-400" />
-                                  <span className="text-[10px] text-slate-500 mt-1">Preview</span>
-                                </div>
-                              </div>
-                            )}
-                            
-                            {/* File Info */}
-                            <div className="p-2">
-                              <div className="flex items-start justify-between gap-1 mb-1">
-                                <span className="text-xs font-medium truncate flex-1" title={file.originalName}>
-                                  {file.originalName || file.filename || 'File'}
-                                </span>
-                                {file.category && (
-                                  <span className="text-[9px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded flex-shrink-0">
-                                    {file.category}
-                                  </span>
-                                )}
-                              </div>
-                              
-                              <div className="flex items-center justify-between">
-                                <span className="text-[10px] text-slate-500">
-                                  {((file.size || 0) / 1024).toFixed(0)}KB
-                                </span>
-                                <div className="flex gap-1">
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-6 w-6 p-0 hover:bg-slate-50"
-                                    onClick={() => window.open(previewUrl, '_blank')}
-                                    title="Preview"
-                                  >
-                                    <FileText className="w-3 h-3 text-slate-600" />
-                                  </Button>
-                                  <Button 
-                                    size="sm" 
-                                    variant="ghost" 
-                                    className="h-6 w-6 p-0 hover:bg-blue-50" 
-                                    onClick={() => {
-                                      window.open(downloadUrl, '_blank');
-                                    }} 
-                                    title="Download"
-                                  >
-                                    <Download className="w-3 h-3 text-blue-600" />
-                                  </Button>
-                                  <Button 
-                                    size="sm" 
-                                    variant="ghost" 
-                                    className="h-6 w-6 p-0 hover:bg-red-50" 
-                                    onClick={async () => {
-                                      if (confirm('Delete this file?')) {
-                                        try {
-                                          await makeApiCall(`${API_BASE}/files/${file.id}`, { method: 'DELETE' });
-                                          toast({ title: 'Success', description: 'File deleted' });
-                                          loadFiles();
-                                        } catch (error) {
-                                          toast({ title: 'Error', description: 'Failed to delete file', variant: 'destructive' });
-                                        }
-                                      }
-                                    }} 
-                                    title="Delete"
-                                  >
-                                    <Trash className="w-3 h-3 text-red-600" />
-                                  </Button>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (<div className="text-center py-2 bg-slate-50 rounded text-[10px] text-slate-500">No files yet</div>)}
+                  <LeadFileGallery
+                    files={files}
+                    onDeleteFile={async (file) => {
+                      if (confirm('Delete this file?')) {
+                        try {
+                          await makeApiCall(`${API_BASE}/files/${file.id}`, { method: 'DELETE' });
+                          toast({ title: 'Success', description: 'File deleted' });
+                          loadFiles();
+                        } catch (error) {
+                          toast({ title: 'Error', description: 'Failed to delete file', variant: 'destructive' });
+                        }
+                      }
+                    }}
+                  />
                 </div>
               </TabsContent>
             </Tabs>

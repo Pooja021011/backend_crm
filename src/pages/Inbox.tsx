@@ -409,26 +409,40 @@ const Inbox = () => {
     // Handle communication clicks - navigate to lead details
     if (email.type === 'communication' && email.leadId) {
       console.log('💬 Navigating to communication lead ID:', email.leadId);
-      navigate(`/leads/${email.leadId}/edit`);
-
+      
       // Inbox dismiss: remove immediately + persist read so it won't reappear on refresh
       setLeadCommunications((prev) => prev.filter((c) => c.id !== email.id));
-      try {
-        const accessToken = localStorage.getItem('accessToken');
-        await fetch(`${API_BASE}/inbox/communications/${email.id}/mark-read`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
-          },
-        });
-      } catch (e) {
-        console.error('Failed to mark communication as read:', e);
-      }
+      
+      // Mark as read in backend (fire and forget, but log any errors)
+      const markAsRead = async () => {
+        try {
+          const accessToken = localStorage.getItem('accessToken');
+          const response = await fetch(`${API_BASE}/inbox/communications/${email.id}/mark-read`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+            },
+          });
+          
+          if (!response.ok) {
+            console.error('Failed to mark communication as read:', response.status, response.statusText);
+          } else {
+            console.log('✅ Communication marked as read successfully');
+          }
+        } catch (e) {
+          console.error('Failed to mark communication as read:', e);
+        }
+      };
+      
+      markAsRead(); // Fire and forget
+      
+      // Navigate to lead
+      navigate(`/leads/${email.leadId}/edit`);
       
       toast({
         title: "Lead Opened",
-        description: `Opened ${email.from} details for communication`,
+        description: `Viewing lead details`,
       });
       return;
     }
@@ -1556,8 +1570,10 @@ const Inbox = () => {
       console.log(`🔍 Getting tasks for display: ${assignedTasks.length} items`, assignedTasks);
       return assignedTasks;
     } else if (source === 'communications') {
-      console.log(`🔍 Getting communications for display: ${leadCommunications.length} items`, leadCommunications);
-      return leadCommunications;
+      // Only show unread communications in Inbox
+      const unreadComms = leadCommunications.filter(comm => comm.unread);
+      console.log(`🔍 Getting communications for display: ${unreadComms.length} unread out of ${leadCommunications.length} total`, unreadComms);
+      return unreadComms;
     } else if (source === 'reminders') {
       // Combine reminders and notifications for the reminders tab
       return [...reminders, ...notifications];

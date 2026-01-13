@@ -286,7 +286,7 @@ const AddBuyerLead = () => {
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
               {/* Lead Source */}
               <div className="space-y-2">
                 <Label htmlFor="leadSource" className="text-sm font-medium text-gray-700">
@@ -310,6 +310,43 @@ const AddBuyerLead = () => {
                 </Select>
               </div>
 
+              {/* Disposition Agent */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-700">
+                  Disposition Agent *
+                </Label>
+                <Select 
+                  value={formData.dispositionAgentId} 
+                  onValueChange={(value) => handleInputChange('dispositionAgentId', value)}
+                  disabled={agentsLoading}
+                >
+                  <SelectTrigger className="h-10 border-gray-300 focus:border-blue-500 focus:ring-blue-500/20">
+                    <SelectValue placeholder={agentsLoading ? "Loading agents..." : "Select disposition agent"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {dispositionAgents.map((agent) => {
+                      const fullName = `${agent.firstName} ${agent.lastName}`;
+                      // Show only ADMIN and MANAGER roles
+                      const importantRoles = agent.roles
+                        .filter(r => r.role.name === 'ADMIN' || r.role.name === 'MANAGER')
+                        .map(r => r.role.name)
+                        .join(', ');
+                      const displayName = importantRoles ? `${fullName} (${importantRoles})` : fullName;
+                      
+                      return (
+                        <SelectItem key={agent.id} value={agent.id}>
+                          <span className="font-medium">{displayName}</span>
+                        </SelectItem>
+                      );
+                    })}
+                    {dispositionAgents.length === 0 && !agentsLoading && (
+                      <SelectItem value="no-agents" disabled>
+                        No disposition agents available
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </Card>
 
@@ -521,59 +558,6 @@ const AddBuyerLead = () => {
                 >
                   Pre-Approved for Financing
                 </Label>
-              </div>
-            </div>
-          </Card>
-
-          {/* Assignment Section */}
-          <Card className="p-8 shadow-sm border border-gray-200">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <Users className="w-5 h-5 text-purple-600" />
-              </div>
-              <h2 className="text-lg font-semibold text-gray-900">Assignment</h2>
-            </div>
-            
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">
-                  Disposition Agent *
-                </Label>
-                <Select 
-                  value={formData.dispositionAgentId} 
-                  onValueChange={(value) => handleInputChange('dispositionAgentId', value)}
-                  disabled={agentsLoading}
-                >
-                  <SelectTrigger className="h-10 border-gray-300 focus:border-blue-500 focus:ring-blue-500/20">
-                    <SelectValue placeholder={agentsLoading ? "Loading agents..." : "Select disposition agent"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {dispositionAgents.map((agent) => {
-                      const initials = `${agent.firstName.charAt(0)}${agent.lastName.charAt(0)}`;
-                      const fullName = `${agent.firstName} ${agent.lastName}`;
-                      const roleNames = agent.roles.map(r => r.role.name).join(', ');
-                      return (
-                        <SelectItem key={agent.id} value={agent.id}>
-                          <div className="flex flex-col">
-                            <div className="flex items-center gap-2">
-                              <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
-                                <span className="text-xs font-medium text-blue-600">{initials}</span>
-                              </div>
-                              <span className="font-medium">{fullName}</span>
-                            </div>
-                            <span className="text-xs text-gray-500 ml-8">{roleNames}</span>
-                          </div>
-                        </SelectItem>
-                      );
-                    })}
-                    {dispositionAgents.length === 0 && !agentsLoading && (
-                      <SelectItem value="no-agents" disabled>
-                        No disposition agents available
-                      </SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-gray-500">Select the agent who will handle this buyer lead</p>
               </div>
             </div>
           </Card>
