@@ -87,12 +87,11 @@ const Pipeline = () => {
     leadToMove: any;
   } | null>(null);
 
-  // Drag behavior: long-press to drag (so click opens lead reliably)
+  // Drag behavior: distance-based activation (more reliable than delay)
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        delay: 150,
-        tolerance: 4,
+        distance: 8,
       },
     })
   );

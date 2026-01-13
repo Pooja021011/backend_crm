@@ -45,7 +45,7 @@ export const leadService = {
     }
     
     // NEW: Auto-update lead status to "Closed" when moving to Closed stage
-    if (name === 'closed') {
+    if (name.includes('closed')) {
       const closedStatus = await prisma.leadStatus.findFirst({
         where: { name: { equals: 'Closed', mode: 'insensitive' } }
       });
