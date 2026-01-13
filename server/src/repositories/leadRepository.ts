@@ -392,7 +392,7 @@ export const leadRepository = {
       where,
       orderBy: { [sort]: order },
       skip,
-      take: Math.min(take, 100),
+      take: Math.min(take, 1000), // Increased from 100 to 1000 to support larger lead lists
       include: includeLead,
     });
   },
