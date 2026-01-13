@@ -14,7 +14,7 @@ export const authService = {
   async login(email: string, password: string) {
     const user = await userRepository.findByEmail(email);
     if (!user || user.status !== 'active') throw Object.assign(new Error('Invalid credentials'), { status: 401 });
-    const ok = await cryptoUtil.verifyPassword(user.passwordHash, password);
+    const ok = await cryptoUtil.verifyPassword(password, user.passwordHash);
     if (!ok) throw Object.assign(new Error('Invalid credentials'), { status: 401 });
 
     const roles = user.roles.map((ur) => ur.role.name as RoleName);

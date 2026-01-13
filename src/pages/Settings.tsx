@@ -143,14 +143,17 @@ const Settings = () => {
   // Voicemail greeting state (per-user)
   const [voicemailBlob, setVoicemailBlob] = useState<Blob | null>(null);
   const [voicemailUrl, setVoicemailUrl] = useState<string>('');
+  const [voicemailDuration, setVoicemailDuration] = useState<number | null>(null);
   const [savedVoicemailAt, setSavedVoicemailAt] = useState<string>('');
   const [isRecordingVoicemail, setIsRecordingVoicemail] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
   const [savingVoicemailGreeting, setSavingVoicemailGreeting] = useState(false);
   const voicemailRecorderRef = useRef<MediaRecorder | null>(null);
   const voicemailChunksRef = useRef<Blob[]>([]);
   const voicemailObjectUrlRef = useRef<string>('');
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Cleanup voicemail preview URL
+  // Cleanup voicemail preview URL and timer
   useEffect(() => {
     return () => {
       if (voicemailObjectUrlRef.current) {
@@ -159,6 +162,9 @@ const Settings = () => {
         } catch {
           // ignore
         }
+      }
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
       }
     };
   }, []);
@@ -246,6 +252,7 @@ const Settings = () => {
       }
       setVoicemailUrl('');
       setVoicemailBlob(null);
+      setVoicemailDuration(null);
       setSavedVoicemailAt('');
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -279,6 +286,12 @@ const Settings = () => {
 
       recorder.start();
       setIsRecordingVoicemail(true);
+      setRecordingDuration(0);
+      
+      // Start timer
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
     } catch (err: any) {
       console.error('Mic recording error:', err);
       toast({ title: 'Error', description: err?.message || 'Microphone permission denied', variant: 'destructive' });
@@ -291,6 +304,12 @@ const Settings = () => {
     if (r.state !== 'inactive') r.stop();
     voicemailRecorderRef.current = null;
     setIsRecordingVoicemail(false);
+    
+    // Stop timer
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
   };
 
   const saveVoicemailGreeting = async () => {
@@ -341,6 +360,44 @@ const Settings = () => {
       toast({ title: 'Saved', description: 'Voicemail greeting saved successfully' });
     } catch (err: any) {
       toast({ title: 'Error', description: err?.message || 'Failed to save voicemail greeting', variant: 'destructive' });
+    } finally {
+      setSavingVoicemailGreeting(false);
+    }
+  };
+
+  const deleteVoicemailGreeting = async () => {
+    if (!confirm('Are you sure you want to delete your voicemail greeting?')) {
+      return;
+    }
+
+    setSavingVoicemailGreeting(true);
+    try {
+      const resp = await makeApiCall(`${API_BASE}/settings/sms/voicemail-greeting`, {
+        method: 'DELETE',
+      });
+
+      const json = await resp.json();
+      if (!resp.ok || !json.success) {
+        throw new Error(json.error || 'Failed to delete voicemail greeting');
+      }
+
+      // Clear all voicemail state
+      if (voicemailObjectUrlRef.current) {
+        try {
+          URL.revokeObjectURL(voicemailObjectUrlRef.current);
+        } catch {
+          // ignore
+        }
+        voicemailObjectUrlRef.current = '';
+      }
+      setVoicemailUrl('');
+      setVoicemailBlob(null);
+      setVoicemailDuration(null);
+      setSavedVoicemailAt('');
+
+      toast({ title: 'Deleted', description: 'Voicemail greeting deleted successfully' });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err?.message || 'Failed to delete voicemail greeting', variant: 'destructive' });
     } finally {
       setSavingVoicemailGreeting(false);
     }
@@ -674,15 +731,6 @@ const Settings = () => {
       toast({
         title: "Validation Error",
         description: "Please enter a new password.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (passwordData.newPassword.length < 6) {
-      toast({
-        title: "Validation Error",
-        description: "New password must be at least 6 characters long.",
         variant: "destructive",
       });
       return;
@@ -1167,7 +1215,7 @@ const Settings = () => {
                         type="password" 
                         value={passwordData.newPassword}
                         onChange={(e) => setPasswordData(prev => ({ ...prev, newPassword: e.target.value }))}
-                        placeholder="Enter your new password (minimum 6 characters)"
+                        placeholder="Enter your new password"
                         className="bg-input border-border focus:ring-primary focus:border-primary"
                       />
                     </div>
@@ -1574,6 +1622,15 @@ const Settings = () => {
                           Record a voicemail greeting for your phone number. Callers will hear this message when the call goes to voicemail.
                         </p>
 
+                        {isRecordingVoicemail && (
+                          <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg">
+                            <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+                            <span className="text-sm font-medium text-red-700 dark:text-red-400">
+                              Recording: {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
+                            </span>
+                          </div>
+                        )}
+
                         <div className="flex flex-wrap items-center gap-2">
                           <Button
                             type="button"
@@ -1613,15 +1670,57 @@ const Settings = () => {
                               </>
                             )}
                           </Button>
+
+                          {savedVoicemailAt && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={deleteVoicemailGreeting}
+                              disabled={savingVoicemailGreeting}
+                              className="gap-2 text-destructive hover:text-destructive"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              Delete
+                            </Button>
+                          )}
                         </div>
 
                         {voicemailUrl && (
                           <div className="rounded-lg border border-border bg-background/50 p-4">
                             <div className="flex items-center justify-between gap-2 mb-2">
                               <div className="text-sm font-medium">Preview</div>
-                              <div className="text-xs text-muted-foreground">WAV</div>
+                              <div className="flex items-center gap-2">
+                                {voicemailDuration !== null && (
+                                  <span className="text-xs text-muted-foreground">
+                                    {Math.floor(voicemailDuration / 60)}:{(Math.floor(voicemailDuration % 60)).toString().padStart(2, '0')}
+                                  </span>
+                                )}
+                                <div className="text-xs text-muted-foreground">WAV</div>
+                              </div>
                             </div>
-                            <audio controls src={voicemailUrl} className="w-full" />
+                            <audio 
+                              key={voicemailUrl} 
+                              controls 
+                              src={voicemailUrl} 
+                              className="w-full" 
+                              preload="metadata"
+                              onLoadedMetadata={(e) => {
+                                const audio = e.currentTarget;
+                                // Set duration when metadata loads
+                                if (audio.duration && !isNaN(audio.duration) && audio.duration !== Infinity) {
+                                  setVoicemailDuration(audio.duration);
+                                } else {
+                                  // Force reload to ensure duration is displayed
+                                  audio.currentTime = 0;
+                                  // Try again after a brief moment
+                                  setTimeout(() => {
+                                    if (audio.duration && !isNaN(audio.duration) && audio.duration !== Infinity) {
+                                      setVoicemailDuration(audio.duration);
+                                    }
+                                  }, 100);
+                                }
+                              }}
+                            />
                           </div>
                         )}
                       </div>

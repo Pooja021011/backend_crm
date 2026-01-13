@@ -143,10 +143,10 @@ export const AddAgentDialog: React.FC<AddAgentDialogProps> = ({
       return false;
     }
 
-    if (useCustomPassword && (!formData.password || formData.password.length < 8)) {
+    if (useCustomPassword && !formData.password) {
       toast({
         title: "Validation Error",
-        description: "Password must be at least 8 characters long",
+        description: "Password is required when using custom password",
         variant: "destructive",
       });
       return false;

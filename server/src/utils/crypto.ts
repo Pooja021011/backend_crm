@@ -5,7 +5,7 @@ import { env } from '../config/env.js';
 
 export const cryptoUtil = {
   hashPassword: (pwd: string) => argon2.hash(pwd),
-  verifyPassword: (hash: string, pwd: string) => argon2.verify(hash, pwd),
+  verifyPassword: (pwd: string, hash: string) => argon2.verify(hash, pwd),
   newId: () => randomUUID(),
 };
 

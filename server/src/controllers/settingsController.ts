@@ -358,5 +358,52 @@ export const settingsController = {
       return res.status(500).json({ success: false, error: 'Failed to upload voicemail greeting' });
     }
   },
+
+  // Delete Voicemail Greeting (per-user)
+  deleteVoicemailGreeting: async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user?.id as string | undefined;
+      if (!userId) {
+        return res.status(401).json({ success: false, error: 'User not authenticated' });
+      }
+
+      // Get user settings to find the file
+      const settings = await prisma.userSmsSettings.findUnique({
+        where: { userId },
+        select: { voicemailGreetingPath: true },
+      });
+
+      // Delete the physical file if it exists
+      if (settings?.voicemailGreetingPath) {
+        const greetingsDir = path.resolve(process.cwd(), 'server', 'uploads', 'voicemail-greetings');
+        const filePath = path.join(greetingsDir, settings.voicemailGreetingPath);
+        
+        if (fs.existsSync(filePath)) {
+          try {
+            fs.unlinkSync(filePath);
+          } catch (err) {
+            console.error('Error deleting voicemail file:', err);
+          }
+        }
+      }
+
+      // Clear the greeting path in database
+      await prisma.userSmsSettings.update({
+        where: { userId },
+        data: {
+          voicemailGreetingPath: null,
+          voicemailGreetingUpdatedAt: null,
+        },
+      });
+
+      return res.json({
+        success: true,
+        message: 'Voicemail greeting deleted successfully',
+      });
+    } catch (error: any) {
+      console.error('Error deleting voicemail greeting:', error);
+      return res.status(500).json({ success: false, error: 'Failed to delete voicemail greeting' });
+    }
+  },
 };
 

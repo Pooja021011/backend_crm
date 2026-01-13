@@ -159,10 +159,10 @@ export const EditAgentDialog: React.FC<EditAgentDialogProps> = ({
       return false;
     }
 
-    if (changePassword && (!formData.password || formData.password.length < 8)) {
+    if (changePassword && !formData.password) {
       toast({
         title: "Validation Error",
-        description: "Password must be at least 8 characters long",
+        description: "Password is required when changing password",
         variant: "destructive",
       });
       return false;

@@ -34,6 +34,9 @@ router.post('/sms', (req, res, next) => settingsController.upsertUserSmsSettings
 router.post('/sms/voicemail-greeting', fileUploader.single('file'), (req, res, next) =>
   settingsController.uploadVoicemailGreeting(req, res).catch(next)
 );
+router.delete('/sms/voicemail-greeting', (req, res, next) =>
+  settingsController.deleteVoicemailGreeting(req, res).catch(next)
+);
 
 // Mutations (ADMIN only)
 router.use(requireRoles('ADMIN'));
