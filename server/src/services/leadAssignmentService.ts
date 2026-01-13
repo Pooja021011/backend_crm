@@ -1,5 +1,6 @@
 import { leadDistributionRepository } from '../repositories/leadDistributionRepository.js';
 import { prisma } from '../config/db.js';
+import { logger } from '../config/logger.js';
 
 interface AssignmentStats {
   userId: string;
@@ -21,7 +22,30 @@ export const leadAssignmentService = {
         agent.leadDistributionSettings?.isActive
     );
 
+    // DEBUG LOG: Active agents count and details (H6)
+    logger.info({
+      event: 'LEAD_ASSIGNMENT_AGENTS_CHECK',
+      totalAgents: agents.length,
+      activeAgentsCount: activeAgents.length,
+      activeAgents: activeAgents.map(a => ({
+        id: a.id,
+        name: `${a.firstName} ${a.lastName}`,
+        status: a.status,
+        receiveLeads: a.leadDistributionSettings?.receiveLeads,
+        isActive: a.leadDistributionSettings?.isActive,
+        distributionPercentage: a.leadDistributionSettings?.distributionPercentage
+      }))
+    }, `Found ${activeAgents.length} active agents for lead assignment`);
+
     if (activeAgents.length === 0) {
+      // DEBUG LOG: Warning when no agents available (H6)
+      logger.warn({
+        event: 'LEAD_ASSIGNMENT_NO_AGENTS',
+        totalAgents: agents.length,
+        inactiveAgents: agents.filter(a => a.status !== 'active').length,
+        notReceivingLeads: agents.filter(a => !a.leadDistributionSettings?.receiveLeads).length
+      }, 'No active agents available for lead assignment');
+      
       console.warn('No active agents available for lead assignment');
       return null;
     }
@@ -63,6 +87,19 @@ export const leadAssignmentService = {
     // Calculate total leads assigned today
     const totalAssigned = stats.reduce((sum, s) => sum + s.assignedCount, 0);
 
+    // DEBUG LOG: Assignment calculation stats (H9)
+    logger.info({
+      event: 'LEAD_ASSIGNMENT_CALCULATION',
+      totalAssignedToday: totalAssigned,
+      stats: stats.map(s => ({
+        userId: s.userId,
+        assignedCount: s.assignedCount,
+        targetPercentage: s.targetPercentage,
+        targetCount: (totalAssigned + 1) * (s.targetPercentage / 100),
+        deficit: (totalAssigned + 1) * (s.targetPercentage / 100) - s.assignedCount
+      }))
+    }, 'Calculating lead assignment distribution');
+
     // Find agent most behind their target percentage
     let selectedAgent: AssignmentStats | null = null;
     let maxDeficit = -Infinity;
@@ -79,8 +116,22 @@ export const leadAssignmentService = {
 
     if (!selectedAgent) {
       // Fallback: return first active agent
+      logger.warn({
+        event: 'LEAD_ASSIGNMENT_FALLBACK',
+        fallbackAgentId: activeAgents[0].id
+      }, 'No agent selected by distribution logic, using fallback (first active agent)');
       return activeAgents[0].id;
     }
+
+    // DEBUG LOG: Selected agent and distribution (H9)
+    logger.info({
+      event: 'LEAD_ASSIGNMENT_SELECTED',
+      selectedAgentId: selectedAgent.userId,
+      selectedAgentCount: selectedAgent.assignedCount,
+      selectedAgentTarget: selectedAgent.targetPercentage,
+      maxDeficit,
+      totalAssignedAfter: totalAssigned + 1
+    }, `Lead assigned to agent ${selectedAgent.userId}`);
 
     console.log('Lead assignment:', {
       selectedAgent: selectedAgent.userId,

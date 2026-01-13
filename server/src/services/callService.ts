@@ -185,6 +185,15 @@ export const callService = {
         const existing = safeFrom ? await this.findLeadByPhoneNumber(safeFrom, userId) : null;
         if (existing) return existing;
 
+        // DEBUG LOG: Creating lead for inbound call (H8)
+        logger.info({
+          event: 'LEAD_CREATE_INBOUND_CALL',
+          from: safeFrom,
+          assignedUserId: userId,
+          source: 'inbound_call_webhook',
+          hardcodedAssignment: true
+        }, `Creating lead for inbound call - HARDCODED assignment to receiving agent: ${userId}`);
+
         // If this is a brand-new inbound-call lead, set leadSource to "Mailer" (from DB)
         const mailerSource = await prisma.leadSource.findFirst({
           where: { active: true, name: { equals: 'Mailer', mode: 'insensitive' as any } },
@@ -217,6 +226,15 @@ export const callService = {
         if (!created) {
           throw new Error('Failed to auto-create lead for unknown inbound caller');
         }
+
+        // DEBUG LOG: Lead created for inbound call
+        logger.info({
+          event: 'LEAD_CREATED_INBOUND_CALL',
+          leadId: created.id,
+          from: safeFrom,
+          assignedUserId: userId,
+          usedDistribution: false
+        }, 'Auto-created lead for unknown inbound caller - assigned to receiving agent (NOT using distribution service)');
 
         logger.info(
           { leadId: created.id, from: safeFrom, assignedUserId: userId },

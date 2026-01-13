@@ -259,6 +259,20 @@ export const callController = {
       const from = String(body?.From || '');
       const to = String(body?.To || '');
 
+      // DEBUG LOG: Entry - Log all Twilio callback parameters (H1-H5)
+      logger.info({
+        event: 'RECORDING_CALLBACK_ENTRY',
+        callSid,
+        recordingSid,
+        recordingUrl,
+        recordingDuration,
+        recordingSource,
+        from,
+        to,
+        timestamp: new Date().toISOString(),
+        isVoicemail: recordingSource && recordingSource !== 'DialVerb'
+      }, 'Recording callback received');
+
       console.log('🎤 RECORDING STATUS CALLBACK:', {
         callSid,
         recordingSid,
@@ -271,10 +285,23 @@ export const callController = {
       });
 
       if (!callSid || !recordingSid) {
+        // DEBUG LOG: Recording ignored - missing required fields
+        logger.warn({
+          event: 'RECORDING_IGNORED_MISSING_FIELDS',
+          callSid,
+          recordingSid
+        }, 'Recording ignored - missing callSid or recordingSid');
         return res.json({ success: true, ignored: true });
       }
 
       const isVoicemail = recordingSource && recordingSource !== 'DialVerb';
+
+      // DEBUG LOG: Before callSid search (H1, H4)
+      logger.info({
+        event: 'RECORDING_SEARCH_BY_CALLSID',
+        callSid,
+        isVoicemail
+      }, 'Searching for existing Communication by callSid');
 
       // Try to update existing call Communication by callSid
       const existing = await prisma.communication.findFirst({
@@ -283,6 +310,16 @@ export const callController = {
           metadata: { path: ['callSid'], equals: callSid },
         },
       });
+
+      // DEBUG LOG: After callSid search with result (H1, H4)
+      logger.info({
+        event: 'RECORDING_CALLSID_SEARCH_RESULT',
+        found: !!existing,
+        existingId: existing?.id,
+        existingLeadId: existing?.leadId,
+        existingDirection: existing?.direction,
+        existingMetadata: existing?.metadata
+      }, existing ? 'Found existing Communication by callSid' : 'No Communication found by callSid');
 
       if (existing) {
         const prev = (existing.metadata as any) || {};
@@ -301,6 +338,14 @@ export const callController = {
           },
         });
 
+        // DEBUG LOG: Recording attached to existing Communication
+        logger.info({
+          event: 'RECORDING_ATTACHED_TO_EXISTING',
+          communicationId: existing.id,
+          leadId: existing.leadId,
+          recordingSid
+        }, 'Recording attached to existing Communication');
+
         console.log('✅ Recording attached to existing Communication:', existing.id);
         return res.json({ success: true, updated: true });
       }
@@ -309,6 +354,19 @@ export const callController = {
       // Try to find recent OUTBOUND Communication by phone number
       const toNormalized = typeof to === 'string' ? to.replace(/[\s\(\)\-]/g, '') : to;
       const fromNormalized = typeof from === 'string' ? from.replace(/[\s\(\)\-]/g, '') : from;
+      
+      // DEBUG LOG: Before OUTBOUND phone search with normalization details (H2, H3, H4)
+      const timeWindowStart = new Date(Date.now() - 5 * 60 * 1000);
+      logger.info({
+        event: 'RECORDING_SEARCH_BY_PHONE',
+        to,
+        from,
+        toNormalized,
+        fromNormalized,
+        toLast10: toNormalized.slice(-10),
+        timeWindowStart: timeWindowStart.toISOString(),
+        timeWindowMinutes: 5
+      }, 'Searching for OUTBOUND Communication by phone number');
       
       console.log('🔍 Searching for OUTBOUND Communication without callSid:', {
         toNormalized,
@@ -331,6 +389,16 @@ export const callController = {
         orderBy: { occurredAt: 'desc' }
       });
 
+      // DEBUG LOG: After OUTBOUND search with age calculation (H2, H3)
+      logger.info({
+        event: 'RECORDING_PHONE_SEARCH_RESULT',
+        found: !!recentOutbound,
+        outboundId: recentOutbound?.id,
+        outboundOccurredAt: recentOutbound?.occurredAt,
+        outboundMetadata: recentOutbound?.metadata,
+        ageInSeconds: recentOutbound ? ((Date.now() - new Date(recentOutbound.occurredAt).getTime()) / 1000) : null
+      }, recentOutbound ? 'Found OUTBOUND Communication by phone' : 'No OUTBOUND Communication found by phone');
+
       if (recentOutbound) {
         const prev = (recentOutbound.metadata as any) || {};
         await prisma.communication.update({
@@ -348,6 +416,14 @@ export const callController = {
           },
         });
 
+        // DEBUG LOG: Recording attached to OUTBOUND Communication
+        logger.info({
+          event: 'RECORDING_ATTACHED_TO_OUTBOUND',
+          communicationId: recentOutbound.id,
+          leadId: recentOutbound.leadId,
+          recordingSid
+        }, 'Recording attached to OUTBOUND Communication');
+
         console.log('✅ Recording attached to recent OUTBOUND Communication:', recentOutbound.id);
         return res.json({ success: true, updated: true });
       }
@@ -359,12 +435,37 @@ export const callController = {
       const userSettings = await smsSettingsRepository.smsSettingsRepository.findByPhoneNumber(toNormalized);
       const userId = userSettings?.userId;
 
+      // DEBUG LOG: User lookup result (H5)
+      logger.info({
+        event: 'RECORDING_USER_LOOKUP',
+        toNormalized,
+        userFound: !!userSettings,
+        userId: userId || null
+      }, userSettings ? 'User found for phone number' : 'No user found for phone number');
+
       if (!userId) {
+        // DEBUG LOG: Recording ignored - no userId found (H5)
+        logger.warn({
+          event: 'RECORDING_IGNORED_NO_USER',
+          toNormalized,
+          from,
+          recordingSid
+        }, 'Recording ignored - no userId found for destination phone number');
         return res.json({ success: true, ignored: true });
       }
 
       // Find matching lead for this agent; otherwise auto-create Unknown Caller lead
       const lead = from ? await callService.findLeadByPhoneNumber(from, userId) : null;
+
+      // DEBUG LOG: Lead lookup result (H5)
+      logger.info({
+        event: 'RECORDING_LEAD_LOOKUP',
+        from,
+        userId,
+        leadFound: !!lead,
+        leadId: lead?.id || null
+      }, lead ? 'Found existing lead for caller' : 'No existing lead found for caller - will create new');
+
 
       // If this is a brand-new inbound-call lead, set leadSource to "Mailer" (from DB)
       const mailerSource = await prisma.leadSource.findFirst({
@@ -392,6 +493,17 @@ export const callController = {
           userId
         ));
 
+      // DEBUG LOG: Before creating new Communication (H5)
+      logger.info({
+        event: 'RECORDING_CREATE_NEW_COMMUNICATION',
+        leadId: ensuredLead.id,
+        leadWasCreated: !lead,
+        isVoicemail,
+        recordingSid,
+        callSid,
+        assignedUserId: userId
+      }, 'Creating new Communication with recording');
+
       await communicationRepository.create(ensuredLead.id, {
         type: 'CALL',
         direction: 'INBOUND',
@@ -412,8 +524,27 @@ export const callController = {
         },
       });
 
+      // DEBUG LOG: New Communication created successfully
+      logger.info({
+        event: 'RECORDING_COMMUNICATION_CREATED',
+        leadId: ensuredLead.id,
+        recordingSid,
+        isVoicemail
+      }, 'New Communication created successfully');
+
       return res.json({ success: true, created: true });
     } catch (error: any) {
+      // DEBUG LOG: Catch block with full error details (H5)
+      logger.error({
+        event: 'RECORDING_ERROR',
+        error: error.message,
+        stack: error.stack,
+        callSid: req.body?.CallSid,
+        recordingSid: req.body?.RecordingSid,
+        from: req.body?.From,
+        to: req.body?.To
+      }, 'ERROR in recordingStatus callback');
+      
       logger.error({ error: error.message }, 'Error in recordingStatus callback');
       return res.json({ success: true });
     }

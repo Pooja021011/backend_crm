@@ -1,6 +1,7 @@
 import { prisma } from '../config/db.js';
 import { leadAssignmentService } from './leadAssignmentService.js';
 import type { LeadType } from '@prisma/client';
+import { logger } from '../config/logger.js';
 
 interface GoogleSheetLeadData {
   leadType: 'SELLER' | 'BUYER' | 'VENDOR';
@@ -42,12 +43,31 @@ export const googleSheetsWebhookService = {
     // Validate required fields
     this.validateLeadData(data);
 
+    // DEBUG LOG: Google Sheets lead import (H7)
+    logger.info({
+      event: 'LEAD_CREATE_GOOGLE_SHEETS',
+      leadType: data.leadType,
+      source: 'google_sheets_webhook',
+      usesDistribution: true
+    }, 'Processing lead from Google Sheets - will use distribution service');
+
     // Get next agent for assignment
     const assignedUserId = await leadAssignmentService.getNextAgentForAssignment();
 
     if (!assignedUserId) {
+      logger.error({
+        event: 'LEAD_CREATE_GOOGLE_SHEETS_NO_AGENT',
+        leadType: data.leadType
+      }, 'Failed to create Google Sheets lead - no active agents available');
       throw new Error('No active agents available for lead assignment');
     }
+
+    // DEBUG LOG: Agent assigned via distribution
+    logger.info({
+      event: 'LEAD_CREATE_GOOGLE_SHEETS_AGENT_ASSIGNED',
+      assignedUserId,
+      leadType: data.leadType
+    }, `Google Sheets lead will be assigned to: ${assignedUserId}`);
 
     // Find the default pipeline stage for the lead type
     const defaultStage = await this.getDefaultPipelineStage(data.leadType);

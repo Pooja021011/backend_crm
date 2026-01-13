@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { leadService } from '../services/leadService.js';
 import { listLeadsQuery, createSellerLeadSchema, createBuyerLeadSchema, createVendorLeadSchema, changeStageSchema, createTaskSchema } from '../validators/leadValidators.js';
+import { logger } from '../config/logger.js';
 
 export const leadController = {
   // Create lead by type
@@ -12,7 +13,27 @@ export const leadController = {
     else if (type === 'VENDOR') parsed = createVendorLeadSchema.parse(req.body);
     else return res.status(400).json({ error: 'Invalid type' });
 
+    // DEBUG LOG: Manual lead creation (H7, H8)
+    logger.info({
+      event: 'LEAD_CREATE_MANUAL',
+      leadType: type,
+      hasAssignedUserId: !!parsed.assignedUserId,
+      assignedUserId: parsed.assignedUserId || null,
+      createdBy: (req as any).user?.id,
+      source: 'manual'
+    }, `Manual lead creation - type: ${type}, assignedUserId: ${parsed.assignedUserId ? 'provided' : 'not provided'}`);
+
     const created = await leadService.create(parsed, (req as any).user?.id);
+    
+    // DEBUG LOG: Lead created result
+    logger.info({
+      event: 'LEAD_CREATED_MANUAL',
+      leadId: created.id,
+      leadType: type,
+      finalAssignedUserId: created.assignedUserId,
+      wasAutoAssigned: !parsed.assignedUserId && !!created.assignedUserId
+    }, `Manual lead created - ID: ${created.id}, assigned to: ${created.assignedUserId || 'none'}`);
+    
     res.status(201).json({ data: created });
   },
 
