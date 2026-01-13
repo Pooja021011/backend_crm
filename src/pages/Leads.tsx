@@ -147,36 +147,38 @@ const Leads = () => {
     // Priority 1: Check primary lead owner first
     if (lead.owners && lead.owners.length > 0) {
       const primaryOwner = lead.owners.find((o: any) => o.isPrimary);
-      if (primaryOwner?.email?.trim()) return primaryOwner.email.trim();
+      if (primaryOwner?.email?.trim() && !primaryOwner.email.includes('@unknown.local')) {
+        return primaryOwner.email.trim();
+      }
       
       // If no primary, get first owner with email
-      const ownerEmail = lead.owners.find((o: any) => o.email)?.email?.trim();
+      const ownerEmail = lead.owners.find((o: any) => o.email && !o.email.includes('@unknown.local'))?.email?.trim();
       if (ownerEmail) return ownerEmail;
     }
     
     // Priority 2: Check contacts (for backward compatibility)
     if (lead.contacts && lead.contacts.length > 0) {
       const contactEmail = lead.contacts[0]?.email?.trim();
-      if (contactEmail) return contactEmail;
+      if (contactEmail && !contactEmail.includes('@unknown.local')) return contactEmail;
     }
     
     // Priority 3: Check lead owners (old field name for backward compatibility)
     if (lead.leadOwners && lead.leadOwners.length > 0) {
-      const ownerEmail = lead.leadOwners.find((o: any) => o.email)?.email?.trim();
+      const ownerEmail = lead.leadOwners.find((o: any) => o.email && !o.email.includes('@unknown.local'))?.email?.trim();
       if (ownerEmail) return ownerEmail;
     }
     
     // Priority 4: Check seller/buyer/vendor as fallback
     const sellerEmail = lead.seller?.email?.trim();
-    if (sellerEmail) return sellerEmail;
+    if (sellerEmail && !sellerEmail.includes('@unknown.local')) return sellerEmail;
     
     const buyerEmail = lead.buyer?.email?.trim();
-    if (buyerEmail) return buyerEmail;
+    if (buyerEmail && !buyerEmail.includes('@unknown.local')) return buyerEmail;
     
     const vendorEmail = lead.vendor?.email?.trim();
-    if (vendorEmail) return vendorEmail;
+    if (vendorEmail && !vendorEmail.includes('@unknown.local')) return vendorEmail;
     
-    return 'N/A';
+    return 'No email';
   };
   
   // Helper to check if lead has any phone number
@@ -279,8 +281,8 @@ const Leads = () => {
     }
   }, [activeTab, canViewSellerLeads, canViewBuyerLeads, canViewVendorLeads]);
   
-  // Sorting functionality
-  const { sortConfig, handleSort, resetSort } = useSortable({ key: 'updatedAt', direction: 'desc' });
+  // Sorting functionality - default to createdAt DESC (newest first)
+  const { sortConfig, handleSort, resetSort } = useSortable({ key: 'createdAt', direction: 'desc' });
 
   // Load all leads and filter data on component mount
   useEffect(() => {
@@ -1421,7 +1423,10 @@ const Leads = () => {
                       <SortableTableHeader sortKey="assignedUser" sortConfig={sortConfig} onSort={handleSort} className="min-w-[90px]">
                         Assigned
                       </SortableTableHeader>
-                      <SortableTableHeader sortKey="updatedAt" sortConfig={sortConfig} onSort={handleSort} className="min-w-[80px]">
+                      <SortableTableHeader sortKey="createdAt" sortConfig={sortConfig} onSort={handleSort} className="min-w-[80px]">
+                        Date Created
+                      </SortableTableHeader>
+                      <SortableTableHeader sortKey="lastContactAt" sortConfig={sortConfig} onSort={handleSort} className="min-w-[80px]">
                         Last Contact
                       </SortableTableHeader>
                       <TableHead className="w-8 sticky right-0 bg-gray-50 z-10 border-l border-gray-200"></TableHead>
@@ -1498,7 +1503,10 @@ const Leads = () => {
                           {lead.assignedUserId ? 'Assigned' : 'Unassigned'}
                         </TableCell>
                         <TableCell className="text-gray-600">
-                          {new Date(lead.updatedAt).toLocaleDateString()}
+                          {new Date(lead.createdAt).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="text-gray-600">
+                          {lead.lastContactAt ? new Date(lead.lastContactAt).toLocaleDateString() : 'No contact'}
                         </TableCell>
                         <TableCell 
                           className="sticky right-0 bg-white z-10 border-l border-gray-200 p-0"
@@ -1550,6 +1558,7 @@ const Leads = () => {
                       <TableHead className="min-w-[70px]">Pre-Appr</TableHead>
                       <TableHead className="min-w-[70px]">Timeline</TableHead>
                       <TableHead className="min-w-[80px]">Assigned</TableHead>
+                      <TableHead className="min-w-[80px]">Date Created</TableHead>
                       <TableHead className="min-w-[80px]">Last Contact</TableHead>
                       <TableHead className="w-8 sticky right-0 bg-gray-50 z-10 border-l border-gray-200"></TableHead>
                     </TableRow>
@@ -1636,7 +1645,10 @@ const Leads = () => {
                           {lead.assignedUserId ? 'Assigned' : <span className="text-gray-400">Unassigned</span>}
                         </TableCell>
                         <TableCell className="text-gray-600">
-                          {lead.updatedAt ? new Date(lead.updatedAt).toLocaleDateString() : <span className="text-gray-400">-</span>}
+                          {lead.createdAt ? new Date(lead.createdAt).toLocaleDateString() : <span className="text-gray-400">-</span>}
+                        </TableCell>
+                        <TableCell className="text-gray-600">
+                          {lead.lastContactAt ? new Date(lead.lastContactAt).toLocaleDateString() : <span className="text-gray-400">No contact</span>}
                         </TableCell>
                         <TableCell 
                           className="sticky right-0 bg-white z-10 border-l border-gray-200 p-0"
@@ -1686,6 +1698,7 @@ const Leads = () => {
                       <TableHead className="min-w-[60px]">Rating</TableHead>
                       <TableHead className="min-w-[60px]">Verified</TableHead>
                       <TableHead className="min-w-[80px]">Assigned</TableHead>
+                      <TableHead className="min-w-[80px]">Date Created</TableHead>
                       <TableHead className="min-w-[80px]">Last Contact</TableHead>
                       <TableHead className="w-8 sticky right-0 bg-gray-50 z-10 border-l border-gray-200"></TableHead>
                     </TableRow>
@@ -1742,7 +1755,8 @@ const Leads = () => {
                           <Badge className="bg-gray-100 text-gray-700 text-[10px] px-1.5 py-0">Pending</Badge>
                         </TableCell>
                         <TableCell className="text-gray-600">{lead.assignedUserId ? 'Assigned' : 'Unassigned'}</TableCell>
-                        <TableCell className="text-gray-600">{new Date(lead.updatedAt).toLocaleDateString()}</TableCell>
+                        <TableCell className="text-gray-600">{new Date(lead.createdAt).toLocaleDateString()}</TableCell>
+                        <TableCell className="text-gray-600">{lead.lastContactAt ? new Date(lead.lastContactAt).toLocaleDateString() : 'No contact'}</TableCell>
                         <TableCell 
                           className="sticky right-0 bg-white z-10 border-l border-gray-200 p-0"
                           onClick={(e) => e.stopPropagation()}

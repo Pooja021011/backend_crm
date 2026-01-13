@@ -36,6 +36,7 @@ export const communicationResponseService = {
       if (direction === 'OUTBOUND') {
         // First outbound → Set to "No Contact Made" (if not already past this)
         // Only update if current status doesn't indicate contact has been made
+        // NOTE: lastContactAt is NOT updated here - only when call is answered (handled in callService)
         if (!currentStatus.includes('contact')) {
           const noContactStatus = await prisma.leadStatus.findFirst({
             where: { 
@@ -50,8 +51,8 @@ export const communicationResponseService = {
             await prisma.lead.update({
               where: { id: leadId },
               data: { 
-                leadStatusId: noContactStatus.id,
-                lastContactAt: new Date() // Update lastContactAt
+                leadStatusId: noContactStatus.id
+                // lastContactAt removed - only update when call is answered
               }
             });
             

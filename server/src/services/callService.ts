@@ -175,8 +175,8 @@ export const callService = {
       const safeTo = typeof toCandidate === 'string' ? toCandidate : '';
 
       const buildUnknownEmail = (phone: string) => {
-        const digits = String(phone || '').replace(/\D/g, '');
-        return digits ? `${digits}@unknown.local` : `unknown@unknown.local`;
+        // No longer generate fake emails - return empty string
+        return '';
       };
 
       const ensureLead = async (userId: string) => {
@@ -270,6 +270,16 @@ export const callService = {
               subject: status === 'missed' ? `⚠️ MISSED CALL from ${safeFrom}` : `Incoming call from ${safeFrom}`,
             },
           });
+          
+          // Update lastContactAt ONLY for completed (answered) calls, not missed calls
+          if (status === 'completed') {
+            await prisma.lead.update({
+              where: { id: leadId },
+              data: { lastContactAt: new Date() }
+            });
+            logger.info({ leadId, callSid, status }, 'Updated lastContactAt for answered inbound call');
+          }
+          
           return existingComm.id;
         }
 
@@ -282,6 +292,15 @@ export const callService = {
           createdById: userId,
           metadata: baseMetadata,
         });
+
+        // Update lastContactAt ONLY for completed (answered) calls, not missed calls
+        if (status === 'completed') {
+          await prisma.lead.update({
+            where: { id: leadId },
+            data: { lastContactAt: new Date() }
+          });
+          logger.info({ leadId, callSid, status }, 'Updated lastContactAt for answered inbound call');
+        }
 
         return created.id;
       };

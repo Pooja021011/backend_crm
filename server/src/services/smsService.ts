@@ -124,6 +124,12 @@ export const smsService = {
             },
           });
           
+          // Update lastContactAt for sent SMS (actual contact attempt)
+          await prisma.lead.update({
+            where: { id: storedLeadId },
+            data: { lastContactAt: new Date() }
+          });
+          
           // NEW: Auto-update lead status based on communication
           await communicationResponseService.handleCommunicationEvent(
             storedLeadId,

@@ -90,6 +90,8 @@ export const emailService = {
     if (emailData.leadId) {
       try {
         const { communicationRepository } = await import('../repositories/communicationRepository.js');
+        const { prisma } = await import('../config/db.js');
+        
         await communicationRepository.create(emailData.leadId, {
           type: 'EMAIL',
           direction: 'OUTBOUND',
@@ -102,6 +104,12 @@ export const emailService = {
             to: emailData.to,
             messageId: result.messageId,
           },
+        });
+        
+        // Update lastContactAt for sent email (actual contact attempt)
+        await prisma.lead.update({
+          where: { id: emailData.leadId },
+          data: { lastContactAt: new Date() }
         });
       } catch (error) {
         console.error('Failed to log email to communication table:', error);

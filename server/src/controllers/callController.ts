@@ -485,9 +485,7 @@ export const callController = {
               firstName: 'Unknown',
               lastName: 'Caller',
               phone: from || 'Unknown',
-              email: String(from || '').replace(/\D/g, '')
-                ? `${String(from || '').replace(/\D/g, '')}@unknown.local`
-                : 'unknown@unknown.local',
+              email: '', // No fake email - leave empty for unknown callers
             },
           },
           userId

@@ -548,13 +548,8 @@ export const pipelineService = {
       const transformedLeads = leads.map(lead => {
         const lastCommAt = lead.communications[0]?.occurredAt || lead.communications[0]?.createdAt;
         const lastTaskAt = lead.tasks[0]?.updatedAt || lead.tasks[0]?.createdAt;
-        const lastActivityAt = new Date(
-          Math.max(
-            new Date(lead.updatedAt).getTime(),
-            lastCommAt ? new Date(lastCommAt).getTime() : 0,
-            lastTaskAt ? new Date(lastTaskAt).getTime() : 0
-          )
-        );
+        // lastActivityAt now only tracks communications (lastContactAt), not general updates
+        const lastActivityAt = lead.lastContactAt || (lastCommAt ? new Date(lastCommAt) : new Date(lead.createdAt));
 
         const contactComms = lead.communications.filter((c: any) => {
           const t = String(c.type || '').toUpperCase();
@@ -656,19 +651,19 @@ export const pipelineService = {
           if (aStageIndex !== bStageIndex) return aStageIndex - bStageIndex;
           const aAt = new Date(a.lastActivityAt).getTime();
           const bAt = new Date(b.lastActivityAt).getTime();
-          if (aAt !== bAt) return aAt - bAt;
+          if (aAt !== bAt) return bAt - aAt; // DESC: most recent first
           return String(a.id).localeCompare(String(b.id));
         });
       }
 
-      // Final sort: stage order asc, lastActivityAt asc (least recently touched at top)
+      // Final sort: stage order asc, lastActivityAt desc (most recently touched at top)
       return transformedLeads.sort((a: any, b: any) => {
         const aStageIndex = stageOrderIndexByLeadId.get(a.id) ?? 0;
         const bStageIndex = stageOrderIndexByLeadId.get(b.id) ?? 0;
         if (aStageIndex !== bStageIndex) return aStageIndex - bStageIndex;
         const aAt = new Date(a.lastActivityAt).getTime();
         const bAt = new Date(b.lastActivityAt).getTime();
-        if (aAt !== bAt) return aAt - bAt;
+        if (aAt !== bAt) return bAt - aAt; // DESC: most recent first
         return String(a.id).localeCompare(String(b.id));
       });
     } catch (error: any) {

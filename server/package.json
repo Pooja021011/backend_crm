@@ -16,6 +16,7 @@
     "seed": "tsx prisma/seed.ts",
     "seed:test": "tsx prisma/seed-test-data.ts",
     "seed:all": "npm run seed && npm run seed:test",
+    "backfill:lastcontact": "tsx src/scripts/backfillLastContactAt.ts",
     "lint": "eslint .",
     "postinstall": "node scripts/auto-deploy.js",
     "db:deploy": "npx prisma migrate deploy && npx prisma generate && pm2 restart all --update-env",
