@@ -3793,8 +3793,8 @@ const LeadEdit: React.FC = () => {
                             <SelectValue placeholder="Min" />
                           </SelectTrigger>
                           <SelectContent>
-                            {Array.from({ length: 12 }).map((_, i) => {
-                              const m = String(i * 5).padStart(2, '0');
+                            {Array.from({ length: 60 }).map((_, i) => {
+                              const m = String(i).padStart(2, '0');
                               return (
                                 <SelectItem key={m} value={m}>
                                   {m}

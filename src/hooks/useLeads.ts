@@ -261,7 +261,7 @@ export const useLeads = (): LeadsHookReturn => {
   };
 
   const fetchLeads = async (): Promise<void> => {
-    await listLeads();
+    await listLeads({ take: 1000 }); // Fetch up to 1000 leads (no pagination limit)
   };
 
   const getLeadsByType = (type: LeadType): Lead[] => {

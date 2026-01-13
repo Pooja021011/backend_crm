@@ -12,7 +12,7 @@ import {
   ChevronDown,
   UserCog,
   Mail,
-  MessageSquare,
+  Phone,
   FileSpreadsheet,
   Tags
 } from "lucide-react";
@@ -44,13 +44,13 @@ const navigationItems = [
     subItems: [
       { title: "Profile", url: "/settings?tab=profile", icon: User },
       { title: "Email Sync", url: "/settings?tab=email", icon: Mail },
-      { title: "SMS and Call", url: "/settings?tab=sms", icon: MessageSquare },
+      { title: "Phone Sync", url: "/settings?tab=sms", icon: Phone },
       { title: "Agents", url: "/settings?tab=agents", icon: UserCog, adminOnly: true },
       { title: "Lead Distribution", url: "/settings?tab=lead-distribution", icon: Users, adminOnly: true },
+      { title: "Pipeline Statuses", url: "/settings?tab=pipeline", icon: TrendingUp, adminOnly: true },
       { title: "Lead Statuses", url: "/settings?tab=lead-statuses", icon: Tags, adminOnly: true },
       { title: "Lead Sources", url: "/settings?tab=lead-sources", icon: Tags, adminOnly: true },
       { title: "Marketing Platforms", url: "/settings?tab=marketing-platforms", icon: Building2, adminOnly: true },
-      { title: "Pipeline Statuses", url: "/settings?tab=pipeline", icon: TrendingUp, adminOnly: true },
     ]
   },
 ];
