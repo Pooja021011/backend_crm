@@ -1852,7 +1852,11 @@ const LeadEdit: React.FC = () => {
       if (response.ok) {
         const data = await response.json();
         // Include ALL communication types: CALL, SMS, EMAIL, and NOTE
-        const comms = (data.data || []).sort((a: any, b: any) => 
+        // Map createdBy to user for frontend compatibility
+        const comms = (data.data || []).map((c: any) => ({
+          ...c,
+          user: c.createdBy // Map createdBy to user so the component can display author name
+        })).sort((a: any, b: any) => 
           new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime() // Sort by timestamp (newest first)
         );
         setCommunications(comms);
