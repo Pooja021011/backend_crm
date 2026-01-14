@@ -278,16 +278,17 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
         pipelineStageId: formData.pipelineStageId || undefined,
       };
 
-      // Update type-specific data
+      // Update type-specific data (CONTACT INFO REMOVED - now managed via Lead Owners only)
       if (lead.leadType === 'SELLER') {
-        updateData.seller = {
-          firstName: formData.firstName.trim(),
-          lastName: formData.lastName.trim(),
-          phone: (normalizeUsPhoneToE164(formData.phone) || formData.phone).trim(),
-          email: formData.email.trim(),
-          motivation: formData.motivation,
-          notes: formData.notes.trim()
-        };
+        // Only update seller-specific fields, NOT contact info
+        const sellerUpdate: any = {};
+        if (formData.motivation) sellerUpdate.motivation = formData.motivation;
+        if (formData.notes.trim()) sellerUpdate.notes = formData.notes.trim();
+        
+        // Only send seller update if there are fields to update
+        if (Object.keys(sellerUpdate).length > 0) {
+          updateData.seller = sellerUpdate;
+        }
         
         updateData.address = {
           address1: formData.address1.trim(),
@@ -298,17 +299,18 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
           countyId: formData.countyId || undefined
         };
       } else if (lead.leadType === 'BUYER') {
-        updateData.buyer = {
-          firstName: formData.firstName.trim(),
-          lastName: formData.lastName.trim(),
-          phone: (normalizeUsPhoneToE164(formData.phone) || formData.phone).trim(),
-          email: formData.email.trim(),
-          propertiesPurchased: parseInt(formData.propertiesPurchased) || 0,
-          creditScore: formData.creditScore || undefined,
-          preApproved: formData.preApproved,
-          motivation: formData.buyerMotivation || undefined,
-          timeline: formData.timeline || undefined
-        };
+        // Only update buyer-specific fields, NOT contact info
+        const buyerUpdate: any = {};
+        if (formData.propertiesPurchased) buyerUpdate.propertiesPurchased = parseInt(formData.propertiesPurchased) || 0;
+        if (formData.creditScore) buyerUpdate.creditScore = formData.creditScore;
+        buyerUpdate.preApproved = formData.preApproved;
+        if (formData.buyerMotivation) buyerUpdate.motivation = formData.buyerMotivation;
+        if (formData.timeline) buyerUpdate.timeline = formData.timeline;
+        
+        // Only send buyer update if there are fields to update
+        if (Object.keys(buyerUpdate).length > 0) {
+          updateData.buyer = buyerUpdate;
+        }
         
         // Update buyer criteria if any data
         const criteriaData = {
@@ -322,15 +324,16 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
           updateData.buyerCriteria = criteriaData;
         }
       } else if (lead.leadType === 'VENDOR') {
-        updateData.vendor = {
-          firstName: formData.firstName.trim(),
-          lastName: formData.lastName.trim(),
-          phone: (normalizeUsPhoneToE164(formData.phone) || formData.phone).trim(),
-          email: formData.email.trim(),
-          company: formData.company.trim(),
-          industry: formData.serviceType,
-          marketIds: formData.vendorMarkets.length > 0 ? formData.vendorMarkets : undefined
-        };
+        // Only update vendor-specific fields, NOT contact info
+        const vendorUpdate: any = {};
+        if (formData.company.trim()) vendorUpdate.company = formData.company.trim();
+        if (formData.serviceType) vendorUpdate.industry = formData.serviceType;
+        if (formData.vendorMarkets.length > 0) vendorUpdate.marketIds = formData.vendorMarkets;
+        
+        // Only send vendor update if there are fields to update
+        if (Object.keys(vendorUpdate).length > 0) {
+          updateData.vendor = vendorUpdate;
+        }
       }
 
       await updateLead(lead.id, updateData);
@@ -547,57 +550,19 @@ export const EditLeadDialog: React.FC<EditLeadDialogProps> = ({
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <User className="w-5 h-5" />
-                    Contact Information
+                    Contact Information (Lead Owners)
                   </CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    All contact information is managed through lead owners. The primary owner's details are used as the main contact.
+                  </p>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <ValidatedInput
-                      label="First Name"
-                      name="firstName"
-                      value={formData.firstName}
-                      onValueChange={(value) => handleInputChange('firstName', value)}
-                      validator={(value) => value.trim() ? validateName(value, 'First name') : ({ isValid: true })}
-                      placeholder="Enter first name"
-                      icon={<User className="w-4 h-4" />}
-                    />
-                    <ValidatedInput
-                      label="Last Name"
-                      name="lastName"
-                      value={formData.lastName}
-                      onValueChange={(value) => handleInputChange('lastName', value)}
-                      validator={(value) => value.trim() ? validateName(value, 'Last name') : ({ isValid: true })}
-                      placeholder="Enter last name"
-                      icon={<User className="w-4 h-4" />}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <ValidatedInput
-                      label="Phone Number"
-                      name="phone"
-                      value={formatUsPhoneForDisplay(formData.phone)}
-                      onValueChange={(value) => handleInputChange('phone', value)}
-                      validator={(value) =>
-                        value.trim()
-                          ? ({
-                              isValid: Boolean(normalizeUsPhoneToE164(value)),
-                              error: 'Enter a valid 10-digit phone number',
-                            })
-                          : ({ isValid: true })
-                      }
-                      placeholder="(555) 123-4567"
-                      icon={<Phone className="w-4 h-4" />}
-                    />
-                    <ValidatedInput
-                      label="Email Address"
-                      name="email"
-                      value={formData.email}
-                      onValueChange={(value) => handleInputChange('email', value)}
-                      validator={(value) => value.trim() ? validateEmail(value) : ({ isValid: true })}
-                      placeholder="email@example.com"
-                      icon={<Mail className="w-4 h-4" />}
-                    />
+                <CardContent>
+                  {/* Lead Owners Section - This is now the single source of truth for contact info */}
+                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg mb-4">
+                    <p className="text-sm text-blue-800">
+                      <strong>Note:</strong> Contact information (name, phone, email) is now managed exclusively through Lead Owners below. 
+                      Changes here will automatically sync everywhere.
+                    </p>
                   </div>
                 </CardContent>
               </Card>

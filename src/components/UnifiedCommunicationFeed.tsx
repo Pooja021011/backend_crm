@@ -23,6 +23,7 @@ import {
   Loader2,
   User,
   CheckSquare,
+  CheckCircle,
   Calendar,
   Plus,
   Edit2,
@@ -294,17 +295,17 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
   const canEditNoteItem = (item: any) => {
     if (item.type !== 'NOTE') return false;
     const userId = currentUser?.id;
-    const roles = currentUser?.roles || [];
-    const privileged = roles.includes('ADMIN') || roles.includes('MANAGER') || roles.includes('TC');
+    // Only the creator can edit their own note
     const isAuthor = !!userId && item.createdById === userId;
-    return privileged || canEditLead || isAuthor;
+    return isAuthor;
   };
 
   const canEditTaskItem = (item: any) => {
     if (item.type !== 'TASK') return false;
     const userId = currentUser?.id;
-    const isAssignee = !!userId && item.assignedToId === userId;
-    return canEditLead || isAssignee;
+    // Only the creator can edit their own task
+    const isCreator = !!userId && item.createdById === userId;
+    return isCreator;
   };
 
   const openEditNote = (item: any) => {
@@ -473,6 +474,7 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
       dueAt: task.dueAt,
       occurredAt: task.createdAt || task.dueAt,
       createdAt: task.createdAt,
+      createdById: task.createdById, // Include createdById for permission check
       assignedTo: task.assignedTo,
       user: task.createdBy,
       assignedToId: task.assignedToId,
@@ -493,11 +495,29 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
     if (loadingCommunications) return;
     if (!feedRef.current) return;
 
+    // Use multiple requestAnimationFrame to ensure content is fully rendered
+    // This helps with call recordings and other dynamic content
     requestAnimationFrame(() => {
-      if (!feedRef.current) return;
-      feedRef.current.scrollTop = feedRef.current.scrollHeight;
+      requestAnimationFrame(() => {
+        if (!feedRef.current) return;
+        feedRef.current.scrollTop = feedRef.current.scrollHeight;
+      });
     });
   }, [loadingCommunications, sortedItems.length, leadId]);
+
+  // Additional scroll on recording URL load (for call recordings)
+  useEffect(() => {
+    if (!feedRef.current) return;
+    if (Object.keys(recordingUrls).length === 0) return;
+
+    // Scroll to bottom when recordings are loaded
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!feedRef.current) return;
+        feedRef.current.scrollTop = feedRef.current.scrollHeight;
+      });
+    });
+  }, [recordingUrls]);
 
   const getIconForType = (type: string) => {
     switch (type) {
@@ -710,13 +730,22 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
                 {/* Header */}
                 <div className="flex items-start justify-between gap-2 mb-0.5">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs font-medium text-slate-500 uppercase">
-                      {getTypeLabel(item.type)}
-                    </span>
-                    {item.user && (
-                      <span className="text-xs font-medium text-slate-900">
-                        {item.user.firstName} {item.user.lastName}
+                    {/* For NOTES, show "Note from [Name]" prominently */}
+                    {item.type === 'NOTE' && item.user ? (
+                      <span className="text-xs font-semibold text-slate-700">
+                        Note from {item.user.firstName} {item.user.lastName}
                       </span>
+                    ) : (
+                      <>
+                        <span className="text-xs font-medium text-slate-500 uppercase">
+                          {getTypeLabel(item.type)}
+                        </span>
+                        {item.user && (
+                          <span className="text-xs font-medium text-slate-900">
+                            {item.user.firstName} {item.user.lastName}
+                          </span>
+                        )}
+                      </>
                     )}
                     {item.direction && (
                       <span className="text-xs text-slate-500">
@@ -737,6 +766,32 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
                     <span className="text-[10px] text-slate-400">
                       {formatDateTime(item.occurredAt || item.createdAt || '')}
                     </span>
+                    {/* Complete button for open tasks */}
+                    {item.type === 'TASK' && item.status === 'OPEN' && canEditTaskItem(item) && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 w-6 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+                        title="Mark as complete"
+                        onClick={async () => {
+                          try {
+                            await makeApiCall(`${API_BASE}/leads/${leadId}/tasks/${item.id}`, {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ status: 'DONE' }),
+                            });
+                            onRefreshTasks?.();
+                            onTaskUpdated?.(item);
+                          } catch (error) {
+                            console.error('Failed to complete task:', error);
+                          }
+                        }}
+                      >
+                        <CheckCircle className="w-3 h-3" />
+                        <span className="sr-only">Complete</span>
+                      </Button>
+                    )}
                     {(canEditNoteItem(item) || canEditTaskItem(item)) && (
                       <Button
                         type="button"
@@ -838,7 +893,7 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
             ref={noteInputRef}
             value={noteText}
             onChange={handleNoteInputChange}
-            placeholder="Add a note... (Type @ to mention someone)"
+            placeholder=""
             className="min-h-[60px] text-sm resize-none pr-12"
             disabled={addingNote}
           />

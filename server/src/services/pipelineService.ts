@@ -792,6 +792,26 @@ export const pipelineService = {
         userId 
       });
       
+      // NEW: Auto-update lead status to "Closed" when moved to Closed pipeline stage
+      const stageNameLower = stage.name.toLowerCase();
+      if (stageNameLower.includes('closed')) {
+        const closedStatus = await prisma.leadStatus.findFirst({
+          where: { name: 'Closed' }
+        });
+        
+        if (closedStatus) {
+          await prisma.lead.update({
+            where: { id: leadId },
+            data: { leadStatusId: closedStatus.id }
+          });
+          
+          logger.info('Lead status automatically updated to Closed', { 
+            leadId, 
+            leadStatusId: closedStatus.id 
+          });
+        }
+      }
+      
       // NEW: Execute post-transition actions (task creation)
       if (userId) {
         await stageTransitionService.executePostTransitionActions(leadId, stageId, userId);

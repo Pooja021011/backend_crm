@@ -262,7 +262,7 @@ const LeadEdit: React.FC = () => {
   const [sqft, setSqft] = useState('');
   const [lotSize, setLotSize] = useState('');
   const [bedrooms, setBedrooms] = useState('');
-  const [bathrooms, setBathrooms] = useState('0');
+  const [bathrooms, setBathrooms] = useState('');
   const [yearBuilt, setYearBuilt] = useState('');
   
   // Additional property info
@@ -1897,160 +1897,42 @@ const LeadEdit: React.FC = () => {
     
     const phones: Array<{number: string; label: string; type: string; isPrimary?: boolean}> = [];
     
-    // First, check contacts from customFields (saved multiple contacts)
-    const savedContacts = lead.customFields?.contacts || [];
-    if (Array.isArray(savedContacts) && savedContacts.length > 0) {
-      savedContacts.forEach((contact: any, index: number) => {
-        if (contact.phone?.trim()) {
-          phones.push({
-            number: contact.phone.trim(),
-            label: `${contact.name || `Contact ${index + 1}`} (Contact)`,
-            type: 'contact',
-            isPrimary: index === 0
-          });
-        }
-      });
-    }
-    
-    // Also check lead.contacts if available (from database)
-    lead.contacts?.forEach((contact: any, index: number) => {
-      if (contact.phone?.trim()) {
-        const firstName = contact.firstName || '';
-        const lastName = contact.lastName || '';
-        const name = `${firstName} ${lastName}`.trim() || `Contact ${index + 1}`;
-        phones.push({
-          number: contact.phone.trim(),
-          label: `${name} (Contact)`,
-          type: 'contact',
-          isPrimary: index === 0
-        });
-      }
-    });
-    
-    // Add all owners
-    leadOwners?.forEach((owner: LeadOwner, index: number) => {
+    // ONLY use lead owners as the single source of truth for contact info
+    leadOwners?.forEach((owner: LeadOwner) => {
       if (owner.phone?.trim()) {
         phones.push({
           number: owner.phone.trim(),
-          label: `${owner.firstName} ${owner.lastName} (Owner)`,
+          label: `${owner.firstName} ${owner.lastName}${owner.isPrimary ? ' (Primary)' : ''}`,
           type: 'owner',
           isPrimary: owner.isPrimary
         });
       }
     });
     
-    // Add seller
-    if (lead.seller?.phone?.trim()) {
-      const sellerName = `${lead.seller.firstName || ''} ${lead.seller.lastName || ''}`.trim() || 'Seller';
-      phones.push({
-        number: lead.seller.phone.trim(),
-        label: `${sellerName} (Seller)`,
-        type: 'seller'
-      });
-    }
-    
-    // Add buyer
-    if (lead.buyer?.phone?.trim()) {
-      const buyerName = `${lead.buyer.firstName || ''} ${lead.buyer.lastName || ''}`.trim() || 'Buyer';
-      phones.push({
-        number: lead.buyer.phone.trim(),
-        label: `${buyerName} (Buyer)`,
-        type: 'buyer'
-      });
-    }
-    
-    // Remove duplicates by phone number
-    const uniquePhones = phones.filter((phone, index, self) =>
-      index === self.findIndex((p) => p.number === phone.number)
-    );
-    
-    return uniquePhones;
+    return phones;
   };
 
-  // Get all available email addresses from contacts, owners, seller, buyer, vendor
+  // Get all available email addresses from lead owners only
   const getAllEmailAddresses = () => {
     if (!lead) return [];
     
     const emails: Array<{email: string; label: string; type: string; isPrimary?: boolean}> = [];
     
-    // First, check contacts from customFields (saved multiple contacts)
-    const savedContacts = lead.customFields?.contacts || [];
-    if (Array.isArray(savedContacts) && savedContacts.length > 0) {
-      savedContacts.forEach((contact: any, index: number) => {
-        if (contact.email?.trim()) {
-          emails.push({
-            email: contact.email.trim(),
-            label: `${contact.name || `Contact ${index + 1}`} (Contact)`,
-            type: 'contact',
-            isPrimary: index === 0
-          });
-        }
-      });
-    }
-    
-    // Also check lead.contacts if available (from database)
-    lead.contacts?.forEach((contact: any, index: number) => {
-      if (contact.email?.trim()) {
-        const firstName = contact.firstName || '';
-        const lastName = contact.lastName || '';
-        const name = `${firstName} ${lastName}`.trim() || `Contact ${index + 1}`;
-        emails.push({
-          email: contact.email.trim(),
-          label: `${name} (Contact)`,
-          type: 'contact',
-          isPrimary: index === 0
-        });
-      }
-    });
-    
-    // Add all owners
-    leadOwners?.forEach((owner: LeadOwner, index: number) => {
-      if (owner.email?.trim()) {
+    // ONLY use lead owners as the single source of truth for contact info
+    leadOwners?.forEach((owner: LeadOwner) => {
+      if (owner.email?.trim() && 
+          !owner.email.includes('@unknown.local') && 
+          !owner.email.includes('none@none.com')) {
         emails.push({
           email: owner.email.trim(),
-          label: `${owner.firstName} ${owner.lastName} (Owner)`,
+          label: `${owner.firstName} ${owner.lastName}${owner.isPrimary ? ' (Primary)' : ''}`,
           type: 'owner',
           isPrimary: owner.isPrimary
         });
       }
     });
     
-    // Add seller
-    if (lead.seller?.email?.trim()) {
-      const sellerName = `${lead.seller.firstName || ''} ${lead.seller.lastName || ''}`.trim() || 'Seller';
-      emails.push({
-        email: lead.seller.email.trim(),
-        label: `${sellerName} (Seller)`,
-        type: 'seller'
-      });
-    }
-    
-    // Add buyer
-    if (lead.buyer?.email?.trim()) {
-      const buyerName = `${lead.buyer.firstName || ''} ${lead.buyer.lastName || ''}`.trim() || 'Buyer';
-      emails.push({
-        email: lead.buyer.email.trim(),
-        label: `${buyerName} (Buyer)`,
-        type: 'buyer'
-      });
-    }
-    
-    // Add vendor
-    if (lead.vendor?.email?.trim()) {
-      const vendorName = `${lead.vendor.firstName || ''} ${lead.vendor.lastName || ''}`.trim() || 'Vendor';
-      emails.push({
-        email: lead.vendor.email.trim(),
-        label: `${vendorName} (Vendor)`,
-        type: 'vendor'
-      });
-    }
-    
-    // Remove duplicates by email address
-    const uniqueEmails = emails.filter((email, index, self) =>
-      index === self.findIndex((e) => e.email === email.email)
-    );
-    
-    return uniqueEmails;
+    return emails;
   };
 
   const getLeadEmail = () => {
@@ -2699,37 +2581,63 @@ const LeadEdit: React.FC = () => {
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
 
     setUploading(true);
     try {
-      const formData = new FormData();
-      formData.append('file', file);
+      let successCount = 0;
+      let failCount = 0;
 
-      const response = await makeApiCall(`${API_BASE}/leads/${id}/files`, {
-        method: 'POST',
-        body: formData
-      });
+      // Upload multiple files
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
 
-      if (response.ok) {
+          const response = await makeApiCall(`${API_BASE}/leads/${id}/files`, {
+            method: 'POST',
+            body: formData
+          });
+
+          if (response.ok) {
+            successCount++;
+          } else {
+            failCount++;
+          }
+        } catch (error) {
+          console.error(`Error uploading file ${file.name}:`, error);
+          failCount++;
+        }
+      }
+
+      // Show summary toast
+      if (successCount > 0) {
         toast({
           title: 'Success',
-          description: 'File uploaded successfully'
+          description: `${successCount} file${successCount > 1 ? 's' : ''} uploaded successfully${failCount > 0 ? `, ${failCount} failed` : ''}`
         });
         loadFiles();
-      } else {
-        throw new Error('Failed to upload file');
+      } else if (failCount > 0) {
+        toast({
+          title: 'Error',
+          description: `Failed to upload ${failCount} file${failCount > 1 ? 's' : ''}`,
+          variant: 'destructive'
+        });
       }
     } catch (error: any) {
-      console.error('Error uploading file:', error);
+      console.error('Error uploading files:', error);
       toast({
         title: 'Error',
-        description: error.message || 'Failed to upload file',
+        description: error.message || 'Failed to upload files',
         variant: 'destructive'
       });
     } finally {
       setUploading(false);
+      // Reset the input so the same files can be selected again if needed
+      event.target.value = '';
     }
   };
 
@@ -3062,13 +2970,13 @@ const LeadEdit: React.FC = () => {
         {/* Section 2 - Lead Details + Timeline (side by side) */}
         <div className="grid grid-cols-12 gap-2">
           {/* Lead Details - Left Side (6 cols) */}
-          <div className="col-span-6 border border-slate-200 rounded-lg bg-white p-2">
-            <div className="flex items-center gap-1.5 mb-2">
+          <div className="col-span-6 border border-slate-200 rounded-lg bg-white p-2 flex flex-col">
+            <div className="flex items-center gap-1.5 mb-1">
               <FileText className="w-3 h-3 text-slate-500" />
               <span className="text-[11px] font-medium text-slate-600">Lead Details</span>
             </div>
 
-            <div className="grid grid-cols-2 gap-1.5">
+            <div className="grid grid-cols-2 gap-1 flex-1 content-start">
               <div>
                 <Label className="text-[9px] text-slate-500">Source</Label>
                 <Select value={leadSource} onValueChange={setLeadSource} disabled={!canEditLead}>
@@ -3170,7 +3078,7 @@ const LeadEdit: React.FC = () => {
           </div>
 
           {/* Timeline - Right Side (6 cols) */}
-          <div className="col-span-6 border border-slate-200 rounded-lg bg-white p-2">
+          <div className="col-span-6 border border-slate-200 rounded-lg bg-white p-2 flex flex-col">
             <LeadTimeline
               leadId={id!}
               leadCreatedAt={lead.createdAt}
@@ -3197,8 +3105,8 @@ const LeadEdit: React.FC = () => {
             <span className="text-[11px] font-medium text-slate-600">Property Information</span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1.5">
-            <div>
-              <Label className="text-[9px] text-slate-500">Type</Label>
+            <div className="flex flex-col">
+              <Label className="text-[9px] text-slate-500 h-[14px] leading-[14px] mb-0.5">Type</Label>
               <Select value={propertyType} onValueChange={setPropertyType} disabled={!canEditLead}>
                 <SelectTrigger className="h-5 text-[10px]"><SelectValue placeholder="Type" /></SelectTrigger>
                 <SelectContent>
@@ -3209,24 +3117,24 @@ const LeadEdit: React.FC = () => {
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <Label className="text-[9px] text-slate-500">SqFt</Label>
+            <div className="flex flex-col">
+              <Label className="text-[9px] text-slate-500 h-[14px] leading-[14px] mb-0.5">SqFt</Label>
               <Input type="number" value={sqft} onChange={(e) => setSqft(e.target.value)} placeholder="SqFt" className="h-5 text-[10px]" disabled={!canEditLead} />
             </div>
-            <div>
-              <Label className="text-[9px] text-slate-500">Lot</Label>
-              <Input value={lotSize} onChange={(e) => setLotSize(e.target.value)} placeholder="Acres" className="h-5 text-[10px]" disabled={!canEditLead} />
+            <div className="flex flex-col">
+              <Label className="text-[9px] text-slate-500 h-[14px] leading-[14px] mb-0.5">Acres</Label>
+              <Input type="number" step="0.01" value={lotSize} onChange={(e) => setLotSize(e.target.value)} placeholder="Acres" className="h-5 text-[10px]" disabled={!canEditLead} />
             </div>
-            <div>
-              <Label className="text-[9px] text-slate-500">Beds</Label>
+            <div className="flex flex-col">
+              <Label className="text-[9px] text-slate-500 h-[14px] leading-[14px] mb-0.5">Beds</Label>
               <Input type="number" value={bedrooms} onChange={(e) => setBedrooms(e.target.value)} placeholder="Beds" className="h-5 text-[10px]" disabled={!canEditLead} />
             </div>
-            <div>
-              <Label className="text-[9px] text-slate-500">Baths</Label>
+            <div className="flex flex-col">
+              <Label className="text-[9px] text-slate-500 h-[14px] leading-[14px] mb-0.5">Baths</Label>
               <Input type="number" step="0.5" value={bathrooms} onChange={(e) => setBathrooms(e.target.value)} placeholder="Baths" className="h-5 text-[10px]" disabled={!canEditLead} />
             </div>
-            <div>
-              <Label className="text-[9px] text-slate-500">Year</Label>
+            <div className="flex flex-col">
+              <Label className="text-[9px] text-slate-500 h-[14px] leading-[14px] mb-0.5">Year</Label>
               <Input type="number" value={yearBuilt} onChange={(e) => setYearBuilt(e.target.value)} placeholder="Year" className="h-5 text-[10px]" disabled={!canEditLead} />
             </div>
           </div>
@@ -3356,12 +3264,12 @@ const LeadEdit: React.FC = () => {
                         <Button 
                           size="sm" 
                           variant="ghost" 
-                          className="h-6 text-xs px-2" 
+                          className="h-6 w-6 p-0" 
                           disabled={uploadingPhoto}
                           onClick={() => document.getElementById('photo-upload')?.click()}
+                          title="Add Photo"
                         >
-                          <Plus className="w-3 h-3 mr-1" />
-                          {uploadingPhoto ? 'Uploading...' : 'Add'}
+                          <Plus className="w-3 h-3" />
                         </Button>
                         <CollapsibleTrigger asChild>
                           <Button

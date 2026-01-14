@@ -384,10 +384,15 @@ export const LeadOwnerSection = forwardRef<LeadOwnerSectionRef, LeadOwnerSection
                     <Phone className="h-2 w-2" />
                     {formatUsPhoneForDisplay(owner.phone)}
                   </span>
-                  <span className="flex items-center gap-0.5">
-                    <Mail className="h-2 w-2" />
-                    {owner.email}
-                  </span>
+                  {owner.email && 
+                   !owner.email.includes('@unknown.local') && 
+                   !owner.email.includes('none@none.com') && 
+                   owner.email.trim() !== '' && (
+                    <span className="flex items-center gap-0.5">
+                      <Mail className="h-2 w-2" />
+                      {owner.email}
+                    </span>
+                  )}
                 </div>
               </div>
 

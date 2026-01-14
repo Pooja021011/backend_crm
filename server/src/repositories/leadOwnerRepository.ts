@@ -69,7 +69,18 @@ export const leadOwnerRepository = {
     isPrimary?: boolean;
     order?: number;
   }) {
-    const owner = await prisma.leadOwner.findUnique({ where: { id } });
+    const owner = await prisma.leadOwner.findUnique({ 
+      where: { id },
+      include: {
+        lead: {
+          include: {
+            seller: true,
+            buyer: true,
+            vendor: true
+          }
+        }
+      }
+    });
     if (!owner) throw new Error('Owner not found');
 
     // If setting as primary, unset other primary owners
@@ -80,10 +91,43 @@ export const leadOwnerRepository = {
       });
     }
 
-    return prisma.leadOwner.update({
+    // Update the owner
+    const updatedOwner = await prisma.leadOwner.update({
       where: { id },
       data
     });
+
+    // BIDIRECTIONAL SYNC: If this is the primary owner, sync back to seller/buyer/vendor
+    const isPrimary = data.isPrimary !== undefined ? data.isPrimary : owner.isPrimary;
+    if (isPrimary && (data.firstName || data.lastName || data.phone || data.email)) {
+      const lead = owner.lead;
+      const syncData: any = {};
+      
+      if (data.firstName !== undefined) syncData.firstName = data.firstName;
+      if (data.lastName !== undefined) syncData.lastName = data.lastName;
+      if (data.phone !== undefined) syncData.phone = data.phone;
+      if (data.email !== undefined) syncData.email = data.email;
+
+      // Sync to appropriate lead type
+      if (lead.leadType === 'SELLER' && lead.seller) {
+        await prisma.sellerDetail.update({
+          where: { leadId: owner.leadId },
+          data: syncData
+        });
+      } else if (lead.leadType === 'BUYER' && lead.buyer) {
+        await prisma.buyerDetail.update({
+          where: { leadId: owner.leadId },
+          data: syncData
+        });
+      } else if (lead.leadType === 'VENDOR' && lead.vendor) {
+        await prisma.vendorDetail.update({
+          where: { leadId: owner.leadId },
+          data: syncData
+        });
+      }
+    }
+
+    return updatedOwner;
   },
 
   /**
@@ -99,7 +143,18 @@ export const leadOwnerRepository = {
    * Set an owner as primary
    */
   async setPrimary(id: string) {
-    const owner = await prisma.leadOwner.findUnique({ where: { id } });
+    const owner = await prisma.leadOwner.findUnique({ 
+      where: { id },
+      include: {
+        lead: {
+          include: {
+            seller: true,
+            buyer: true,
+            vendor: true
+          }
+        }
+      }
+    });
     if (!owner) throw new Error('Owner not found');
 
     // Unset other primary owners
@@ -109,10 +164,38 @@ export const leadOwnerRepository = {
     });
 
     // Set this one as primary
-    return prisma.leadOwner.update({
+    const updatedOwner = await prisma.leadOwner.update({
       where: { id },
       data: { isPrimary: true }
     });
+
+    // BIDIRECTIONAL SYNC: When setting a new primary owner, sync their info to seller/buyer/vendor
+    const lead = owner.lead;
+    const syncData = {
+      firstName: owner.firstName,
+      lastName: owner.lastName,
+      phone: owner.phone,
+      email: owner.email
+    };
+
+    if (lead.leadType === 'SELLER' && lead.seller) {
+      await prisma.sellerDetail.update({
+        where: { leadId: owner.leadId },
+        data: syncData
+      });
+    } else if (lead.leadType === 'BUYER' && lead.buyer) {
+      await prisma.buyerDetail.update({
+        where: { leadId: owner.leadId },
+        data: syncData
+      });
+    } else if (lead.leadType === 'VENDOR' && lead.vendor) {
+      await prisma.vendorDetail.update({
+        where: { leadId: owner.leadId },
+        data: syncData
+      });
+    }
+
+    return updatedOwner;
   }
 };
 

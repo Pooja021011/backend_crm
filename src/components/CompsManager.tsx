@@ -197,31 +197,97 @@ export const CompsManager: React.FC<CompsManagerProps> = ({
   };
 
   const handlePdfUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+    const files = event.target.files;
+    console.log('📁 Files selected:', files?.length || 0);
+    
+    if (!files || files.length === 0) {
+      console.log('⚠️ No files selected');
+      return;
+    }
+    
+    // Convert FileList to Array to preserve files after clearing input
+    const fileArray = Array.from(files);
+    console.log('📋 Converted to array:', fileArray.length, 'file(s)');
+    
+    // Clear input value so the same file can be selected again
     event.target.value = '';
 
     setUploadingPdf(true);
+    console.log('🚀 Starting upload for', fileArray.length, 'file(s)');
+    
     try {
-      const formData = new FormData();
-      formData.append('file', file);
+      let successCount = 0;
+      let errorCount = 0;
+      const errors: string[] = [];
 
-      const response = await makeApiCall(`${API_BASE}/comps/leads/${leadId}/pdfs`, {
-        method: 'POST',
-        body: formData,
-      });
+      // Upload each file sequentially
+      for (let i = 0; i < fileArray.length; i++) {
+        const file = fileArray[i];
+        console.log(`📤 Uploading file ${i + 1}/${fileArray.length}:`, file.name, file.type, file.size);
+        
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
 
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err?.error || err?.message || 'Failed to upload file');
+          const response = await makeApiCall(`${API_BASE}/comps/leads/${leadId}/pdfs`, {
+            method: 'POST',
+            body: formData,
+          });
+
+          console.log(`📥 Response for ${file.name}:`, response.status, response.statusText);
+
+          if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            const errorMsg = err?.error || err?.message || `HTTP ${response.status}`;
+            console.error(`❌ Upload failed for ${file.name}:`, errorMsg);
+            throw new Error(errorMsg);
+          }
+
+          successCount++;
+          console.log(`✅ Successfully uploaded ${file.name}`);
+        } catch (e: any) {
+          errorCount++;
+          const errorMsg = `${file.name}: ${e?.message || 'Unknown error'}`;
+          errors.push(errorMsg);
+          console.error(`❌ Failed to upload ${file.name}:`, e);
+        }
       }
 
-      toast({ title: 'Success', description: 'File uploaded successfully' });
-      await loadLeadCompPdfs();
+      console.log(`📊 Upload complete: ${successCount} success, ${errorCount} failed`);
+
+      // Show summary toast only if files were processed
+      if (successCount > 0 || errorCount > 0) {
+        if (successCount > 0 && errorCount === 0) {
+          toast({ 
+            title: 'Success', 
+            description: `${successCount} file${successCount > 1 ? 's' : ''} uploaded successfully` 
+          });
+        } else if (successCount > 0 && errorCount > 0) {
+          toast({ 
+            title: 'Partial Success', 
+            description: `${successCount} uploaded, ${errorCount} failed. Check console for details.`,
+            variant: 'default'
+          });
+        } else if (errorCount > 0) {
+          toast({ 
+            title: 'Upload Failed', 
+            description: errors[0] || `Failed to upload ${errorCount} file${errorCount > 1 ? 's' : ''}`,
+            variant: 'destructive' 
+          });
+        }
+      }
+
+      // Only reload if at least one file was successfully uploaded
+      if (successCount > 0) {
+        console.log('🔄 Reloading PDF list...');
+        await loadLeadCompPdfs();
+      }
     } catch (e: any) {
-      toast({ title: 'Error', description: e?.message || 'Failed to upload file', variant: 'destructive' });
+      console.error('❌ Upload error:', e);
+      toast({ title: 'Error', description: e?.message || 'Failed to upload files', variant: 'destructive' });
     } finally {
       setUploadingPdf(false);
+      console.log('✅ Upload process complete');
     }
   };
 
@@ -381,8 +447,8 @@ export const CompsManager: React.FC<CompsManagerProps> = ({
   };
 
   const formatArv = () => {
-    if (!arv) return 'ARV ($0)';
-    return `ARV (${formatCurrency(arv)})`;
+    if (!arv) return '$0';
+    return formatCurrency(arv);
   };
 
   return (
@@ -391,22 +457,24 @@ export const CompsManager: React.FC<CompsManagerProps> = ({
         <div className="flex items-center gap-1">
           <Home className="w-3 h-3 text-slate-500" />
           <span className="text-xs font-medium text-slate-600">Comparable Properties</span>
-          <span className="text-xs text-emerald-600 font-semibold ml-2">{formatArv()}</span>
+          <span className="text-xs text-emerald-600 font-semibold ml-2">ARV: {formatArv()}</span>
         </div>
         <div className="flex items-center gap-1">
             <Button
               size="sm"
               variant="ghost"
-              className="h-5 text-[10px] px-2"
+              className="h-6 w-6 p-0"
               onClick={() => document.getElementById(`comps-pdf-upload-${leadId}`)?.click()}
               disabled={uploadingPdf}
+              title="Add PDF"
             >
-              <Plus className="h-3 w-3 mr-0.5" />
-              {uploadingPdf ? 'Uploading...' : 'Add'}
+              <Plus className="w-3 h-3" />
             </Button>
             <input
               id={`comps-pdf-upload-${leadId}`}
               type="file"
+              multiple
+              accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,image/*,application/pdf"
               className="hidden"
               onChange={handlePdfUpload}
               disabled={uploadingPdf}

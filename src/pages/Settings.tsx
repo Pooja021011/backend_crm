@@ -2094,8 +2094,8 @@ const Settings = () => {
             </div>
           )}
 
-          {/* Lead Distribution Tab - Only show when activeTab is 'lead-distribution' */}
-          {activeTab === 'lead-distribution' && (
+          {/* Lead Distribution Tab - HIDDEN - Only used for Google Sheets imports */}
+          {/* {activeTab === 'lead-distribution' && (
             <div className="space-y-8">
               {!isAdminOrManager ? (
                 <Card>
@@ -2118,7 +2118,7 @@ const Settings = () => {
                 <LeadDistributionSettings />
               )}
             </div>
-          )}
+          )} */}
 
           {/* Google Sheets section removed */}
 

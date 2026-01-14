@@ -4,6 +4,7 @@ import { prisma } from '../config/db.js';
 import { communicationRepository } from '../repositories/communicationRepository.js';
 import { smsSettingsRepository } from '../repositories/smsSettingsRepository.js';
 import { communicationResponseService } from './communicationResponseService.js';
+import { notificationService } from './notificationService.js';
 
 // Initialize Twilio client
 // #region agent log
@@ -208,6 +209,24 @@ export const smsService = {
               from, 
               userId: userSmsSettings.userId 
             });
+            
+            // Create notification for incoming SMS
+            const leadName = lead.seller?.firstName || lead.buyer?.firstName || lead.vendor?.firstName || 'Lead';
+            await notificationService.createNotification({
+              type: 'NEW_SMS',
+              title: `New SMS from ${leadName}`,
+              message: text.substring(0, 100), // First 100 chars
+              priority: 'MEDIUM',
+              targetUserId: lead.assignedUserId || userSmsSettings.userId,
+              leadId: lead.id,
+              triggeredBy: null, // External source
+              data: {
+                from,
+                to,
+                messageSid: messageId,
+                communicationType: 'SMS'
+              }
+            }).catch(err => logger.error('Failed to create SMS notification', { err }));
             
             // NEW: Auto-update lead status based on communication
             await communicationResponseService.handleCommunicationEvent(

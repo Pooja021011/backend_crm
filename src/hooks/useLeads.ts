@@ -261,7 +261,7 @@ export const useLeads = (): LeadsHookReturn => {
   };
 
   const fetchLeads = async (): Promise<void> => {
-    await listLeads({ take: 1000 }); // Fetch up to 1000 leads (no pagination limit)
+    await listLeads({ take: 10000 }); // Fetch up to 10000 leads to ensure all leads are loaded
   };
 
   const getLeadsByType = (type: LeadType): Lead[] => {
@@ -561,6 +561,23 @@ export const useLeads = (): LeadsHookReturn => {
         case 'phone':
           aValue = a.seller?.phone || a.buyer?.phone || a.vendor?.phone || '';
           bValue = b.seller?.phone || b.buyer?.phone || b.vendor?.phone || '';
+          break;
+        case 'status':
+          // Sort by leadStatus name, fallback to status field
+          aValue = a.leadStatus?.name || a.status || '';
+          bValue = b.leadStatus?.name || b.status || '';
+          break;
+        case 'address':
+          aValue = a.address?.address1 || '';
+          bValue = b.address?.address1 || '';
+          break;
+        case 'assignedUser':
+          aValue = a.assignedUserId || '';
+          bValue = b.assignedUserId || '';
+          break;
+        case 'lastContactAt':
+          aValue = a.lastContactAt ? new Date(a.lastContactAt as string) : new Date(0);
+          bValue = b.lastContactAt ? new Date(b.lastContactAt as string) : new Date(0);
           break;
         case 'createdAt':
         case 'updatedAt':

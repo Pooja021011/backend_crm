@@ -5,6 +5,7 @@ import { communicationRepository } from '../repositories/communicationRepository
 import { smsSettingsRepository } from '../repositories/smsSettingsRepository.js';
 import { communicationResponseService } from './communicationResponseService.js';
 import { leadRepository } from '../repositories/leadRepository.js';
+import { notificationService } from './notificationService.js';
 
 function normalizeBaseUrl(input?: string | null): string {
   const trimmed = String(input || '').trim();
@@ -280,6 +281,46 @@ export const callService = {
             logger.info({ leadId, callSid, status }, 'Updated lastContactAt for answered inbound call');
           }
           
+          // Create notification for status update (especially for missed calls)
+          if (status === 'missed' || status === 'completed') {
+            const lead = await prisma.lead.findUnique({
+              where: { id: leadId },
+              select: {
+                seller: { select: { firstName: true, lastName: true } },
+                buyer: { select: { firstName: true, lastName: true } },
+                vendor: { select: { firstName: true, lastName: true } },
+                assignedUserId: true
+              }
+            });
+            
+            if (lead) {
+              const leadName = lead.seller?.firstName || lead.buyer?.firstName || lead.vendor?.firstName || 'Lead';
+              const priority = status === 'missed' ? 'HIGH' : 'MEDIUM';
+              const notifType = status === 'missed' ? 'MISSED_CALL' : 'NEW_CALL';
+              
+              await notificationService.createNotification({
+                type: notifType,
+                title: status === 'missed' 
+                  ? `⚠️ Missed Call from ${leadName}`
+                  : `Call Completed with ${leadName}`,
+                message: status === 'missed'
+                  ? `You missed a call from ${safeFrom}. Follow up required.`
+                  : `Call with ${safeFrom} completed successfully`,
+                priority: priority,
+                targetUserId: lead.assignedUserId || userId,
+                leadId: leadId,
+                triggeredBy: null,
+                data: {
+                  callSid,
+                  from: safeFrom,
+                  to: safeTo,
+                  status,
+                  communicationType: 'CALL'
+                }
+              }).catch(err => logger.error('Failed to create call notification', { err }));
+            }
+          }
+          
           return existingComm.id;
         }
 
@@ -300,6 +341,44 @@ export const callService = {
             data: { lastContactAt: new Date() }
           });
           logger.info({ leadId, callSid, status }, 'Updated lastContactAt for answered inbound call');
+        }
+
+        // Create notification for incoming call
+        const lead = await prisma.lead.findUnique({
+          where: { id: leadId },
+          select: {
+            seller: { select: { firstName: true, lastName: true } },
+            buyer: { select: { firstName: true, lastName: true } },
+            vendor: { select: { firstName: true, lastName: true } },
+            assignedUserId: true
+          }
+        });
+        
+        if (lead) {
+          const leadName = lead.seller?.firstName || lead.buyer?.firstName || lead.vendor?.firstName || 'Lead';
+          const priority = status === 'missed' ? 'HIGH' : 'MEDIUM';
+          const notifType = status === 'missed' ? 'MISSED_CALL' : 'NEW_CALL';
+          
+          await notificationService.createNotification({
+            type: notifType,
+            title: status === 'missed' 
+              ? `⚠️ Missed Call from ${leadName}`
+              : `Incoming Call from ${leadName}`,
+            message: status === 'missed'
+              ? `You missed a call from ${safeFrom}. Follow up required.`
+              : `Call received from ${safeFrom}`,
+            priority: priority,
+            targetUserId: lead.assignedUserId || userId,
+            leadId: leadId,
+            triggeredBy: null,
+            data: {
+              callSid,
+              from: safeFrom,
+              to: safeTo,
+              status,
+              communicationType: 'CALL'
+            }
+          }).catch(err => logger.error('Failed to create call notification', { err }));
         }
 
         return created.id;

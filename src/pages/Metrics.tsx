@@ -1377,17 +1377,12 @@ const Metrics = () => {
         {/* Global Filters Toggle */}
         <Button
           variant="outline"
+          size="sm"
+          className="gap-2"
           onClick={() => setShowFilters(!showFilters)}
-          className="flex items-center gap-2"
         >
           <Filter className="w-4 h-4" />
-          Filters
-          <ChevronDown className={`w-4 h-4 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
-          {(selectedSource !== 'all' || selectedPeriod !== 'This Month') && (
-            <Badge variant="secondary" className="ml-1">
-              {(selectedSource !== 'all' ? 1 : 0) + (selectedPeriod !== 'This Month' ? 1 : 0)}
-            </Badge>
-          )}
+          {showFilters ? 'Hide' : 'Filter'}
         </Button>
       </div>
 
@@ -1542,29 +1537,8 @@ const Metrics = () => {
             variant={activeTab === "communications" ? "default" : "outline"}
             className="flex items-center gap-2"
           >
-            <Zap className="w-4 h-4" />
+            <Phone className="w-4 h-4" />
             Communications Overview
-          </Button>
-        </div>
-
-        {/* Bottom Row */}
-        <div className="flex flex-wrap gap-2">
-          <Button
-            onClick={() => setActiveTab("acquisitions")}
-            variant={activeTab === "acquisitions" ? "default" : "outline"}
-            className="flex items-center gap-2"
-          >
-            <Users className="w-4 h-4" />
-            Acquisitions Team
-          </Button>
-          
-          <Button
-            onClick={() => setActiveTab("dispositions-team")}
-            variant={activeTab === "dispositions-team" ? "default" : "outline"}
-            className="flex items-center gap-2"
-          >
-            <Users className="w-4 h-4" />
-            Dispositions Team
           </Button>
           
           <Button
@@ -1573,13 +1547,34 @@ const Metrics = () => {
             className="flex items-center gap-2"
           >
             <FileText className="w-4 h-4" />
-            Transaction Coordinator
+            Transaction Overview
+          </Button>
+        </div>
+
+        {/* Bottom Row */}
+        <div className="flex flex-wrap gap-2">
+          <Button
+            onClick={() => setActiveTab("acquisitions")}
+            variant={activeTab === "acquisitions" ? "default" : "outline"}
+            className="flex items-center gap-2 flex-1"
+          >
+            <Users className="w-4 h-4" />
+            Acquisitions Team
+          </Button>
+          
+          <Button
+            onClick={() => setActiveTab("dispositions-team")}
+            variant={activeTab === "dispositions-team" ? "default" : "outline"}
+            className="flex items-center gap-2 flex-1"
+          >
+            <Users className="w-4 h-4" />
+            Dispositions Team
           </Button>
           
           <Button
             onClick={() => setActiveTab("acquisitions-leaderboard")}
             variant={activeTab === "acquisitions-leaderboard" ? "default" : "outline"}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 flex-1"
           >
             <Trophy className="w-4 h-4" />
             Acquisitions Leaderboard
@@ -1588,9 +1583,9 @@ const Metrics = () => {
           <Button
             onClick={() => setActiveTab("dispositions-leaderboard")}
             variant={activeTab === "dispositions-leaderboard" ? "default" : "outline"}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 flex-1"
           >
-            <Award className="w-4 h-4" />
+            <Trophy className="w-4 h-4" />
             Dispositions Leaderboard
           </Button>
         </div>
@@ -1602,7 +1597,7 @@ const Metrics = () => {
           {/* Row 1 - Main KPIs (4 metrics) */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {/* Contracts Signed */}
-            <Card className="p-6 hover:shadow-lg transition-all duration-300 border border-blue-200 bg-gradient-to-br from-blue-50 to-white">
+            <Card className="p-6 hover:shadow-lg transition-all duration-300 border border-gray-200 bg-white">
               <div className="flex items-center justify-between mb-4">
                 <div className="p-3 bg-blue-100 rounded-xl">
                   <Users className="w-6 h-6 text-blue-600" />
@@ -1612,7 +1607,7 @@ const Metrics = () => {
             </Card>
 
             {/* Contracts Sold */}
-            <Card className="p-6 hover:shadow-lg transition-all duration-300 border border-green-200 bg-gradient-to-br from-green-50 to-white">
+            <Card className="p-6 hover:shadow-lg transition-all duration-300 border border-gray-200 bg-white">
               <div className="flex items-center justify-between mb-4">
                 <div className="p-3 bg-green-100 rounded-xl">
                   <Target className="w-6 h-6 text-green-600" />
@@ -1622,7 +1617,7 @@ const Metrics = () => {
             </Card>
 
             {/* Projected Profit */}
-            <Card className="p-6 hover:shadow-lg transition-all duration-300 border border-purple-200 bg-gradient-to-br from-purple-50 to-white">
+            <Card className="p-6 hover:shadow-lg transition-all duration-300 border border-gray-200 bg-white">
               <div className="flex items-center justify-between mb-4">
                 <div className="p-3 bg-purple-100 rounded-xl">
                   <TrendingUp className="w-6 h-6 text-purple-600" />
@@ -1632,7 +1627,7 @@ const Metrics = () => {
             </Card>
 
             {/* Closed Profit */}
-            <Card className="p-6 hover:shadow-lg transition-all duration-300 border border-orange-200 bg-gradient-to-br from-orange-50 to-white">
+            <Card className="p-6 hover:shadow-lg transition-all duration-300 border border-gray-200 bg-white">
               <div className="flex items-center justify-between mb-4">
                 <div className="p-3 bg-orange-100 rounded-xl">
                   <DollarSign className="w-6 h-6 text-orange-600" />
@@ -2817,7 +2812,7 @@ const Metrics = () => {
               ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Total Properties in Pipeline */}
-            <Card className="p-8 hover:shadow-lg transition-shadow bg-gradient-to-br from-blue-50 to-white border border-blue-200">
+            <Card className="p-8 hover:shadow-lg transition-shadow bg-white border border-gray-200">
               <div className="text-center space-y-4">
                 <h3 className="text-sm font-bold text-blue-600 uppercase tracking-wider">Total Properties in Pipeline</h3>
                       {acqLoading ? (
@@ -2863,7 +2858,7 @@ const Metrics = () => {
             </Card>
 
             {/* Total Properties Clear to Close */}
-            <Card className="p-8 hover:shadow-lg transition-shadow bg-gradient-to-br from-green-50 to-white border border-green-200">
+            <Card className="p-8 hover:shadow-lg transition-shadow bg-white border border-gray-200">
               <div className="text-center space-y-4">
                       <h3 className="text-sm font-bold text-green-600 uppercase tracking-wider">Total Clear to Close</h3>
                       {acqLoading ? (
@@ -2909,7 +2904,7 @@ const Metrics = () => {
             </Card>
 
             {/* Percentage Clear to Close */}
-            <Card className="p-8 hover:shadow-lg transition-shadow bg-gradient-to-br from-purple-50 to-white border border-purple-200">
+            <Card className="p-8 hover:shadow-lg transition-shadow bg-white border border-gray-200">
               <div className="text-center space-y-4">
                       <h3 className="text-sm font-bold text-purple-600 uppercase tracking-wider">% Clear to Close</h3>
                       {acqLoading ? (
@@ -2960,7 +2955,7 @@ const Metrics = () => {
               {!acqError && (
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Projected Profit */}
-            <Card className="p-8 hover:shadow-lg transition-shadow bg-gradient-to-br from-orange-50 to-white border border-orange-200">
+            <Card className="p-8 hover:shadow-lg transition-shadow bg-white border border-gray-200">
               <div className="text-center space-y-4">
                 <h3 className="text-sm font-bold text-orange-600 uppercase tracking-wider">Projected Profit</h3>
                       {acqLoading ? (
@@ -3006,7 +3001,7 @@ const Metrics = () => {
             </Card>
 
             {/* Total Deals Closed */}
-            <Card className="p-8 hover:shadow-lg transition-shadow bg-gradient-to-br from-green-50 to-white border border-green-200">
+            <Card className="p-8 hover:shadow-lg transition-shadow bg-white border border-gray-200">
               <div className="text-center space-y-4">
                 <h3 className="text-sm font-bold text-green-600 uppercase tracking-wider">Total Deals Closed</h3>
                       {acqLoading ? (
@@ -3052,7 +3047,7 @@ const Metrics = () => {
             </Card>
 
             {/* Closed Profit */}
-            <Card className="p-8 hover:shadow-lg transition-shadow bg-gradient-to-br from-blue-50 to-white border border-blue-200">
+            <Card className="p-8 hover:shadow-lg transition-shadow bg-white border border-gray-200">
               <div className="text-center space-y-4">
                 <h3 className="text-sm font-bold text-blue-600 uppercase tracking-wider">Closed Profit</h3>
                       {acqLoading ? (
@@ -3098,15 +3093,7 @@ const Metrics = () => {
             </Card>
 
                   {/* Leads Mishandled - Color Coded */}
-                  <Card className={`p-8 hover:shadow-lg transition-shadow bg-gradient-to-br border ${
-                    !acqLoading && acquisitionsData?.leadsMishandled ? (
-                      acquisitionsData.leadsMishandled.riskLevel === 'high' 
-                        ? 'from-red-50 to-white border-red-200' 
-                        : acquisitionsData.leadsMishandled.riskLevel === 'medium' 
-                          ? 'from-yellow-50 to-white border-yellow-200'
-                          : 'from-green-50 to-white border-green-200'
-                    ) : 'from-gray-50 to-white border-gray-200'
-                  }`}>
+                  <Card className="p-8 hover:shadow-lg transition-shadow bg-white border border-gray-200">
               <div className="text-center space-y-4">
                       <h3 className={`text-sm font-bold uppercase tracking-wider ${
                         !acqLoading && acquisitionsData?.leadsMishandled ? (

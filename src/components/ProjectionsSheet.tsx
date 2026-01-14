@@ -22,6 +22,11 @@ export function ProjectionsSheet({
 }: ProjectionsSheetProps) {
   const [expanded, setExpanded] = useState(false);
 
+  // Debug: Log props to see what values are being passed
+  useEffect(() => {
+    console.log('🔍 ProjectionsSheet props:', { leadId, finalOffer, rehabCost, arv, taxes, timeline });
+  }, [leadId, finalOffer, rehabCost, arv, taxes, timeline]);
+
   // FIXED SYSTEM CONSTANTS (from Google Sheet)
   const TRANSFER_TAX_RATE = 0.002; // 0.20%
   const SPLIT_TRANSFER = true;
@@ -267,12 +272,22 @@ export function ProjectionsSheet({
     return `${value.toFixed(2)}%`;
   };
 
+  // Check if we have data to display
+  const hasData = finalOffer > 0 && arv > 0;
+
   return (
     <div className="border border-slate-200 rounded-lg bg-white p-2">
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-1">
           <TrendingUp className="w-3 h-3 text-slate-500" />
-          <span className="text-xs font-medium text-slate-600">Projections (Full Sheet)</span>
+          <span className="text-xs font-medium text-slate-600">Projections</span>
+          
+          {/* Show Buyer Profit in header when data is available */}
+          {hasData && (
+            <span className="text-xs text-emerald-600 font-semibold ml-2">
+              Buyer Profit: {formatCurrency(projections.profit)}
+            </span>
+          )}
         </div>
         <Button
           size="sm"

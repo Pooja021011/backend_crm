@@ -44,13 +44,11 @@ export function UnderwritingCalculator({
     return digits ? Number(digits) : 0;
   };
   
-  // EDITABLE FIELDS (including Rehab Cost for testing)
+  // EDITABLE FIELDS
   const [arv, setArv] = useState(initialArv);
   const [rehabCostValue, setRehabCostValue] = useState(rehabCost);
   const [taxes, setTaxes] = useState(initialTaxes);
   const [timeline, setTimeline] = useState(initialTimeline); // months
-  const [arvDisplay, setArvDisplay] = useState(initialArv ? formatCurrency(initialArv) : '');
-  const [rehabCostDisplay, setRehabCostDisplay] = useState('');
   const [taxesDisplay, setTaxesDisplay] = useState(initialTaxes ? formatCurrency(initialTaxes) : '');
 
   // CALCULATED OUTPUT
@@ -64,16 +62,14 @@ export function UnderwritingCalculator({
     setLoading(false);
   }, [leadId]);
 
-  // Sync ARV display/value when parent updates initialArv (e.g., top-level ARV box on Lead page)
+  // Sync ARV value when parent updates initialArv (from Comparable Properties)
   useEffect(() => {
     setArv(initialArv || 0);
-    setArvDisplay(initialArv ? formatCurrency(initialArv) : '');
   }, [initialArv]);
 
   // Update rehabCostValue when rehabCost prop changes
   useEffect(() => {
     setRehabCostValue(rehabCost);
-    setRehabCostDisplay(rehabCost ? formatCurrency(rehabCost) : '');
   }, [rehabCost]);
 
   // Calculate Final Offer when inputs change
@@ -161,25 +157,18 @@ export function UnderwritingCalculator({
       {expanded && (
         <div className="space-y-2 mt-2">
           {/* INPUTS */}
-          <div className="p-2 bg-blue-50 border border-blue-200 rounded">
-            <Label className="text-[10px] font-semibold text-blue-700 mb-1 block">INPUTS</Label>
+          <div className="p-2 bg-slate-50 border border-slate-200 rounded">
+            <Label className="text-[10px] font-semibold text-slate-700 mb-1 block">INPUTS</Label>
             <div className="grid grid-cols-4 gap-2">
-              {/* ARV - EDITABLE */}
+              {/* ARV - READ-ONLY (auto-filled from Comparable Properties) */}
               <div>
-                <Label className="text-[10px] text-slate-600">ARV *</Label>
+                <Label className="text-[10px] text-slate-600">ARV</Label>
                 <Input
                   type="text"
-                  inputMode="numeric"
-                  value={arvDisplay}
-                  onChange={(e) => {
-                    const raw = e.target.value;
-                    setArvDisplay(raw);
-                    setArv(parseCurrencyInput(raw));
-                  }}
-                  onBlur={() => setArvDisplay(arv ? formatCurrency(arv) : '')}
-                  disabled={readOnly}
-                  className="h-6 text-xs"
-                  placeholder="Enter ARV"
+                  value={arv ? `$${arv.toLocaleString()}` : '$0'}
+                  disabled={true}
+                  className="h-6 text-xs bg-slate-100 cursor-not-allowed text-slate-600 font-medium"
+                  readOnly
                 />
               </div>
 
@@ -216,7 +205,7 @@ export function UnderwritingCalculator({
 
               {/* TIMELINE - EDITABLE */}
               <div>
-                <Label className="text-[10px] text-slate-600">Timeline (months) *</Label>
+                <Label className="text-[10px] text-slate-600">Timeline (Months) *</Label>
                 <Input
                   type="number"
                   value={timeline || ''}

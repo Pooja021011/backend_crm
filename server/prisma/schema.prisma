@@ -792,7 +792,7 @@ model MarketingResource {
 // Event-based Notifications
 model Notification {
   id       String  @id @default(uuid())
-  type     String // 'NEW_CONTRACT', 'NEW_LEAD', 'NEW_DEAL_ASSIGNED'
+  type     String // 'NEW_CONTRACT', 'NEW_LEAD', 'NEW_DEAL_ASSIGNED', 'NEW_SMS', 'NEW_CALL', 'MISSED_CALL'
   title    String
   message  String
   priority String  @default("MEDIUM") // 'LOW', 'MEDIUM', 'HIGH', 'URGENT'

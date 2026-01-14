@@ -211,7 +211,7 @@ export function RehabBudgetCalculatorCompact({
           <Wrench className="w-3 h-3 text-slate-500" />
           <span className="text-xs font-medium text-slate-600">Rehab Budget</span>
           <span className="text-xs text-emerald-600 font-semibold ml-2">
-            {formatCurrency(calculation.totalCost)}
+            Rehab Budget: {formatCurrency(calculation.totalCost)}
           </span>
         </div>
         <Button
@@ -227,7 +227,7 @@ export function RehabBudgetCalculatorCompact({
       {expanded && (
         <div className="space-y-1 mt-2">
           {/* Configuration */}
-          <div className="grid grid-cols-3 gap-2 p-2 bg-slate-50 rounded">
+          <div className="grid grid-cols-4 gap-2 p-2 bg-slate-50 rounded">
             <div>
               <Label className="text-[10px] text-slate-500">Finish Level</Label>
               <Select value={finishLevel} onValueChange={(value: any) => setFinishLevel(value)} disabled={readOnly}>
@@ -242,14 +242,13 @@ export function RehabBudgetCalculatorCompact({
               </Select>
             </div>
             <div>
-              <Label className="text-[10px] text-slate-500">Windows</Label>
+              <Label className="text-[10px] text-slate-500">SqFt</Label>
               <Input
                 type="number"
-                value={numberOfWindows}
-                onChange={(e) => setNumberOfWindows(Number(e.target.value))}
-                disabled={readOnly}
-                className="h-6 text-xs"
-                min={1}
+                value={propertySquareFeet || ''}
+                disabled
+                className="h-6 text-xs bg-white"
+                placeholder="N/A"
               />
             </div>
             <div>
@@ -263,11 +262,17 @@ export function RehabBudgetCalculatorCompact({
                 min={0}
               />
             </div>
-          </div>
-          
-          {/* Property Info Display (Read-only) */}
-          <div className="flex gap-2 text-[10px] text-slate-500 bg-slate-50 p-1 rounded">
-            <span>SqFt: <span className="font-medium text-slate-700">{propertySquareFeet || 'N/A'}</span></span>
+            <div>
+              <Label className="text-[10px] text-slate-500">Windows</Label>
+              <Input
+                type="number"
+                value={numberOfWindows}
+                onChange={(e) => setNumberOfWindows(Number(e.target.value))}
+                disabled={readOnly}
+                className="h-6 text-xs"
+                min={1}
+              />
+            </div>
           </div>
 
           {/* Item Layout - 4 Rows */}

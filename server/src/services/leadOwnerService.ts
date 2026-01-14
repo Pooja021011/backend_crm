@@ -1,5 +1,6 @@
 import { leadOwnerRepository } from '../repositories/leadOwnerRepository.js';
 import { logger } from '../config/logger.js';
+import { prisma } from '../config/db.js';
 
 export const leadOwnerService = {
   /**
@@ -86,7 +87,10 @@ export const leadOwnerService = {
         }
       }
 
-      return await leadOwnerRepository.update(ownerId, ownerData);
+      // Update the owner (repository handles bidirectional sync)
+      const updatedOwner = await leadOwnerRepository.update(ownerId, ownerData);
+
+      return updatedOwner;
     } catch (error: any) {
       logger.error('Error updating owner', { error: error.message, ownerId });
       throw error;
@@ -128,7 +132,52 @@ export const leadOwnerService = {
    */
   async setPrimaryOwner(ownerId: string) {
     try {
-      return await leadOwnerRepository.setPrimary(ownerId);
+      // Get the owner being set as primary
+      const owner = await leadOwnerRepository.findById(ownerId);
+      if (!owner) {
+        throw new Error('Owner not found');
+      }
+
+      // Set as primary
+      const updatedOwner = await leadOwnerRepository.setPrimary(ownerId);
+
+      // Sync the new primary owner's contact info to seller/buyer/vendor
+      const lead = await prisma.lead.findUnique({
+        where: { id: owner.leadId },
+        include: {
+          seller: true,
+          buyer: true,
+          vendor: true
+        }
+      });
+
+      if (lead) {
+        const syncData = {
+          firstName: owner.firstName,
+          lastName: owner.lastName,
+          phone: owner.phone,
+          email: owner.email
+        };
+
+        if (lead.leadType === 'SELLER' && lead.seller) {
+          await prisma.sellerDetail.update({
+            where: { leadId: lead.id },
+            data: syncData
+          });
+        } else if (lead.leadType === 'BUYER' && lead.buyer) {
+          await prisma.buyerDetail.update({
+            where: { leadId: lead.id },
+            data: syncData
+          });
+        } else if (lead.leadType === 'VENDOR' && lead.vendor) {
+          await prisma.vendorDetail.update({
+            where: { leadId: lead.id },
+            data: syncData
+          });
+        }
+      }
+
+      return updatedOwner;
     } catch (error: any) {
       logger.error('Error setting primary owner', { error: error.message, ownerId });
       throw error;

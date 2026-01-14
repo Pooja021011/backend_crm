@@ -217,6 +217,21 @@ export const leadRepository = {
     // Transform nested relations for proper Prisma update syntax
     const updateData: any = { ...data };
     
+    // Get the current lead to determine its type
+    const currentLead = await prisma.lead.findUnique({
+      where: { id },
+      include: {
+        owners: {
+          where: { isPrimary: true },
+          take: 1
+        }
+      }
+    });
+    
+    if (!currentLead) {
+      throw new Error('Lead not found');
+    }
+    
     // Handle seller relation - use upsert to create if doesn't exist
     if (data.seller) {
       updateData.seller = { 
@@ -225,6 +240,23 @@ export const leadRepository = {
           update: data.seller
         }
       };
+      
+      // Sync seller contact info to primary lead owner
+      if (currentLead.leadType === 'SELLER' && (data.seller.phone || data.seller.email || data.seller.firstName || data.seller.lastName)) {
+        const primaryOwner = currentLead.owners[0];
+        if (primaryOwner) {
+          // Update existing primary owner
+          await prisma.leadOwner.update({
+            where: { id: primaryOwner.id },
+            data: {
+              firstName: data.seller.firstName || primaryOwner.firstName,
+              lastName: data.seller.lastName || primaryOwner.lastName,
+              phone: data.seller.phone || primaryOwner.phone,
+              email: data.seller.email || primaryOwner.email,
+            }
+          });
+        }
+      }
     }
     
     // Handle buyer relation - use upsert to create if doesn't exist
@@ -235,6 +267,23 @@ export const leadRepository = {
           update: data.buyer
         }
       };
+      
+      // Sync buyer contact info to primary lead owner
+      if (currentLead.leadType === 'BUYER' && (data.buyer.phone || data.buyer.email || data.buyer.firstName || data.buyer.lastName)) {
+        const primaryOwner = currentLead.owners[0];
+        if (primaryOwner) {
+          // Update existing primary owner
+          await prisma.leadOwner.update({
+            where: { id: primaryOwner.id },
+            data: {
+              firstName: data.buyer.firstName || primaryOwner.firstName,
+              lastName: data.buyer.lastName || primaryOwner.lastName,
+              phone: data.buyer.phone || primaryOwner.phone,
+              email: data.buyer.email || primaryOwner.email,
+            }
+          });
+        }
+      }
     }
     
     // Handle vendor relation - use upsert to create if doesn't exist
@@ -256,6 +305,23 @@ export const leadRepository = {
           update: normalizedVendor
         }
       };
+      
+      // Sync vendor contact info to primary lead owner
+      if (currentLead.leadType === 'VENDOR' && (v.phone || v.email || v.firstName || v.lastName)) {
+        const primaryOwner = currentLead.owners[0];
+        if (primaryOwner) {
+          // Update existing primary owner
+          await prisma.leadOwner.update({
+            where: { id: primaryOwner.id },
+            data: {
+              firstName: v.firstName || primaryOwner.firstName,
+              lastName: v.lastName || primaryOwner.lastName,
+              phone: v.phone || primaryOwner.phone,
+              email: v.email || primaryOwner.email,
+            }
+          });
+        }
+      }
     }
     
     // Handle address relation - use upsert to create if doesn't exist
@@ -392,7 +458,7 @@ export const leadRepository = {
       where,
       orderBy: { [sort]: order },
       skip,
-      take: Math.min(take, 1000), // Increased from 100 to 1000 to support larger lead lists
+      take: Math.min(take, 10000), // Increased to 10000 to support larger lead lists and accurate counts
       include: includeLead,
     });
   },

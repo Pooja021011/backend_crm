@@ -57,6 +57,7 @@ import {
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { useLeads, type LeadType } from "@/hooks/useLeads";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePipelineNav } from "@/contexts/PipelineNavContext";
 import { SortableTableHeader, useSortable } from "@/components/SortableTableHeader";
 import { ImportCSVDialog } from "@/components/ImportCSVDialog";
 import { LeadActions } from "@/components/LeadActions";
@@ -69,6 +70,7 @@ import { formatUsPhoneForDisplay } from "@/utils/phone";
 const Leads = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { setFromPipelineView } = usePipelineNav();
   const { 
     leads, 
     isLoading, 
@@ -105,9 +107,9 @@ const Leads = () => {
     return names || '-';
   };
   
-  // Helper to get first available phone number from all sources
+  // Helper to get phone number from lead owners only (single source of truth)
   const getLeadPhone = (lead: any): string => {
-    // Priority 1: Check primary lead owner first
+    // ONLY use lead owners as the single source of truth for contact info
     if (lead.owners && lead.owners.length > 0) {
       const primaryOwner = lead.owners.find((o: any) => o.isPrimary);
       if (primaryOwner?.phone?.trim()) return primaryOwner.phone.trim();
@@ -117,66 +119,30 @@ const Leads = () => {
       if (ownerPhone) return ownerPhone;
     }
     
-    // Priority 2: Check contacts (for backward compatibility)
-    if (lead.contacts && lead.contacts.length > 0) {
-      const contactPhone = lead.contacts[0]?.phone?.trim();
-      if (contactPhone) return contactPhone;
-    }
-    
-    // Priority 3: Check lead owners (old field name for backward compatibility)
-    if (lead.leadOwners && lead.leadOwners.length > 0) {
-      const ownerPhone = lead.leadOwners.find((o: any) => o.phone)?.phone?.trim();
-      if (ownerPhone) return ownerPhone;
-    }
-    
-    // Priority 4: Check seller/buyer/vendor as fallback
-    const sellerPhone = lead.seller?.phone?.trim();
-    if (sellerPhone) return sellerPhone;
-    
-    const buyerPhone = lead.buyer?.phone?.trim();
-    if (buyerPhone) return buyerPhone;
-    
-    const vendorPhone = lead.vendor?.phone?.trim();
-    if (vendorPhone) return vendorPhone;
-    
     return 'N/A';
   };
   
-  // Helper to get first available email from all sources
+  // Helper to get email from lead owners only (single source of truth)
   const getLeadEmail = (lead: any): string => {
-    // Priority 1: Check primary lead owner first
+    // Helper to check if email is valid (not empty, not fake)
+    const isValidEmail = (email: string | undefined | null): boolean => {
+      if (!email || !email.trim()) return false;
+      if (email.includes('@unknown.local')) return false;
+      if (email.includes('none@none.com')) return false;
+      return true;
+    };
+    
+    // ONLY use lead owners as the single source of truth for contact info
     if (lead.owners && lead.owners.length > 0) {
       const primaryOwner = lead.owners.find((o: any) => o.isPrimary);
-      if (primaryOwner?.email?.trim() && !primaryOwner.email.includes('@unknown.local')) {
+      if (isValidEmail(primaryOwner?.email)) {
         return primaryOwner.email.trim();
       }
       
       // If no primary, get first owner with email
-      const ownerEmail = lead.owners.find((o: any) => o.email && !o.email.includes('@unknown.local'))?.email?.trim();
-      if (ownerEmail) return ownerEmail;
+      const ownerWithEmail = lead.owners.find((o: any) => isValidEmail(o.email));
+      if (ownerWithEmail) return ownerWithEmail.email.trim();
     }
-    
-    // Priority 2: Check contacts (for backward compatibility)
-    if (lead.contacts && lead.contacts.length > 0) {
-      const contactEmail = lead.contacts[0]?.email?.trim();
-      if (contactEmail && !contactEmail.includes('@unknown.local')) return contactEmail;
-    }
-    
-    // Priority 3: Check lead owners (old field name for backward compatibility)
-    if (lead.leadOwners && lead.leadOwners.length > 0) {
-      const ownerEmail = lead.leadOwners.find((o: any) => o.email && !o.email.includes('@unknown.local'))?.email?.trim();
-      if (ownerEmail) return ownerEmail;
-    }
-    
-    // Priority 4: Check seller/buyer/vendor as fallback
-    const sellerEmail = lead.seller?.email?.trim();
-    if (sellerEmail && !sellerEmail.includes('@unknown.local')) return sellerEmail;
-    
-    const buyerEmail = lead.buyer?.email?.trim();
-    if (buyerEmail && !buyerEmail.includes('@unknown.local')) return buyerEmail;
-    
-    const vendorEmail = lead.vendor?.email?.trim();
-    if (vendorEmail && !vendorEmail.includes('@unknown.local')) return vendorEmail;
     
     return 'No email';
   };
@@ -184,6 +150,63 @@ const Leads = () => {
   // Helper to check if lead has any phone number
   const hasPhoneNumber = (lead: any): boolean => {
     return getLeadPhone(lead) !== 'N/A';
+  };
+  
+  // Helper to get contact name (synced with lead owners)
+  const getContactName = (lead: any): { firstName: string; lastName: string; initials: string } => {
+    // Priority 1: Check primary lead owner first
+    if (lead.owners && lead.owners.length > 0) {
+      const primaryOwner = lead.owners.find((o: any) => o.isPrimary);
+      if (primaryOwner?.firstName && primaryOwner?.lastName) {
+        return {
+          firstName: primaryOwner.firstName,
+          lastName: primaryOwner.lastName,
+          initials: `${primaryOwner.firstName[0]}${primaryOwner.lastName[0]}`
+        };
+      }
+      
+      // If no primary, get first owner with name
+      const ownerWithName = lead.owners.find((o: any) => o.firstName && o.lastName);
+      if (ownerWithName) {
+        return {
+          firstName: ownerWithName.firstName,
+          lastName: ownerWithName.lastName,
+          initials: `${ownerWithName.firstName[0]}${ownerWithName.lastName[0]}`
+        };
+      }
+    }
+    
+    // Priority 2: Check seller/buyer/vendor as fallback
+    if (lead.seller?.firstName && lead.seller?.lastName) {
+      return {
+        firstName: lead.seller.firstName,
+        lastName: lead.seller.lastName,
+        initials: `${lead.seller.firstName[0]}${lead.seller.lastName[0]}`
+      };
+    }
+    
+    if (lead.buyer?.firstName && lead.buyer?.lastName) {
+      return {
+        firstName: lead.buyer.firstName,
+        lastName: lead.buyer.lastName,
+        initials: `${lead.buyer.firstName[0]}${lead.buyer.lastName[0]}`
+      };
+    }
+    
+    if (lead.vendor?.firstName && lead.vendor?.lastName) {
+      return {
+        firstName: lead.vendor.firstName,
+        lastName: lead.vendor.lastName,
+        initials: `${lead.vendor.firstName[0]}${lead.vendor.lastName[0]}`
+      };
+    }
+    
+    // Fallback to Unknown
+    return {
+      firstName: 'Unknown',
+      lastName: 'Contact',
+      initials: 'UC'
+    };
   };
   
   // Set default tab based on user role
@@ -228,12 +251,14 @@ const Leads = () => {
   const [customDateTo, setCustomDateTo] = useState("");
   const [selectedAcqAgentId, setSelectedAcqAgentId] = useState("");
   const [selectedDispAgentId, setSelectedDispAgentId] = useState("");
+  const [selectedLeadSource, setSelectedLeadSource] = useState("");
   
   // Dynamic filter data
   const [filterMarkets, setFilterMarkets] = useState<any[]>([]);
   const [pipelineStages, setPipelineStages] = useState<any[]>([]);
   const [leadStatuses, setLeadStatuses] = useState<Array<{id: string; name: string; color?: string}>>([]);
   const [agents, setAgents] = useState<any[]>([]);
+  const [leadSources, setLeadSources] = useState<any[]>([]);
   const [loadingFilters, setLoadingFilters] = useState(false);
   
   // URL parameter handling for direct lead access
@@ -355,6 +380,15 @@ const Leads = () => {
         const agentsData = await agentsResponse.json();
         setAgents(agentsData.data || []);
       }
+
+      // Fetch lead sources
+      const leadSourcesResponse = await fetch(`${API_BASE}/settings/lead-sources`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
+      });
+      if (leadSourcesResponse.ok) {
+        const leadSourcesData = await leadSourcesResponse.json();
+        setLeadSources(leadSourcesData.data || []);
+      }
       
     } catch (error) {
       console.error('Error loading filter data:', error);
@@ -374,6 +408,7 @@ const Leads = () => {
     setCustomDateTo("");
     setSelectedAcqAgentId("");
     setSelectedDispAgentId("");
+    setSelectedLeadSource("");
   }, [activeTab]);
 
 
@@ -411,6 +446,13 @@ const Leads = () => {
     }
     if (activeTab === 'BUYER' && selectedDispAgentId) {
       filteredLeads = filteredLeads.filter((lead: any) => lead.assignedUserId === selectedDispAgentId);
+    }
+
+    // Lead Source filter
+    if (selectedLeadSource) {
+      filteredLeads = filteredLeads.filter(lead => {
+        return lead.leadSourceId === selectedLeadSource;
+      });
     }
     
     if (selectedDateRange) {
@@ -461,7 +503,7 @@ const Leads = () => {
     }
     
     return filteredLeads;
-  }, [getLeadsByType, activeTab, searchQuery, searchLeads, selectedMarket, selectedStatus, selectedPipelineStatus, selectedDateRange, customDateFrom, customDateTo, selectedAcqAgentId, selectedDispAgentId, sortConfig, sortLeads]);
+  }, [getLeadsByType, activeTab, searchQuery, searchLeads, selectedMarket, selectedStatus, selectedPipelineStatus, selectedDateRange, customDateFrom, customDateTo, selectedAcqAgentId, selectedDispAgentId, selectedLeadSource, sortConfig, sortLeads]);
 
   const getLeadCount = (type: "SELLER" | "BUYER" | "VENDOR") => {
     return getLeadsByType(type).length;
@@ -899,6 +941,19 @@ const Leads = () => {
     ));
   };
 
+  // Handle lead click and set navigation context for next/prev buttons
+  const handleLeadClick = (leadId: string) => {
+    // Set the navigation context with the current filtered/sorted lead list
+    const leadIds = currentLeads.map(lead => lead.id);
+    setFromPipelineView(leadIds, {
+      // Meta information about the source (lead tab)
+      pipelineKey: activeTab,
+    });
+    
+    // Navigate to the lead detail page
+    navigate(`/leads/${leadId}/edit`);
+  };
+
   return (
     <>
       <div className="flex flex-col h-full bg-gray-50">
@@ -915,24 +970,6 @@ const Leads = () => {
         {showFilters && (
           <div className="bg-white border-b border-gray-200 px-6 py-3">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-              {/* Market Filter */}
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-gray-700">Market</label>
-                <select 
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                  value={selectedMarket}
-                  onChange={(e) => setSelectedMarket(e.target.value)}
-                  disabled={loadingFilters}
-                >
-                  <option value="">All Markets</option>
-                  {filterMarkets.map(market => (
-                    <option key={market.id} value={market.id}>
-                      {market.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
               {/* Status Filter */}
               <div className="space-y-1">
                 <label className="text-xs font-medium text-gray-700">Lead Status</label>
@@ -964,6 +1001,24 @@ const Leads = () => {
                   {pipelineStages.map(stage => (
                     <option key={stage.id} value={stage.id}>
                       {stage.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Lead Source Filter */}
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-700">Lead Source</label>
+                <select 
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  value={selectedLeadSource}
+                  onChange={(e) => setSelectedLeadSource(e.target.value)}
+                  disabled={loadingFilters}
+                >
+                  <option value="">All Sources</option>
+                  {leadSources.map(source => (
+                    <option key={source.id} value={source.id}>
+                      {source.name}
                     </option>
                   ))}
                 </select>
@@ -1420,9 +1475,6 @@ const Leads = () => {
                       <SortableTableHeader sortKey="status" sortConfig={sortConfig} onSort={handleSort} className="min-w-[90px]">
                         Lead Status
                       </SortableTableHeader>
-                      <SortableTableHeader sortKey="assignedUser" sortConfig={sortConfig} onSort={handleSort} className="min-w-[90px]">
-                        Assigned
-                      </SortableTableHeader>
                       <SortableTableHeader sortKey="createdAt" sortConfig={sortConfig} onSort={handleSort} className="min-w-[80px]">
                         Date Created
                       </SortableTableHeader>
@@ -1437,7 +1489,7 @@ const Leads = () => {
                       <TableRow 
                         key={lead.id} 
                         className="border-b border-gray-100 hover:bg-blue-50/50 cursor-pointer"
-                        onClick={() => navigate(`/leads/${lead.id}/edit`)}
+                        onClick={() => handleLeadClick(lead.id)}
                       >
                         <TableCell 
                           className="sticky left-0 bg-white z-10 border-r border-gray-200 p-0"
@@ -1463,11 +1515,11 @@ const Leads = () => {
                           <div className="flex items-center gap-1.5">
                             <div className="w-5 h-5 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
                               <span className="text-[10px] font-medium text-blue-600">
-                                {lead.seller?.firstName?.[0]}{lead.seller?.lastName?.[0]}
+                                {getContactName(lead).initials}
                               </span>
                             </div>
                             <span className="font-medium text-gray-900 truncate">
-                              {lead.seller?.firstName} {lead.seller?.lastName}
+                              {getContactName(lead).firstName} {getContactName(lead).lastName}
                             </span>
                           </div>
                         </TableCell>
@@ -1498,9 +1550,6 @@ const Leads = () => {
                               {lead.status || 'No Status'}
                             </Badge>
                           )}
-                        </TableCell>
-                        <TableCell className="text-gray-600">
-                          {lead.assignedUserId ? 'Assigned' : 'Unassigned'}
                         </TableCell>
                         <TableCell className="text-gray-600">
                           {new Date(lead.createdAt).toLocaleDateString()}
@@ -1557,7 +1606,6 @@ const Leads = () => {
                       <TableHead className="min-w-[70px]">Credit</TableHead>
                       <TableHead className="min-w-[70px]">Pre-Appr</TableHead>
                       <TableHead className="min-w-[70px]">Timeline</TableHead>
-                      <TableHead className="min-w-[80px]">Assigned</TableHead>
                       <TableHead className="min-w-[80px]">Date Created</TableHead>
                       <TableHead className="min-w-[80px]">Last Contact</TableHead>
                       <TableHead className="w-8 sticky right-0 bg-gray-50 z-10 border-l border-gray-200"></TableHead>
@@ -1568,7 +1616,7 @@ const Leads = () => {
                       <TableRow 
                         key={lead.id} 
                         className="border-b border-gray-100 hover:bg-green-50/50 cursor-pointer"
-                        onClick={() => navigate(`/leads/${lead.id}/edit`)}
+                        onClick={() => handleLeadClick(lead.id)}
                       >
                         <TableCell 
                           className="sticky left-0 bg-white z-10 border-r border-gray-200 p-0"
@@ -1586,11 +1634,11 @@ const Leads = () => {
                           <div className="flex items-center gap-1.5">
                             <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
                               <span className="text-[10px] font-medium text-green-600">
-                                {lead.buyer?.firstName?.[0]}{lead.buyer?.lastName?.[0]}
+                                {getContactName(lead).initials}
                               </span>
                             </div>
                             <span className="font-medium text-gray-900 truncate">
-                              {lead.buyer?.firstName} {lead.buyer?.lastName}
+                              {getContactName(lead).firstName} {getContactName(lead).lastName}
                             </span>
                           </div>
                         </TableCell>
@@ -1640,9 +1688,6 @@ const Leads = () => {
                         </TableCell>
                         <TableCell className="text-center text-gray-600">
                           {lead.buyer?.timeline || <span className="text-gray-400">-</span>}
-                        </TableCell>
-                        <TableCell className="text-gray-600">
-                          {lead.assignedUserId ? 'Assigned' : <span className="text-gray-400">Unassigned</span>}
                         </TableCell>
                         <TableCell className="text-gray-600">
                           {lead.createdAt ? new Date(lead.createdAt).toLocaleDateString() : <span className="text-gray-400">-</span>}
@@ -1697,7 +1742,6 @@ const Leads = () => {
                       <TableHead className="min-w-[90px]">Industry</TableHead>
                       <TableHead className="min-w-[60px]">Rating</TableHead>
                       <TableHead className="min-w-[60px]">Verified</TableHead>
-                      <TableHead className="min-w-[80px]">Assigned</TableHead>
                       <TableHead className="min-w-[80px]">Date Created</TableHead>
                       <TableHead className="min-w-[80px]">Last Contact</TableHead>
                       <TableHead className="w-8 sticky right-0 bg-gray-50 z-10 border-l border-gray-200"></TableHead>
@@ -1708,7 +1752,7 @@ const Leads = () => {
                       <TableRow 
                         key={lead.id} 
                         className="border-b border-gray-100 hover:bg-purple-50/50 cursor-pointer"
-                        onClick={() => navigate(`/leads/${lead.id}/edit`)}
+                        onClick={() => handleLeadClick(lead.id)}
                       >
                         <TableCell 
                           className="sticky left-0 bg-white z-10 border-r border-gray-200 p-0"
@@ -1726,11 +1770,11 @@ const Leads = () => {
                           <div className="flex items-center gap-1.5">
                             <div className="w-5 h-5 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
                               <span className="text-[10px] font-medium text-orange-600">
-                                {lead.vendor?.firstName?.[0]}{lead.vendor?.lastName?.[0]}
+                                {getContactName(lead).initials}
                               </span>
                             </div>
                             <span className="font-medium text-gray-900 truncate">
-                              {lead.vendor?.firstName} {lead.vendor?.lastName}
+                              {getContactName(lead).firstName} {getContactName(lead).lastName}
                             </span>
                           </div>
                         </TableCell>
@@ -1754,7 +1798,6 @@ const Leads = () => {
                         <TableCell>
                           <Badge className="bg-gray-100 text-gray-700 text-[10px] px-1.5 py-0">Pending</Badge>
                         </TableCell>
-                        <TableCell className="text-gray-600">{lead.assignedUserId ? 'Assigned' : 'Unassigned'}</TableCell>
                         <TableCell className="text-gray-600">{new Date(lead.createdAt).toLocaleDateString()}</TableCell>
                         <TableCell className="text-gray-600">{lead.lastContactAt ? new Date(lead.lastContactAt).toLocaleDateString() : 'No contact'}</TableCell>
                         <TableCell 

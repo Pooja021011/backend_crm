@@ -414,7 +414,7 @@ const AddSellerLead = () => {
               <div className="p-2 bg-green-100 rounded-lg">
                 <MapPin className="w-5 h-5 text-green-600" />
               </div>
-              <h2 className="text-lg font-semibold text-gray-900">Property Information (optional)</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Property Information</h2>
             </div>
             
             <div className="space-y-6">

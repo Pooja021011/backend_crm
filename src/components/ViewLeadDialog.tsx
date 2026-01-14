@@ -142,36 +142,11 @@ export const ViewLeadDialog: React.FC<ViewLeadDialogProps> = ({
               <User className="w-5 h-5" />
               Seller Information
             </CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Contact information is shown in Lead Owners section above
+            </p>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-gray-600">First Name</label>
-                <p className="text-gray-900">{lead.seller.firstName}</p>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">Last Name</label>
-                <p className="text-gray-900">{lead.seller.lastName}</p>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex items-center gap-2">
-                <Phone className="w-4 h-4 text-gray-500" />
-                <div>
-                  <label className="text-sm font-medium text-gray-600">Phone</label>
-                  <p className="text-gray-900">{lead.seller.phone}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Mail className="w-4 h-4 text-gray-500" />
-                <div>
-                  <label className="text-sm font-medium text-gray-600">Email</label>
-                  <p className="text-gray-900">{lead.seller.email}</p>
-                </div>
-              </div>
-            </div>
-
             {lead.seller.motivation && (
               <div>
                 <label className="text-sm font-medium text-gray-600">Motivation Level</label>
@@ -239,35 +214,45 @@ export const ViewLeadDialog: React.FC<ViewLeadDialogProps> = ({
               <User className="w-5 h-5" />
               Buyer Information
             </CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Contact information is shown in Lead Owners section above
+            </p>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            {lead.buyer.propertiesPurchased !== undefined && (
               <div>
-                <label className="text-sm font-medium text-gray-600">First Name</label>
-                <p className="text-gray-900">{lead.buyer.firstName}</p>
+                <label className="text-sm font-medium text-gray-600">Properties Purchased</label>
+                <p className="text-gray-900">{lead.buyer.propertiesPurchased}</p>
               </div>
+            )}
+
+            {lead.buyer.creditScore && (
               <div>
-                <label className="text-sm font-medium text-gray-600">Last Name</label>
-                <p className="text-gray-900">{lead.buyer.lastName}</p>
+                <label className="text-sm font-medium text-gray-600">Credit Score</label>
+                <p className="text-gray-900">{lead.buyer.creditScore}</p>
               </div>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex items-center gap-2">
-                <Phone className="w-4 h-4 text-gray-500" />
-                <div>
-                  <label className="text-sm font-medium text-gray-600">Phone</label>
-                  <p className="text-gray-900">{lead.buyer.phone}</p>
-                </div>
+            )}
+
+            {lead.buyer.preApproved !== undefined && (
+              <div>
+                <label className="text-sm font-medium text-gray-600">Pre-Approved</label>
+                <p className="text-gray-900">{lead.buyer.preApproved ? 'Yes' : 'No'}</p>
               </div>
-              <div className="flex items-center gap-2">
-                <Mail className="w-4 h-4 text-gray-500" />
-                <div>
-                  <label className="text-sm font-medium text-gray-600">Email</label>
-                  <p className="text-gray-900">{lead.buyer.email}</p>
-                </div>
+            )}
+
+            {lead.buyer.motivation && (
+              <div>
+                <label className="text-sm font-medium text-gray-600">Motivation</label>
+                <p className="text-gray-900">{lead.buyer.motivation}</p>
               </div>
-            </div>
+            )}
+
+            {lead.buyer.timeline && (
+              <div>
+                <label className="text-sm font-medium text-gray-600">Timeline</label>
+                <p className="text-gray-900">{lead.buyer.timeline}</p>
+              </div>
+            )}
 
             {lead.buyer.notes && (
               <div>
@@ -332,40 +317,22 @@ export const ViewLeadDialog: React.FC<ViewLeadDialogProps> = ({
             <Building className="w-5 h-5" />
             Vendor Information
           </CardTitle>
+          <p className="text-sm text-muted-foreground mt-1">
+            Contact information is shown in Lead Owners section above
+          </p>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm font-medium text-gray-600">First Name</label>
-              <p className="text-gray-900">{lead.vendor.firstName}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-600">Last Name</label>
-              <p className="text-gray-900">{lead.vendor.lastName}</p>
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-center gap-2">
-              <Phone className="w-4 h-4 text-gray-500" />
-              <div>
-                <label className="text-sm font-medium text-gray-600">Phone</label>
-                <p className="text-gray-900">{lead.vendor.phone}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Mail className="w-4 h-4 text-gray-500" />
-              <div>
-                <label className="text-sm font-medium text-gray-600">Email</label>
-                <p className="text-gray-900">{lead.vendor.email}</p>
-              </div>
-            </div>
-          </div>
-
           {lead.vendor.company && (
             <div>
               <label className="text-sm font-medium text-gray-600">Company</label>
               <p className="text-gray-900">{lead.vendor.company}</p>
+            </div>
+          )}
+
+          {lead.vendor.industry && (
+            <div>
+              <label className="text-sm font-medium text-gray-600">Industry</label>
+              <p className="text-gray-900">{lead.vendor.industry}</p>
             </div>
           )}
 
