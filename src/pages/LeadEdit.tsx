@@ -2973,14 +2973,14 @@ const LeadEdit: React.FC = () => {
 
         {/* Section 2 - Lead Details + Timeline (side by side) */}
         <div className="grid grid-cols-12 gap-2">
-          {/* Lead Details - Left Side (3 cols) */}
-          <div className="col-span-3 border border-slate-200 rounded-lg bg-white p-2 flex flex-col h-full">
+          {/* Lead Details - Left Side (5 cols) */}
+          <div className="col-span-5 border border-slate-200 rounded-lg bg-white p-2 flex flex-col h-full">
             <div className="flex items-center gap-1.5 mb-1">
               <FileText className="w-3 h-3 text-slate-500" />
               <span className="text-[11px] font-medium text-slate-600">Lead Details</span>
             </div>
 
-            <div className="grid grid-cols-1 gap-1 flex-1 content-start">
+            <div className="grid grid-cols-2 gap-1 flex-1 content-start">
               <div>
                 <Label className="text-[9px] text-slate-500">Source</Label>
                 <Select value={leadSource} onValueChange={setLeadSource} disabled={!canEditLead}>
@@ -3081,8 +3081,8 @@ const LeadEdit: React.FC = () => {
             </div>
           </div>
 
-          {/* Timeline - Right Side (4 cols) */}
-          <div className="col-span-4 border border-slate-200 rounded-lg bg-white p-2 flex flex-col h-full">
+          {/* Timeline - Right Side (5 cols) */}
+          <div className="col-span-5 border border-slate-200 rounded-lg bg-white p-2 flex flex-col h-full">
             <LeadTimeline
               leadId={id!}
               leadCreatedAt={lead.createdAt}
