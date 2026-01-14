@@ -1393,18 +1393,17 @@ const Metrics = () => {
             {/* Date Range Filter */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-gray-700">Date Range</label>
-              <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-                <SelectTrigger className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="This Month">This Month</SelectItem>
-                  <SelectItem value="Last Month">Last Month</SelectItem>
-                  <SelectItem value="This Quarter">This Quarter</SelectItem>
-                  <SelectItem value="This Year">This Year</SelectItem>
-                  <SelectItem value="Custom Range">Custom Range</SelectItem>
-                </SelectContent>
-              </Select>
+              <select 
+                className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                value={selectedPeriod}
+                onChange={(e) => setSelectedPeriod(e.target.value)}
+              >
+                <option value="This Month">This Month</option>
+                <option value="Last Month">Last Month</option>
+                <option value="This Quarter">This Quarter</option>
+                <option value="This Year">This Year</option>
+                <option value="Custom Range">Custom Range</option>
+              </select>
             </div>
 
             {/* Custom Date From */}
@@ -1441,25 +1440,24 @@ const Metrics = () => {
 
             {/* Lead Source Filter */}
             <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-700">Lead Sources</label>
-              <Select value={selectedSource} onValueChange={setSelectedSource}>
-                <SelectTrigger className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
-                  <SelectValue placeholder="All Sources" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Sources</SelectItem>
-                  {availableSources.map((source) => (
-                    <SelectItem key={source} value={source}>
-                      {source}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <label className="text-xs font-medium text-gray-700">Lead Source</label>
+              <select 
+                className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                value={selectedSource}
+                onChange={(e) => setSelectedSource(e.target.value)}
+              >
+                <option value="all">All Sources</option>
+                {availableSources.map((source) => (
+                  <option key={source} value={source}>
+                    {source}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
-          {/* Filter Actions */}
-          <div className="flex items-center gap-2 mt-3">
+          {/* Filter Actions - Right aligned like Leads page */}
+          <div className="flex items-center justify-end gap-2 mt-3">
             <Button 
               variant="destructive"
               size="sm"
