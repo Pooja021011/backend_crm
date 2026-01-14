@@ -215,9 +215,9 @@ export const callService = {
               zip: '00000',
             },
             seller: {
-              firstName: 'Unknown',
-              lastName: 'Caller',
-              phone: safeFrom || 'Unknown',
+              firstName: '',
+              lastName: '',
+              phone: safeFrom || '',
               email: buildUnknownEmail(safeFrom),
             },
           },
