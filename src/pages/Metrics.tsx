@@ -1489,7 +1489,7 @@ const Metrics = () => {
           <Button
             onClick={() => setActiveTab("company")}
             variant={activeTab === "company" ? "default" : "outline"}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 flex-1"
           >
             <BarChart3 className="w-4 h-4" />
             Company Overview
@@ -1498,7 +1498,7 @@ const Metrics = () => {
           <Button
             onClick={() => setActiveTab("marketing")}
             variant={activeTab === "marketing" ? "default" : "outline"}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 flex-1"
           >
             <Activity className="w-4 h-4" />
             Marketing Overview
@@ -1507,7 +1507,7 @@ const Metrics = () => {
           <Button
             onClick={() => setActiveTab("pipeline")}
             variant={activeTab === "pipeline" ? "default" : "outline"}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 flex-1"
           >
             <Target className="w-4 h-4" />
             Pipeline Overview
@@ -1516,7 +1516,7 @@ const Metrics = () => {
           <Button
             onClick={() => setActiveTab("communications")}
             variant={activeTab === "communications" ? "default" : "outline"}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 flex-1"
           >
             <Phone className="w-4 h-4" />
             Communications Overview
@@ -1525,7 +1525,7 @@ const Metrics = () => {
           <Button
             onClick={() => setActiveTab("transaction-coordinator")}
             variant={activeTab === "transaction-coordinator" ? "default" : "outline"}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 flex-1"
           >
             <FileText className="w-4 h-4" />
             Transaction Overview
