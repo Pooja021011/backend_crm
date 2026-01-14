@@ -1388,117 +1388,100 @@ const Metrics = () => {
 
       {/* Global Filters Panel */}
       {showFilters && (
-        <Card className="p-3 border border-blue-200 bg-blue-50/30">
-          <div className="space-y-2">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {/* Date Filters */}
-              <div className="space-y-1">
-                <h4 className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
-                  <Calendar className="w-3 h-3" />
-                  Date Range
-                </h4>
-                <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="This Month">This Month</SelectItem>
-                    <SelectItem value="Last Month">Last Month</SelectItem>
-                    <SelectItem value="This Quarter">This Quarter</SelectItem>
-                    <SelectItem value="This Year">This Year</SelectItem>
-                    <SelectItem value="Custom Range">Custom Range</SelectItem>
-                  </SelectContent>
-                </Select>
-                
-                {selectedPeriod === 'Custom Range' && (
-                  <div className="space-y-1 mt-1">
-                    <div>
-                      <Label className="text-[10px] font-medium text-gray-600">From Date</Label>
-                      <input
-                        type="date"
-                        value={customDateRange.from?.toISOString().split('T')[0] || ''}
-                        onChange={(e) => setCustomDateRange(prev => ({ 
-                          ...prev, 
-                          from: e.target.value ? new Date(e.target.value) : undefined 
-                        }))}
-                        className="w-full px-2 py-1 border border-gray-300 rounded-md text-xs font-normal"
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-[10px] font-medium text-gray-600">To Date</Label>
-                      <input
-                        type="date"
-                        value={customDateRange.to?.toISOString().split('T')[0] || ''}
-                        onChange={(e) => setCustomDateRange(prev => ({ 
-                          ...prev, 
-                          to: e.target.value ? new Date(e.target.value) : undefined 
-                        }))}
-                        className="w-full px-2 py-1 border border-gray-300 rounded-md text-xs font-normal"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Source Filters */}
-              <div className="space-y-1">
-                <h4 className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
-                  <Target className="w-3 h-3" />
-                  Lead Sources
-                </h4>
-                <Select value={selectedSource} onValueChange={setSelectedSource}>
-                  <SelectTrigger className="w-full h-8 text-xs">
-                    <SelectValue placeholder="Select source" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Sources</SelectItem>
-                    {availableSources.map((source) => (
-                      <SelectItem key={source} value={source}>
-                        {source}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Clear All Button */}
-              <div className="space-y-1">
-                <h4 className="text-xs font-semibold text-gray-700 opacity-0">Spacer</h4>
-                <Button
-                  variant="default"
-                  onClick={() => {
-                    setSelectedPeriod('This Month');
-                    setCustomDateRange({});
-                    setSelectedSource('all');
-                  }}
-                  className="h-8 px-3 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-xs font-medium shadow-sm hover:shadow-md transition-all duration-200"
-                >
-                  <X className="w-3 h-3 mr-1.5" />
-                  Clear Filters
-                </Button>
-              </div>
+        <div className="bg-white border-b border-gray-200 px-6 py-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* Date Range Filter */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-700">Date Range</label>
+              <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+                <SelectTrigger className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="This Month">This Month</SelectItem>
+                  <SelectItem value="Last Month">Last Month</SelectItem>
+                  <SelectItem value="This Quarter">This Quarter</SelectItem>
+                  <SelectItem value="This Year">This Year</SelectItem>
+                  <SelectItem value="Custom Range">Custom Range</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            
-            {/* Active Filters Summary */}
-            {(selectedSource !== 'all' || selectedPeriod !== 'This Month') && (
-              <div className="mt-2 pt-2 border-t border-blue-200">
-                <div className="text-xs font-semibold text-gray-700 mb-1">Active Filters:</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {selectedPeriod !== 'This Month' && (
-                    <Badge variant="secondary" className="text-[10px] font-medium px-1.5 py-0">
-                      {selectedPeriod}
-                    </Badge>
-                  )}
-                  {selectedSource !== 'all' && (
-                    <Badge variant="secondary" className="text-[10px] font-medium px-1.5 py-0">
-                      Source: {selectedSource}
-                    </Badge>
-                  )}
-                </div>
+
+            {/* Custom Date From */}
+            {selectedPeriod === 'Custom Range' && (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-700">From Date</label>
+                <input
+                  type="date"
+                  value={customDateRange.from?.toISOString().split('T')[0] || ''}
+                  onChange={(e) => setCustomDateRange(prev => ({ 
+                    ...prev, 
+                    from: e.target.value ? new Date(e.target.value) : undefined 
+                  }))}
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                />
               </div>
             )}
+
+            {/* Custom Date To */}
+            {selectedPeriod === 'Custom Range' && (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-700">To Date</label>
+                <input
+                  type="date"
+                  value={customDateRange.to?.toISOString().split('T')[0] || ''}
+                  onChange={(e) => setCustomDateRange(prev => ({ 
+                    ...prev, 
+                    to: e.target.value ? new Date(e.target.value) : undefined 
+                  }))}
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            )}
+
+            {/* Lead Source Filter */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-700">Lead Sources</label>
+              <Select value={selectedSource} onValueChange={setSelectedSource}>
+                <SelectTrigger className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                  <SelectValue placeholder="All Sources" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Sources</SelectItem>
+                  {availableSources.map((source) => (
+                    <SelectItem key={source} value={source}>
+                      {source}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-        </Card>
+
+          {/* Filter Actions */}
+          <div className="flex items-center gap-2 mt-3">
+            <Button 
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                setSelectedPeriod('This Month');
+                setCustomDateRange({});
+                setSelectedSource('all');
+              }}
+            >
+              Clear Filters
+            </Button>
+            <Button 
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setShowFilters(false);
+              }}
+            >
+              Close Panel
+            </Button>
+          </div>
+        </div>
       )}
 
       {/* Navigation Buttons */}
