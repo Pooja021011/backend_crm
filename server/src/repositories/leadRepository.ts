@@ -390,7 +390,7 @@ export const leadRepository = {
     userRoles?: string[];
     userId?: string;
   }) {
-    const { type, marketId, pipelineStageId, status, leadStatusId, countyId, createdFrom, createdTo, updatedFrom, updatedTo, tasksDueBefore, priceRangeIds, assetClassIds, vipBuyer, blacklistedBuyer, vendorCompany, vendorIndustry, q, sort = 'createdAt', order = 'desc', skip = 0, take = 20, userRoles = [], userId } = params;
+    const { type, marketId, pipelineStageId, status, leadStatusId, countyId, createdFrom, createdTo, updatedFrom, updatedTo, tasksDueBefore, priceRangeIds, assetClassIds, vipBuyer, blacklistedBuyer, vendorCompany, vendorIndustry, q, sort = 'createdAt', order = 'desc', skip = 0, take = 10000, userRoles = [], userId } = params;
 
     const where: any = {};
     

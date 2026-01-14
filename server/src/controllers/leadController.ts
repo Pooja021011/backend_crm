@@ -62,7 +62,7 @@ export const leadController = {
     };
     
     const leads = await leadService.list(params);
-    res.json({ data: leads, skip: q.skip ?? 0, take: q.take ?? 20 });
+    res.json({ data: leads, skip: q.skip ?? 0, take: q.take ?? 10000 }); // Default to 10000 leads
   },
 
   async searchByPhone(req: Request, res: Response) {

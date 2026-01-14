@@ -384,12 +384,10 @@ const AddSellerLead = () => {
                   <SelectContent>
                     {acquisitionsAgents.map((agent) => {
                       const fullName = `${agent.firstName} ${agent.lastName}`;
-                      // Show only ADMIN and MANAGER roles
-                      const importantRoles = agent.roles
-                        .filter(r => r.role.name === 'ADMIN' || r.role.name === 'MANAGER')
-                        .map(r => r.role.name)
-                        .join(', ');
-                      const displayName = importantRoles ? `${fullName} (${importantRoles})` : fullName;
+                      // Only show roles if agent has multiple roles
+                      const displayName = agent.roles.length > 1
+                        ? `${fullName} (${agent.roles.map(r => r.role.name).join(', ')})`
+                        : fullName;
                       
                       return (
                         <SelectItem key={agent.id} value={agent.id}>

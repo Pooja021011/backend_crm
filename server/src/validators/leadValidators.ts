@@ -21,7 +21,7 @@ export const listLeadsQuery = z.object({
   sort: z.string().optional(),
   order: z.enum(['asc', 'desc']).optional(),
   skip: z.coerce.number().int().min(0).optional(),
-  take: z.coerce.number().int().min(1).max(100).optional(),
+  take: z.coerce.number().int().min(1).max(10000).optional(), // Increased limit to support large datasets
 });
 
 export const changeStageSchema = z.object({

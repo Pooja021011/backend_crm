@@ -506,7 +506,8 @@ const Leads = () => {
   }, [getLeadsByType, activeTab, searchQuery, searchLeads, selectedMarket, selectedStatus, selectedPipelineStatus, selectedDateRange, customDateFrom, customDateTo, selectedAcqAgentId, selectedDispAgentId, selectedLeadSource, sortConfig, sortLeads]);
 
   const getLeadCount = (type: "SELLER" | "BUYER" | "VENDOR") => {
-    return getLeadsByType(type).length;
+    // Count all leads of this type from the main leads array (not filtered by role)
+    return leads.filter(lead => lead.leadType === type).length;
   };
 
   // Backup sample data (in case API is not available)
