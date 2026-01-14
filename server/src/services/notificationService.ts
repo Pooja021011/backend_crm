@@ -2,7 +2,7 @@ import { prisma } from '../config/db.js';
 import { RoleName } from '@prisma/client';
 
 export interface NotificationData {
-  type: 'NEW_CONTRACT' | 'NEW_LEAD' | 'NEW_DEAL_ASSIGNED';
+  type: 'NEW_CONTRACT' | 'NEW_LEAD' | 'NEW_DEAL_ASSIGNED' | 'NEW_SMS' | 'NEW_CALL' | 'MISSED_CALL';
   title: string;
   message: string;
   priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';

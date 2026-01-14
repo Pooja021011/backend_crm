@@ -1310,7 +1310,7 @@ const Inbox = () => {
       const accessToken = localStorage.getItem('accessToken');
       console.log('🔑 Using token for communications:', accessToken ? 'Token exists' : 'NO TOKEN!');
       const res = await fetch(
-        `${API_BASE}/inbox/communications?timeframe=This%20Month&leadOnly=true&userScope=me&type=NOTE&internal=true`,
+        `${API_BASE}/inbox/communications?timeframe=This%20Month&leadOnly=true&userScope=me&internal=true`,
         { headers: { 'Authorization': `Bearer ${accessToken}` } }
       );
       
