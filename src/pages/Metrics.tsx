@@ -2793,351 +2793,257 @@ const Metrics = () => {
               ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Total Properties in Pipeline */}
-            <Card className="p-8 hover:shadow-lg transition-shadow bg-white border border-gray-200">
-              <div className="text-center space-y-4">
-                <h3 className="text-sm font-bold text-blue-600 uppercase tracking-wider">Total Properties in Pipeline</h3>
-                      {acqLoading ? (
-                        <div className="w-32 h-32 mx-auto flex items-center justify-center">
-                          <div className="animate-pulse bg-blue-200 w-32 h-32 rounded-full"></div>
-                        </div>
-                      ) : (
-                <div className="relative w-32 h-32 mx-auto">
-                  <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
-                    {/* Background circle */}
+            <Card className="p-6 text-center bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+              <div className="space-y-4">
+                <div className="relative w-24 h-24 mx-auto">
+                  <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 100 100">
                     <circle
-                      cx="60"
-                      cy="60"
-                      r="50"
-                      stroke="#e5e7eb"
+                      cx="50"
+                      cy="50"
+                      r="40"
+                      stroke="currentColor"
                       strokeWidth="8"
-                      fill="none"
+                      fill="transparent"
+                      className="text-gray-200"
                     />
-                    {/* Progress circle */}
                     <circle
-                      cx="60"
-                      cy="60"
-                      r="50"
-                      stroke="#3b82f6"
+                      cx="50"
+                      cy="50"
+                      r="40"
+                      stroke="currentColor"
                       strokeWidth="8"
-                      fill="none"
+                      fill="transparent"
+                      strokeDasharray={`${Math.min(((acquisitionsData?.totalPropertiesInPipeline || 0) / 40) * 251.2, 251.2)} 251.2`}
+                      className="text-blue-500"
                       strokeLinecap="round"
-                              strokeDasharray={`${((acquisitionsData?.totalPropertiesInPipeline || 0)/Math.max(1, (acquisitionsData?.totalPropertiesInPipeline || 0) + 10)) * 314} 314`}
-                      className="transition-all duration-1000 ease-out"
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-center">
-                              <div className="text-2xl font-black text-blue-600">{acquisitionsData?.totalPropertiesInPipeline || 0}</div>
-                  <div className="text-xs text-gray-600 font-medium">Total</div>
-                    </div>
+                    <span className="text-2xl font-bold text-gray-900">
+                      {acqLoading ? '...' : (acquisitionsData?.totalPropertiesInPipeline || 0)}
+                    </span>
                   </div>
                 </div>
-                      )}
-                      <div className="text-lg font-bold text-blue-900">{acquisitionsData?.totalPropertiesInPipeline || 0}</div>
-                <p className="text-xs text-blue-600">Properties in Pipeline</p>
+                <div className="space-y-1">
+                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Total Properties in Pipeline</h3>
+                  <p className="text-lg font-bold text-gray-900">
+                    {acqLoading ? '...' : (acquisitionsData?.totalPropertiesInPipeline || acqTotal || 0)}
+                  </p>
+                  <p className="text-xs text-gray-500">Properties in acquisitions pipeline</p>
+                </div>
               </div>
             </Card>
 
             {/* Total Properties Clear to Close */}
-            <Card className="p-8 hover:shadow-lg transition-shadow bg-white border border-gray-200">
-              <div className="text-center space-y-4">
-                      <h3 className="text-sm font-bold text-green-600 uppercase tracking-wider">Total Clear to Close</h3>
-                      {acqLoading ? (
-                        <div className="w-32 h-32 mx-auto flex items-center justify-center">
-                          <div className="animate-pulse bg-green-200 w-32 h-32 rounded-full"></div>
-                        </div>
-                      ) : (
-                <div className="relative w-32 h-32 mx-auto">
-                  <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
-                    {/* Background circle */}
+            <Card className="p-6 text-center bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+              <div className="space-y-4">
+                <div className="relative w-24 h-24 mx-auto">
+                  <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 100 100">
                     <circle
-                      cx="60"
-                      cy="60"
-                      r="50"
-                      stroke="#e5e7eb"
+                      cx="50"
+                      cy="50"
+                      r="40"
+                      stroke="currentColor"
                       strokeWidth="8"
-                      fill="none"
+                      fill="transparent"
+                      className="text-gray-200"
                     />
-                    {/* Progress circle */}
                     <circle
-                      cx="60"
-                      cy="60"
-                      r="50"
-                      stroke="#10b981"
+                      cx="50"
+                      cy="50"
+                      r="40"
+                      stroke="currentColor"
                       strokeWidth="8"
-                      fill="none"
+                      fill="transparent"
+                      strokeDasharray={`${((acquisitionsData?.clearToClosePercentage || 0) / 100) * 251.2} 251.2`}
+                      className="text-green-500"
                       strokeLinecap="round"
-                              strokeDasharray={`${((acquisitionsData?.totalClearToClose || 0)/Math.max(1, (acquisitionsData?.totalPropertiesInPipeline || 1))) * 314} 314`}
-                      className="transition-all duration-1000 ease-out"
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-center">
-                              <div className="text-2xl font-black text-green-600">{acquisitionsData?.totalClearToClose || 0}</div>
-                      <div className="text-xs text-gray-600 font-medium">Clear to Close</div>
-                    </div>
+                    <span className="text-2xl font-bold text-gray-900">
+                      {acqLoading ? '...' : (acquisitionsData?.clearToClosePercentage || 0).toFixed(0)}%
+                    </span>
                   </div>
                 </div>
-                      )}
-                      <div className="text-lg font-bold text-green-900">{acquisitionsData?.totalClearToClose || 0}</div>
-                      <p className="text-xs text-green-600">Ready for Closing</p>
+                <div className="space-y-1">
+                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Total Clear to Close</h3>
+                  <p className="text-lg font-bold text-gray-900">
+                    {acqLoading ? '...' : (acquisitionsData?.totalClearToClose || tranClearToClose || 0)}
+                  </p>
+                  <p className="text-xs text-gray-500">Ready for closing</p>
+                </div>
               </div>
             </Card>
 
             {/* Percentage Clear to Close */}
-            <Card className="p-8 hover:shadow-lg transition-shadow bg-white border border-gray-200">
-              <div className="text-center space-y-4">
-                      <h3 className="text-sm font-bold text-purple-600 uppercase tracking-wider">% Clear to Close</h3>
-                      {acqLoading ? (
-                        <div className="w-32 h-32 mx-auto flex items-center justify-center">
-                          <div className="animate-pulse bg-purple-200 w-32 h-32 rounded-full"></div>
-                        </div>
-                      ) : (
-                <div className="relative w-32 h-32 mx-auto">
-                  <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
-                    {/* Background circle */}
+            <Card className="p-6 text-center bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+              <div className="space-y-4">
+                <div className="relative w-24 h-24 mx-auto">
+                  <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 100 100">
                     <circle
-                      cx="60"
-                      cy="60"
-                      r="50"
-                      stroke="#e5e7eb"
+                      cx="50"
+                      cy="50"
+                      r="40"
+                      stroke="currentColor"
                       strokeWidth="8"
-                      fill="none"
+                      fill="transparent"
+                      className="text-gray-200"
                     />
-                    {/* Progress circle */}
                     <circle
-                      cx="60"
-                      cy="60"
-                      r="50"
-                      stroke="#8b5cf6"
+                      cx="50"
+                      cy="50"
+                      r="40"
+                      stroke="currentColor"
                       strokeWidth="8"
-                      fill="none"
+                      fill="transparent"
+                      strokeDasharray={`${((acquisitionsData?.projectedProfit || 0) / 200000) * 251.2} 251.2`}
+                      className="text-orange-500"
                       strokeLinecap="round"
-                              strokeDasharray={`${((acquisitionsData?.clearToClosePercentage || 0)/100) * 314} 314`}
-                      className="transition-all duration-1000 ease-out"
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-center">
-                              <div className="text-2xl font-black text-purple-600">{(acquisitionsData?.clearToClosePercentage || 0).toFixed(1)}%</div>
-                              <div className="text-xs text-gray-600 font-medium">Success Rate</div>
-                    </div>
+                    <span className="text-2xl font-bold text-gray-900">
+                      {acqLoading ? '...' : (((acquisitionsData?.projectedProfit || 0) / 200000) * 100).toFixed(0)}%
+                    </span>
                   </div>
                 </div>
-                      )}
-                      <div className="text-lg font-bold text-purple-900">{(acquisitionsData?.clearToClosePercentage || 0).toFixed(1)}%</div>
-                <p className="text-xs text-purple-600">Clear to Close Rate</p>
+                <div className="space-y-1">
+                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Projected Profit</h3>
+                  <p className="text-lg font-bold text-gray-900">
+                    {acqLoading ? '...' : `$${(acquisitionsData?.projectedProfit || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  </p>
+                  <p className="text-xs text-gray-500">of $200,000.00 target</p>
+                </div>
               </div>
             </Card>
           </div>
               )}
 
-          {/* Row 2 - Financial Metrics */}
+          {/* Row 2 - Performance & Risk Metrics (4 circular charts) */}
               {!acqError && (
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            {/* Projected Profit */}
-            <Card className="p-8 hover:shadow-lg transition-shadow bg-white border border-gray-200">
-              <div className="text-center space-y-4">
-                <h3 className="text-sm font-bold text-orange-600 uppercase tracking-wider">Projected Profit</h3>
-                      {acqLoading ? (
-                        <div className="w-32 h-32 mx-auto flex items-center justify-center">
-                          <div className="animate-pulse bg-orange-200 w-32 h-32 rounded-full"></div>
-                        </div>
-                      ) : (
-                <div className="relative w-32 h-32 mx-auto">
-                  <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
-                    {/* Background circle */}
-                    <circle
-                      cx="60"
-                      cy="60"
-                      r="50"
-                      stroke="#e5e7eb"
-                      strokeWidth="8"
-                      fill="none"
-                    />
-                    {/* Progress circle */}
-                    <circle
-                      cx="60"
-                      cy="60"
-                      r="50"
-                      stroke="#f97316"
-                      strokeWidth="8"
-                      fill="none"
-                      strokeLinecap="round"
-                              strokeDasharray={`${(acquisitionsData?.projectedProfit && acquisitionsData.projectedProfit > 0 ? Math.min(acquisitionsData.projectedProfit, 1000000) / 1000000 : 0) * 314} 314`}
-                      className="transition-all duration-1000 ease-out"
-                    />
-                  </svg>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-center">
-                              <div className="text-xl font-black text-orange-600">${Math.round((acquisitionsData?.projectedProfit||0)/1000)}K</div>
-                      <div className="text-xs text-gray-600 font-medium">of $1M</div>
-                    </div>
-                  </div>
-                </div>
-                      )}
-                      <div className="text-lg font-bold text-orange-900">{acquisitionsData?.projectedProfit ? Math.round((acquisitionsData.projectedProfit/1000000)*100) : 0}%</div>
-                      <p className="text-xs text-orange-600">${new Intl.NumberFormat().format(acquisitionsData?.projectedProfit||0)}</p>
-              </div>
-            </Card>
-
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {/* Total Deals Closed */}
-            <Card className="p-8 hover:shadow-lg transition-shadow bg-white border border-gray-200">
-              <div className="text-center space-y-4">
-                <h3 className="text-sm font-bold text-green-600 uppercase tracking-wider">Total Deals Closed</h3>
-                      {acqLoading ? (
-                        <div className="w-32 h-32 mx-auto flex items-center justify-center">
-                          <div className="animate-pulse bg-green-200 w-32 h-32 rounded-full"></div>
-                        </div>
-                      ) : (
-                <div className="relative w-32 h-32 mx-auto">
-                  <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
-                    {/* Background circle */}
+            <Card className="p-6 text-center bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+              <div className="space-y-4">
+                <div className="relative w-24 h-24 mx-auto">
+                  <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 100 100">
                     <circle
-                      cx="60"
-                      cy="60"
-                      r="50"
-                      stroke="#e5e7eb"
+                      cx="50"
+                      cy="50"
+                      r="40"
+                      stroke="currentColor"
                       strokeWidth="8"
-                      fill="none"
+                      fill="transparent"
+                      className="text-gray-200"
                     />
-                    {/* Progress circle */}
                     <circle
-                      cx="60"
-                      cy="60"
-                      r="50"
-                      stroke="#10b981"
+                      cx="50"
+                      cy="50"
+                      r="40"
+                      stroke="currentColor"
                       strokeWidth="8"
-                      fill="none"
+                      fill="transparent"
+                      strokeDasharray={`${((acquisitionsData?.totalDealsClosed || 0) / Math.max((acquisitionsData?.totalPropertiesInPipeline || 1), 1)) * 251.2} 251.2`}
+                      className="text-emerald-500"
                       strokeLinecap="round"
-                              strokeDasharray={`${((acquisitionsData?.totalDealsClosed || 0)/Math.max(1, (acquisitionsData?.totalPropertiesInPipeline || 1))) * 314} 314`}
-                      className="transition-all duration-1000 ease-out"
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-center">
-                              <div className="text-2xl font-black text-green-600">{acquisitionsData?.totalDealsClosed || 0}</div>
-                              <div className="text-xs text-gray-600 font-medium">Deals</div>
-                    </div>
+                    <span className="text-2xl font-bold text-gray-900">
+                      {acqLoading ? '...' : (((acquisitionsData?.totalDealsClosed || 0) / Math.max((acquisitionsData?.totalPropertiesInPipeline || 1), 1)) * 100).toFixed(0)}%
+                    </span>
                   </div>
                 </div>
-                      )}
-                      <div className="text-lg font-bold text-green-900">{acquisitionsData?.totalDealsClosed || 0}</div>
-                      <p className="text-xs text-green-600">Closed Successfully</p>
+                <div className="space-y-1">
+                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Total Deals Closed</h3>
+                  <p className="text-lg font-bold text-gray-900">
+                    {acqLoading ? '...' : `${acquisitionsData?.totalDealsClosed || 0} of ${acquisitionsData?.totalPropertiesInPipeline || 0}`}
+                  </p>
+                  <p className="text-xs text-gray-500">Deals closed this month</p>
+                </div>
               </div>
             </Card>
 
             {/* Closed Profit */}
-            <Card className="p-8 hover:shadow-lg transition-shadow bg-white border border-gray-200">
-              <div className="text-center space-y-4">
-                <h3 className="text-sm font-bold text-blue-600 uppercase tracking-wider">Closed Profit</h3>
-                      {acqLoading ? (
-                        <div className="w-32 h-32 mx-auto flex items-center justify-center">
-                          <div className="animate-pulse bg-blue-200 w-32 h-32 rounded-full"></div>
-                        </div>
-                      ) : (
-                <div className="relative w-32 h-32 mx-auto">
-                  <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
-                    {/* Background circle */}
+            <Card className="p-6 text-center bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+              <div className="space-y-4">
+                <div className="relative w-24 h-24 mx-auto">
+                  <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 100 100">
                     <circle
-                      cx="60"
-                      cy="60"
-                      r="50"
-                      stroke="#e5e7eb"
+                      cx="50"
+                      cy="50"
+                      r="40"
+                      stroke="currentColor"
                       strokeWidth="8"
-                      fill="none"
+                      fill="transparent"
+                      className="text-gray-200"
                     />
-                    {/* Progress circle */}
                     <circle
-                      cx="60"
-                      cy="60"
-                      r="50"
-                      stroke="#3b82f6"
+                      cx="50"
+                      cy="50"
+                      r="40"
+                      stroke="currentColor"
                       strokeWidth="8"
-                      fill="none"
+                      fill="transparent"
+                      strokeDasharray={`${((acquisitionsData?.closedProfit || 0) / 200000) * 251.2} 251.2`}
+                      className="text-cyan-500"
                       strokeLinecap="round"
-                              strokeDasharray={`${(acquisitionsData?.closedProfit && acquisitionsData.closedProfit > 0 ? Math.min(acquisitionsData.closedProfit, 800000) / 800000 : 0) * 314} 314`}
-                      className="transition-all duration-1000 ease-out"
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-center">
-                              <div className="text-xl font-black text-blue-600">${Math.round((acquisitionsData?.closedProfit||0)/1000)}K</div>
-                      <div className="text-xs text-gray-600 font-medium">of $800K</div>
-                    </div>
+                    <span className="text-2xl font-bold text-gray-900">
+                      {acqLoading ? '...' : `$${((acquisitionsData?.closedProfit || 0) / 1000).toFixed(0)}k`}
+                    </span>
                   </div>
                 </div>
-                      )}
-                      <div className="text-lg font-bold text-blue-900">{acquisitionsData?.closedProfit ? Math.round((acquisitionsData.closedProfit/800000)*100) : 0}%</div>
-                      <p className="text-xs text-blue-600">${new Intl.NumberFormat().format(acquisitionsData?.closedProfit||0)}</p>
+                <div className="space-y-1">
+                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Closed Profit</h3>
+                  <p className="text-lg font-bold text-gray-900">
+                    {acqLoading ? '...' : `$${(acquisitionsData?.closedProfit || closedProfit || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  </p>
+                  <p className="text-xs text-gray-500">of $200,000.00 target</p>
+                </div>
               </div>
             </Card>
 
-                  {/* Leads Mishandled - Color Coded */}
-                  <Card className="p-8 hover:shadow-lg transition-shadow bg-white border border-gray-200">
-              <div className="text-center space-y-4">
-                      <h3 className={`text-sm font-bold uppercase tracking-wider ${
-                        !acqLoading && acquisitionsData?.leadsMishandled ? (
-                          acquisitionsData.leadsMishandled.riskLevel === 'high' 
-                            ? 'text-red-600' 
-                            : acquisitionsData.leadsMishandled.riskLevel === 'medium' 
-                              ? 'text-yellow-600'
-                              : 'text-green-600'
-                        ) : 'text-gray-600'
-                      }`}>Leads Mishandled</h3>
-                      {acqLoading ? (
-                        <div className="w-32 h-32 mx-auto flex items-center justify-center">
-                          <div className="animate-pulse bg-gray-200 w-32 h-32 rounded-full"></div>
-                        </div>
-                      ) : (
-                <div className="relative w-32 h-32 mx-auto">
-                          <div className={`w-32 h-32 rounded-full flex items-center justify-center border-4 ${
-                            acquisitionsData?.leadsMishandled?.riskLevel === 'high' 
-                              ? 'bg-red-100 border-red-300' 
-                              : acquisitionsData?.leadsMishandled?.riskLevel === 'medium' 
-                                ? 'bg-yellow-100 border-yellow-300'
-                                : 'bg-green-100 border-green-300'
-                          }`}>
-                    <div className="text-center">
-                              <div className={`text-3xl font-black ${
-                                acquisitionsData?.leadsMishandled?.riskLevel === 'high' 
-                                  ? 'text-red-600' 
-                                  : acquisitionsData?.leadsMishandled?.riskLevel === 'medium' 
-                                    ? 'text-yellow-600'
-                                    : 'text-green-600'
-                              }`}>{acquisitionsData?.leadsMishandled?.count || 0}</div>
-                              <div className={`text-xs font-medium ${
-                                acquisitionsData?.leadsMishandled?.riskLevel === 'high' 
-                                  ? 'text-red-700' 
-                                  : acquisitionsData?.leadsMishandled?.riskLevel === 'medium' 
-                                    ? 'text-yellow-700'
-                                    : 'text-green-700'
-                              }`}>Mishandled</div>
-                    </div>
+            {/* Leads Mishandled - Color Coded */}
+            <Card className="p-6 text-center bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+              <div className="space-y-4">
+                <div className="relative w-24 h-24 mx-auto">
+                  <div className={`w-24 h-24 rounded-full flex items-center justify-center border-8 ${
+                    acquisitionsData?.leadsMishandled?.riskLevel === 'high' 
+                      ? 'bg-red-50 border-red-300' 
+                      : acquisitionsData?.leadsMishandled?.riskLevel === 'medium' 
+                        ? 'bg-yellow-50 border-yellow-300'
+                        : 'bg-green-50 border-green-300'
+                  }`}>
+                    <span className={`text-2xl font-bold ${
+                      acquisitionsData?.leadsMishandled?.riskLevel === 'high' 
+                        ? 'text-red-600' 
+                        : acquisitionsData?.leadsMishandled?.riskLevel === 'medium' 
+                          ? 'text-yellow-600'
+                          : 'text-green-600'
+                    }`}>
+                      {acqLoading ? '...' : (acquisitionsData?.leadsMishandled?.count || 0)}
+                    </span>
                   </div>
                 </div>
-                      )}
-                      <div className={`text-lg font-bold ${
-                        acquisitionsData?.leadsMishandled?.riskLevel === 'high' 
-                          ? 'text-red-900' 
-                          : acquisitionsData?.leadsMishandled?.riskLevel === 'medium' 
-                            ? 'text-yellow-900'
-                            : 'text-green-900'
-                      }`}>
-                        {acquisitionsData?.leadsMishandled?.riskLevel === 'high' 
-                          ? 'High Risk' 
-                          : acquisitionsData?.leadsMishandled?.riskLevel === 'medium' 
-                            ? 'Medium Risk'
-                            : 'Low Risk'
-                        }
-                      </div>
-                      <p className={`text-xs ${
-                        acquisitionsData?.leadsMishandled?.riskLevel === 'high' 
-                          ? 'text-red-600' 
-                          : acquisitionsData?.leadsMishandled?.riskLevel === 'medium' 
-                            ? 'text-yellow-600'
-                            : 'text-green-600'
-                      }`}>{acquisitionsData?.leadsMishandled?.details || 'No issues detected'}</p>
+                <div className="space-y-1">
+                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Leads Mishandled</h3>
+                  <p className="text-lg font-bold text-gray-900">
+                    {acqLoading ? '...' : `${acquisitionsData?.leadsMishandled?.count || 0} Leads`}
+                  </p>
+                  <p className={`text-xs ${
+                    acquisitionsData?.leadsMishandled?.riskLevel === 'high' 
+                      ? 'text-red-600' 
+                      : acquisitionsData?.leadsMishandled?.riskLevel === 'medium' 
+                        ? 'text-yellow-600'
+                        : 'text-green-600'
+                  }`}>
+                    {acquisitionsData?.leadsMishandled?.details || '1-4: Yellow • 5-9: Orange • 10+: Red'}
+                  </p>
+                </div>
               </div>
             </Card>
           </div>
