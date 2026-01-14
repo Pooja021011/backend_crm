@@ -521,7 +521,9 @@ export const pipelineService = {
         },
         orderBy: [
           { pipelineStage: { orderIndex: 'asc' } },
-          { id: 'asc' },
+          // Least recently touched first (oldest lastContactAt first, nulls last)
+          { lastContactAt: { sort: 'asc', nulls: 'last' } },
+          { createdAt: 'asc' }, // Fallback for leads never contacted
         ]
       });
 
