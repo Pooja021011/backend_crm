@@ -1389,9 +1389,9 @@ const Metrics = () => {
       {/* Global Filters Panel */}
       {showFilters && (
         <div className="bg-white border-b border-gray-200 px-6 py-3">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="flex items-end gap-3">
             {/* Date Range Filter */}
-            <div className="space-y-1">
+            <div className="space-y-1 flex-1">
               <label className="text-xs font-medium text-gray-700">Date Range</label>
               <select 
                 className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
@@ -1408,7 +1408,7 @@ const Metrics = () => {
 
             {/* Custom Date From */}
             {selectedPeriod === 'Custom Range' && (
-              <div className="space-y-1">
+              <div className="space-y-1 flex-1">
                 <label className="text-xs font-medium text-gray-700">From Date</label>
                 <input
                   type="date"
@@ -1424,7 +1424,7 @@ const Metrics = () => {
 
             {/* Custom Date To */}
             {selectedPeriod === 'Custom Range' && (
-              <div className="space-y-1">
+              <div className="space-y-1 flex-1">
                 <label className="text-xs font-medium text-gray-700">To Date</label>
                 <input
                   type="date"
@@ -1439,7 +1439,7 @@ const Metrics = () => {
             )}
 
             {/* Lead Source Filter */}
-            <div className="space-y-1">
+            <div className="space-y-1 flex-1">
               <label className="text-xs font-medium text-gray-700">Lead Source</label>
               <select 
                 className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
@@ -1454,30 +1454,30 @@ const Metrics = () => {
                 ))}
               </select>
             </div>
-          </div>
 
-          {/* Filter Actions - Right aligned like Leads page */}
-          <div className="flex items-center justify-end gap-2 mt-3">
-            <Button 
-              variant="destructive"
-              size="sm"
-              onClick={() => {
-                setSelectedPeriod('This Month');
-                setCustomDateRange({});
-                setSelectedSource('all');
-              }}
-            >
-              Clear Filters
-            </Button>
-            <Button 
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setShowFilters(false);
-              }}
-            >
-              Close Panel
-            </Button>
+            {/* Filter Actions - Inline with filters */}
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  setSelectedPeriod('This Month');
+                  setCustomDateRange({});
+                  setSelectedSource('all');
+                }}
+              >
+                Clear Filters
+              </Button>
+              <Button 
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setShowFilters(false);
+                }}
+              >
+                Close Panel
+              </Button>
+            </div>
           </div>
         </div>
       )}
