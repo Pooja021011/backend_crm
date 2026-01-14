@@ -2920,9 +2920,9 @@ const Metrics = () => {
           </div>
               )}
 
-          {/* Row 2 - Performance & Risk Metrics (4 circular charts) */}
+          {/* Row 2 - Performance & Risk Metrics */}
               {!acqError && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Total Deals Closed */}
             <Card className="p-6 text-center bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
               <div className="space-y-4">
