@@ -201,11 +201,11 @@ const Leads = () => {
       };
     }
     
-    // Fallback to Unknown
+    // Fallback to empty - don't show "Unknown Contact"
     return {
-      firstName: 'Unknown',
-      lastName: 'Contact',
-      initials: 'UC'
+      firstName: '',
+      lastName: '',
+      initials: ''
     };
   };
   
@@ -1512,16 +1512,24 @@ const Leads = () => {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-1.5">
-                            <div className="w-5 h-5 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-                              <span className="text-[10px] font-medium text-blue-600">
-                                {getContactName(lead).initials}
-                              </span>
-                            </div>
-                            <span className="font-medium text-gray-900 truncate">
-                              {getContactName(lead).firstName} {getContactName(lead).lastName}
-                            </span>
-                          </div>
+                          {(() => {
+                            const contact = getContactName(lead);
+                            const hasName = contact.firstName || contact.lastName;
+                            return hasName ? (
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-5 h-5 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                  <span className="text-[10px] font-medium text-blue-600">
+                                    {contact.initials}
+                                  </span>
+                                </div>
+                                <span className="font-medium text-gray-900 truncate">
+                                  {contact.firstName} {contact.lastName}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-gray-400 text-sm">-</span>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1 text-gray-600">
@@ -1631,16 +1639,24 @@ const Leads = () => {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-1.5">
-                            <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-                              <span className="text-[10px] font-medium text-green-600">
-                                {getContactName(lead).initials}
-                              </span>
-                            </div>
-                            <span className="font-medium text-gray-900 truncate">
-                              {getContactName(lead).firstName} {getContactName(lead).lastName}
-                            </span>
-                          </div>
+                          {(() => {
+                            const contact = getContactName(lead);
+                            const hasName = contact.firstName || contact.lastName;
+                            return hasName ? (
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                  <span className="text-[10px] font-medium text-green-600">
+                                    {contact.initials}
+                                  </span>
+                                </div>
+                                <span className="font-medium text-gray-900 truncate">
+                                  {contact.firstName} {contact.lastName}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-gray-400 text-sm">-</span>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1 text-gray-600">
@@ -1767,16 +1783,24 @@ const Leads = () => {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-1.5">
-                            <div className="w-5 h-5 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
-                              <span className="text-[10px] font-medium text-orange-600">
-                                {getContactName(lead).initials}
-                              </span>
-                            </div>
-                            <span className="font-medium text-gray-900 truncate">
-                              {getContactName(lead).firstName} {getContactName(lead).lastName}
-                            </span>
-                          </div>
+                          {(() => {
+                            const contact = getContactName(lead);
+                            const hasName = contact.firstName || contact.lastName;
+                            return hasName ? (
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-5 h-5 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                  <span className="text-[10px] font-medium text-orange-600">
+                                    {contact.initials}
+                                  </span>
+                                </div>
+                                <span className="font-medium text-gray-900 truncate">
+                                  {contact.firstName} {contact.lastName}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-gray-400 text-sm">-</span>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell className="font-medium text-gray-900 truncate">{lead.vendor?.company}</TableCell>
                         <TableCell>
