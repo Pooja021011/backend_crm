@@ -792,46 +792,6 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
                         Complete
                       </Button>
                     )}
-                    {/* Complete button for notes */}
-                    {item.type === 'NOTE' && canEditNoteItem(item) && (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="h-6 px-2 text-[10px] text-green-600 hover:text-green-700 hover:bg-green-50 border-green-300"
-                        title="Mark note as complete"
-                        onClick={async () => {
-                          try {
-                            // Create a task from this note to mark it as complete
-                            await makeApiCall(`${API_BASE}/leads/${leadId}/tasks`, {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ 
-                                title: `Follow up: ${item.body?.substring(0, 50)}...`,
-                                description: item.body,
-                                status: 'DONE',
-                                dueAt: new Date().toISOString()
-                              }),
-                            });
-                            toast({
-                              title: "Note marked as complete",
-                              description: "A completed task has been created from this note.",
-                            });
-                            onRefreshTasks?.();
-                          } catch (error) {
-                            console.error('Failed to complete note:', error);
-                            toast({
-                              title: "Error",
-                              description: "Failed to mark note as complete",
-                              variant: "destructive"
-                            });
-                          }
-                        }}
-                      >
-                        <CheckCircle className="w-3 h-3 mr-1" />
-                        Complete
-                      </Button>
-                    )}
                     {(canEditNoteItem(item) || canEditTaskItem(item)) && (
                       <Button
                         type="button"

@@ -2649,7 +2649,10 @@ const LeadEdit: React.FC = () => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
+    // Automatically expand the Photos section to show upload progress
+    setIsPhotosOpen(true);
     setUploadingPhoto(true);
+    
     try {
       // Upload multiple photos
       for (let i = 0; i < files.length; i++) {
@@ -3263,7 +3266,20 @@ const LeadEdit: React.FC = () => {
                 <Collapsible open={isPhotosOpen} onOpenChange={setIsPhotosOpen}>
                   <div className="border border-slate-200 rounded-lg bg-white p-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-slate-600">Photos</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-slate-600">Photos</span>
+                        {photos.length > 0 && (
+                          <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
+                            {photos.length}
+                          </Badge>
+                        )}
+                        {uploadingPhoto && (
+                          <span className="text-[10px] text-blue-600 flex items-center gap-1">
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            Uploading...
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-1">
                         <Button 
                           size="sm" 
@@ -3273,7 +3289,7 @@ const LeadEdit: React.FC = () => {
                           onClick={() => document.getElementById('photo-upload')?.click()}
                           title="Add Photo"
                         >
-                          <Plus className="w-3 h-3" />
+                          {uploadingPhoto ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
                         </Button>
                         <CollapsibleTrigger asChild>
                           <Button
@@ -3299,20 +3315,27 @@ const LeadEdit: React.FC = () => {
                     </div>
 
                     <CollapsibleContent className="mt-2">
-                      <LeadPhotoGallery
-                        photos={photos}
-                        onDeletePhoto={async (photo) => {
-                          if (confirm('Delete this photo?')) {
-                            try {
-                              await makeApiCall(`${API_BASE}/files/${photo.id}`, { method: 'DELETE' });
-                              toast({ title: 'Success', description: 'Photo deleted' });
-                              loadPhotos();
-                            } catch (error) {
-                              toast({ title: 'Error', description: 'Failed to delete photo', variant: 'destructive' });
+                      {uploadingPhoto ? (
+                        <div className="flex items-center justify-center py-8 text-slate-500">
+                          <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                          <span className="text-sm">Uploading photos...</span>
+                        </div>
+                      ) : (
+                        <LeadPhotoGallery
+                          photos={photos}
+                          onDeletePhoto={async (photo) => {
+                            if (confirm('Delete this photo?')) {
+                              try {
+                                await makeApiCall(`${API_BASE}/files/${photo.id}`, { method: 'DELETE' });
+                                toast({ title: 'Success', description: 'Photo deleted' });
+                                loadPhotos();
+                              } catch (error) {
+                                toast({ title: 'Error', description: 'Failed to delete photo', variant: 'destructive' });
+                              }
                             }
-                          }
-                        }}
-                      />
+                          }}
+                        />
+                      )}
                     </CollapsibleContent>
                   </div>
                 </Collapsible>

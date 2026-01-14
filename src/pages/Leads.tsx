@@ -970,7 +970,7 @@ const Leads = () => {
         {/* Collapsible Filters */}
         {showFilters && (
           <div className="bg-white border-b border-gray-200 px-6 py-3">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
               {/* Status Filter */}
               <div className="space-y-1">
                 <label className="text-xs font-medium text-gray-700">Lead Status</label>
@@ -1065,10 +1065,8 @@ const Leads = () => {
                   </div>
                 )}
               </div>
-            </div>
 
-            {/* Agent Filters (tab-specific) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
+              {/* Agent Filters (tab-specific) - Now in same row */}
               {activeTab === 'SELLER' && (
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-gray-700">Acquisitions Agent</label>

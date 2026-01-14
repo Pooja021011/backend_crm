@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from './ui/carousel';
-import { Home, Plus, Search, TrendingUp, Calendar, MapPin, Trash2, ExternalLink, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, FileText, Download, X } from 'lucide-react';
+import { Home, Plus, Search, TrendingUp, Calendar, MapPin, Trash2, ExternalLink, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, FileText, Download, X, Loader2 } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 import { API_BASE, makeApiCall } from '../config/api';
 
@@ -212,6 +212,8 @@ export const CompsManager: React.FC<CompsManagerProps> = ({
     // Clear input value so the same file can be selected again
     event.target.value = '';
 
+    // Automatically expand the section to show upload progress
+    setExpanded(true);
     setUploadingPdf(true);
     console.log('🚀 Starting upload for', fileArray.length, 'file(s)');
     
@@ -454,10 +456,21 @@ export const CompsManager: React.FC<CompsManagerProps> = ({
   return (
     <div className="border border-slate-200 rounded-lg bg-white p-2">
       <div className="flex items-center justify-between mb-1">
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
           <Home className="w-3 h-3 text-slate-500" />
           <span className="text-xs font-medium text-slate-600">Comparable Properties</span>
-          <span className="text-xs text-emerald-600 font-semibold ml-2">ARV: {formatArv()}</span>
+          <span className="text-xs text-emerald-600 font-semibold">ARV: {formatArv()}</span>
+          {pdfs.length > 0 && (
+            <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
+              {pdfs.length} file{pdfs.length !== 1 ? 's' : ''}
+            </Badge>
+          )}
+          {uploadingPdf && (
+            <span className="text-[10px] text-blue-600 flex items-center gap-1">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Uploading...
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1">
             <Button
@@ -468,7 +481,7 @@ export const CompsManager: React.FC<CompsManagerProps> = ({
               disabled={uploadingPdf}
               title="Add PDF"
             >
-              <Plus className="w-3 h-3" />
+              {uploadingPdf ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
             </Button>
             <input
               id={`comps-pdf-upload-${leadId}`}
@@ -495,16 +508,16 @@ export const CompsManager: React.FC<CompsManagerProps> = ({
         <div className="space-y-3">
           {/* ARV input (inside Comparable Properties) */}
           {typeof arvDisplay === 'string' && typeof onArvDisplayChange === 'function' && (
-            <div className="grid grid-cols-12 gap-2 items-end">
-              <div className="col-span-12 sm:col-span-4">
-                <Label className="text-[10px] text-slate-500">ARV (USD)</Label>
+            <div className="bg-slate-50 rounded-lg p-2 border border-slate-200">
+              <div className="flex items-center gap-2">
+                <Label className="text-xs font-medium text-slate-600 whitespace-nowrap">ARV:</Label>
                 <Input
                   type="text"
                   inputMode="numeric"
                   value={arvDisplay}
                   onChange={(e) => onArvDisplayChange(e.target.value)}
                   onBlur={onArvBlur}
-                  className="h-6 text-xs"
+                  className="h-7 text-xs flex-1 max-w-[200px]"
                   placeholder="$0"
                   disabled={!canEditArv}
                 />
@@ -518,7 +531,12 @@ export const CompsManager: React.FC<CompsManagerProps> = ({
               <FileText className="h-3.5 w-3.5 text-slate-500" />
               <span className="text-xs font-medium text-slate-600">Comp PDFs</span>
             </div>
-            {pdfs.length === 0 ? (
+            {uploadingPdf ? (
+              <div className="flex items-center justify-center py-8 text-slate-500">
+                <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                <span className="text-sm">Uploading files...</span>
+              </div>
+            ) : pdfs.length === 0 ? (
               <div className="text-center py-2 text-[10px] text-muted-foreground">No PDFs yet</div>
             ) : (
               <Carousel
@@ -589,7 +607,9 @@ export const CompsManager: React.FC<CompsManagerProps> = ({
                             className="h-6 w-6 p-0 bg-red-500 hover:bg-red-600"
                             onClick={(e) => {
                               e.stopPropagation();
-                              deletePdf(p.id);
+                              if (confirm(`Delete ${p.fileName}?`)) {
+                                deletePdf(p.id);
+                              }
                             }}
                             title="Delete file"
                           >
