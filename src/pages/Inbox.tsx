@@ -1613,6 +1613,10 @@ const Inbox = () => {
 
   const getUnreadCount = (source: string) => {
     const messages = getFilteredMessages(source);
+    // For calls, all items in callHistory are unread missed calls, so count all
+    if (source === 'calls') {
+      return messages.length;
+    }
     return messages.filter(m => m.unread).length;
   };
 
