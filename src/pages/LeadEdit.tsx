@@ -3784,14 +3784,14 @@ const LeadEdit: React.FC = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="task-assignee">Assign To</Label>
+              <Label htmlFor="task-assignee">Assign To *</Label>
               <Select
                 value={taskForm.assignedToId || undefined}
                 onValueChange={(value) => setTaskForm({ ...taskForm, assignedToId: value })}
                 disabled={savingTask}
               >
                 <SelectTrigger id="task-assignee">
-                  <SelectValue placeholder="Select team member (optional)..." />
+                  <SelectValue placeholder="Select team member (required)..." />
                 </SelectTrigger>
                 <SelectContent>
                   {agents.map((agent) => (
@@ -3815,7 +3815,7 @@ const LeadEdit: React.FC = () => {
             </Button>
             <Button
               onClick={handleTaskSubmit}
-              disabled={savingTask || !taskForm.title || !taskForm.dueAt}
+              disabled={savingTask || !taskForm.title || !taskForm.dueAt || !taskForm.assignedToId}
               className="h-8 text-sm bg-purple-600 hover:bg-purple-700 px-3"
             >
               {savingTask ? (
