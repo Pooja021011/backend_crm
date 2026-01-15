@@ -40,7 +40,9 @@ import {
   PhoneCall,
   PhoneOff,
   Send,
-  RefreshCw
+  RefreshCw,
+  Image,
+  ClipboardList
 } from 'lucide-react';
 import { differenceInHours, differenceInDays } from 'date-fns';
 import { API_BASE, makeApiCall } from '@/config/api';
@@ -590,8 +592,7 @@ const LeadEdit: React.FC = () => {
         setSqft(customFields.sqft?.toString() || '');
         setLotSize(customFields.lotSize || '');
         setBedrooms(customFields.bedrooms?.toString() || '');
-        // If baths is unknown/not set, keep it as 0 (rehab can also be 0 and remains synced)
-        setBathrooms(customFields.bathrooms?.toString() || '0');
+        setBathrooms(customFields.bathrooms?.toString() || '');
         setYearBuilt(customFields.yearBuilt?.toString() || '');
         
         // Set additional property info from customFields
@@ -638,9 +639,10 @@ const LeadEdit: React.FC = () => {
         });
         
         // Load ARV (top box). Prefer explicit `customFields.arv`, fallback to underwritingArv.
-        const loadedArv = customFields.arv ?? customFields.underwritingArv ?? 0;
-        setArvValue(Number(loadedArv) || 0);
-        setArvDisplay(loadedArv ? formatCurrency(Number(loadedArv) || 0) : '');
+        // Don't default to 0 if no ARV exists - keep it empty
+        const loadedArv = customFields.arv ?? customFields.underwritingArv ?? null;
+        setArvValue(loadedArv ? Number(loadedArv) : 0);
+        setArvDisplay(loadedArv ? formatCurrency(Number(loadedArv)) : '');
         if (loadedArv && !customFields.underwritingArv) {
           setUnderwritingArv(Number(loadedArv) || 0);
         }
@@ -900,11 +902,12 @@ const LeadEdit: React.FC = () => {
   const setTaskDueFromDateTime = (dt: Date) => {
     if (!dt || Number.isNaN(dt.getTime())) return;
 
-    const dateOnly = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
-    const hours24 = dt.getHours();
+    // Use UTC time to match server timezone
+    const dateOnly = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate()));
+    const hours24 = dt.getUTCHours();
     const ampm: 'AM' | 'PM' = hours24 >= 12 ? 'PM' : 'AM';
     const hour12 = hours24 % 12 || 12;
-    const minute = dt.getMinutes();
+    const minute = dt.getUTCMinutes();
 
     setTaskDueDate(dateOnly);
     setTaskDueHour(String(hour12));
@@ -924,7 +927,8 @@ const LeadEdit: React.FC = () => {
     if (!hour12 || Number.isNaN(minute)) return '';
 
     const hour24 = ampm === 'PM' ? ((hour12 % 12) + 12) : (hour12 % 12);
-    const dt = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour24, minute, 0, 0);
+    // Use UTC time instead of local time to match server timezone
+    const dt = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), hour24, minute, 0, 0));
     if (Number.isNaN(dt.getTime())) return '';
     return dt.toISOString();
   };
@@ -1104,7 +1108,8 @@ const LeadEdit: React.FC = () => {
   const buildPropertyDetails = useCallback(() => {
     return {
       // ARV is stored separately from underwriting (but we keep underwritingArv in sync).
-      arv: arvValue || null,
+      // Only save ARV if it has a meaningful value (> 0), otherwise don't save it
+      arv: (arvValue && arvValue > 0) ? arvValue : undefined,
       propertyType: propertyType || null,
       sqft: sqft ? parseInt(sqft) : null,
       lotSize: lotSize || null,
@@ -1332,7 +1337,13 @@ const LeadEdit: React.FC = () => {
 
           lastSavedPayloadRef.current = payloadStr;
           lastSavedAtRef.current = Date.now();
+          
+          // Show "Saved" status for at least 1 second to prevent blinking
           setAutoSaveStatus('saved');
+          setTimeout(() => {
+            setAutoSaveStatus((current) => current === 'saved' ? 'idle' : current);
+          }, 1000);
+          
           if (autoSaveDraftKey) {
             try {
               localStorage.removeItem(autoSaveDraftKey);
@@ -1417,7 +1428,7 @@ const LeadEdit: React.FC = () => {
 
     autoSaveTimerRef.current = setTimeout(() => {
       void flushAutoSave('debounce');
-    }, 800);
+    }, 2000); // Increased from 800ms to 2000ms to allow user to finish typing
   }, [id, lead, canEditLead, buildLeadPatchPayload, flushAutoSave]);
 
   // On mount (and when lead is loaded), if we have a pending draft payload, try to flush it
@@ -2747,7 +2758,6 @@ const LeadEdit: React.FC = () => {
     <>
       <div
         className="space-y-2"
-        onInputCapture={() => scheduleAutoSave()}
         onChangeCapture={() => scheduleAutoSave()}
         onBlurCapture={() => void flushAutoSave('blur')}
       >
@@ -2770,23 +2780,15 @@ const LeadEdit: React.FC = () => {
                 </Badge>
               )}
             </div>
-            {/* Autosave status */}
-            {canEditLead && (
-              <div className="text-[9px] text-slate-500 min-w-[64px] text-right">
-                {autoSaveStatus === 'saving' && 'Saving…'}
-                {autoSaveStatus === 'dirty' && 'Not saved'}
-                {autoSaveStatus === 'saved' && 'Saved'}
-                {autoSaveStatus === 'error' && 'Error'}
-              </div>
-            )}
+            {/* Auto-save happens silently in background - no status display needed */}
             <Button
               className="h-5 text-[9px] bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-md inline-flex items-center justify-center"
               onClick={() => void flushAutoSave('manual')}
-              disabled={saving || autoSaveStatus === 'saving' || !canEditLead}
-              title={autoSaveError ? autoSaveError : 'Save now'}
+              disabled={saving || !canEditLead}
+              title="Save now"
             >
               <Save className="w-2.5 h-2.5 mr-0.5" />
-              {autoSaveStatus === 'saving' || saving ? 'Saving...' : 'Save now'}
+              {saving ? 'Saving...' : 'Save now'}
             </Button>
             {/* Prev / Next lead navigation (from Pipeline view) */}
             <div className="flex items-center gap-1">
@@ -2830,7 +2832,7 @@ const LeadEdit: React.FC = () => {
         )}
 
         {/* Section 1 - Address + Owner */}
-        <div className="border border-slate-200 rounded-lg bg-white p-3">
+        <div className="border border-slate-200 rounded-lg bg-white p-2 min-h-[80px]">
           <div className="grid grid-cols-12 gap-4 items-start">
             {/* Address */}
             <div className="col-span-12 md:col-span-6">
@@ -2975,15 +2977,15 @@ const LeadEdit: React.FC = () => {
         </div>
 
         {/* Section 2 - Lead Details + Timeline (side by side) */}
-        <div className="grid grid-cols-12 gap-2">
+        <div className="grid grid-cols-12 gap-2 items-stretch">
           {/* Lead Details - Left Side (8 cols) */}
-          <div className="col-span-8 border border-slate-200 rounded-lg bg-white p-2 flex flex-col h-full">
+          <div className="col-span-8 border border-slate-200 rounded-lg bg-white p-2 flex flex-col">
             <div className="flex items-center gap-1.5 mb-1">
               <FileText className="w-3 h-3 text-slate-500" />
               <span className="text-[11px] font-medium text-slate-600">Lead Details</span>
             </div>
 
-            <div className="grid grid-cols-3 gap-1 flex-1 content-start">
+            <div className="grid grid-cols-5 gap-1 flex-1 content-start">
               <div>
                 <Label className="text-[9px] text-slate-500">Source</Label>
                 <Select value={leadSource} onValueChange={setLeadSource} disabled={!canEditLead}>
@@ -3085,7 +3087,7 @@ const LeadEdit: React.FC = () => {
           </div>
 
           {/* Timeline - Right Side (4 cols) */}
-          <div className="col-span-4 border border-slate-200 rounded-lg bg-white p-2 flex flex-col h-full">
+          <div className="col-span-4 border border-slate-200 rounded-lg bg-white p-2 flex flex-col">
             <LeadTimeline
               leadId={id!}
               leadCreatedAt={lead.createdAt}
@@ -3106,8 +3108,8 @@ const LeadEdit: React.FC = () => {
         </div>
 
         {/* Section 3 - Property Information (full width) */}
-        <div className="border border-slate-200 rounded-lg bg-white p-2">
-          <div className="flex items-center gap-1.5 mb-1.5">
+        <div className="border border-slate-200 rounded-lg bg-white p-2 min-h-[80px]">
+          <div className="flex items-center gap-1.5 mb-1">
             <Home className="w-3 h-3 text-slate-500" />
             <span className="text-[11px] font-medium text-slate-600">Property Information</span>
           </div>
@@ -3234,7 +3236,10 @@ const LeadEdit: React.FC = () => {
                 <Collapsible open={isAdditionalInfoOpen} onOpenChange={setIsAdditionalInfoOpen}>
                   <div className="border border-slate-200 rounded-lg bg-white p-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-slate-600">Additional Property Information</span>
+                      <div className="flex items-center gap-1">
+                        <ClipboardList className="w-3 h-3 text-slate-500" />
+                        <span className="text-xs font-medium text-slate-600">Additional Property Information</span>
+                      </div>
                       <CollapsibleTrigger asChild>
                         <Button
                           type="button"
@@ -3267,6 +3272,7 @@ const LeadEdit: React.FC = () => {
                   <div className="border border-slate-200 rounded-lg bg-white p-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
+                        <Image className="w-3 h-3 text-slate-500" />
                         <span className="text-xs font-medium text-slate-600">Photos</span>
                         {photos.length > 0 && (
                           <Badge variant="secondary" className="text-[10px] h-4 px-1.5">

@@ -217,10 +217,10 @@ export function RehabBudgetCalculatorCompact({
         <Button
           size="sm"
           variant="ghost"
-          className="h-5 text-[10px] px-1"
+          className="h-6 w-6 p-0"
           onClick={() => setExpanded(!expanded)}
         >
-          {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </Button>
       </div>
 
@@ -245,10 +245,10 @@ export function RehabBudgetCalculatorCompact({
               <Label className="text-[10px] text-slate-500">SqFt</Label>
               <Input
                 type="number"
-                value={propertySquareFeet || ''}
+                value={propertySquareFeet || 0}
                 disabled
-                className="h-6 text-xs bg-white"
-                placeholder="N/A"
+                className="h-6 text-xs bg-slate-100 cursor-not-allowed text-slate-400 font-medium"
+                placeholder="0"
               />
             </div>
             <div>

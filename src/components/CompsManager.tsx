@@ -496,28 +496,28 @@ export const CompsManager: React.FC<CompsManagerProps> = ({
             <Button
               size="sm"
               variant="ghost"
-              className="h-5 w-5 p-0"
+              className="h-6 w-6 p-0"
               onClick={() => setExpanded(!expanded)}
               title={expanded ? 'Collapse' : 'Expand'}
             >
-              {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </Button>
         </div>
       </div>
       {expanded && (
-        <div className="space-y-3">
+        <div className="space-y-2 mt-2">
           {/* ARV input (inside Comparable Properties) */}
           {typeof arvDisplay === 'string' && typeof onArvDisplayChange === 'function' && (
-            <div className="bg-slate-50 rounded-lg p-2 border border-slate-200">
-              <div className="flex items-center gap-2">
-                <Label className="text-xs font-medium text-slate-600 whitespace-nowrap">ARV:</Label>
+            <div className="grid grid-cols-4 gap-2 p-2 bg-slate-50 rounded">
+              <div>
+                <Label className="text-[10px] text-slate-500">ARV</Label>
                 <Input
                   type="text"
                   inputMode="numeric"
                   value={arvDisplay}
                   onChange={(e) => onArvDisplayChange(e.target.value)}
                   onBlur={onArvBlur}
-                  className="h-7 text-xs flex-1 max-w-[200px]"
+                  className="h-6 text-xs"
                   placeholder="$0"
                   disabled={!canEditArv}
                 />

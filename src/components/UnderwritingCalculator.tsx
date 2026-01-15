@@ -147,75 +147,72 @@ export function UnderwritingCalculator({
         <Button
           size="sm"
           variant="ghost"
-          className="h-5 text-[10px] px-1"
+          className="h-6 w-6 p-0"
           onClick={() => setExpanded(!expanded)}
         >
-          {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </Button>
       </div>
 
       {expanded && (
         <div className="space-y-2 mt-2">
-          {/* INPUTS */}
-          <div className="p-2 bg-slate-50 border border-slate-200 rounded">
-            <Label className="text-[10px] font-semibold text-slate-700 mb-1 block">INPUTS</Label>
-            <div className="grid grid-cols-4 gap-2">
-              {/* ARV - READ-ONLY (auto-filled from Comparable Properties) */}
-              <div>
-                <Label className="text-[10px] text-slate-600">ARV</Label>
-                <Input
-                  type="text"
-                  value={arv ? `$${arv.toLocaleString()}` : '$0'}
-                  disabled={true}
-                  className="h-6 text-xs bg-slate-100 cursor-not-allowed text-slate-600 font-medium"
-                  readOnly
-                />
-              </div>
+          {/* Configuration Section */}
+          <div className="grid grid-cols-4 gap-2 p-2 bg-slate-50 rounded">
+            {/* ARV - READ-ONLY (auto-filled from Comparable Properties) */}
+            <div>
+              <Label className="text-[10px] text-slate-500">ARV</Label>
+              <Input
+                type="text"
+                value={arv ? `$${arv.toLocaleString()}` : '$0'}
+                disabled={true}
+                className="h-6 text-xs bg-slate-100 cursor-not-allowed text-slate-400 font-medium"
+                readOnly
+              />
+            </div>
 
-              {/* REHAB COST - READ-ONLY (auto-filled from Rehab Calculator) */}
-              <div>
-                <Label className="text-[10px] text-slate-600">Rehab Cost</Label>
-                <Input
-                  type="text"
-                  value={rehabCostValue ? `$${rehabCostValue.toLocaleString()}` : '$0'}
-                  disabled={true}
-                  className="h-6 text-xs bg-slate-100 cursor-not-allowed text-slate-600 font-medium"
-                  readOnly
-                />
-              </div>
+            {/* REHAB COST - READ-ONLY (auto-filled from Rehab Calculator) */}
+            <div>
+              <Label className="text-[10px] text-slate-500">Rehab Cost</Label>
+              <Input
+                type="text"
+                value={rehabCostValue ? `$${rehabCostValue.toLocaleString()}` : '$0'}
+                disabled={true}
+                className="h-6 text-xs bg-slate-100 cursor-not-allowed text-slate-400 font-medium"
+                readOnly
+              />
+            </div>
 
-              {/* TAXES - EDITABLE */}
-              <div>
-                <Label className="text-[10px] text-slate-600">Annual Taxes *</Label>
-                <Input
-                  type="text"
-                  inputMode="numeric"
-                  value={taxesDisplay}
-                  onChange={(e) => {
-                    const raw = e.target.value;
-                    setTaxesDisplay(raw);
-                    setTaxes(parseCurrencyInput(raw));
-                  }}
-                  onBlur={() => setTaxesDisplay(taxes ? formatCurrency(taxes) : '')}
-                  disabled={readOnly}
-                  className="h-6 text-xs"
-                  placeholder="1000"
-                />
-              </div>
+            {/* TAXES - EDITABLE */}
+            <div>
+              <Label className="text-[10px] text-slate-500">Annual Taxes</Label>
+              <Input
+                type="text"
+                inputMode="numeric"
+                value={taxesDisplay}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  setTaxesDisplay(raw);
+                  setTaxes(parseCurrencyInput(raw));
+                }}
+                onBlur={() => setTaxesDisplay(taxes ? formatCurrency(taxes) : '')}
+                disabled={readOnly}
+                className="h-6 text-xs"
+                placeholder="1000"
+              />
+            </div>
 
-              {/* TIMELINE - EDITABLE */}
-              <div>
-                <Label className="text-[10px] text-slate-600">Timeline (Months) *</Label>
-                <Input
-                  type="number"
-                  value={timeline || ''}
-                  onChange={(e) => setTimeline(Number(e.target.value) || 0)}
-                  disabled={readOnly}
-                  className="h-6 text-xs"
-                  placeholder="6"
-                  min={1}
-                />
-              </div>
+            {/* TIMELINE - EDITABLE */}
+            <div>
+              <Label className="text-[10px] text-slate-500">Timeline (Months)</Label>
+              <Input
+                type="number"
+                value={timeline || ''}
+                onChange={(e) => setTimeline(Number(e.target.value) || 0)}
+                disabled={readOnly}
+                className="h-6 text-xs"
+                placeholder="6"
+                min={1}
+              />
             </div>
           </div>
 

@@ -272,7 +272,7 @@ export const LeadOwnerSection = forwardRef<LeadOwnerSectionRef, LeadOwnerSection
 
   return (
     <div className="border border-slate-200 rounded-lg bg-white p-2">
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-1">
           <User className="w-3 h-3 text-slate-500" />
           <span className="text-xs font-medium text-slate-600">Lead Owners</span>
@@ -380,10 +380,12 @@ export const LeadOwnerSection = forwardRef<LeadOwnerSectionRef, LeadOwnerSection
                   )}
                 </div>
                 <div className="flex items-center gap-2 text-slate-600">
-                  <span className="flex items-center gap-0.5">
-                    <Phone className="h-2 w-2" />
-                    {formatUsPhoneForDisplay(owner.phone)}
-                  </span>
+                  {owner.phone && owner.phone.trim() !== '' && (
+                    <span className="flex items-center gap-0.5">
+                      <Phone className="h-2 w-2" />
+                      {formatUsPhoneForDisplay(owner.phone)}
+                    </span>
+                  )}
                   {owner.email && 
                    !owner.email.includes('@unknown.local') && 
                    !owner.email.includes('none@none.com') && 

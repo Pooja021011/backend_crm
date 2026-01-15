@@ -962,7 +962,6 @@ const Leads = () => {
         <div className="bg-white border-b border-gray-200">
           <div className="flex items-center gap-4">
             <h1 className="text-xl font-semibold text-gray-900">Lead Management</h1>
-            <ChevronDown className="w-4 h-4 text-gray-500" />
           </div>
         </div>
 
@@ -1131,6 +1130,7 @@ const Leads = () => {
                     setSelectedMarket("");
                     setSelectedStatus("");
                     setSelectedPipelineStatus("");
+                    setSelectedLeadSource("");
                     setSelectedDateRange("");
                     setCustomDateFrom("");
                     setCustomDateTo("");

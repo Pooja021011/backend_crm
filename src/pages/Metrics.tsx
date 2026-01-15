@@ -1544,21 +1544,21 @@ const Metrics = () => {
           </Button>
           
           <Button
-            onClick={() => setActiveTab("dispositions-team")}
-            variant={activeTab === "dispositions-team" ? "default" : "outline"}
-            className="flex items-center gap-2 flex-1"
-          >
-            <Users className="w-4 h-4" />
-            Dispositions Team
-          </Button>
-          
-          <Button
             onClick={() => setActiveTab("acquisitions-leaderboard")}
             variant={activeTab === "acquisitions-leaderboard" ? "default" : "outline"}
             className="flex items-center gap-2 flex-1"
           >
             <Trophy className="w-4 h-4" />
             Acquisitions Leaderboard
+          </Button>
+          
+          <Button
+            onClick={() => setActiveTab("dispositions-team")}
+            variant={activeTab === "dispositions-team" ? "default" : "outline"}
+            className="flex items-center gap-2 flex-1"
+          >
+            <Users className="w-4 h-4" />
+            Dispositions Team
           </Button>
           
           <Button

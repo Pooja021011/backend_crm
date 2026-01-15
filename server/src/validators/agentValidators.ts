@@ -41,8 +41,8 @@ export const createAgentSchema = z.object({
     .optional()
     .refine(val => {
       if (!val) return true;
-      return val.length >= 8;
-    }, 'Password must be at least 8 characters long')
+      return val.length >= 1;
+    }, 'Password must be at least 1 character long')
 });
 
 export const updateAgentSchema = z.object({
@@ -83,7 +83,7 @@ export const updateAgentSchema = z.object({
     .optional(),
   
   password: z.string()
-    .min(8, 'Password must be at least 8 characters long')
+    .min(1, 'Password must be at least 1 character long')
     .optional()
 }).refine(data => {
   // At least one field must be provided for update

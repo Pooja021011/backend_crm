@@ -65,38 +65,50 @@ export const inboxRepository = {
       : {};
 
     // For EMAIL/SMS/CALL inbox:
-    // Scope results to the user’s configured email/phone via Communication.metadata.{to,from}
-    const commScopeFilter =
-      filters.userId && (filters.type === 'EMAIL' || filters.type === 'SMS' || filters.type === 'CALL')
-        ? {
-            OR: [
-              // Email scoping
-              ...(filters.type === 'EMAIL' && filters.scope?.email
-                ? ([
-                    { metadata: { path: ['to'], equals: filters.scope.email } },
-                    { metadata: { path: ['from'], equals: filters.scope.email } },
-                  ] as any[])
-                : []),
-              // Phone scoping
-              ...(filters.type !== 'EMAIL' && filters.scope?.phone
-                ? ([
-                    { metadata: { path: ['to'], equals: filters.scope.phone } },
-                    { metadata: { path: ['from'], equals: filters.scope.phone } },
-                  ] as any[])
-                : []),
-            ],
-          }
-        : {};
+    // Build scope filter that checks if user's email/phone is in metadata
+    const hasScopeConditions = 
+      filters.userId && 
+      (filters.type === 'EMAIL' || filters.type === 'SMS' || filters.type === 'CALL') &&
+      ((filters.type === 'EMAIL' && filters.scope?.email) || 
+       (filters.type !== 'EMAIL' && filters.scope?.phone));
+
+    const commScopeConditions = hasScopeConditions
+      ? {
+          OR: [
+            // Email scoping
+            ...(filters.type === 'EMAIL' && filters.scope?.email
+              ? ([
+                  { metadata: { path: ['to'], equals: filters.scope.email } },
+                  { metadata: { path: ['from'], equals: filters.scope.email } },
+                ] as any[])
+              : []),
+            // Phone scoping
+            ...(filters.type !== 'EMAIL' && filters.scope?.phone
+              ? ([
+                  { metadata: { path: ['to'], equals: filters.scope.phone } },
+                  { metadata: { path: ['from'], equals: filters.scope.phone } },
+                ] as any[])
+              : []),
+          ],
+        }
+      : null;
 
     // Default user scoping (non-internal): items I created OR items tied to leads I own.
-    // NOTE: for EMAIL/SMS/CALL we additionally apply commScopeFilter above.
+    // For EMAIL/SMS/CALL, we ALSO require the user's email/phone to be in metadata (AND condition)
     const userFilter =
       !isNoteInternal && filters.userId
         ? {
-            OR: [
-              { createdById: filters.userId },
-              { lead: { assignedUserId: filters.userId } },
-              { lead: { createdById: filters.userId } },
+            AND: [
+              // Lead ownership filter
+              {
+                OR: [
+                  { createdById: filters.userId },
+                  { lead: { assignedUserId: filters.userId } },
+                  { lead: { createdById: filters.userId } },
+                ],
+              },
+              // For EMAIL/SMS/CALL, additionally require user's email/phone in metadata
+              ...(commScopeConditions ? [commScopeConditions] : []),
             ],
           }
         : {};
@@ -106,7 +118,6 @@ export const inboxRepository = {
         ...(isNoteInternal ? internalNoteFilter : userFilter),
         ...timeFilter,
         ...typeFilter,
-        ...(Object.keys(commScopeFilter).length ? commScopeFilter : {}),
       },
       orderBy: { occurredAt: 'desc' },
       include: {

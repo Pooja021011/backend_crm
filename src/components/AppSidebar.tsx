@@ -140,11 +140,9 @@ export function AppSidebar() {
             
             {!isCollapsed && (
               <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-semibold text-sidebar-foreground truncate">{displayName}</h3>
-                    <p className="text-xs text-sidebar-foreground/70 truncate">{orgName}</p>
-                  </div>
+                <div className="flex flex-col">
+                  <h3 className="text-sm font-semibold text-sidebar-foreground truncate leading-tight">{displayName}</h3>
+                  <p className="text-xs text-sidebar-foreground/70 truncate leading-tight">{orgName}</p>
                 </div>
               </div>
             )}

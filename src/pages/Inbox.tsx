@@ -462,14 +462,30 @@ const Inbox = () => {
     
     // Handle notification clicks - navigate to lead details and mark as read
     if (email.type === 'notification') {
+      // Mark notification as read in backend
+      try {
+        const accessToken = localStorage.getItem('accessToken');
+        await fetch(`${API_BASE}/notifications/${email.id}/read`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+      } catch (error) {
+        console.error('Failed to mark notification as read:', error);
+        // Continue anyway - user experience is more important
+      }
+      
+      // Remove notification from list immediately (optimistic update)
+      setNotifications(prevNotifications => prevNotifications.filter(notification => notification.id !== email.id));
+      
+      // Navigate to lead details
       if (email.leadId) {
         navigate(`/leads/${email.leadId}/edit`);
       } else if (email.leadAddress) {
         navigate(`/leads?address=${encodeURIComponent(email.leadAddress)}`);
       }
-      
-      // Mark notification as read (remove from list)
-      setNotifications(prevNotifications => prevNotifications.filter(notification => notification.id !== email.id));
       
       toast({
         title: "Notification Read & Lead Opened",
@@ -1236,10 +1252,15 @@ const Inbox = () => {
   };
 
   const toLocalDateTimeInputValue = (isoOrDate: string) => {
+    // Convert UTC time to datetime-local input format (treating as UTC)
     const d = new Date(isoOrDate);
-    const tzOffsetMs = d.getTimezoneOffset() * 60_000;
-    const local = new Date(d.getTime() - tzOffsetMs);
-    return local.toISOString().slice(0, 16);
+    // Use UTC values directly without timezone conversion
+    const year = d.getUTCFullYear();
+    const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    const hour = String(d.getUTCHours()).padStart(2, '0');
+    const minute = String(d.getUTCMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hour}:${minute}`;
   };
 
   const openTaskEdit = (task: any) => {
@@ -1265,13 +1286,19 @@ const Inbox = () => {
 
     setSavingTaskEdit(true);
     try {
+      // Parse datetime-local input as UTC time
+      const [datePart, timePart] = taskEditForm.dueAt.split('T');
+      const [year, month, day] = datePart.split('-').map(Number);
+      const [hour, minute] = timePart.split(':').map(Number);
+      const utcDate = new Date(Date.UTC(year, month - 1, day, hour, minute, 0, 0));
+      
       await makeApiCall(`${API_BASE}/leads/${editingTask.leadId}/tasks/${editingTask.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: taskEditForm.title.trim(),
           description: taskEditForm.description?.trim() || null,
-          dueAt: new Date(taskEditForm.dueAt).toISOString(),
+          dueAt: utcDate.toISOString(),
         }),
       });
 
@@ -1585,7 +1612,20 @@ const Inbox = () => {
     return messages.filter(m => m.unread).length;
   };
 
-  const getMessageIcon = (type: string) => {
+  const getMessageIcon = (type: string, notificationType?: string) => {
+    // For notifications, use the notificationType to determine the icon
+    if (type === 'notification' && notificationType) {
+      switch (notificationType) {
+        case 'NEW_SMS': return <MessageSquare className="w-3 h-3" />;
+        case 'NEW_CALL': return <Phone className="w-3 h-3" />;
+        case 'MISSED_CALL': return <PhoneOff className="w-3 h-3" />;
+        case 'NEW_LEAD': return <Bell className="w-3 h-3" />;
+        case 'NEW_CONTRACT': return <Bell className="w-3 h-3" />;
+        case 'NEW_DEAL_ASSIGNED': return <Bell className="w-3 h-3" />;
+        default: return <Bell className="w-3 h-3" />;
+      }
+    }
+    
     switch (type) {
       case 'email': return <Mail className="w-3 h-3" />;
       case 'sms': return <MessageSquare className="w-3 h-3" />;
@@ -1629,7 +1669,6 @@ const Inbox = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <h1 className="text-xl font-semibold text-gray-900">Inbox</h1>
-            <ChevronDown className="w-4 h-4 text-gray-500" />
           </div>
         </div>
       </div>
@@ -1815,7 +1854,7 @@ const Inbox = () => {
                 <div>
                   {/* SMS Header */}
                   <div className="flex items-center justify-between p-4 border-b bg-gray-50">
-                    <h3 className="text-lg font-semibold text-gray-900">Received Messages</h3>
+                    <h3 className="text-lg font-semibold text-gray-900">Text Messages</h3>
                     <Button
                       onClick={fetchSMSHistory}
                       variant="ghost"
@@ -2058,7 +2097,7 @@ const Inbox = () => {
                   
                   {activeTab === 'reminders' && (
                     <div className="flex items-center justify-between p-4 border-b bg-gray-50">
-                      <h3 className="text-lg font-semibold text-gray-900">Reminders & Notifications</h3>
+                      <h3 className="text-lg font-semibold text-gray-900">Reminders</h3>
                       <Button 
                         variant="ghost" 
                         size="sm" 
@@ -2125,6 +2164,11 @@ const Inbox = () => {
                                 'bg-blue-100 text-blue-600'
                               ) :
                               message.type === 'notification' ? (
+                                // Use specific colors for call/SMS notifications
+                                message.notificationType === 'NEW_SMS' ? 'bg-green-100 text-green-600' :
+                                message.notificationType === 'NEW_CALL' ? 'bg-blue-100 text-blue-600' :
+                                message.notificationType === 'MISSED_CALL' ? 'bg-red-100 text-red-600' :
+                                // Default priority-based colors for other notifications
                                 message.priority === 'urgent' ? 'bg-red-100 text-red-600' :
                                 message.priority === 'high' ? 'bg-orange-100 text-orange-600' :
                                 message.priority === 'medium' ? 'bg-yellow-100 text-yellow-600' :
@@ -2132,7 +2176,7 @@ const Inbox = () => {
                               ) :
                               'bg-gray-100 text-gray-600'
                             }`}>
-                              {getMessageIcon(message.type)}
+                              {getMessageIcon(message.type, message.notificationType)}
                             </div>
                           </div>
                           
@@ -2165,6 +2209,23 @@ const Inbox = () => {
                                 >
                                   {message.unread ? 'Unread' : 'Read'}
                                 </Badge>
+                              )}
+                              
+                              {/* Type Badge for Call/SMS Notifications */}
+                              {message.type === 'notification' && message.notificationType && (
+                                message.notificationType === 'NEW_SMS' ? (
+                                  <Badge variant="outline" className="text-xs px-1.5 py-0.5 bg-green-50 text-green-700 border-green-200">
+                                    SMS
+                                  </Badge>
+                                ) : message.notificationType === 'NEW_CALL' ? (
+                                  <Badge variant="outline" className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-700 border-blue-200">
+                                    CALL
+                                  </Badge>
+                                ) : message.notificationType === 'MISSED_CALL' ? (
+                                  <Badge variant="outline" className="text-xs px-1.5 py-0.5 bg-red-50 text-red-700 border-red-200">
+                                    MISSED CALL
+                                  </Badge>
+                                ) : null
                               )}
                               
                               {/* Priority Badge for Reminders and Notifications */}
@@ -2250,7 +2311,7 @@ const Inbox = () => {
             </div>
 
             <div className="space-y-1">
-              <div className="text-sm font-medium text-gray-700">Due date & time (Central)</div>
+              <div className="text-sm font-medium text-gray-700">Due date & time (UTC)</div>
               <Input
                 type="datetime-local"
                 value={taskEditForm.dueAt}

@@ -103,10 +103,10 @@ export const LeadTimeline: React.FC<LeadTimelineProps> = ({
   ];
 
   return (
-    <div className="px-2 py-2">
-      <div className="flex items-center gap-1 mb-2">
-        <Clock className="w-3.5 h-3.5 text-slate-500" />
-        <span className="text-xs font-medium text-slate-600">Timeline</span>
+    <div>
+      <div className="flex items-center gap-1.5 mb-1">
+        <Clock className="w-3 h-3 text-slate-500" />
+        <span className="text-[11px] font-medium text-slate-600">Timeline</span>
       </div>
       <div className="flex items-center justify-between relative">
         <div className="absolute top-2.5 left-4 right-4 h-px bg-slate-200 z-0" />

@@ -400,7 +400,10 @@ export const pipelineService = {
           pipelineId: pipeline.id
         },
         leadStatus: {
-          name: { equals: 'Pipeline', mode: 'insensitive' }
+          name: { 
+            in: ['Pipeline', 'Closed'],
+            mode: 'insensitive' 
+          }
         },
       };
 

@@ -53,14 +53,21 @@ export const notificationService = {
       
       // Build the where clause conditionally
       const whereClause: any = {
-        OR: [
-          { targetUserId: userId }
+        AND: [
+          // Only show unread notifications
+          { isRead: false },
+          // User or role targeting
+          {
+            OR: [
+              { targetUserId: userId }
+            ]
+          }
         ]
       };
       
       // Only add role-based filtering if there are valid roles
       if (validRoles.length > 0) {
-        whereClause.OR.push({ targetRoles: { hasSome: validRoles } });
+        whereClause.AND[1].OR.push({ targetRoles: { hasSome: validRoles } });
       }
       
       const notifications = await prisma.notification.findMany({
@@ -85,7 +92,7 @@ export const notificationService = {
         orderBy: {
           createdAt: 'desc'
         },
-        take: 50 // Limit to recent 50 notifications
+        take: 50 // Limit to recent 50 unread notifications
       });
 
       return notifications;
