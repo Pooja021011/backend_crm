@@ -1564,6 +1564,7 @@ const Inbox = () => {
     fetchReminderCounts();
     fetchSLAStatus();
     fetchCallHistory(); // Load call history on mount for badge count
+    fetchSMSHistory(); // Load SMS history on mount for badge count
     // Re-enable notifications - backend should be working now
     fetchNotifications();
   }, []);
@@ -1593,6 +1594,10 @@ const Inbox = () => {
       // For calls tab, show call history (missed calls)
       console.log(`🔍 Getting calls for display: ${callHistory.length} items`, callHistory);
       return callHistory;
+    } else if (source === 'sms') {
+      // For SMS/Messages tab, show SMS history
+      console.log(`🔍 Getting SMS for display: ${smsHistory.length} items`, smsHistory);
+      return smsHistory;
     } else if (source === 'tasks') {
       console.log(`🔍 Getting tasks for display: ${assignedTasks.length} items`, assignedTasks);
       return assignedTasks;
@@ -1614,8 +1619,8 @@ const Inbox = () => {
 
   const getUnreadCount = (source: string) => {
     const messages = getFilteredMessages(source);
-    // For calls, all items in callHistory are unread missed calls, so count all
-    if (source === 'calls') {
+    // For calls and SMS, all items are unread, so count all
+    if (source === 'calls' || source === 'sms') {
       return messages.length;
     }
     return messages.filter(m => m.unread).length;
