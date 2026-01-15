@@ -255,10 +255,11 @@ export function RehabBudgetCalculatorCompact({
               <Label className="text-[10px] text-slate-500">Bathrooms</Label>
               <Input
                 type="number"
-                value={numberOfBathrooms}
+                value={numberOfBathrooms || ''}
                 onChange={(e) => handleBathroomsChange(Number(e.target.value))}
                 disabled={readOnly}
                 className="h-6 text-xs"
+                placeholder="0"
                 min={0}
               />
             </div>
