@@ -1588,6 +1588,10 @@ const Inbox = () => {
       console.log(`🔍 Getting Gmail emails for display: ${gmailEmails.length} items`, gmailEmails);
       console.log(`🔍 Email settings:`, emailSettings);
       return [...gmailEmails];
+    } else if (source === 'calls') {
+      // For calls tab, show call history (missed calls)
+      console.log(`🔍 Getting calls for display: ${callHistory.length} items`, callHistory);
+      return callHistory;
     } else if (source === 'tasks') {
       console.log(`🔍 Getting tasks for display: ${assignedTasks.length} items`, assignedTasks);
       return assignedTasks;
