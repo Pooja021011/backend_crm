@@ -1595,9 +1595,9 @@ const Inbox = () => {
       console.log(`🔍 Getting calls for display: ${callHistory.length} items`, callHistory);
       return callHistory;
     } else if (source === 'sms') {
-      // For SMS/Messages tab, show SMS history
-      console.log(`🔍 Getting SMS for display: ${smsHistory.length} items`, smsHistory);
-      return smsHistory;
+      // For SMS/Messages tab, show SMS conversations
+      console.log(`🔍 Getting SMS for display: ${smsConversations.length} items`, smsConversations);
+      return smsConversations;
     } else if (source === 'tasks') {
       console.log(`🔍 Getting tasks for display: ${assignedTasks.length} items`, assignedTasks);
       return assignedTasks;
