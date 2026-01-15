@@ -360,6 +360,17 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
 
   const saveEditedTask = async () => {
     if (!editingTask) return;
+    
+    // Validation
+    if (!taskEditForm.title?.trim() || !taskEditForm.dueAtIso || !taskEditForm.assignedToId) {
+      toast({ 
+        title: 'Validation Error', 
+        description: 'Title, due date, and assignee are required',
+        variant: 'destructive' 
+      });
+      return;
+    }
+    
     setSavingTaskEdit(true);
     try {
       const payload: any = {
@@ -1224,7 +1235,7 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
-              <Label className="text-sm">Title</Label>
+              <Label className="text-sm">Title *</Label>
               <Input
                 value={taskEditForm.title}
                 onChange={(e) => setTaskEditForm((p) => ({ ...p, title: e.target.value }))}
@@ -1241,7 +1252,7 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
               />
             </div>
             <div>
-              <Label className="text-sm">Due</Label>
+              <Label className="text-sm">Due *</Label>
               <Popover open={taskEditDuePickerOpen} onOpenChange={setTaskEditDuePickerOpen}>
                 <PopoverTrigger asChild>
                   <Button
@@ -1373,16 +1384,15 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
               </Select>
             </div>
             <div className="col-span-2">
-              <Label className="text-sm">Assigned To</Label>
+              <Label className="text-sm">Assigned To *</Label>
               <Select
-                value={taskEditForm.assignedToId || 'unassigned'}
-                onValueChange={(value) => setTaskEditForm((p) => ({ ...p, assignedToId: value === 'unassigned' ? '' : value }))}
+                value={taskEditForm.assignedToId || ''}
+                onValueChange={(value) => setTaskEditForm((p) => ({ ...p, assignedToId: value }))}
               >
                 <SelectTrigger disabled={savingTaskEdit}>
-                  <SelectValue placeholder="Assignee" />
+                  <SelectValue placeholder="Select assignee (required)..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="unassigned">Unassigned</SelectItem>
                   {users.map((u) => (
                     <SelectItem key={u.id} value={u.id}>
                       {u.firstName} {u.lastName}
@@ -1396,7 +1406,17 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
             <Button type="button" variant="outline" onClick={() => setEditingTask(null)} disabled={savingTaskEdit}>
               Cancel
             </Button>
-            <Button type="button" onClick={saveEditedTask} disabled={savingTaskEdit}>
+            <Button 
+              type="button" 
+              onClick={saveEditedTask} 
+              disabled={
+                savingTaskEdit || 
+                !taskEditForm.title || 
+                taskEditForm.title.trim() === '' || 
+                !taskEditForm.dueAtIso || 
+                !taskEditForm.assignedToId
+              }
+            >
               {savingTaskEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
               Save
             </Button>
