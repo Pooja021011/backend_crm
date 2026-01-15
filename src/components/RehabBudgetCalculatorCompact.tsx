@@ -259,7 +259,6 @@ export function RehabBudgetCalculatorCompact({
                 onChange={(e) => handleBathroomsChange(Number(e.target.value))}
                 disabled={readOnly}
                 className="h-6 text-xs"
-                placeholder="0"
                 min={0}
               />
             </div>
