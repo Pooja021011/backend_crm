@@ -1563,6 +1563,7 @@ const Inbox = () => {
     fetchReminders();
     fetchReminderCounts();
     fetchSLAStatus();
+    fetchCallHistory(); // Load call history on mount for badge count
     // Re-enable notifications - backend should be working now
     fetchNotifications();
   }, []);
