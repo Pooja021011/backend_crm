@@ -979,10 +979,10 @@ const LeadEdit: React.FC = () => {
   };
 
   const handleTaskSubmit = async () => {
-    if (!taskForm.title || !taskForm.dueAt) {
+    if (!taskForm.title?.trim() || !taskForm.dueAt || !taskForm.assignedToId) {
       toast({
         title: "Validation Error",
-        description: "Title and due date are required",
+        description: "Title, due date, and assignee are required",
         variant: "destructive"
       });
       return;
@@ -3815,7 +3815,7 @@ const LeadEdit: React.FC = () => {
             </Button>
             <Button
               onClick={handleTaskSubmit}
-              disabled={savingTask || !taskForm.title || !taskForm.dueAt || !taskForm.assignedToId}
+              disabled={savingTask || !taskForm.title?.trim() || !taskForm.dueAt || !taskForm.assignedToId}
               className="h-8 text-sm bg-purple-600 hover:bg-purple-700 px-3"
             >
               {savingTask ? (
