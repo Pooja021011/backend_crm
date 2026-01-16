@@ -644,6 +644,8 @@ const LeadEdit: React.FC = () => {
         // Establish baseline after state hydration completes (best-effort)
         setTimeout(() => {
           try {
+            // Baseline snapshot: include everything so we can correctly diff, but autosave itself
+            // will omit lead-owner/contact fields (see scheduleAutoSave/keepalive).
             lastSavedPayloadRef.current = JSON.stringify(buildLeadPatchPayload());
             autoSaveBaselineReadyRef.current = true;
             setAutoSaveStatus('idle');
@@ -1227,9 +1229,10 @@ const LeadEdit: React.FC = () => {
     finalOffer,
   ]);
 
-  const buildLeadPatchPayload = useCallback(() => {
+  const buildLeadPatchPayload = useCallback((options?: { includeLeadOwners?: boolean }) => {
     // Note: pipeline stage moves are handled separately via the pipeline move endpoint.
     const updates: any = {};
+    const includeLeadOwners = options?.includeLeadOwners !== false;
 
     // Contacts (primary + multi-contact support)
     const filteredContacts = (contacts || []).filter((c) => c?.name || c?.phone || c?.email);
@@ -1238,7 +1241,8 @@ const LeadEdit: React.FC = () => {
     // IMPORTANT:
     // Do NOT auto-clear contact fields when contacts are empty/unloaded.
     // This page uses autosave and can race with async hydration; sending empty strings wipes existing data.
-    if (primaryContact) {
+    // Additionally: autosave must NOT touch Lead Owners/contact data at all.
+    if (includeLeadOwners && primaryContact) {
       if (lead?.leadType === 'SELLER') {
         updates.seller = {
           firstName: primaryContact.name?.split(' ')[0] || primaryContact.name || '',
@@ -1274,7 +1278,7 @@ const LeadEdit: React.FC = () => {
     updates.customFields = {
       ...(lead?.customFields || {}),
       ...propertyDetails,
-      contacts: filteredContacts,
+      ...(includeLeadOwners ? { contacts: filteredContacts } : {}),
     };
 
     // Address: only send when editing address (so we don't clobber unintentionally)
@@ -1467,7 +1471,7 @@ const LeadEdit: React.FC = () => {
       return;
     }
 
-    const payloadStr = JSON.stringify(buildLeadPatchPayload());
+    const payloadStr = JSON.stringify(buildLeadPatchPayload({ includeLeadOwners: false }));
     if (!payloadStr || payloadStr === lastSavedPayloadRef.current) return;
 
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
@@ -1500,7 +1504,7 @@ const LeadEdit: React.FC = () => {
     const bestEffortKeepaliveSave = () => {
       try {
         if (!autoSaveBaselineReadyRef.current) return;
-        const payload = buildLeadPatchPayload();
+      const payload = buildLeadPatchPayload({ includeLeadOwners: false });
         const payloadStr = JSON.stringify(payload);
         if (!payloadStr || payloadStr === lastSavedPayloadRef.current) return;
 
