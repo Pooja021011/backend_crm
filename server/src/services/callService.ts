@@ -307,9 +307,11 @@ export const callService = {
                   ? `You missed a call from ${safeFrom}. Follow up required.`
                   : `Call with ${safeFrom} completed successfully`,
                 priority: priority,
-                targetUserId: lead.assignedUserId || userId,
+                // Critical: notify ONLY the user who owns the destination number (userId param),
+                // not the lead assignee (prevents "missed call for other user's number").
+                targetUserId: userId,
                 leadId: leadId,
-                triggeredBy: null,
+                triggeredBy: undefined,
                 data: {
                   callSid,
                   from: safeFrom,
@@ -317,7 +319,7 @@ export const callService = {
                   status,
                   communicationType: 'CALL'
                 }
-              }).catch(err => logger.error('Failed to create call notification', { err }));
+              }).catch(err => logger.error({ err }, 'Failed to create call notification'));
             }
           }
           
@@ -368,9 +370,11 @@ export const callService = {
               ? `You missed a call from ${safeFrom}. Follow up required.`
               : `Call received from ${safeFrom}`,
             priority: priority,
-            targetUserId: lead.assignedUserId || userId,
+            // Critical: notify ONLY the user who owns the destination number (userId param),
+            // not the lead assignee (prevents "missed call for other user's number").
+            targetUserId: userId,
             leadId: leadId,
-            triggeredBy: null,
+            triggeredBy: undefined,
             data: {
               callSid,
               from: safeFrom,
@@ -378,7 +382,7 @@ export const callService = {
               status,
               communicationType: 'CALL'
             }
-          }).catch(err => logger.error('Failed to create call notification', { err }));
+          }).catch(err => logger.error({ err }, 'Failed to create call notification'));
         }
 
         return created.id;
@@ -686,7 +690,6 @@ export const callService = {
     try {
       const userId = params.userId;
       const roles = params.roles || [];
-      const isPrivileged = roles.includes('ADMIN') || roles.includes('EXECUTIVE') || roles.includes('MANAGER') || roles.includes('TC');
 
       logger.info({ userId, roles }, 'Fetching call history from database');
 
@@ -699,35 +702,27 @@ export const callService = {
       
       console.log('📞 Fetching call history for user:', userId, 'Phone:', userPhoneNumber);
 
+      // Inbox Calls tab requirement: user must only see calls to their configured phone number.
+      // If user has no phone configured, show nothing (prevents leaking other users' calls).
+      if (!userPhoneNumber) {
+        logger.info({ userId }, 'No phone number configured for user; returning empty call history');
+        return [];
+      }
+
       // Fetch real call communications from database
       const communications = await prisma.communication.findMany({
         where: {
           type: 'CALL',
-          ...(isPrivileged
-            ? {}
-            : {
-                OR: [
-                  // Show OUTBOUND calls the user placed (even if lead assignment changes later)
-                  { AND: [{ direction: 'OUTBOUND' as any }, { createdById: userId }] },
-                  // Show INBOUND calls to user's phone number (if phone number is configured)
-                  ...(userPhoneNumber ? [{
-                    AND: [
-                      { direction: 'INBOUND' as any },
-                      {
-                        OR: [
-                          { metadata: { path: ['to'], equals: userPhoneNumber } },
-                          { metadata: { path: ['To'], equals: userPhoneNumber } }
-                        ]
-                      }
-                    ]
-                  }] : []),
-                  // Fallback: Show calls on leads assigned to user (only if no phone number configured)
-                  ...(!userPhoneNumber ? [
-                    { lead: { assignedUserId: userId } },
-                    { lead: { createdById: userId } }
-                  ] : [])
-                ],
-              }),
+          // Same logic for everyone (admin/agent): only inbound calls to user's configured number.
+          AND: [
+            { direction: 'INBOUND' as any },
+            {
+              OR: [
+                { metadata: { path: ['to'], equals: userPhoneNumber } },
+                { metadata: { path: ['To'], equals: userPhoneNumber } },
+              ],
+            },
+          ],
         },
         include: {
           lead: {
@@ -811,7 +806,7 @@ export const callService = {
         };
       });
 
-      logger.info({ userId, totalCalls: callHistory.length, isPrivileged }, 'Call history fetched successfully');
+      logger.info({ userId, totalCalls: callHistory.length }, 'Call history fetched successfully');
 
       return callHistory;
     } catch (error: any) {

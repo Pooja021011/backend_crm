@@ -124,6 +124,8 @@ export const inboxRepository = {
     let filteredItems = items;
     if (isNoteInternal && filters.userId) {
       filteredItems = items.filter((item: any) => {
+        // Requirement: show ONLY notes where logged-in user was tagged by someone else
+        if (item.createdById === filters.userId) return false;
         const metadata = item.metadata as any;
         const mentionedUserIds = metadata?.mentionedUserIds;
         const isMentioned = Array.isArray(mentionedUserIds) && mentionedUserIds.includes(filters.userId);

@@ -112,131 +112,113 @@ export const communicationController = {
 
 // Helper function to parse @mentions and create tasks
 async function createTasksForMentions(leadId: string, noteBody: string, createdById?: string): Promise<string[]> {
+  // NOTE: This function MUST return mentioned user IDs even if task creation fails,
+  // because Inbox "Communications" relies on metadata.mentionedUserIds.
   try {
-    // Extract all @mentions from the note body
-    // Pattern: @FirstName LastName (supports names with numbers like "Hardeep1")
-    const mentionRegex = /@([A-Z][a-z0-9]+)\s+([A-Z][a-z]+)/g;
-    const mentions = Array.from(noteBody.matchAll(mentionRegex));
-    
+    // More tolerant mention parsing:
+    // - allows lowercase/uppercase
+    // - allows digits in names
+    // - supports multiple spaces
+    const mentionRegex = /@([A-Za-z0-9]+)\s+([A-Za-z0-9]+)\b/g;
+    const mentions = Array.from(noteBody.matchAll(mentionRegex)).map(m => ({
+      first: String(m[1] || ''),
+      last: String(m[2] || ''),
+    }));
+
     console.log('🔍 Parsing mentions from note:', noteBody);
-    console.log('🔍 Found mentions:', mentions.map(m => `${m[1]} ${m[2]}`));
-    
-    if (mentions.length === 0) {
-      console.log('⚠️ No mentions found in note');
-      return [];
-    }
-    
-    // Get lead info to check permissions
+    console.log('🔍 Found mentions:', mentions.map(m => `${m.first} ${m.last}`));
+
+    if (mentions.length === 0) return [];
+
     const lead = await prisma.lead.findUnique({
       where: { id: leadId },
       select: {
         id: true,
-        assignedUserId: true,
-        dispAgentId: true,
-        createdById: true,
         address: { select: { address1: true, city: true, state: true } },
         seller: { select: { firstName: true, lastName: true } },
         buyer: { select: { firstName: true, lastName: true } },
         vendor: { select: { firstName: true, lastName: true } },
-        tasks: { select: { assignedToId: true, title: true } }
-      }
+      },
     });
-    
-    if (!lead) return [];
-    
-    // Get all active users first
+
+    // Even if lead is missing (shouldn't happen), we can still resolve user IDs from mentions.
+
     const allUsers = await prisma.user.findMany({
-      select: { id: true, firstName: true, lastName: true, roles: true, status: true }
+      select: { id: true, firstName: true, lastName: true, status: true },
     });
-    
-    // Match mentions against users (case-insensitive, flexible matching)
-    // Supports: "@Hardeep Singh", "@Hardeep1 Singh" matching user "Hardeep Singh" or "Hardeep1 Singh"
-    const users = allUsers.filter(user => {
-      return mentions.some(match => {
-        const mentionFirst = match[1].toLowerCase();
-        const mentionLast = match[2].toLowerCase();
-        const userFirst = user.firstName.toLowerCase();
-        const userLast = user.lastName.toLowerCase();
-        
-        // Exact match OR user's name contains mention (handles both "Hardeep" and "Hardeep1")
-        const firstNameMatches = 
-          userFirst === mentionFirst || 
-          userFirst.includes(mentionFirst) || 
-          mentionFirst.includes(userFirst);
-        const lastNameMatches = userLast === mentionLast;
-        
-        return firstNameMatches && lastNameMatches;
+
+    const normalize = (s: string) => s.trim().toLowerCase();
+
+    const matchedUsers = allUsers.filter(u => {
+      if (!u.firstName || !u.lastName) return false;
+      if (String(u.status || '').toUpperCase() !== 'ACTIVE') return false;
+
+      const userFirst = normalize(u.firstName);
+      const userLast = normalize(u.lastName);
+
+      return mentions.some(m => {
+        const mentionFirst = normalize(m.first);
+        const mentionLast = normalize(m.last);
+
+        // allow "Hardeep" vs "Hardeep1" and vice versa
+        const firstOk =
+          userFirst === mentionFirst ||
+          userFirst.startsWith(mentionFirst) ||
+          mentionFirst.startsWith(userFirst);
+
+        const lastOk = userLast === mentionLast;
+        return firstOk && lastOk;
       });
     });
-    
-    console.log('🔍 All mentions found:', mentions.map(m => `@${m[1]} ${m[2]}`));
-    console.log('🔍 Matched users:', users.map(u => `${u.firstName} ${u.lastName} (${u.id})`));
-    
-    // Filter users who have access to this lead
-    const allowedUsers = users.filter(user => {
-      // Always allow ADMIN, MANAGER, and Transaction Coordinator
-      if (user.roles.includes('ADMIN') || user.roles.includes('MANAGER') || user.roles.includes('TC')) {
-        return true;
-      }
-      
-      // Allow if user is ACQ agent (assigned to the lead)
-      if (lead.assignedUserId === user.id) {
-        return true;
-      }
-      
-      // Allow if user is DISP agent
-      if (lead.dispAgentId === user.id) {
-        return true;
-      }
-      
-      // Allow if user created the lead
-      if (lead.createdById === user.id) {
-        return true;
-      }
-      
-      // Allow if user has REAL tasks assigned on this lead (not auto-generated mention tasks)
-      const realTasks = lead.tasks.filter((task: any) => !task.title?.startsWith('Review note on '));
-      if (realTasks.some((task: any) => task.assignedToId === user.id)) {
-        return true;
-      }
-      
-      return false;
-    });
-    
-    if (allowedUsers.length === 0) {
-      console.log('⚠️ No users with lead access were mentioned');
-      return [];
-    }
-    
-    const leadDescription = lead?.address?.address1 
-      ? `${lead.address.address1}, ${lead.address.city}, ${lead.address.state}`
-      : lead?.seller?.firstName 
-      ? `${lead.seller.firstName} ${lead.seller.lastName}`
-      : lead?.buyer?.firstName
-      ? `${lead.buyer.firstName} ${lead.buyer.lastName}`
-      : 'Lead';
-    
-    // Create tasks for each allowed mentioned user
-    const taskPromises = allowedUsers.map(user =>
-      prisma.task.create({
-        data: {
-          leadId,
-          title: `Review note on ${leadDescription}`,
-          description: `You were mentioned in a note:\n\n${noteBody.substring(0, 500)}${noteBody.length > 500 ? '...' : ''}`,
-          dueAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // Due in 24 hours
-          status: 'OPEN' as any,
-          assignedToId: user.id,
-          createdById: createdById || null
-        }
-      })
+
+    const uniqueMentionedUserIds = Array.from(
+      new Set(
+        matchedUsers
+          .map(u => u.id)
+          .filter(id => Boolean(id) && (!createdById || id !== createdById))
+      )
     );
-    
-    await Promise.all(taskPromises);
-    console.log(`✅ Created ${taskPromises.length} tasks for @mentions in note`);
-    return allowedUsers.map(u => u.id);
+
+    console.log(
+      '🔍 Matched users:',
+      matchedUsers.map(u => `${u.firstName} ${u.lastName} (${u.id})`)
+    );
+
+    if (uniqueMentionedUserIds.length === 0) return [];
+
+    // Best-effort task creation (do NOT affect returned mentioned IDs)
+    try {
+      const leadDescription = lead?.address?.address1
+        ? `${lead.address.address1}, ${lead.address.city}, ${lead.address.state}`
+        : lead?.seller?.firstName
+          ? `${lead.seller.firstName} ${lead.seller.lastName}`
+          : lead?.buyer?.firstName
+            ? `${lead.buyer.firstName} ${lead.buyer.lastName}`
+            : 'Lead';
+
+      await Promise.all(
+        uniqueMentionedUserIds.map(mentionedUserId =>
+          prisma.task.create({
+            data: {
+              leadId,
+              title: `Review note on ${leadDescription}`,
+              description: `You were mentioned in a note:\n\n${noteBody.substring(0, 500)}${noteBody.length > 500 ? '...' : ''}`,
+              dueAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // Due in 24 hours
+              status: 'OPEN' as any,
+              assignedToId: mentionedUserId,
+              createdById: createdById || null,
+            },
+          })
+        )
+      );
+      console.log(`✅ Created ${uniqueMentionedUserIds.length} tasks for @mentions in note`);
+    } catch (taskError) {
+      console.error('❌ Task creation failed for mentions (continuing):', taskError);
+    }
+
+    return uniqueMentionedUserIds;
   } catch (error) {
-    console.error('❌ Error creating tasks for mentions:', error);
-    // Don't throw - note should still be created even if task creation fails
+    console.error('❌ Error parsing mentions:', error);
     return [];
   }
 }
