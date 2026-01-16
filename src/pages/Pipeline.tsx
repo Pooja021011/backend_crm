@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -437,13 +437,15 @@ const Pipeline = () => {
 
       // Load pipeline stages based on role
       let allStages: any[] = [];
+      let stagePipelineKeyById = new Map<string, string>();
       
       if (transactionPipelineView && pipelineAccess?.allowedPipelines?.includes('TRANSACTION')) {
         // Load Transaction pipeline
         const stagesResponse = await makeApiCall(`${API_BASE}/pipeline/TRANSACTION/stages`);
         if (stagesResponse.ok) {
           const stagesData = await stagesResponse.json();
-          allStages = stagesData.data || [];
+          allStages = (stagesData.data || []).map((s: any) => ({ ...s, pipelineKey: 'TRANSACTION' }));
+          stagePipelineKeyById = new Map(allStages.map((s: any) => [s.id, 'TRANSACTION']));
         }
       } else if (isAdminOrManager) {
         // Admin & Manager: Load both Acquisitions + Dispositions stages
@@ -459,12 +461,12 @@ const Pipeline = () => {
         
         if (acqResponse.ok) {
           const acqData = await acqResponse.json();
-          acqStages = acqData.data || [];
+          acqStages = (acqData.data || []).map((s: any) => ({ ...s, pipelineKey: 'ACQUISITIONS' }));
         }
         
         if (dispResponse.ok) {
           const dispData = await dispResponse.json();
-          dispStages = dispData.data || [];
+          dispStages = (dispData.data || []).map((s: any) => ({ ...s, pipelineKey: 'DISPOSITIONS' }));
         }
         
         // Combine stages with explicit grouping:
@@ -472,6 +474,7 @@ const Pipeline = () => {
         const acqSorted = [...acqStages].sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
         const dispSorted = [...dispStages].sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
         allStages = [...acqSorted, ...dispSorted];
+        stagePipelineKeyById = new Map(allStages.map((s: any) => [s.id, String(s.pipelineKey || '')]));
         console.log('📊 Combined stages:', allStages.length, 'stages');
       } else if (isAcqOnly) {
         // ACQ users: Only Acquisitions pipeline
@@ -479,7 +482,8 @@ const Pipeline = () => {
         const stagesResponse = await makeApiCall(`${API_BASE}/pipeline/ACQUISITIONS/stages`);
         if (stagesResponse.ok) {
           const stagesData = await stagesResponse.json();
-          allStages = stagesData.data || [];
+          allStages = (stagesData.data || []).map((s: any) => ({ ...s, pipelineKey: 'ACQUISITIONS' }));
+          stagePipelineKeyById = new Map(allStages.map((s: any) => [s.id, 'ACQUISITIONS']));
         }
       } else if (isDispOnly) {
         // DISP users: Only Dispositions pipeline
@@ -487,7 +491,8 @@ const Pipeline = () => {
         const stagesResponse = await makeApiCall(`${API_BASE}/pipeline/DISPOSITIONS/stages`);
         if (stagesResponse.ok) {
           const stagesData = await stagesResponse.json();
-          allStages = stagesData.data || [];
+          allStages = (stagesData.data || []).map((s: any) => ({ ...s, pipelineKey: 'DISPOSITIONS' }));
+          stagePipelineKeyById = new Map(allStages.map((s: any) => [s.id, 'DISPOSITIONS']));
         }
       }
       
@@ -605,6 +610,12 @@ const Pipeline = () => {
             ownerName = `${lead.vendor.firstName} ${lead.vendor.lastName}`;
           }
           
+          const stageId = lead.pipelineStageId || lead.stage || lead.pipelineStage?.id || 'unknown-stage';
+          const stagePipelineKey =
+            stagePipelineKeyById.get(stageId) ||
+            lead?.pipelineStage?.pipeline?.key ||
+            (transactionPipelineView ? 'TRANSACTION' : currentPipeline);
+
           return {
             id: lead.id,
             address: addressDisplay,
@@ -623,8 +634,9 @@ const Pipeline = () => {
             currentPrice: lead.deal?.soldPrice || 0,
             // IMPORTANT: Always prefer UUID ids for matching pipeline columns
             // Some API responses include `pipelineStageId` but not `stage`, especially after filtering.
-            stage: lead.pipelineStageId || lead.stage || lead.pipelineStage?.id || 'unknown-stage',
+            stage: stageId,
             stageName: lead.pipelineStage?.name || lead.stageName || 'Unknown Stage',
+            stagePipelineKey,
             assignedAgent: lead.assignedUser ? `${lead.assignedUser.firstName} ${lead.assignedUser.lastName}` : undefined,
             leadType: lead.leadType,
             status: lead.needsAttention ? 'urgent' : 'active',
@@ -668,6 +680,18 @@ const Pipeline = () => {
     setActiveId(event.active.id as string);
   };
 
+  const getStagePipelineKey = useCallback(
+    (stageId: string) => {
+      const s = pipelineStages.find((x: any) => x?.id === stageId);
+      const keyFromStage = s?.pipelineKey || s?.pipeline?.key;
+      if (keyFromStage) return String(keyFromStage).toUpperCase();
+      return transactionPipelineView && pipelineAccess?.allowedPipelines?.includes('TRANSACTION')
+        ? 'TRANSACTION'
+        : String(currentPipeline || 'ACQUISITIONS').toUpperCase();
+    },
+    [pipelineStages, transactionPipelineView, pipelineAccess, currentPipeline]
+  );
+
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveId(null);
@@ -710,7 +734,12 @@ const Pipeline = () => {
     // EXISTING: Update UI immediately (optimistic update)
     setLeads(prev => prev.map(lead => 
       lead.id === leadId 
-        ? { ...lead, stage: newStageId, statusChangedDate: new Date().toISOString() }
+        ? {
+            ...lead,
+            stage: newStageId,
+            stagePipelineKey: getStagePipelineKey(newStageId),
+            statusChangedDate: new Date().toISOString(),
+          }
         : lead
     ));
 
@@ -761,6 +790,7 @@ const Pipeline = () => {
             ? { 
                 ...lead, 
                 stage: newStageId, 
+                stagePipelineKey: getStagePipelineKey(newStageId),
                 statusChangedDate: new Date().toISOString(),
                 leadType: updatedLead.leadType // Update leadType from backend
               }
@@ -775,7 +805,12 @@ const Pipeline = () => {
       // EXISTING: Revert optimistic update on error
       setLeads(prev => prev.map(lead => 
         lead.id === leadId 
-          ? { ...lead, stage: leadToMove.stage, statusChangedDate: leadToMove.statusChangedDate }
+          ? {
+              ...lead,
+              stage: leadToMove.stage,
+              stagePipelineKey: (leadToMove as any)?.stagePipelineKey || getStagePipelineKey(leadToMove.stage),
+              statusChangedDate: leadToMove.statusChangedDate,
+            }
           : lead
       ));
 
@@ -1219,7 +1254,12 @@ const Pipeline = () => {
                 // Now proceed with stage change
                 setLeads(prev => prev.map(lead => 
                   lead.id === pendingStageChange.leadId 
-                    ? { ...lead, stage: pendingStageChange.newStageId, statusChangedDate: new Date().toISOString() }
+                    ? {
+                        ...lead,
+                        stage: pendingStageChange.newStageId,
+                        stagePipelineKey: getStagePipelineKey(pendingStageChange.newStageId),
+                        statusChangedDate: new Date().toISOString(),
+                      }
                     : lead
                 ));
                 
@@ -1272,7 +1312,12 @@ const Pipeline = () => {
               // Now proceed with stage change
               setLeads(prev => prev.map(lead => 
                 lead.id === pendingStageChange.leadId 
-                  ? { ...lead, stage: pendingStageChange.newStageId, statusChangedDate: new Date().toISOString() }
+                  ? {
+                      ...lead,
+                      stage: pendingStageChange.newStageId,
+                      stagePipelineKey: getStagePipelineKey(pendingStageChange.newStageId),
+                      statusChangedDate: new Date().toISOString(),
+                    }
                   : lead
               ));
               
@@ -1314,7 +1359,12 @@ const Pipeline = () => {
               // Now proceed with stage change
               setLeads(prev => prev.map(lead => 
                 lead.id === pendingStageChange.leadId 
-                  ? { ...lead, stage: pendingStageChange.newStageId, statusChangedDate: new Date().toISOString() }
+                  ? {
+                      ...lead,
+                      stage: pendingStageChange.newStageId,
+                      stagePipelineKey: getStagePipelineKey(pendingStageChange.newStageId),
+                      statusChangedDate: new Date().toISOString(),
+                    }
                   : lead
               ));
               

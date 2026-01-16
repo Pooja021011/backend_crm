@@ -33,6 +33,7 @@ interface PipelineColumnProps {
     status?: string;
     openTasks?: number;
     openTasksMine?: number;
+    stagePipelineKey?: string;
   }>;
   onLeadClick?: (leadId: string) => void;
   currentPipeline?: string;

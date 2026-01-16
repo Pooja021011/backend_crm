@@ -39,6 +39,7 @@ interface PipelineCardProps {
     status?: string;
     openTasks?: number;
     openTasksMine?: number;
+    stagePipelineKey?: string;
   };
   isDragging?: boolean;
   onViewDetails?: () => void;
@@ -169,8 +170,9 @@ export const PipelineCard = ({ lead, isDragging, onViewDetails, currentPipeline 
           </div>
         </div>
 
-        {/* Status Indicators - Only show for Buyer leads (Dispositions pipeline) */}
-        {canShowTransactionFlags && (currentPipeline === 'DISPOSITIONS' || lead.leadType === 'BUYER') && (
+        {/* Status Indicators - show when lead is currently in Dispositions pipeline stages */}
+        {canShowTransactionFlags &&
+          ((lead.stagePipelineKey || currentPipeline || '').toUpperCase() === 'DISPOSITIONS') && (
           <div className="flex items-center gap-2 pt-0.5">
             <div className="flex items-center gap-0.5">
               <Checkbox 
