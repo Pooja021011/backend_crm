@@ -216,6 +216,31 @@ export const leadRepository = {
   async update(id: string, data: any) {
     // Transform nested relations for proper Prisma update syntax
     const updateData: any = { ...data };
+
+    // Defensive sanitization:
+    // - Some clients/autosave flows may send empty strings for IDs or nested objects during hydration.
+    // - Treat empty-string IDs as "not provided" (do not update) to prevent wiping relations unintentionally.
+    // - Treat completely blank contact payloads as "not provided" to prevent clobbering seller/buyer/vendor.
+    const isBlank = (v: any) => v === '' || v === undefined;
+    const isAllBlank = (obj: any, keys: string[]) =>
+      !obj || keys.every((k) => isBlank(obj[k]));
+
+    // Normalize common ID fields: '' -> undefined (ignore update)
+    for (const key of [
+      'assignedUserId',
+      'dispositionAgentId',
+      'marketId',
+      'pipelineStageId',
+      'leadStatusId',
+      'leadSourceId',
+      'createdById',
+    ]) {
+      if (updateData[key] === '') {
+        delete updateData[key];
+      }
+    }
+    // Nested relation IDs
+    if (updateData.address?.countyId === '') delete updateData.address.countyId;
     
     // Get the current lead to determine its type
     const currentLead = await prisma.lead.findUnique({
@@ -248,7 +273,7 @@ export const leadRepository = {
     }
     
     // Handle seller relation - use upsert to create if doesn't exist
-    if (data.seller) {
+    if (data.seller && !isAllBlank(data.seller, ['firstName', 'lastName', 'phone', 'email', 'motivation', 'notes'])) {
       updateData.seller = { 
         upsert: {
           create: data.seller,
@@ -275,7 +300,7 @@ export const leadRepository = {
     }
     
     // Handle buyer relation - use upsert to create if doesn't exist
-    if (data.buyer) {
+    if (data.buyer && !isAllBlank(data.buyer, ['firstName', 'lastName', 'phone', 'email', 'vip', 'blacklisted', 'propertiesPurchased', 'creditScore', 'preApproved', 'motivation', 'timeline'])) {
       updateData.buyer = { 
         upsert: {
           create: data.buyer,
@@ -302,7 +327,7 @@ export const leadRepository = {
     }
     
     // Handle vendor relation - use upsert to create if doesn't exist
-    if (data.vendor) {
+    if (data.vendor && !isAllBlank(data.vendor, ['firstName', 'lastName', 'phone', 'email', 'company', 'companyName', 'industry', 'serviceType'])) {
       // Normalize vendor payload (some older clients use companyName/serviceType)
       const v = data.vendor || {};
       const normalizedVendor = {
@@ -340,7 +365,7 @@ export const leadRepository = {
     }
     
     // Handle address relation - use upsert to create if doesn't exist
-    if (data.address) {
+    if (data.address && !isAllBlank(data.address, ['address1', 'city', 'state', 'zipCode', 'zip', 'countyId'])) {
       // Map zipCode to zip for database compatibility
       const addressData: any = {
         address1: data.address.address1 || '',
@@ -363,7 +388,7 @@ export const leadRepository = {
     }
     
     // Handle buyer criteria relation - use upsert to create if doesn't exist
-    if (data.buyerCriteria) {
+    if (data.buyerCriteria && !isAllBlank(data.buyerCriteria, ['marketIds', 'assetClassIds', 'priceRangeIds'])) {
       updateData.buyerCriteria = { 
         upsert: {
           create: data.buyerCriteria,

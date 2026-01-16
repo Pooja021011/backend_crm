@@ -187,6 +187,9 @@ const LeadEdit: React.FC = () => {
   const autoSavePendingRef = useRef(false);
   const lastSavedPayloadRef = useRef<string>('');
   const lastSavedAtRef = useRef<number | null>(null);
+  // Prevent "first render / hydration" races from wiping fields via autosave.
+  // We only allow autosave (and payload diffs that can clear fields) after we establish a baseline snapshot.
+  const autoSaveBaselineReadyRef = useRef(false);
   const suppressNextAutoSaveRef = useRef(true);
   const rehabImmediateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoSaveDraftKey = id ? `lead-edit-draft:${id}` : null;
@@ -642,6 +645,7 @@ const LeadEdit: React.FC = () => {
         setTimeout(() => {
           try {
             lastSavedPayloadRef.current = JSON.stringify(buildLeadPatchPayload());
+            autoSaveBaselineReadyRef.current = true;
             setAutoSaveStatus('idle');
           } catch (e) {
             // ignore
@@ -1231,60 +1235,38 @@ const LeadEdit: React.FC = () => {
     const filteredContacts = (contacts || []).filter((c) => c?.name || c?.phone || c?.email);
     const primaryContact = filteredContacts[0];
 
-    if (lead?.leadType === 'SELLER') {
-      updates.seller = primaryContact?.name
-        ? {
-            firstName: primaryContact.name.split(' ')[0] || primaryContact.name,
-            lastName: primaryContact.name.split(' ').slice(1).join(' ') || '',
-            phone: primaryContact.phone || '',
-            email: primaryContact.email || '',
-            motivation: lead.seller?.motivation || null,
-            notes: lead.seller?.notes || null,
-          }
-        : {
-            firstName: '',
-            lastName: '',
-            phone: '',
-            email: '',
-            motivation: lead.seller?.motivation || null,
-            notes: lead.seller?.notes || null,
-          };
-    } else if (lead?.leadType === 'BUYER') {
-      updates.buyer = primaryContact?.name
-        ? {
-            firstName: primaryContact.name.split(' ')[0] || primaryContact.name,
-            lastName: primaryContact.name.split(' ').slice(1).join(' ') || '',
-            phone: primaryContact.phone || '',
-            email: primaryContact.email || '',
-            vip: lead.buyer?.vip || false,
-            blacklisted: (lead.buyer as any)?.blacklisted || false,
-          }
-        : {
-            firstName: '',
-            lastName: '',
-            phone: '',
-            email: '',
-            vip: lead.buyer?.vip || false,
-            blacklisted: (lead.buyer as any)?.blacklisted || false,
-          };
-    } else if (lead?.leadType === 'VENDOR') {
-      updates.vendor = primaryContact?.name
-        ? {
-            firstName: primaryContact.name.split(' ')[0] || primaryContact.name,
-            lastName: primaryContact.name.split(' ').slice(1).join(' ') || '',
-            phone: primaryContact.phone || '',
-            email: primaryContact.email || '',
-            companyName: (lead.vendor as any)?.companyName || null,
-            serviceType: (lead.vendor as any)?.serviceType || null,
-          }
-        : {
-            firstName: '',
-            lastName: '',
-            phone: '',
-            email: '',
-            companyName: (lead.vendor as any)?.companyName || null,
-            serviceType: (lead.vendor as any)?.serviceType || null,
-          };
+    // IMPORTANT:
+    // Do NOT auto-clear contact fields when contacts are empty/unloaded.
+    // This page uses autosave and can race with async hydration; sending empty strings wipes existing data.
+    if (primaryContact) {
+      if (lead?.leadType === 'SELLER') {
+        updates.seller = {
+          firstName: primaryContact.name?.split(' ')[0] || primaryContact.name || '',
+          lastName: primaryContact.name?.split(' ').slice(1).join(' ') || '',
+          phone: primaryContact.phone || '',
+          email: primaryContact.email || '',
+          motivation: lead.seller?.motivation || null,
+          notes: lead.seller?.notes || null,
+        };
+      } else if (lead?.leadType === 'BUYER') {
+        updates.buyer = {
+          firstName: primaryContact.name?.split(' ')[0] || primaryContact.name || '',
+          lastName: primaryContact.name?.split(' ').slice(1).join(' ') || '',
+          phone: primaryContact.phone || '',
+          email: primaryContact.email || '',
+          vip: lead.buyer?.vip || false,
+          blacklisted: (lead.buyer as any)?.blacklisted || false,
+        };
+      } else if (lead?.leadType === 'VENDOR') {
+        updates.vendor = {
+          firstName: primaryContact.name?.split(' ')[0] || primaryContact.name || '',
+          lastName: primaryContact.name?.split(' ').slice(1).join(' ') || '',
+          phone: primaryContact.phone || '',
+          email: primaryContact.email || '',
+          companyName: (lead.vendor as any)?.companyName || null,
+          serviceType: (lead.vendor as any)?.serviceType || null,
+        };
+      }
     }
 
     // Custom fields: merge to avoid wiping unknown keys
@@ -1306,10 +1288,11 @@ const LeadEdit: React.FC = () => {
     }
 
     // Assigned agents (allow clearing)
-    if ((lead?.assignedUserId || '') !== (acquisitionsAgent || '')) {
+    // Guard: don't let hydration races clear agent assignments before we've established a baseline.
+    if (autoSaveBaselineReadyRef.current && (lead?.assignedUserId || '') !== (acquisitionsAgent || '')) {
       updates.assignedUserId = acquisitionsAgent ? acquisitionsAgent : null;
     }
-    if ((lead?.dispositionAgentId || '') !== (dispositionsAgent || '')) {
+    if (autoSaveBaselineReadyRef.current && (lead?.dispositionAgentId || '') !== (dispositionsAgent || '')) {
       updates.dispositionAgentId = dispositionsAgent ? dispositionsAgent : null;
     }
 
@@ -1503,7 +1486,10 @@ const LeadEdit: React.FC = () => {
         rehabImmediateSaveTimerRef.current = null;
       }
       // Fire and forget; SPA navigation won't cancel this in most cases.
-      void flushAutoSave('manual');
+      // Guard: don't run autosave until a baseline has been established (prevents wiping on fast navigation).
+      if (autoSaveBaselineReadyRef.current) {
+        void flushAutoSave('manual');
+      }
     };
   }, [flushAutoSave]);
 
@@ -1513,6 +1499,7 @@ const LeadEdit: React.FC = () => {
 
     const bestEffortKeepaliveSave = () => {
       try {
+        if (!autoSaveBaselineReadyRef.current) return;
         const payload = buildLeadPatchPayload();
         const payloadStr = JSON.stringify(payload);
         if (!payloadStr || payloadStr === lastSavedPayloadRef.current) return;
