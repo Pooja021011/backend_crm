@@ -644,9 +644,9 @@ const LeadEdit: React.FC = () => {
         // Establish baseline after state hydration completes (best-effort)
         setTimeout(() => {
           try {
-            // Baseline snapshot: include everything so we can correctly diff, but autosave itself
-            // will omit lead-owner/contact fields (see scheduleAutoSave/keepalive).
-            lastSavedPayloadRef.current = JSON.stringify(buildLeadPatchPayload());
+            // Baseline snapshot for autosave: omit Lead Owners/contact fields so autosave
+            // can never wipe them during hydration or blur/debounce saves.
+            lastSavedPayloadRef.current = JSON.stringify(buildLeadPatchPayload({ includeLeadOwners: false }));
             autoSaveBaselineReadyRef.current = true;
             setAutoSaveStatus('idle');
           } catch (e) {
@@ -1344,7 +1344,7 @@ const LeadEdit: React.FC = () => {
         return;
       }
 
-      const payload = buildLeadPatchPayload();
+      const payload = buildLeadPatchPayload({ includeLeadOwners: false });
       const payloadStr = JSON.stringify(payload);
 
       // No actual lead changes → do nothing (prevents flicker from unrelated inputs like task dialogs)
@@ -1467,7 +1467,7 @@ const LeadEdit: React.FC = () => {
     // Skip the very first run after load/hydrate
     if (suppressNextAutoSaveRef.current) {
       suppressNextAutoSaveRef.current = false;
-      lastSavedPayloadRef.current = JSON.stringify(buildLeadPatchPayload());
+      lastSavedPayloadRef.current = JSON.stringify(buildLeadPatchPayload({ includeLeadOwners: false }));
       return;
     }
 
