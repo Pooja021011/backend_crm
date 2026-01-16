@@ -188,6 +188,7 @@ const LeadEdit: React.FC = () => {
   const lastSavedPayloadRef = useRef<string>('');
   const lastSavedAtRef = useRef<number | null>(null);
   const suppressNextAutoSaveRef = useRef(true);
+  const rehabImmediateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoSaveDraftKey = id ? `lead-edit-draft:${id}` : null;
   const [activeTab, setActiveTab] = useState('acquisitions');
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -1462,6 +1463,17 @@ const LeadEdit: React.FC = () => {
     ]
   );
 
+  const requestImmediateRehabSave = useCallback(() => {
+    // Coalesce rapid rehab edits (toggles, sliders, calculations) into a single quick save.
+    if (rehabImmediateSaveTimerRef.current) {
+      clearTimeout(rehabImmediateSaveTimerRef.current);
+      rehabImmediateSaveTimerRef.current = null;
+    }
+    rehabImmediateSaveTimerRef.current = setTimeout(() => {
+      void flushAutoSave('manual');
+    }, 250);
+  }, [flushAutoSave]);
+
   const scheduleAutoSave = useCallback(() => {
     if (!id || !lead || !canEditLead) return;
 
@@ -1482,6 +1494,61 @@ const LeadEdit: React.FC = () => {
       void flushAutoSave('debounce');
     }, 2000); // Increased from 800ms to 2000ms to allow user to finish typing
   }, [id, lead, canEditLead, buildLeadPatchPayload, flushAutoSave]);
+
+  // Best-effort: if user navigates away/unmounts quickly, try to persist pending edits.
+  useEffect(() => {
+    return () => {
+      if (rehabImmediateSaveTimerRef.current) {
+        clearTimeout(rehabImmediateSaveTimerRef.current);
+        rehabImmediateSaveTimerRef.current = null;
+      }
+      // Fire and forget; SPA navigation won't cancel this in most cases.
+      void flushAutoSave('manual');
+    };
+  }, [flushAutoSave]);
+
+  // Best-effort save on page hide / refresh / close (covers cases where user leaves before debounce fires).
+  useEffect(() => {
+    if (!id || !lead || !canEditLead) return;
+
+    const bestEffortKeepaliveSave = () => {
+      try {
+        const payload = buildLeadPatchPayload();
+        const payloadStr = JSON.stringify(payload);
+        if (!payloadStr || payloadStr === lastSavedPayloadRef.current) return;
+
+        const accessToken = localStorage.getItem('accessToken');
+        void fetch(`${API_BASE}/leads/${id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+          body: payloadStr,
+          // keepalive allows the request to outlive the page in some browsers
+          keepalive: true,
+        } as any);
+      } catch {
+        // ignore
+      }
+    };
+
+    const onPageHide = () => bestEffortKeepaliveSave();
+    const onBeforeUnload = () => bestEffortKeepaliveSave();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') bestEffortKeepaliveSave();
+    };
+
+    window.addEventListener('pagehide', onPageHide);
+    window.addEventListener('beforeunload', onBeforeUnload);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      window.removeEventListener('pagehide', onPageHide);
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [id, lead, canEditLead, buildLeadPatchPayload]);
 
   // On mount (and when lead is loaded), if we have a pending draft payload, try to flush it
   useEffect(() => {
@@ -3417,13 +3484,17 @@ const LeadEdit: React.FC = () => {
                   initialToggledItems={rehabToggledItems}
                   initialNumberOfWindows={rehabNumberOfWindows}
                   initialCustomValues={rehabCustomValues}
-                  onTotalChange={(total) => setRehabBudget(total.toString())}
+                  onTotalChange={(total) => {
+                    setRehabBudget(total.toString());
+                    requestImmediateRehabSave();
+                  }}
                   onBathroomsChange={(n) => setBathrooms(String(n))}
                   onDataChange={(data) => {
                     setRehabFinishLevel(data.finishLevel as 'low_end' | 'mid_range' | 'high_end');
                     setRehabToggledItems(data.toggledItems);
                     setRehabNumberOfWindows(data.numberOfWindows);
                     setRehabCustomValues(data.customValues || {});
+                    requestImmediateRehabSave();
                   }}
                 />
 
