@@ -89,7 +89,7 @@ export const stageTransitionService = {
 
         if (!nonEmpty(contact?.firstName)) requiredFields.push('firstName');
         if (!nonEmpty(contact?.lastName)) requiredFields.push('lastName');
-        if (!nonEmpty(contact?.phone)) requiredFields.push('phone');
+        // Phone is NOT required for stage transition validation (per CRM requirement)
 
         // For property leads (SELLER), address must be present.
         if (lead.leadType === 'SELLER') {
@@ -108,7 +108,7 @@ export const stageTransitionService = {
         
         if (requiredFields.length > 0) {
           // Build a clear message: separate “basic info” from “property info” (custom fields).
-          const basic = requiredFields.filter(f => ['firstName','lastName','phone','address1','city','state','zip'].includes(f));
+          const basic = requiredFields.filter(f => ['firstName','lastName','address1','city','state','zip'].includes(f));
           const dd = requiredFields.filter(f => !basic.includes(f));
           if (basic.length) errors.push(`Basic information required: ${basic.join(', ')}`);
           if (dd.length) errors.push(`Property information required: ${dd.join(', ')}`);

@@ -85,7 +85,8 @@ export const PipelineColumn = ({ stage, leads, onLeadClick, currentPipeline }: P
           ref={setNodeRef}
           className="p-1.5 flex-1 overflow-y-auto"
         >
-          <SortableContext 
+          <SortableContext
+            id={stage.id}
             items={leads.map(lead => lead.id)} 
             strategy={verticalListSortingStrategy}
           >

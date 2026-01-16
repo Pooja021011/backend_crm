@@ -33,34 +33,11 @@ export const inboxRepository = {
     const isNoteInternal = Boolean(filters.internal) && filters.type === 'NOTE' && Boolean(filters.userId);
 
     // For internal NOTE inbox:
-    // - Tagged: metadata.mentionedUserIds contains userId
-    // - Direct: createdById != userId and lead is assigned/created by userId
+    // - Tagged: metadata.mentionedUserIds contains userId (only notes where user was @mentioned by others)
+    // Note: We'll filter in-memory after fetching since Prisma's JSON array filtering is unreliable
     const internalNoteFilter = isNoteInternal
       ? {
-          AND: [
-            { type: 'NOTE' as any },
-            {
-              OR: [
-                {
-                  metadata: {
-                    path: ['mentionedUserIds'],
-                    array_contains: [filters.userId as string],
-                  },
-                },
-                {
-                  AND: [
-                    { createdById: { not: filters.userId as string } },
-                    {
-                      OR: [
-                        { lead: { assignedUserId: filters.userId as string } },
-                        { lead: { createdById: filters.userId as string } },
-                      ],
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
+          type: 'NOTE' as any,
         }
       : {};
 
@@ -113,6 +90,12 @@ export const inboxRepository = {
           }
         : {};
 
+    // Debug: Log the filter being used
+    if (isNoteInternal) {
+      console.log('🔍 Internal NOTE filter:', JSON.stringify(internalNoteFilter, null, 2));
+      console.log('🔍 Looking for userId:', filters.userId);
+    }
+
     const items = await prisma.communication.findMany({
       where: {
         ...(isNoteInternal ? internalNoteFilter : userFilter),
@@ -129,12 +112,35 @@ export const inboxRepository = {
       },
     });
 
+    // Debug: Log results
+    if (isNoteInternal) {
+      console.log('🔍 Found communications (before filtering):', items.length);
+      items.forEach((item: any) => {
+        console.log('  - Communication:', item.id, 'metadata:', item.metadata);
+      });
+    }
+
+    // For internal NOTE inbox, filter by mentionedUserIds in-memory
+    let filteredItems = items;
+    if (isNoteInternal && filters.userId) {
+      filteredItems = items.filter((item: any) => {
+        const metadata = item.metadata as any;
+        const mentionedUserIds = metadata?.mentionedUserIds;
+        const isMentioned = Array.isArray(mentionedUserIds) && mentionedUserIds.includes(filters.userId);
+        if (isMentioned) {
+          console.log('✅ User IS mentioned in communication:', item.id);
+        }
+        return isMentioned;
+      });
+      console.log('🔍 After filtering by mentions:', filteredItems.length);
+    }
+
     // `leadOnly` means: return only items whose Lead still exists.
     // (Some DBs can contain orphaned communication rows due to missing FK cascades.)
     if (filters.leadOnly) {
-      return items.filter((c: any) => Boolean(c?.lead));
+      return filteredItems.filter((c: any) => Boolean(c?.lead));
     }
-    return items;
+    return filteredItems;
   },
 };
 

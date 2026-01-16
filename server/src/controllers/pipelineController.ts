@@ -94,7 +94,18 @@ export const pipelineController = {
       });
     } catch (error: any) {
       logger.error('Error in moveLeadToStage controller', { error: error.message });
-      res.status(500).json({
+      // Validation errors (e.g., missing required fields) should not be treated as 500s
+      if (error?.code === 'VALIDATION_REQUIRED') {
+        return res.status(400).json({
+          success: false,
+          error: error.message || 'Validation required',
+          code: error.code,
+          requiredFields: error.requiredFields || [],
+          stageName: error.stageName
+        });
+      }
+
+      return res.status(500).json({
         success: false,
         error: error.message || 'Internal server error'
       });
@@ -349,6 +360,14 @@ export const pipelineController = {
       const lastTouchedFrom = (req.query.lastTouchedFrom as string) || undefined;
       const lastTouchedTo = (req.query.lastTouchedTo as string) || undefined;
       
+      // Multi-select agent filters - handle arrays
+      const acqAgentIds = req.query.acqAgentIds 
+        ? (Array.isArray(req.query.acqAgentIds) ? req.query.acqAgentIds : [req.query.acqAgentIds]) as string[]
+        : undefined;
+      const dispAgentIds = req.query.dispAgentIds 
+        ? (Array.isArray(req.query.dispAgentIds) ? req.query.dispAgentIds : [req.query.dispAgentIds]) as string[]
+        : undefined;
+      
       const filters = {
         needsAttention: req.query.needsAttention === 'true',
         leadSourceId,
@@ -358,6 +377,8 @@ export const pipelineController = {
         createdTo,
         lastTouchedFrom,
         lastTouchedTo,
+        acqAgentIds,
+        dispAgentIds,
         userRole: userRoles[0], // Primary role
         userId: userId
       };

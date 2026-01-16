@@ -9,6 +9,7 @@ import { TrendingUp, TrendingDown, Users, DollarSign, Target, Clock, BarChart3, 
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
 import { API_BASE, makeApiCall } from '@/config/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { MultiSelect } from '@/components/ui/multi-select';
 
 const Metrics = () => {
   const [selectedPeriod, setSelectedPeriod] = useState('This Month');
@@ -20,7 +21,7 @@ const Metrics = () => {
   // Global Filters State
   const [showFilters, setShowFilters] = useState(false);
   const [customDateRange, setCustomDateRange] = useState<{ from?: Date; to?: Date }>({});
-  const [selectedSource, setSelectedSource] = useState<string>('all');
+  const [selectedSources, setSelectedSources] = useState<string[]>([]);
   const [availableSources, setAvailableSources] = useState<string[]>([]);
   // Teams (Acq/Disp) pipeline overview
   const [acqTotal, setAcqTotal] = useState<number>(0);
@@ -245,9 +246,9 @@ const Metrics = () => {
       filters.dateTo = dateRange.to.toISOString();
     }
     
-    // Source filters
-    if (selectedSource !== 'all') {
-      filters.sources = [selectedSource];
+    // Source filters (multi-select)
+    if (selectedSources.length > 0) {
+      filters.sources = selectedSources;
     }
     
     // Role-based scoping
@@ -1162,7 +1163,7 @@ const Metrics = () => {
       }
     };
     load();
-  }, [activeTab, showFilters, customDateRange, selectedSource]);
+  }, [activeTab, showFilters, customDateRange, selectedSources]);
 
   // Fetch Team pipelines on tab switch
   useEffect(() => {
@@ -1388,13 +1389,27 @@ const Metrics = () => {
 
       {/* Global Filters Panel */}
       {showFilters && (
-        <div className="bg-white border-b border-gray-200 px-6 py-3">
-          <div className="flex items-end gap-3">
-            {/* Date Range Filter */}
-            <div className="space-y-1 flex-1">
+        <div className="bg-white border-t border-b border-gray-200 px-6 py-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            {/* 1) Lead Source (multi-select) */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-700">Lead Source</label>
+              <MultiSelect
+                options={availableSources.map((source) => ({
+                  label: source,
+                  value: source,
+                }))}
+                selected={selectedSources}
+                onChange={setSelectedSources}
+                placeholder="All Sources"
+              />
+            </div>
+
+            {/* 2) Date Range */}
+            <div className="space-y-1">
               <label className="text-xs font-medium text-gray-700">Date Range</label>
-              <select 
-                className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              <select
+                className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 h-9"
                 value={selectedPeriod}
                 onChange={(e) => setSelectedPeriod(e.target.value)}
               >
@@ -1402,73 +1417,60 @@ const Metrics = () => {
                 <option value="Last Month">Last Month</option>
                 <option value="This Quarter">This Quarter</option>
                 <option value="This Year">This Year</option>
-                <option value="Custom Range">Custom Range</option>
+                <option value="Custom Range">Custom Range…</option>
               </select>
             </div>
 
-            {/* Custom Date From */}
+            {/* 3) Custom Range fields (inline next to Date Range) */}
             {selectedPeriod === 'Custom Range' && (
-              <div className="space-y-1 flex-1">
-                <label className="text-xs font-medium text-gray-700">From Date</label>
-                <input
-                  type="date"
-                  value={customDateRange.from?.toISOString().split('T')[0] || ''}
-                  onChange={(e) => setCustomDateRange(prev => ({ 
-                    ...prev, 
-                    from: e.target.value ? new Date(e.target.value) : undefined 
-                  }))}
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
+              <>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-gray-700">From</label>
+                  <input
+                    type="date"
+                    value={customDateRange.from?.toISOString().split('T')[0] || ''}
+                    onChange={(e) =>
+                      setCustomDateRange((prev) => ({
+                        ...prev,
+                        from: e.target.value ? new Date(e.target.value) : undefined,
+                      }))
+                    }
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 h-9"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-gray-700">To</label>
+                  <input
+                    type="date"
+                    value={customDateRange.to?.toISOString().split('T')[0] || ''}
+                    onChange={(e) =>
+                      setCustomDateRange((prev) => ({
+                        ...prev,
+                        to: e.target.value ? new Date(e.target.value) : undefined,
+                      }))
+                    }
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 h-9"
+                  />
+                </div>
+              </>
             )}
+          </div>
 
-            {/* Custom Date To */}
-            {selectedPeriod === 'Custom Range' && (
-              <div className="space-y-1 flex-1">
-                <label className="text-xs font-medium text-gray-700">To Date</label>
-                <input
-                  type="date"
-                  value={customDateRange.to?.toISOString().split('T')[0] || ''}
-                  onChange={(e) => setCustomDateRange(prev => ({ 
-                    ...prev, 
-                    to: e.target.value ? new Date(e.target.value) : undefined 
-                  }))}
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-            )}
-
-            {/* Lead Source Filter */}
-            <div className="space-y-1 flex-1">
-              <label className="text-xs font-medium text-gray-700">Lead Source</label>
-              <select 
-                className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                value={selectedSource}
-                onChange={(e) => setSelectedSource(e.target.value)}
-              >
-                <option value="all">All Sources</option>
-                {availableSources.map((source) => (
-                  <option key={source} value={source}>
-                    {source}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Filter Actions - Inline with filters */}
+          {/* Filter Actions (same layout as Leads/Pipeline) */}
+          <div className="flex items-center justify-end mt-4 pt-4 border-t border-gray-200">
             <div className="flex items-center gap-2">
-              <Button 
-                variant="destructive"
+              <Button
+                variant="outline"
                 size="sm"
                 onClick={() => {
                   setSelectedPeriod('This Month');
                   setCustomDateRange({});
-                  setSelectedSource('all');
+                  setSelectedSources([]);
                 }}
               >
                 Clear Filters
               </Button>
-              <Button 
+              <Button
                 variant="outline"
                 size="sm"
                 onClick={() => {

@@ -23,10 +23,12 @@ export const communicationController = {
     
     // If this is a NOTE with @mentions, create tasks for mentioned users
     if (type === 'NOTE' && body) {
+      console.log('📝 CREATE NOTE - Processing mentions...');
       const mentionedUserIds = await createTasksForMentions(req.params.id, body, (req as any).user?.id);
 
       // Store mention recipients for inbox notification targeting
       if (mentionedUserIds.length > 0) {
+        console.log('✅ CREATE NOTE - Found mentions, updating communication with metadata');
         const mergedMetadata = {
           ...(typeof created?.metadata === 'object' && created?.metadata ? created.metadata : {}),
           mentionedUserIds,
@@ -40,6 +42,9 @@ export const communicationController = {
             metadata: mergedMetadata,
           },
         });
+        console.log('✅ CREATE NOTE - Communication updated with mentionedUserIds:', mentionedUserIds);
+      } else {
+        console.log('⚠️ CREATE NOTE - No mentions found or no users matched');
       }
     }
     
@@ -76,8 +81,15 @@ export const communicationController = {
 
     const trimmed = body.trim();
 
+    console.log('✏️ EDIT NOTE - Processing mentions...');
     // Re-run mention parsing and create mention tasks for newly mentioned users (add-only for safety)
     const mentionedUserIds = trimmed ? await createTasksForMentions(req.params.id, trimmed, userId) : [];
+
+    if (mentionedUserIds.length > 0) {
+      console.log('✅ EDIT NOTE - Found mentions:', mentionedUserIds);
+    } else {
+      console.log('⚠️ EDIT NOTE - No mentions found or no users matched');
+    }
 
     const mergedMetadata = {
       ...(typeof (comm as any)?.metadata === 'object' && (comm as any)?.metadata ? (comm as any).metadata : {}),
@@ -93,6 +105,7 @@ export const communicationController = {
       metadata: mergedMetadata,
     });
 
+    console.log('✅ EDIT NOTE - Note updated with direction:', direction);
     res.json({ data: updated });
   },
 };
@@ -101,11 +114,17 @@ export const communicationController = {
 async function createTasksForMentions(leadId: string, noteBody: string, createdById?: string): Promise<string[]> {
   try {
     // Extract all @mentions from the note body
-    // Pattern: @FirstName LastName
-    const mentionRegex = /@([A-Z][a-z]+)\s+([A-Z][a-z]+)/g;
+    // Pattern: @FirstName LastName (supports names with numbers like "Hardeep1")
+    const mentionRegex = /@([A-Z][a-z0-9]+)\s+([A-Z][a-z]+)/g;
     const mentions = Array.from(noteBody.matchAll(mentionRegex));
     
-    if (mentions.length === 0) return [];
+    console.log('🔍 Parsing mentions from note:', noteBody);
+    console.log('🔍 Found mentions:', mentions.map(m => `${m[1]} ${m[2]}`));
+    
+    if (mentions.length === 0) {
+      console.log('⚠️ No mentions found in note');
+      return [];
+    }
     
     // Get lead info to check permissions
     const lead = await prisma.lead.findUnique({
@@ -125,18 +144,33 @@ async function createTasksForMentions(leadId: string, noteBody: string, createdB
     
     if (!lead) return [];
     
-    // Get all users to match names
-    const users = await prisma.user.findMany({
-      where: {
-        OR: mentions.map(match => ({
-          AND: [
-            { firstName: { equals: match[1], mode: 'insensitive' as any } },
-            { lastName: { equals: match[2], mode: 'insensitive' as any } }
-          ]
-        }))
-      },
-      select: { id: true, firstName: true, lastName: true, roles: true }
+    // Get all active users first
+    const allUsers = await prisma.user.findMany({
+      select: { id: true, firstName: true, lastName: true, roles: true, status: true }
     });
+    
+    // Match mentions against users (case-insensitive, flexible matching)
+    // Supports: "@Hardeep Singh", "@Hardeep1 Singh" matching user "Hardeep Singh" or "Hardeep1 Singh"
+    const users = allUsers.filter(user => {
+      return mentions.some(match => {
+        const mentionFirst = match[1].toLowerCase();
+        const mentionLast = match[2].toLowerCase();
+        const userFirst = user.firstName.toLowerCase();
+        const userLast = user.lastName.toLowerCase();
+        
+        // Exact match OR user's name contains mention (handles both "Hardeep" and "Hardeep1")
+        const firstNameMatches = 
+          userFirst === mentionFirst || 
+          userFirst.includes(mentionFirst) || 
+          mentionFirst.includes(userFirst);
+        const lastNameMatches = userLast === mentionLast;
+        
+        return firstNameMatches && lastNameMatches;
+      });
+    });
+    
+    console.log('🔍 All mentions found:', mentions.map(m => `@${m[1]} ${m[2]}`));
+    console.log('🔍 Matched users:', users.map(u => `${u.firstName} ${u.lastName} (${u.id})`));
     
     // Filter users who have access to this lead
     const allowedUsers = users.filter(user => {

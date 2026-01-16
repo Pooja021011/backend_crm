@@ -83,7 +83,7 @@ export function LeadFileGallery({
   if (files.length === 0) {
     return (
       <div className={className}>
-        <div className="text-center py-4 bg-slate-50 rounded text-xs text-slate-500">
+        <div className="min-h-[72px] flex items-center justify-center bg-slate-50 rounded text-xs text-slate-500">
           No files yet. Click &quot;Upload&quot; to add files.
         </div>
       </div>

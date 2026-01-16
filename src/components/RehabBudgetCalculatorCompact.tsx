@@ -15,10 +15,11 @@ interface RehabBudgetCalculatorProps {
   readOnly?: boolean;
   onTotalChange?: (total: number) => void;
   onBathroomsChange?: (bathrooms: number) => void;
-  onDataChange?: (data: { finishLevel: string; toggledItems: ToggledItems; numberOfWindows: number }) => void;
+  onDataChange?: (data: { finishLevel: string; toggledItems: ToggledItems; numberOfWindows: number; customValues: { miscLabel: string; miscValue: number } }) => void;
   initialFinishLevel?: 'low_end' | 'mid_range' | 'high_end';
   initialToggledItems?: ToggledItems;
   initialNumberOfWindows?: number;
+  initialCustomValues?: { miscLabel?: string; miscValue?: number };
 }
 
 interface ToggledItems {
@@ -36,6 +37,7 @@ export function RehabBudgetCalculatorCompact({
   initialFinishLevel = 'mid_range',
   initialToggledItems = {},
   initialNumberOfWindows = 10,
+  initialCustomValues,
 }: RehabBudgetCalculatorProps) {
   const { toast } = useToast();
   const [expanded, setExpanded] = useState(false);
@@ -46,6 +48,8 @@ export function RehabBudgetCalculatorCompact({
   const [propertySquareFeet, setPropertySquareFeet] = useState(sqft);
   
   const [toggledItems, setToggledItems] = useState<ToggledItems>(initialToggledItems);
+  const [customMiscLabel, setCustomMiscLabel] = useState<string>(initialCustomValues?.miscLabel || '');
+  const [customMiscValue, setCustomMiscValue] = useState<number>(Number(initialCustomValues?.miscValue) || 0);
   const [calculation, setCalculation] = useState({
     itemizedCosts: {} as { [key: string]: number },
     subtotal: 0,
@@ -62,10 +66,14 @@ export function RehabBudgetCalculatorCompact({
       onDataChange({
         finishLevel,
         toggledItems,
-        numberOfWindows
+        numberOfWindows,
+        customValues: {
+          miscLabel: customMiscLabel,
+          miscValue: customMiscValue,
+        }
       });
     }
-  }, [finishLevel, toggledItems, numberOfWindows, onDataChange]);
+  }, [finishLevel, toggledItems, numberOfWindows, customMiscLabel, customMiscValue, onDataChange]);
 
   // Update property values when props change
   useEffect(() => {
@@ -80,17 +88,22 @@ export function RehabBudgetCalculatorCompact({
   }, [finishLevel, toggledItems, numberOfBathrooms, numberOfWindows, propertySquareFeet]);
 
   const handleBathroomsChange = (value: number) => {
-    const next = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+    // Integer-only (match Property Information Baths field)
+    const next = Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
     setNumberOfBathrooms(next);
     onBathroomsChange?.(next);
   };
 
+  const subtotalWithCustom = calculation.subtotal + (Number(customMiscValue) || 0);
+  const contingencyWithCustom = subtotalWithCustom * 0.10;
+  const totalWithCustom = subtotalWithCustom + contingencyWithCustom;
+
   // Notify parent when total changes
   useEffect(() => {
     if (onTotalChange) {
-      onTotalChange(calculation.totalCost);
+      onTotalChange(totalWithCustom);
     }
-  }, [calculation.totalCost, onTotalChange]);
+  }, [totalWithCustom, onTotalChange]);
 
   const calculateBudget = async () => {
     try {
@@ -132,10 +145,13 @@ export function RehabBudgetCalculatorCompact({
         body: JSON.stringify({
           finishLevel,
           toggledItems,
-          customValues: {},
-          subtotal: calculation.subtotal,
-          contingencyAmount: calculation.contingencyAmount,
-          totalCost: calculation.totalCost
+          customValues: {
+            miscLabel: customMiscLabel,
+            miscValue: customMiscValue,
+          },
+          subtotal: subtotalWithCustom,
+          contingencyAmount: contingencyWithCustom,
+          totalCost: totalWithCustom
         })
       });
 
@@ -189,6 +205,32 @@ export function RehabBudgetCalculatorCompact({
     );
   };
 
+  const renderCustomMiscRow = () => {
+    const value = Number(customMiscValue) || 0;
+    return (
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+          <Input
+            value={customMiscLabel}
+            onChange={(e) => setCustomMiscLabel(e.target.value)}
+            disabled={readOnly}
+            placeholder="Custom line item"
+            className="h-7 text-[10px]"
+          />
+        </div>
+        <div className="flex items-center gap-1">
+          <Input
+            type="number"
+            value={Number.isFinite(value) ? value : 0}
+            onChange={(e) => setCustomMiscValue(Number(e.target.value) || 0)}
+            disabled={readOnly}
+            className="h-7 w-20 text-[10px] tabular-nums"
+          />
+        </div>
+      </div>
+    );
+  };
+
   const renderGroup = (title: string, items: Array<{ key: string; label: string }>) => (
     <div className="rounded border border-slate-200 bg-white p-2">
       <div className="text-[10px] font-semibold text-slate-700 mb-1 uppercase tracking-wide">{title}</div>
@@ -211,7 +253,7 @@ export function RehabBudgetCalculatorCompact({
           <Wrench className="w-3 h-3 text-slate-500" />
           <span className="text-xs font-medium text-slate-600">Rehab Budget</span>
           <span className="text-xs text-emerald-600 font-semibold ml-2">
-            Rehab Budget: {formatCurrency(calculation.totalCost)}
+            Rehab Budget: {formatCurrency(totalWithCustom)}
           </span>
         </div>
         <Button
@@ -282,6 +324,7 @@ export function RehabBudgetCalculatorCompact({
               {renderGroup('Planning', [
                 { key: 'permits', label: 'Permits' },
                 { key: 'demolition', label: 'Demo' },
+                { key: 'cleanup', label: 'Cleanup (Sqft × 0.8)' },
               ])}
               {renderGroup('Structure', [
                 { key: 'foundation', label: 'Foundation' },
@@ -331,6 +374,12 @@ export function RehabBudgetCalculatorCompact({
                 { key: 'landscaping', label: 'Landscaping' },
                 { key: 'miscellaneous', label: 'Miscellaneous' },
               ])}
+              <div className="rounded border border-slate-200 bg-white p-2 mt-2">
+                <div className="text-[10px] font-semibold text-slate-700 mb-1 uppercase tracking-wide">
+                  Miscellaneous (Custom)
+                </div>
+                {renderCustomMiscRow()}
+              </div>
             </div>
           </div>
 

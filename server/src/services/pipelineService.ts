@@ -432,6 +432,15 @@ export const pipelineService = {
         whereClause.dispAgentId = filters.dispAgentId;
       }
 
+      // Multi-select agent filters
+      if (filters.acqAgentIds && filters.acqAgentIds.length > 0) {
+        whereClause.assignedUserId = { in: filters.acqAgentIds };
+      }
+
+      if (filters.dispAgentIds && filters.dispAgentIds.length > 0) {
+        whereClause.dispAgentId = { in: filters.dispAgentIds };
+      }
+
       if (filters.leadSourceId) {
         whereClause.leadSourceId = filters.leadSourceId;
       }

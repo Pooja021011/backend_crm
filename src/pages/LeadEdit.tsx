@@ -42,7 +42,8 @@ import {
   Send,
   RefreshCw,
   Image,
-  ClipboardList
+  ClipboardList,
+  Check
 } from 'lucide-react';
 import { differenceInHours, differenceInDays } from 'date-fns';
 import { API_BASE, makeApiCall } from '@/config/api';
@@ -324,6 +325,7 @@ const LeadEdit: React.FC = () => {
   const [rehabFinishLevel, setRehabFinishLevel] = useState<'low_end' | 'mid_range' | 'high_end'>('mid_range');
   const [rehabToggledItems, setRehabToggledItems] = useState<any>({});
   const [rehabNumberOfWindows, setRehabNumberOfWindows] = useState(10);
+  const [rehabCustomValues, setRehabCustomValues] = useState<{ miscLabel?: string; miscValue?: number }>({});
   
   // Comparables
   const [comparables, setComparables] = useState<any[]>([]);
@@ -362,6 +364,20 @@ const LeadEdit: React.FC = () => {
   // Photos
   const [photos, setPhotos] = useState<any[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+  const isAdditionalPropertyInfoComplete =
+    roofType.trim().length > 0 &&
+    hvacType.trim().length > 0 &&
+    waterType.trim().length > 0 &&
+    sewerType.trim().length > 0 &&
+    roofAge.trim().length > 0 &&
+    hvacAge.trim().length > 0 &&
+    waterHeaterAge.trim().length > 0 &&
+    Number.isFinite(Number(roofAge)) &&
+    Number.isFinite(Number(hvacAge)) &&
+    Number.isFinite(Number(waterHeaterAge));
+
+  const hasPhotos = photos.length > 0;
   
   // Transaction/Deal fields
   const [deal, setDeal] = useState<any>(null);
@@ -472,7 +488,8 @@ const LeadEdit: React.FC = () => {
 
         if (!stageResponse.ok) {
           const stageError = await stageResponse.json().catch(() => ({}));
-          throw new Error(stageError.message || 'Failed to change pipeline stage');
+          // Backend returns { success:false, error, code, requiredFields, stageName } for validation
+          throw new Error(stageError?.error || stageError?.message || 'Failed to change pipeline stage');
         }
 
         setPipelineStatus(stageId);
@@ -617,6 +634,7 @@ const LeadEdit: React.FC = () => {
         if (customFields.rehabFinishLevel) setRehabFinishLevel(customFields.rehabFinishLevel);
         if (customFields.rehabToggledItems) setRehabToggledItems(customFields.rehabToggledItems);
         if (customFields.rehabNumberOfWindows) setRehabNumberOfWindows(customFields.rehabNumberOfWindows);
+        if (customFields.rehabCustomValues) setRehabCustomValues(customFields.rehabCustomValues);
         setLeadSourceData(customFields.leadSourceData || {});
 
         // Establish baseline after state hydration completes (best-effort)
@@ -1114,7 +1132,7 @@ const LeadEdit: React.FC = () => {
       sqft: sqft ? parseInt(sqft) : null,
       lotSize: lotSize || null,
       bedrooms: bedrooms ? parseInt(bedrooms) : null,
-      bathrooms: bathrooms ? parseFloat(bathrooms) : null,
+      bathrooms: bathrooms ? parseInt(bathrooms, 10) : null,
       yearBuilt: yearBuilt ? parseInt(yearBuilt) : null,
       roofType: roofType || null,
       roofAge: roofAge ? parseInt(roofAge) : null,
@@ -1131,6 +1149,7 @@ const LeadEdit: React.FC = () => {
       rehabFinishLevel: rehabFinishLevel || null,
       rehabToggledItems: rehabToggledItems || {},
       rehabNumberOfWindows: rehabNumberOfWindows || null,
+      rehabCustomValues: rehabCustomValues || {},
       leadSourceData: leadSourceData || {},
       // Underwriting Calculator values
       underwritingArv: underwritingArv || null,
@@ -1162,6 +1181,7 @@ const LeadEdit: React.FC = () => {
     rehabFinishLevel,
     rehabToggledItems,
     rehabNumberOfWindows,
+    rehabCustomValues,
     leadSourceData,
     underwritingArv,
     underwritingTaxes,
@@ -1478,7 +1498,7 @@ const LeadEdit: React.FC = () => {
         sqft: sqft ? parseInt(sqft) : null,
         lotSize: lotSize || null,
         bedrooms: bedrooms ? parseInt(bedrooms) : null,
-        bathrooms: bathrooms ? parseFloat(bathrooms) : null,
+        bathrooms: bathrooms ? parseInt(bathrooms, 10) : null,
         yearBuilt: yearBuilt ? parseInt(yearBuilt) : null,
         roofType: roofType || null,
         roofAge: roofAge ? parseInt(roofAge) : null,
@@ -1495,6 +1515,7 @@ const LeadEdit: React.FC = () => {
         rehabFinishLevel: rehabFinishLevel || null,
         rehabToggledItems: rehabToggledItems || {},
         rehabNumberOfWindows: rehabNumberOfWindows || null,
+        rehabCustomValues: rehabCustomValues || {},
         leadSourceData: leadSourceData || {},
       // ARV (top box) + Underwriting Calculator values
       arv: arvValue || null,
@@ -1585,6 +1606,15 @@ const LeadEdit: React.FC = () => {
             } else {
               const stageError = await stageResponse.json();
               console.error('Stage change failed:', stageError);
+              // Revert UI selection if backend rejected the stage change
+              if (stageError?.code === 'VALIDATION_REQUIRED') {
+                setPipelineStatus(lead?.pipelineStageId || '');
+                toast({
+                  title: 'Stage Change Failed',
+                  description: stageError?.error || 'Validation required',
+                  variant: 'destructive',
+                });
+              }
               // Don't show error toast since the lead was already updated
             }
           } catch (stageError) {
@@ -2739,16 +2769,26 @@ const LeadEdit: React.FC = () => {
   }
 
   const primaryOwner = leadOwners.find((o) => o.isPrimary) || leadOwners[0];
-  const fallbackOwnerName =
-    lead.seller?.firstName && lead.seller?.lastName
-      ? `${lead.seller.firstName} ${lead.seller.lastName}`
-      : lead.buyer?.firstName && lead.buyer?.lastName
-        ? `${lead.buyer.firstName} ${lead.buyer.lastName}`
-        : lead.vendor?.firstName && lead.vendor?.lastName
-          ? `${lead.vendor.firstName} ${lead.vendor.lastName}`
-          : 'No Owner';
 
-  const ownerName = primaryOwner ? `${primaryOwner.firstName} ${primaryOwner.lastName}` : fallbackOwnerName;
+  const formatDisplayName = (firstName?: string, lastName?: string) => {
+    const fn = (firstName || '').trim();
+    const ln = (lastName || '').trim();
+    const full = `${fn} ${ln}`.trim();
+    return full || 'Unknown Caller';
+  };
+
+  const fallbackOwnerName =
+    (lead.seller?.firstName || lead.seller?.lastName)
+      ? formatDisplayName(lead.seller?.firstName, lead.seller?.lastName)
+      : (lead.buyer?.firstName || lead.buyer?.lastName)
+        ? formatDisplayName(lead.buyer?.firstName, lead.buyer?.lastName)
+        : (lead.vendor?.firstName || lead.vendor?.lastName)
+          ? formatDisplayName(lead.vendor?.firstName, lead.vendor?.lastName)
+          : 'Unknown Caller';
+
+  const ownerName = primaryOwner
+    ? formatDisplayName(primaryOwner.firstName, primaryOwner.lastName)
+    : fallbackOwnerName;
   const ownerEmail = primaryOwner?.email || lead.seller?.email || lead.buyer?.email || lead.vendor?.email || '';
   const ownerPhone = primaryOwner?.phone || lead.seller?.phone || lead.buyer?.phone || lead.vendor?.phone || '';
   const ownerContactLine = [ownerEmail, ownerPhone].filter(Boolean).join(' • ');
@@ -2832,7 +2872,7 @@ const LeadEdit: React.FC = () => {
         )}
 
         {/* Section 1 - Address + Owner */}
-        <div className="border border-slate-200 rounded-lg bg-white p-2 min-h-[80px]">
+        <div className="border border-slate-200 rounded-lg bg-white p-2 min-h-[96px]">
           <div className="grid grid-cols-12 gap-4 items-start">
             {/* Address */}
             <div className="col-span-12 md:col-span-6">
@@ -2979,7 +3019,7 @@ const LeadEdit: React.FC = () => {
         {/* Section 2 - Lead Details + Timeline (side by side) */}
         <div className="grid grid-cols-12 gap-2 items-stretch">
           {/* Lead Details - Left Side (8 cols) */}
-          <div className="col-span-8 border border-slate-200 rounded-lg bg-white p-2 flex flex-col">
+          <div className="col-span-8 border border-slate-200 rounded-lg bg-white p-2 flex flex-col min-h-[96px]">
             <div className="flex items-center gap-1.5 mb-1">
               <FileText className="w-3 h-3 text-slate-500" />
               <span className="text-[11px] font-medium text-slate-600">Lead Details</span>
@@ -3017,11 +3057,13 @@ const LeadEdit: React.FC = () => {
               <div>
                 <Label className="text-[9px] text-slate-500">Pipeline Status</Label>
                 <Select value={pipelineStatus} onValueChange={handlePipelineStatusChange} disabled={!canEditLead}>
-                  <SelectTrigger className="h-5 text-[10px]"><SelectValue placeholder="Pipeline Status" /></SelectTrigger>
+                  <SelectTrigger className="h-5 px-2 py-0 text-[10px] [&>span]:w-full [&>span]:text-left">
+                    <SelectValue className="text-left" placeholder="Pipeline Status" />
+                  </SelectTrigger>
                   <SelectContent>
                     {pipelineStages.map((stage) => (
                       <SelectItem key={stage.id} value={stage.id}>
-                        {stage.name}
+                        {stage.name?.trim?.() || stage.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -3108,7 +3150,7 @@ const LeadEdit: React.FC = () => {
         </div>
 
         {/* Section 3 - Property Information (full width) */}
-        <div className="border border-slate-200 rounded-lg bg-white p-2 min-h-[80px]">
+        <div className="border border-slate-200 rounded-lg bg-white p-2 min-h-[96px]">
           <div className="flex items-center gap-1.5 mb-1">
             <Home className="w-3 h-3 text-slate-500" />
             <span className="text-[11px] font-medium text-slate-600">Property Information</span>
@@ -3140,7 +3182,22 @@ const LeadEdit: React.FC = () => {
             </div>
             <div className="flex flex-col">
               <Label className="text-[9px] text-slate-500 h-[14px] leading-[14px] mb-0.5">Baths</Label>
-              <Input type="number" step="0.5" value={bathrooms} onChange={(e) => setBathrooms(e.target.value)} placeholder="Baths" className="h-5 text-[10px]" disabled={!canEditLead} />
+              <Input
+                type="number"
+                step="1"
+                value={bathrooms}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  if (!Number.isFinite(v)) {
+                    setBathrooms('');
+                    return;
+                  }
+                  setBathrooms(String(Math.max(0, Math.round(v))));
+                }}
+                placeholder="Baths"
+                className="h-5 text-[10px]"
+                disabled={!canEditLead}
+              />
             </div>
             <div className="flex flex-col">
               <Label className="text-[9px] text-slate-500 h-[14px] leading-[14px] mb-0.5">Year</Label>
@@ -3150,64 +3207,6 @@ const LeadEdit: React.FC = () => {
         </div>
 
         {/* Contacts box removed (not needed) */}
-
-        {/* Offer Information - Show if offer data exists */}
-        {(lead?.customFields?.offerMadePrice || lead?.customFields?.maxAllowableOffer || lead?.customFields?.offerMadeResponse) && (
-          <div className="grid grid-cols-1 gap-3">
-            {/* Offer Information */}
-            <div className="border border-slate-200 rounded-lg bg-white p-3">
-              <div className="flex items-center gap-1.5 mb-2">
-                <DollarSign className="w-3.5 h-3.5 text-green-600" />
-                <span className="text-xs font-medium text-slate-600">Offer Information</span>
-                {lead?.customFields?.offerMadeResponse && (
-                  <Badge 
-                    className={`text-[10px] ml-auto ${
-                      lead.customFields.offerMadeResponse === 'Accepted' ? 'bg-green-100 text-green-700' :
-                      lead.customFields.offerMadeResponse === 'Negotiating' ? 'bg-blue-100 text-blue-700' :
-                      'bg-orange-100 text-orange-700'
-                    }`}
-                  >
-                    {lead.customFields.offerMadeResponse}
-                  </Badge>
-                )}
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <Label className="text-[10px] text-slate-500">Offer Made Price</Label>
-                  <div className="relative">
-                    <DollarSign className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-slate-400" />
-                    <Input 
-                      type="number" 
-                      value={lead?.customFields?.offerMadePrice || ''} 
-                      readOnly
-                      className="h-6 text-xs pl-6 bg-slate-50" 
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-[10px] text-slate-500">Max Allowable Offer</Label>
-                  <div className="relative">
-                    <DollarSign className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-slate-400" />
-                    <Input 
-                      type="number" 
-                      value={lead?.customFields?.maxAllowableOffer || ''} 
-                      readOnly
-                      className="h-6 text-xs pl-6 bg-slate-50" 
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-[10px] text-slate-500">Response Status</Label>
-                  <Input 
-                    value={lead?.customFields?.offerMadeResponse || 'N/A'} 
-                    readOnly
-                    className="h-6 text-xs bg-slate-50 font-medium" 
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Tabs Section */}
         <div className="grid grid-cols-12 gap-2">
@@ -3224,10 +3223,10 @@ const LeadEdit: React.FC = () => {
               }}
             >
               <TabsList className={`grid w-full ${tabsGridColsClass} h-7`}>
-                <TabsTrigger value="acquisitions" className="text-xs py-1">Acquisitions</TabsTrigger>
-                {canSeeTransactionsTab && <TabsTrigger value="transactions" className="text-xs py-1">Transactions</TabsTrigger>}
-                {canSeeDispositionsTab && <TabsTrigger value="dispositions" className="text-xs py-1">Dispositions</TabsTrigger>}
-                <TabsTrigger value="files" className="text-xs py-1">Files</TabsTrigger>
+                <TabsTrigger value="acquisitions" className="w-full h-full justify-center text-xs py-1">Acquisitions</TabsTrigger>
+                {canSeeDispositionsTab && <TabsTrigger value="dispositions" className="w-full h-full justify-center text-xs py-1">Dispositions</TabsTrigger>}
+                {canSeeTransactionsTab && <TabsTrigger value="transactions" className="w-full h-full justify-center text-xs py-1">Transactions</TabsTrigger>}
+                <TabsTrigger value="files" className="w-full h-full justify-center text-xs py-1">Files</TabsTrigger>
               </TabsList>
 
               {/* Acquisitions Tab */}
@@ -3239,6 +3238,11 @@ const LeadEdit: React.FC = () => {
                       <div className="flex items-center gap-1">
                         <ClipboardList className="w-3 h-3 text-slate-500" />
                         <span className="text-xs font-medium text-slate-600">Additional Property Information</span>
+                        {isAdditionalPropertyInfoComplete ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        ) : (
+                          <X className="w-3.5 h-3.5 text-red-500" />
+                        )}
                       </div>
                       <CollapsibleTrigger asChild>
                         <Button
@@ -3274,8 +3278,10 @@ const LeadEdit: React.FC = () => {
                       <div className="flex items-center gap-2">
                         <Image className="w-3 h-3 text-slate-500" />
                         <span className="text-xs font-medium text-slate-600">Photos</span>
-                        {photos.length > 0 && (
-                          <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
+                        {!hasPhotos ? (
+                          <X className="w-3.5 h-3.5 text-red-500" />
+                        ) : (
+                          <Badge className="bg-emerald-100 text-emerald-800 text-[10px] h-4 px-1.5">
                             {photos.length}
                           </Badge>
                         )}
@@ -3372,17 +3378,20 @@ const LeadEdit: React.FC = () => {
                 <RehabBudgetCalculatorCompact
                   leadId={id!}
                   sqft={parseInt(sqft) || 0}
-                  bathrooms={Math.max(0, Math.ceil(parseFloat(bathrooms) || 0))}
+                  // Keep Rehab bathrooms input in sync with Property Information baths (integer-only)
+                  bathrooms={Math.max(0, parseInt(bathrooms || '0', 10) || 0)}
                   readOnly={false}
                   initialFinishLevel={rehabFinishLevel}
                   initialToggledItems={rehabToggledItems}
                   initialNumberOfWindows={rehabNumberOfWindows}
+                  initialCustomValues={rehabCustomValues}
                   onTotalChange={(total) => setRehabBudget(total.toString())}
                   onBathroomsChange={(n) => setBathrooms(String(n))}
                   onDataChange={(data) => {
                     setRehabFinishLevel(data.finishLevel as 'low_end' | 'mid_range' | 'high_end');
                     setRehabToggledItems(data.toggledItems);
                     setRehabNumberOfWindows(data.numberOfWindows);
+                    setRehabCustomValues(data.customValues || {});
                   }}
                 />
 
@@ -3420,7 +3429,7 @@ const LeadEdit: React.FC = () => {
               {/* Transactions Tab */}
               {canSeeTransactionsTab && (
               <TabsContent value="transactions" className="mt-2">
-                <div className="border border-slate-200 rounded-lg bg-white p-2">
+                <div className="border border-slate-200 rounded-lg bg-white p-2 min-h-[120px]">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-medium text-slate-600">Transaction Details</span>
                     {!editingDeal && <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => setEditingDeal(true)}><Edit2 className="w-3 h-3 mr-1" />{deal ? 'Edit' : 'Create'}</Button>}
@@ -3449,7 +3458,9 @@ const LeadEdit: React.FC = () => {
                         <div><span className="text-slate-500">Closed:</span> <span className="font-medium">{deal.closedAt ? new Date(deal.closedAt).toLocaleDateString() : 'N/A'}</span></div>
                       </div>
                     ) : (
-                      <div className="text-center py-3 bg-slate-50 rounded text-[10px] text-slate-500">No transaction yet</div>
+                      <div className="min-h-[72px] flex items-center justify-center bg-slate-50 rounded text-xs text-slate-500">
+                        No transaction yet
+                      </div>
                     )}
                 </div>
               </TabsContent>
@@ -3458,7 +3469,7 @@ const LeadEdit: React.FC = () => {
               {/* Dispositions Tab */}
               {canSeeDispositionsTab && (
               <TabsContent value="dispositions" className="mt-2">
-                <div className="border border-slate-200 rounded-lg bg-white p-2">
+                <div className="border border-slate-200 rounded-lg bg-white p-2 min-h-[120px]">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-medium text-slate-600">Buyer Offers</span>
                     {!creatingOffer && !creatingBuyer && (
@@ -3530,17 +3541,21 @@ const LeadEdit: React.FC = () => {
                         </div>
                       ))}
                     </div>
-                  ) : (<div className="text-center py-2 bg-slate-50 rounded text-[10px] text-slate-500">No offers yet</div>)}
+                  ) : (
+                    <div className="min-h-[72px] flex items-center justify-center bg-slate-50 rounded text-xs text-slate-500">
+                      No offers yet
+                    </div>
+                  )}
                 </div>
               </TabsContent>
               )}
 
               {/* Files Tab */}
               <TabsContent value="files" className="mt-2">
-                <div className="border border-slate-200 rounded-lg bg-white p-2">
+                <div className="border border-slate-200 rounded-lg bg-white p-2 min-h-[120px]">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-medium text-slate-600">Files</span>
-                    <Button size="sm" variant="ghost" className="h-6 text-xs px-2" disabled={uploading}>
+                    <Button size="sm" variant="ghost" className="h-7 text-xs px-2" disabled={uploading}>
                       <Upload className="w-3 h-3 mr-1" />
                       <label htmlFor="file-upload" className="cursor-pointer">{uploading ? 'Uploading...' : 'Upload'}</label>
                       <input id="file-upload" type="file" className="hidden" onChange={handleFileUpload} disabled={uploading} multiple />
@@ -3548,6 +3563,7 @@ const LeadEdit: React.FC = () => {
                   </div>
                   <LeadFileGallery
                     files={files}
+                    className="min-h-[72px]"
                     onDeleteFile={async (file) => {
                       if (confirm('Delete this file?')) {
                         try {

@@ -45,7 +45,7 @@ interface PipelineCardProps {
 export const PipelineCard = ({ lead, isDragging, onViewDetails, currentPipeline }: PipelineCardProps) => {
   const { user } = useAuth();
   const userRoles = user?.roles || [];
-  const canShowTransactionFlags = userRoles.includes('ADMIN') || userRoles.includes('DISP') || userRoles.includes('TC');
+  const canShowTransactionFlags = userRoles.includes('ADMIN') || userRoles.includes('MANAGER') || userRoles.includes('EXECUTIVE') || userRoles.includes('DISP') || userRoles.includes('TC');
 
   const {
     attributes,
@@ -163,8 +163,8 @@ export const PipelineCard = ({ lead, isDragging, onViewDetails, currentPipeline 
           </div>
         </div>
 
-        {/* Status Indicators - Only show in Dispositions pipeline */}
-        {canShowTransactionFlags && currentPipeline === 'DISPOSITIONS' && (
+        {/* Status Indicators - Only show for Buyer leads (Dispositions pipeline) */}
+        {canShowTransactionFlags && (currentPipeline === 'DISPOSITIONS' || lead.leadType === 'BUYER') && (
           <div className="flex items-center gap-2 pt-0.5">
             <div className="flex items-center gap-0.5">
               <Checkbox 

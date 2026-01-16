@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +22,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, closestCenter, useSensor, useSensors } from "@dnd-kit/core";
 import { snapCenterToCursor } from "@dnd-kit/modifiers";
 import { differenceInHours, isToday, addDays } from "date-fns";
@@ -43,6 +44,7 @@ const Pipeline = () => {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [pipelineAccess, setPipelineAccess] = useState<any>(null);
   const [currentPipeline, setCurrentPipeline] = useState<string>('ACQUISITIONS');
+  const didInitialLoadRef = useRef(false);
   
   // API state
   const [pipelineStages, setPipelineStages] = useState<any[]>([]);
@@ -56,13 +58,20 @@ const Pipeline = () => {
   const [acqAgents, setAcqAgents] = useState<any[]>([]);
   const [dispAgents, setDispAgents] = useState<any[]>([]);
 
-  // Filter states (directly applied, no draft/apply pattern)
+  // Filter states - Multi-select arrays for agents only
   const [createdFrom, setCreatedFrom] = useState<string>('');
   const [createdTo, setCreatedTo] = useState<string>('');
   const [lastTouchedFrom, setLastTouchedFrom] = useState<string>('');
   const [lastTouchedTo, setLastTouchedTo] = useState<string>('');
-  const [acqAgentId, setAcqAgentId] = useState<string>('all');
-  const [dispAgentId, setDispAgentId] = useState<string>('all');
+  // Date-range dropdowns (match Leads page Date Created filter UX)
+  const [createdDateRange, setCreatedDateRange] = useState<string>('');
+  const [createdCustomFrom, setCreatedCustomFrom] = useState<string>('');
+  const [createdCustomTo, setCreatedCustomTo] = useState<string>('');
+  const [lastTouchedDateRange, setLastTouchedDateRange] = useState<string>('');
+  const [lastTouchedCustomFrom, setLastTouchedCustomFrom] = useState<string>('');
+  const [lastTouchedCustomTo, setLastTouchedCustomTo] = useState<string>('');
+  const [selectedAcqAgents, setSelectedAcqAgents] = useState<string[]>([]);
+  const [selectedDispAgents, setSelectedDispAgents] = useState<string[]>([]);
   
   // ViewLeadDialog state
   const [selectedLead, setSelectedLead] = useState<any>(null);
@@ -235,8 +244,10 @@ const Pipeline = () => {
       if (isAdminOrManager) {
         loadAgents();
       }
-      // Pass the pipeline key directly to avoid state timing issues
+      // Keep original on-load behavior: immediately load pipeline data once we know the first pipeline key.
+      // (We still guard the secondary effect to avoid an immediate duplicate fetch.)
       if (accessData?.allowedPipelines?.[0]) {
+        didInitialLoadRef.current = true;
         loadPipelineData(accessData.allowedPipelines[0]);
       }
     };
@@ -246,9 +257,14 @@ const Pipeline = () => {
   useEffect(() => {
     // Only load data if we have pipeline access loaded
     if (pipelineAccess) {
+      // Avoid double-fetch on initial mount (initializePipeline already loaded once)
+      if (didInitialLoadRef.current) {
+        didInitialLoadRef.current = false;
+        return;
+      }
       loadPipelineData();
     }
-  }, [transactionPipelineView, needsAttentionView, selectedLeadSource, currentPipeline, pipelineAccess, createdFrom, createdTo, lastTouchedFrom, lastTouchedTo, acqAgentId, dispAgentId]);
+  }, [transactionPipelineView, needsAttentionView, selectedLeadSource, currentPipeline, pipelineAccess, createdFrom, createdTo, lastTouchedFrom, lastTouchedTo, selectedAcqAgents, selectedDispAgents]);
 
   const loadPipelineAccess = async () => {
     try {
@@ -335,6 +351,54 @@ const Pipeline = () => {
       }
     } catch (error) {
       console.error('Failed to load agents:', error);
+    }
+  };
+
+  const formatDateInput = (d: Date) => {
+    // YYYY-MM-DD for <input type="date">
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const applyPresetRange = (
+    range: string,
+    setFrom: (v: string) => void,
+    setTo: (v: string) => void
+  ) => {
+    const now = new Date();
+    const from = new Date(now);
+    const to = new Date(now);
+
+    switch (range) {
+      case 'today':
+        setFrom(formatDateInput(from));
+        setTo(formatDateInput(to));
+        return;
+      case 'week':
+        from.setDate(now.getDate() - 7);
+        setFrom(formatDateInput(from));
+        setTo(formatDateInput(to));
+        return;
+      case 'month':
+        from.setMonth(now.getMonth() - 1);
+        setFrom(formatDateInput(from));
+        setTo(formatDateInput(to));
+        return;
+      case 'quarter':
+        from.setMonth(now.getMonth() - 3);
+        setFrom(formatDateInput(from));
+        setTo(formatDateInput(to));
+        return;
+      case 'year':
+        setFrom(`${now.getFullYear()}-01-01`);
+        setTo(formatDateInput(to));
+        return;
+      default:
+        // All Time / empty
+        setFrom('');
+        setTo('');
     }
   };
 
@@ -452,10 +516,13 @@ const Pipeline = () => {
         if (createdTo) filters.append('createdTo', createdTo);
         if (lastTouchedFrom) filters.append('lastTouchedFrom', lastTouchedFrom);
         if (lastTouchedTo) filters.append('lastTouchedTo', lastTouchedTo);
-        if (acqAgentId && acqAgentId !== 'all') filters.append('assignedUserId', acqAgentId);
-        if (dispAgentId && dispAgentId !== 'all') {
-          console.log('🔍 Applying DISP agent filter:', dispAgentId);
-          filters.append('dispAgentId', dispAgentId);
+        
+        // Multi-select agent filters
+        if (selectedAcqAgents.length > 0) {
+          selectedAcqAgents.forEach(agentId => filters.append('acqAgentIds', agentId));
+        }
+        if (selectedDispAgents.length > 0) {
+          selectedDispAgents.forEach(agentId => filters.append('dispAgentIds', agentId));
         }
       }
       
@@ -552,9 +619,10 @@ const Pipeline = () => {
             clearToClose: lead.clearToClose || false,
             originalPrice: lead.deal?.contractPrice || 0,
             currentPrice: lead.deal?.soldPrice || 0,
-            // Use the stage field from backend API, fallback to pipelineStage.id
-            stage: lead.stage || lead.pipelineStage?.id || 'unknown-stage',
-            stageName: lead.stageName || lead.pipelineStage?.name || 'Unknown Stage',
+            // IMPORTANT: Always prefer UUID ids for matching pipeline columns
+            // Some API responses include `pipelineStageId` but not `stage`, especially after filtering.
+            stage: lead.pipelineStageId || lead.stage || lead.pipelineStage?.id || 'unknown-stage',
+            stageName: lead.pipelineStage?.name || lead.stageName || 'Unknown Stage',
             assignedAgent: lead.assignedUser ? `${lead.assignedUser.firstName} ${lead.assignedUser.lastName}` : undefined,
             leadType: lead.leadType,
             status: lead.needsAttention ? 'urgent' : 'active',
@@ -581,50 +649,6 @@ const Pipeline = () => {
             assignedUserId: pipelineAccess?.canViewAssignedOnly ? (user?.id || undefined) : undefined,
           }
         );
-        
-        // Fallback to basic leads API if no leads found
-        if (transformedLeads.length === 0) {
-        const basicLeadsResponse = await makeApiCall(`${API_BASE}/leads`);
-        console.log('Basic leads response status:', basicLeadsResponse.status);
-        
-        if (basicLeadsResponse.ok) {
-          const basicLeadsData = await basicLeadsResponse.json();
-          console.log('Basic API leads response:', basicLeadsData);
-          
-          // Filter only leads with pipeline stages
-          const leadsWithStages = (basicLeadsData.data || []).filter((lead: any) => lead.pipelineStageId);
-          console.log('Leads with stages:', leadsWithStages.length);
-          
-          // Transform basic leads data
-          const transformedLeads = leadsWithStages.map((lead: any) => ({
-            id: lead.id,
-            address: lead.address?.address1 || `Lead ${lead.id.substring(0, 8)}`,
-            sellerName: lead.seller ? `${lead.seller.firstName} ${lead.seller.lastName}` : 'Unknown Seller',
-            buyerName: lead.buyer ? `${lead.buyer.firstName} ${lead.buyer.lastName}` : undefined,
-            dateCreated: lead.createdAt,
-            statusChangedDate: lead.updatedAt,
-            lastContactDate: lead.updatedAt,
-            priceReduction: false,
-            clearToClose: false,
-            originalPrice: 0,
-            currentPrice: 0,
-            stage: lead.pipelineStageId || 'new-lead',
-            stageName: 'Unknown Stage',
-            assignedAgent: lead.assignedUser ? `${lead.assignedUser.firstName} ${lead.assignedUser.lastName}` : undefined,
-            leadType: lead.leadType,
-            status: 'active'
-          }));
-          
-          setLeads(transformedLeads);
-          setNeedsAttentionCount(0);
-          console.log('Loaded basic leads from database:', transformedLeads.length);
-          console.log('Sample basic lead:', transformedLeads[0]);
-        } else {
-          console.log('Both API calls failed, using sample data');
-          setLeads(sampleLeads);
-          setNeedsAttentionCount(0);
-        }
-      }
 
     } catch (error) {
       console.error('Error loading pipeline data:', error);
@@ -649,7 +673,13 @@ const Pipeline = () => {
     if (!over) return;
 
     const leadId = active.id as string;
-    const newStageId = over.id as string;
+    // IMPORTANT: When dropping onto a card in a filled column, `over.id` is the lead id (not stage id).
+    // Use Sortable containerId when available; fallback to looking up the lead's current stage.
+    const overId = over.id as string;
+    const containerStageId =
+      (over.data?.current as any)?.sortable?.containerId as string | undefined;
+    const stageFromOverLead = leads.find(l => l.id === overId)?.stage as string | undefined;
+    const newStageId = containerStageId || stageFromOverLead || overId;
 
     // Find the lead being moved
     const leadToMove = leads.find(lead => lead.id === leadId);
@@ -717,6 +747,25 @@ const Pipeline = () => {
         throw new Error('Failed to move lead');
       }
 
+      // Fetch updated lead data from backend to get correct leadType
+      const updatedLeadResponse = await makeApiCall(`${API_BASE}/leads/${leadId}`);
+      if (updatedLeadResponse.ok) {
+        const updatedLeadData = await updatedLeadResponse.json();
+        const updatedLead = updatedLeadData.data || updatedLeadData;
+        
+        // Update lead with correct data from backend
+        setLeads(prev => prev.map(lead => 
+          lead.id === leadId 
+            ? { 
+                ...lead, 
+                stage: newStageId, 
+                statusChangedDate: new Date().toISOString(),
+                leadType: updatedLead.leadType // Update leadType from backend
+              }
+            : lead
+        ));
+      }
+
       // Success notification removed - only show errors
     } catch (error) {
       console.error('Error moving lead:', error);
@@ -738,9 +787,8 @@ const Pipeline = () => {
 
   const getLeadsForStage = (stageId: string) => {
     const filteredLeads = leads.filter(lead => {
-      // Match by stage ID (UUID from database) or stage name
-      const matches = lead.stage === stageId || lead.stageName === stageId;
-      return matches;
+      // Match by normalized stage UUID (preferred). We do NOT match by name to avoid mismatches.
+      return lead.stage === stageId;
     });
     
     
@@ -753,15 +801,6 @@ const Pipeline = () => {
     // Navigate to lead edit page
     navigate(`/leads/${leadId}/edit`);
   };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin" />
-        <span className="ml-2">Loading pipeline...</span>
-      </div>
-    );
-  }
 
   // Show access denied if user has no pipeline access
   if (pipelineAccess && (!pipelineAccess.allowedPipelines || pipelineAccess.allowedPipelines.length === 0)) {
@@ -802,17 +841,10 @@ const Pipeline = () => {
 
   return (
     <div className="space-y-3 max-w-full overflow-hidden">
-      {/* Header */}
+      {/* Title (must appear above filter panel) */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold">Pipeline</h1>
-          <Badge variant="outline" className="flex items-center gap-1">
-            <Workflow className="h-3 w-3" />
-            {getActivePipelineName()}
-          </Badge>
-          <Badge variant="outline" className="flex items-center gap-1">
-            {leads.length} Active Leads
-          </Badge>
           {pipelineAccess?.canViewAssignedOnly && (
             <Badge variant="secondary" className="flex items-center gap-1">
               <Users className="h-3 w-3" />
@@ -820,9 +852,201 @@ const Pipeline = () => {
             </Badge>
           )}
         </div>
-        
-        <div className="flex items-center gap-4">
-          {/* Role-based controls */}
+      </div>
+
+      {/* Collapsible Filters - Same layout as Leads page (moved above header controls) */}
+      {isAdminOrManager && showFilters && (
+        <div className="bg-white border-t border-b border-gray-200 px-6 py-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* Acquisitions Agent Filter - Multi-select */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-700">Acquisitions Agent</label>
+              <MultiSelect
+                options={acqAgents.map((a: any) => ({
+                  label: `${a.firstName} ${a.lastName}`,
+                  value: a.id
+                }))}
+                selected={selectedAcqAgents}
+                onChange={setSelectedAcqAgents}
+                placeholder="All ACQ Agents"
+              />
+            </div>
+
+            {/* Dispositions Agent Filter - Multi-select */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-700">Dispositions Agent</label>
+              <MultiSelect
+                options={dispAgents.map((a: any) => ({
+                  label: `${a.firstName} ${a.lastName}`,
+                  value: a.id
+                }))}
+                selected={selectedDispAgents}
+                onChange={setSelectedDispAgents}
+                placeholder="All DISP Agents"
+              />
+            </div>
+
+            {/* Lead Created - Date Range (matches Leads page Date Created) */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-700">Lead Created</label>
+              <select
+                className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 h-9"
+                value={createdDateRange}
+                onChange={(e) => {
+                  const range = e.target.value;
+                  setCreatedDateRange(range);
+                  if (range === 'custom') {
+                    // Keep current custom inputs; actual from/to comes from custom fields below
+                    return;
+                  }
+                  setCreatedCustomFrom('');
+                  setCreatedCustomTo('');
+                  applyPresetRange(range, setCreatedFrom, setCreatedTo);
+                }}
+              >
+                <option value="">All Time</option>
+                <option value="today">Today ({new Date().toLocaleDateString()})</option>
+                <option value="week">This Week</option>
+                <option value="month">This Month ({new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })})</option>
+                <option value="quarter">This Quarter</option>
+                <option value="year">This Year ({new Date().getFullYear()})</option>
+                <option value="custom">Custom Range…</option>
+              </select>
+
+              {createdDateRange === 'custom' && (
+                <div className="grid grid-cols-2 gap-2 pt-2">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-medium text-gray-600">From</label>
+                    <input
+                      type="date"
+                      value={createdCustomFrom}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setCreatedCustomFrom(v);
+                        setCreatedFrom(v);
+                      }}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-medium text-gray-600">To</label>
+                    <input
+                      type="date"
+                      value={createdCustomTo}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setCreatedCustomTo(v);
+                        setCreatedTo(v);
+                      }}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Last Touched - Date Range (matches Leads page Date Created) */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-700">Last Touched</label>
+              <select
+                className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 h-9"
+                value={lastTouchedDateRange}
+                onChange={(e) => {
+                  const range = e.target.value;
+                  setLastTouchedDateRange(range);
+                  if (range === 'custom') {
+                    return;
+                  }
+                  setLastTouchedCustomFrom('');
+                  setLastTouchedCustomTo('');
+                  applyPresetRange(range, setLastTouchedFrom, setLastTouchedTo);
+                }}
+              >
+                <option value="">All Time</option>
+                <option value="today">Today ({new Date().toLocaleDateString()})</option>
+                <option value="week">This Week</option>
+                <option value="month">This Month ({new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })})</option>
+                <option value="quarter">This Quarter</option>
+                <option value="year">This Year ({new Date().getFullYear()})</option>
+                <option value="custom">Custom Range…</option>
+              </select>
+
+              {lastTouchedDateRange === 'custom' && (
+                <div className="grid grid-cols-2 gap-2 pt-2">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-medium text-gray-600">From</label>
+                    <input
+                      type="date"
+                      value={lastTouchedCustomFrom}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setLastTouchedCustomFrom(v);
+                        setLastTouchedFrom(v);
+                      }}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-medium text-gray-600">To</label>
+                    <input
+                      type="date"
+                      value={lastTouchedCustomTo}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setLastTouchedCustomTo(v);
+                        setLastTouchedTo(v);
+                      }}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Filter Actions - Same as Leads page */}
+          <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
+            <div className="text-sm text-gray-600">
+              {leads.length} leads in pipeline
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setCreatedFrom('');
+                  setCreatedTo('');
+                  setLastTouchedFrom('');
+                  setLastTouchedTo('');
+                  setCreatedDateRange('');
+                  setCreatedCustomFrom('');
+                  setCreatedCustomTo('');
+                  setLastTouchedDateRange('');
+                  setLastTouchedCustomFrom('');
+                  setLastTouchedCustomTo('');
+                  setSelectedAcqAgents([]);
+                  setSelectedDispAgents([]);
+                }}
+              >
+                Clear Filters
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setShowFilters(false);
+                }}
+              >
+                Close Panel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Controls row (Filter button must be below filter panel) */}
+      <div className="flex items-center justify-end flex-wrap gap-4">
+        {/* Role-based controls */}
           {isAdminOrManager && (
             <Button
               variant="outline"
@@ -876,118 +1100,18 @@ const Pipeline = () => {
               </Label>
             </div>
           )}
-        </div>
       </div>
 
-      {/* Collapsible Filters */}
-      {isAdminOrManager && showFilters && (
-        <div className="bg-white border-b border-gray-200 px-6 py-3">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-            {/* Lead Created From */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-700">Lead Created (From)</label>
-              <Input 
-                type="date" 
-                value={createdFrom} 
-                onChange={(e) => setCreatedFrom(e.target.value)}
-                className="h-8 text-xs"
-              />
-            </div>
-
-            {/* Lead Created To */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-700">Lead Created (To)</label>
-              <Input 
-                type="date" 
-                value={createdTo} 
-                onChange={(e) => setCreatedTo(e.target.value)}
-                className="h-8 text-xs"
-              />
-            </div>
-
-            {/* Last Touched From */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-700">Last Touched (From)</label>
-              <Input 
-                type="date" 
-                value={lastTouchedFrom} 
-                onChange={(e) => setLastTouchedFrom(e.target.value)}
-                className="h-8 text-xs"
-              />
-            </div>
-
-            {/* Last Touched To */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-700">Last Touched (To)</label>
-              <Input 
-                type="date" 
-                value={lastTouchedTo} 
-                onChange={(e) => setLastTouchedTo(e.target.value)}
-                className="h-8 text-xs"
-              />
-            </div>
-          </div>
-
-          {/* Agent Filters Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
-            {/* Acquisitions Agent */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-700">Acquisitions Agent</label>
-              <select
-                value={acqAgentId}
-                onChange={(e) => setAcqAgentId(e.target.value)}
-                className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="all">All ACQ Agents</option>
-                {acqAgents.map((a: any) => (
-                  <option key={a.id} value={a.id}>
-                    {a.firstName} {a.lastName}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Dispositions Agent */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-700">Dispositions Agent</label>
-              <select
-                value={dispAgentId}
-                onChange={(e) => setDispAgentId(e.target.value)}
-                className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="all">All DISP Agents</option>
-                {dispAgents.map((a: any) => (
-                  <option key={a.id} value={a.id}>
-                    {a.firstName} {a.lastName}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Clear Filters Button */}
-            <div className="space-y-1 flex items-end">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setCreatedFrom('');
-                  setCreatedTo('');
-                  setLastTouchedFrom('');
-                  setLastTouchedTo('');
-                  setAcqAgentId('all');
-                  setDispAgentId('all');
-                }}
-                className="w-full"
-              >
-                Clear Filters
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Drag and Drop Pipeline */}
+      <div className="relative">
+        {loading && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/60 backdrop-blur-[1px]">
+            <div className="flex items-center gap-2 text-sm text-gray-700">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Updating…
+            </div>
+          </div>
+        )}
         <DndContext
           collisionDetection={closestCenter}
           sensors={sensors}
@@ -1013,6 +1137,7 @@ const Pipeline = () => {
           )}
           </DragOverlay>
         </DndContext>
+      </div>
 
       {/* View Lead Dialog */}
       {selectedLead && (

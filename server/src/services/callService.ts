@@ -690,6 +690,15 @@ export const callService = {
 
       logger.info({ userId, roles }, 'Fetching call history from database');
 
+      // Get user's phone number from SMS settings to filter calls
+      const userSmsSettings = await prisma.userSmsSettings.findUnique({
+        where: { userId },
+        select: { phoneNumber: true }
+      });
+      const userPhoneNumber = userSmsSettings?.phoneNumber;
+      
+      console.log('📞 Fetching call history for user:', userId, 'Phone:', userPhoneNumber);
+
       // Fetch real call communications from database
       const communications = await prisma.communication.findMany({
         where: {
@@ -700,8 +709,23 @@ export const callService = {
                 OR: [
                   // Show OUTBOUND calls the user placed (even if lead assignment changes later)
                   { AND: [{ direction: 'OUTBOUND' as any }, { createdById: userId }] },
-                  { lead: { assignedUserId: userId } },
-                  { lead: { createdById: userId } },
+                  // Show INBOUND calls to user's phone number (if phone number is configured)
+                  ...(userPhoneNumber ? [{
+                    AND: [
+                      { direction: 'INBOUND' as any },
+                      {
+                        OR: [
+                          { metadata: { path: ['to'], equals: userPhoneNumber } },
+                          { metadata: { path: ['To'], equals: userPhoneNumber } }
+                        ]
+                      }
+                    ]
+                  }] : []),
+                  // Fallback: Show calls on leads assigned to user (only if no phone number configured)
+                  ...(!userPhoneNumber ? [
+                    { lead: { assignedUserId: userId } },
+                    { lead: { createdById: userId } }
+                  ] : [])
                 ],
               }),
         },
@@ -731,14 +755,18 @@ export const callService = {
         take: 100 // Limit to recent 100 calls
       });
 
-      // Inbox behavior: hide missed calls that were already opened (marked read) by this user.
+      // Inbox behavior: Show ONLY missed/no-answer calls that haven't been marked read
       // Also safety: if lead was deleted, hide the row from inbox calls.
       const communicationsForInbox = communications.filter((c: any) => {
         if (!c.lead) return false;
         const status = String(c?.metadata?.status || '').toLowerCase();
         const isMissed = status === 'missed' || status === 'no-answer';
         const isRead = Array.isArray(c.reads) && c.reads.length > 0;
-        if (isMissed && isRead) return false;
+        
+        // Only show missed/no-answer calls that haven't been read
+        if (!isMissed) return false; // Hide completed/answered calls
+        if (isRead) return false; // Hide already read missed calls
+        
         return true;
       });
 

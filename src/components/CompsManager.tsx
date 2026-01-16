@@ -460,11 +460,6 @@ export const CompsManager: React.FC<CompsManagerProps> = ({
           <Home className="w-3 h-3 text-slate-500" />
           <span className="text-xs font-medium text-slate-600">Comparable Properties</span>
           <span className="text-xs text-emerald-600 font-semibold">ARV: {formatArv()}</span>
-          {pdfs.length > 0 && (
-            <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
-              {pdfs.length} file{pdfs.length !== 1 ? 's' : ''}
-            </Badge>
-          )}
           {uploadingPdf && (
             <span className="text-[10px] text-blue-600 flex items-center gap-1">
               <Loader2 className="w-3 h-3 animate-spin" />

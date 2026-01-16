@@ -473,6 +473,11 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
   const filteredTasks = tasks.filter(task => 
     !task.title?.startsWith('Review note on ')
   );
+
+  // Badge count should reflect only CALL + SMS + EMAIL (not notes/tasks)
+  const communicationsBadgeCount = (communications || []).filter((c: any) =>
+    c?.type === 'CALL' || c?.type === 'SMS' || c?.type === 'EMAIL'
+  ).length;
   
   const allItems = [
     ...communications,
@@ -713,7 +718,7 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
         <div className="flex items-center gap-2">
           <MessageSquare className="w-4 h-4 text-slate-600" />
           <h3 className="text-sm font-semibold text-slate-700">Communications</h3>
-          <span className="text-xs text-slate-500">({allItems.length})</span>
+          <span className="text-xs text-slate-500">({communicationsBadgeCount})</span>
         </div>
       </div>
 

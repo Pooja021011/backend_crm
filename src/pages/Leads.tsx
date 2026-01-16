@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { 
   Table,
   TableBody,
@@ -157,55 +158,65 @@ const Leads = () => {
     // Priority 1: Check primary lead owner first
     if (lead.owners && lead.owners.length > 0) {
       const primaryOwner = lead.owners.find((o: any) => o.isPrimary);
-      if (primaryOwner?.firstName && primaryOwner?.lastName) {
+      if (primaryOwner?.firstName || primaryOwner?.lastName) {
+        const fn = (primaryOwner.firstName || '').trim();
+        const ln = (primaryOwner.lastName || '').trim();
         return {
-          firstName: primaryOwner.firstName,
-          lastName: primaryOwner.lastName,
-          initials: `${primaryOwner.firstName[0]}${primaryOwner.lastName[0]}`
+          firstName: fn,
+          lastName: ln,
+          initials: `${fn ? fn[0] : ''}${ln ? ln[0] : ''}`.toUpperCase() || 'UC'
         };
       }
       
       // If no primary, get first owner with name
-      const ownerWithName = lead.owners.find((o: any) => o.firstName && o.lastName);
+      const ownerWithName = lead.owners.find((o: any) => (o.firstName && String(o.firstName).trim()) || (o.lastName && String(o.lastName).trim()));
       if (ownerWithName) {
+        const fn = (ownerWithName.firstName || '').trim();
+        const ln = (ownerWithName.lastName || '').trim();
         return {
-          firstName: ownerWithName.firstName,
-          lastName: ownerWithName.lastName,
-          initials: `${ownerWithName.firstName[0]}${ownerWithName.lastName[0]}`
+          firstName: fn,
+          lastName: ln,
+          initials: `${fn ? fn[0] : ''}${ln ? ln[0] : ''}`.toUpperCase() || 'UC'
         };
       }
     }
     
     // Priority 2: Check seller/buyer/vendor as fallback
-    if (lead.seller?.firstName && lead.seller?.lastName) {
+    if (lead.seller?.firstName || lead.seller?.lastName) {
+      const fn = (lead.seller.firstName || '').trim();
+      const ln = (lead.seller.lastName || '').trim();
       return {
-        firstName: lead.seller.firstName,
-        lastName: lead.seller.lastName,
-        initials: `${lead.seller.firstName[0]}${lead.seller.lastName[0]}`
+        firstName: fn,
+        lastName: ln,
+        initials: `${fn ? fn[0] : ''}${ln ? ln[0] : ''}`.toUpperCase() || 'UC'
       };
     }
     
-    if (lead.buyer?.firstName && lead.buyer?.lastName) {
+    if (lead.buyer?.firstName || lead.buyer?.lastName) {
+      const fn = (lead.buyer.firstName || '').trim();
+      const ln = (lead.buyer.lastName || '').trim();
       return {
-        firstName: lead.buyer.firstName,
-        lastName: lead.buyer.lastName,
-        initials: `${lead.buyer.firstName[0]}${lead.buyer.lastName[0]}`
+        firstName: fn,
+        lastName: ln,
+        initials: `${fn ? fn[0] : ''}${ln ? ln[0] : ''}`.toUpperCase() || 'UC'
       };
     }
     
-    if (lead.vendor?.firstName && lead.vendor?.lastName) {
+    if (lead.vendor?.firstName || lead.vendor?.lastName) {
+      const fn = (lead.vendor.firstName || '').trim();
+      const ln = (lead.vendor.lastName || '').trim();
       return {
-        firstName: lead.vendor.firstName,
-        lastName: lead.vendor.lastName,
-        initials: `${lead.vendor.firstName[0]}${lead.vendor.lastName[0]}`
+        firstName: fn,
+        lastName: ln,
+        initials: `${fn ? fn[0] : ''}${ln ? ln[0] : ''}`.toUpperCase() || 'UC'
       };
     }
     
-    // Fallback to empty - don't show "Unknown Contact"
+    // Fallback to Unknown Caller
     return {
-      firstName: '',
-      lastName: '',
-      initials: ''
+      firstName: 'Unknown',
+      lastName: 'Caller',
+      initials: 'UC'
     };
   };
   
@@ -243,15 +254,16 @@ const Leads = () => {
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
   const [pendingBulkAction, setPendingBulkAction] = useState<'delete' | 'archive' | null>(null);
   const [isBulkProcessing, setIsBulkProcessing] = useState(false);
-  const [selectedMarket, setSelectedMarket] = useState("");
-  const [selectedStatus, setSelectedStatus] = useState("");
-  const [selectedPipelineStatus, setSelectedPipelineStatus] = useState("");
+  
+  // Multi-select filters (changed from single select to arrays)
+  const [selectedMarkets, setSelectedMarkets] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const [selectedPipelineStatuses, setSelectedPipelineStatuses] = useState<string[]>([]);
+  const [selectedLeadSources, setSelectedLeadSources] = useState<string[]>([]);
+  const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
   const [selectedDateRange, setSelectedDateRange] = useState("");
   const [customDateFrom, setCustomDateFrom] = useState("");
   const [customDateTo, setCustomDateTo] = useState("");
-  const [selectedAcqAgentId, setSelectedAcqAgentId] = useState("");
-  const [selectedDispAgentId, setSelectedDispAgentId] = useState("");
-  const [selectedLeadSource, setSelectedLeadSource] = useState("");
   
   // Dynamic filter data
   const [filterMarkets, setFilterMarkets] = useState<any[]>([]);
@@ -400,15 +412,14 @@ const Leads = () => {
   // Clear selected items and filters when switching tabs
   useEffect(() => {
     setSelectedItems([]);
-    setSelectedMarket("");
-    setSelectedStatus("");
-    setSelectedPipelineStatus("");
+    setSelectedMarkets([]);
+    setSelectedStatuses([]);
+    setSelectedPipelineStatuses([]);
+    setSelectedLeadSources([]);
+    setSelectedAgents([]);
     setSelectedDateRange("");
     setCustomDateFrom("");
     setCustomDateTo("");
-    setSelectedAcqAgentId("");
-    setSelectedDispAgentId("");
-    setSelectedLeadSource("");
   }, [activeTab]);
 
 
@@ -421,37 +432,34 @@ const Leads = () => {
       filteredLeads = searchLeads(searchQuery).filter(lead => lead.leadType === activeTab);
     }
     
-    // Apply additional filters
-    if (selectedMarket) {
+    // Apply multi-select filters
+    if (selectedMarkets.length > 0) {
       filteredLeads = filteredLeads.filter(lead => {
-        return lead.marketId === selectedMarket;
+        return selectedMarkets.includes(lead.marketId);
       });
     }
     
-    if (selectedStatus) {
+    if (selectedStatuses.length > 0) {
       filteredLeads = filteredLeads.filter(lead => {
-        return lead.leadStatusId === selectedStatus;
+        return selectedStatuses.includes(lead.leadStatusId);
       });
     }
     
-    if (selectedPipelineStatus) {
+    if (selectedPipelineStatuses.length > 0) {
       filteredLeads = filteredLeads.filter(lead => {
-        return lead.pipelineStageId === selectedPipelineStatus;
+        return selectedPipelineStatuses.includes(lead.pipelineStageId);
       });
     }
 
-    // Agent filters (tab-specific)
-    if (activeTab === 'SELLER' && selectedAcqAgentId) {
-      filteredLeads = filteredLeads.filter((lead: any) => lead.assignedUserId === selectedAcqAgentId);
-    }
-    if (activeTab === 'BUYER' && selectedDispAgentId) {
-      filteredLeads = filteredLeads.filter((lead: any) => lead.assignedUserId === selectedDispAgentId);
+    // Agent filters (multi-select)
+    if (selectedAgents.length > 0) {
+      filteredLeads = filteredLeads.filter((lead: any) => selectedAgents.includes(lead.assignedUserId));
     }
 
-    // Lead Source filter
-    if (selectedLeadSource) {
+    // Lead Source filter (multi-select)
+    if (selectedLeadSources.length > 0) {
       filteredLeads = filteredLeads.filter(lead => {
-        return lead.leadSourceId === selectedLeadSource;
+        return selectedLeadSources.includes(lead.leadSourceId);
       });
     }
     
@@ -503,7 +511,7 @@ const Leads = () => {
     }
     
     return filteredLeads;
-  }, [getLeadsByType, activeTab, searchQuery, searchLeads, selectedMarket, selectedStatus, selectedPipelineStatus, selectedDateRange, customDateFrom, customDateTo, selectedAcqAgentId, selectedDispAgentId, selectedLeadSource, sortConfig, sortLeads]);
+  }, [getLeadsByType, activeTab, searchQuery, searchLeads, selectedMarkets, selectedStatuses, selectedPipelineStatuses, selectedDateRange, customDateFrom, customDateTo, selectedAgents, selectedLeadSources, sortConfig, sortLeads]);
 
   const getLeadCount = (type: "SELLER" | "BUYER" | "VENDOR") => {
     // Count all leads of this type from the main leads array (not filtered by role)
@@ -970,58 +978,49 @@ const Leads = () => {
         {showFilters && (
           <div className="bg-white border-b border-gray-200 px-6 py-3">
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
-              {/* Status Filter */}
+              {/* Status Filter - Multi-select Dropdown */}
               <div className="space-y-1">
                 <label className="text-xs font-medium text-gray-700">Lead Status</label>
-                <select 
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                  value={selectedStatus}
-                  onChange={(e) => setSelectedStatus(e.target.value)}
+                <MultiSelect
+                  options={leadStatuses.map(status => ({
+                    label: status.name,
+                    value: status.id
+                  }))}
+                  selected={selectedStatuses}
+                  onChange={setSelectedStatuses}
+                  placeholder="All Statuses"
                   disabled={loadingFilters}
-                >
-                  <option value="">All Statuses</option>
-                  {leadStatuses.map(status => (
-                    <option key={status.id} value={status.id}>
-                      {status.name}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
 
-              {/* Pipeline Status Filter */}
+              {/* Pipeline Status Filter - Multi-select Dropdown */}
               <div className="space-y-1">
-                <label className="text-xs font-medium text-gray-700">Pipeline Statuses</label>
-                <select 
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                  value={selectedPipelineStatus}
-                  onChange={(e) => setSelectedPipelineStatus(e.target.value)}
+                <label className="text-xs font-medium text-gray-700">Pipeline Stages</label>
+                <MultiSelect
+                  options={pipelineStages.map(stage => ({
+                    label: stage.name,
+                    value: stage.id
+                  }))}
+                  selected={selectedPipelineStatuses}
+                  onChange={setSelectedPipelineStatuses}
+                  placeholder="All Stages"
                   disabled={loadingFilters}
-                >
-                  <option value="">All Stages</option>
-                  {pipelineStages.map(stage => (
-                    <option key={stage.id} value={stage.id}>
-                      {stage.name}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
 
-              {/* Lead Source Filter */}
+              {/* Lead Source Filter - Multi-select Dropdown */}
               <div className="space-y-1">
                 <label className="text-xs font-medium text-gray-700">Lead Source</label>
-                <select 
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                  value={selectedLeadSource}
-                  onChange={(e) => setSelectedLeadSource(e.target.value)}
+                <MultiSelect
+                  options={leadSources.map(source => ({
+                    label: source.name,
+                    value: source.id
+                  }))}
+                  selected={selectedLeadSources}
+                  onChange={setSelectedLeadSources}
+                  placeholder="All Sources"
                   disabled={loadingFilters}
-                >
-                  <option value="">All Sources</option>
-                  {leadSources.map(source => (
-                    <option key={source.id} value={source.id}>
-                      {source.name}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
 
               {/* Date Created Filter */}
@@ -1065,52 +1064,46 @@ const Leads = () => {
                 )}
               </div>
 
-              {/* Agent Filters (tab-specific) - Now in same row */}
+              {/* Agent Filters (tab-specific) - Multi-select Dropdown */}
               {activeTab === 'SELLER' && (
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-gray-700">Acquisitions Agent</label>
-                  <select
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                    value={selectedAcqAgentId}
-                    onChange={(e) => setSelectedAcqAgentId(e.target.value)}
-                    disabled={loadingFilters}
-                  >
-                    <option value="">All ACQ Agents</option>
-                    {agents
+                  <MultiSelect
+                    options={agents
                       .filter((a: any) => {
                         const roles = (a.roles || []).map((r: any) => r?.role?.name || r?.name || r);
                         return roles.includes('ACQ') || roles.includes('MANAGER');
                       })
-                      .map((a: any) => (
-                        <option key={a.id} value={a.id}>
-                          {a.firstName} {a.lastName}
-                        </option>
-                      ))}
-                  </select>
+                      .map((a: any) => ({
+                        label: `${a.firstName} ${a.lastName}`,
+                        value: a.id
+                      }))}
+                    selected={selectedAgents}
+                    onChange={setSelectedAgents}
+                    placeholder="All ACQ Agents"
+                    disabled={loadingFilters}
+                  />
                 </div>
               )}
 
               {activeTab === 'BUYER' && (
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-gray-700">Dispositions Agent</label>
-                  <select
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                    value={selectedDispAgentId}
-                    onChange={(e) => setSelectedDispAgentId(e.target.value)}
-                    disabled={loadingFilters}
-                  >
-                    <option value="">All DISP Agents</option>
-                    {agents
+                  <MultiSelect
+                    options={agents
                       .filter((a: any) => {
                         const roles = (a.roles || []).map((r: any) => r?.role?.name || r?.name || r);
                         return roles.includes('DISP') || roles.includes('MANAGER');
                       })
-                      .map((a: any) => (
-                        <option key={a.id} value={a.id}>
-                          {a.firstName} {a.lastName}
-                        </option>
-                      ))}
-                  </select>
+                      .map((a: any) => ({
+                        label: `${a.firstName} ${a.lastName}`,
+                        value: a.id
+                      }))}
+                    selected={selectedAgents}
+                    onChange={setSelectedAgents}
+                    placeholder="All DISP Agents"
+                    disabled={loadingFilters}
+                  />
                 </div>
               )}
             </div>
@@ -1125,17 +1118,16 @@ const Leads = () => {
                   variant="outline" 
                   size="sm"
                   onClick={() => {
-                    // Clear all filters
+                    // Clear all multi-select filters
                     setSearchQuery("");
-                    setSelectedMarket("");
-                    setSelectedStatus("");
-                    setSelectedPipelineStatus("");
-                    setSelectedLeadSource("");
+                    setSelectedMarkets([]);
+                    setSelectedStatuses([]);
+                    setSelectedPipelineStatuses([]);
+                    setSelectedLeadSources([]);
+                    setSelectedAgents([]);
                     setSelectedDateRange("");
                     setCustomDateFrom("");
                     setCustomDateTo("");
-                    setSelectedAcqAgentId("");
-                    setSelectedDispAgentId("");
                   }}
                 >
                   Clear Filters
@@ -1513,8 +1505,7 @@ const Leads = () => {
                         <TableCell>
                           {(() => {
                             const contact = getContactName(lead);
-                            const hasName = contact.firstName || contact.lastName;
-                            return hasName ? (
+                            return (
                               <div className="flex items-center gap-1.5">
                                 <div className="w-5 h-5 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
                                   <span className="text-[10px] font-medium text-blue-600">
@@ -1522,11 +1513,9 @@ const Leads = () => {
                                   </span>
                                 </div>
                                 <span className="font-medium text-gray-900 truncate">
-                                  {contact.firstName} {contact.lastName}
+                                  {(contact.firstName || '').trim()} {(contact.lastName || '').trim()}
                                 </span>
                               </div>
-                            ) : (
-                              <span className="text-gray-400 text-sm">-</span>
                             );
                           })()}
                         </TableCell>
@@ -1640,8 +1629,7 @@ const Leads = () => {
                         <TableCell>
                           {(() => {
                             const contact = getContactName(lead);
-                            const hasName = contact.firstName || contact.lastName;
-                            return hasName ? (
+                            return (
                               <div className="flex items-center gap-1.5">
                                 <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
                                   <span className="text-[10px] font-medium text-green-600">
@@ -1649,11 +1637,9 @@ const Leads = () => {
                                   </span>
                                 </div>
                                 <span className="font-medium text-gray-900 truncate">
-                                  {contact.firstName} {contact.lastName}
+                                  {(contact.firstName || '').trim()} {(contact.lastName || '').trim()}
                                 </span>
                               </div>
-                            ) : (
-                              <span className="text-gray-400 text-sm">-</span>
                             );
                           })()}
                         </TableCell>
@@ -1784,8 +1770,7 @@ const Leads = () => {
                         <TableCell>
                           {(() => {
                             const contact = getContactName(lead);
-                            const hasName = contact.firstName || contact.lastName;
-                            return hasName ? (
+                            return (
                               <div className="flex items-center gap-1.5">
                                 <div className="w-5 h-5 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
                                   <span className="text-[10px] font-medium text-orange-600">
@@ -1793,11 +1778,9 @@ const Leads = () => {
                                   </span>
                                 </div>
                                 <span className="font-medium text-gray-900 truncate">
-                                  {contact.firstName} {contact.lastName}
+                                  {(contact.firstName || '').trim()} {(contact.lastName || '').trim()}
                                 </span>
                               </div>
-                            ) : (
-                              <span className="text-gray-400 text-sm">-</span>
                             );
                           })()}
                         </TableCell>

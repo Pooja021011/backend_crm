@@ -140,10 +140,20 @@ export const DashboardHeader = () => {
   // Debounce timer ref
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  const getMinSearchLength = (value: string) => {
+    const trimmed = value.trim();
+    const digitsOnly = trimmed.replace(/\D/g, "");
+    // Allow short numeric searches for address numbers / street numbers
+    if (digitsOnly.length >= 2) return 2;
+    return 3;
+  };
+
   // Search function that calls API
   const performSearch = async (query: string) => {
-    // Require minimum 3 characters
-    if (!query.trim() || query.trim().length < 3) {
+    const trimmed = query.trim();
+    const minLen = getMinSearchLength(trimmed);
+    // Require minimum length (2+ digits OR 3+ chars)
+    if (!trimmed || trimmed.length < minLen) {
       setSearchResults([]);
       setIsSearching(false);
       return;
@@ -202,11 +212,12 @@ export const DashboardHeader = () => {
       clearTimeout(searchTimeoutRef.current);
     }
 
-    // Show dropdown immediately if there's text
-    setShowDropdown(value.length >= 3);
+    const minLen = getMinSearchLength(value);
+    // Show dropdown immediately if the query is long enough
+    setShowDropdown(value.trim().length >= minLen);
     
     // Only show loading if query is long enough
-    if (value.trim().length >= 3) {
+    if (value.trim().length >= minLen) {
       setIsSearching(true);
     } else {
       setSearchResults([]);
@@ -405,17 +416,15 @@ export const DashboardHeader = () => {
                       </div>
                     ))}
                   </div>
-                ) : searchQuery.length >= 3 ? (
+                ) : searchQuery.length >= getMinSearchLength(searchQuery) ? (
                   <div className="p-6 text-center">
-                    <div className="text-2xl mb-2">🔍</div>
+                    <Search className="w-6 h-6 mx-auto mb-2 text-gray-400" />
                     <p className="text-gray-500 text-sm">No results found for "{searchQuery}"</p>
-                    <p className="text-xs text-gray-400 mt-1">Try searching by name, address, email, or phone number</p>
                   </div>
-                ) : searchQuery.length > 0 && searchQuery.length < 3 ? (
+                ) : searchQuery.length > 0 && searchQuery.length < getMinSearchLength(searchQuery) ? (
                   <div className="p-6 text-center">
                     <div className="text-2xl mb-2">⌨️</div>
-                    <p className="text-gray-500 text-sm">Type at least 3 characters to search</p>
-                    <p className="text-xs text-gray-400 mt-1">Search by name, address, email, or phone number</p>
+                    <p className="text-gray-500 text-sm">Type at least 3 characters (or 2 digits) to search</p>
                   </div>
                 ) : null}
               </Card>

@@ -39,6 +39,10 @@ export const rehabCalculationService = {
     if (toggledItems.demolition) {
       itemizedCosts.demolition = 1.50 * sqft;
     }
+    // Cleanup (requested): Sqft * 0.8
+    if ((toggledItems as any).cleanup) {
+      itemizedCosts.cleanup = 0.8 * sqft;
+    }
 
     // Structural Work
     if (toggledItems.foundation) {

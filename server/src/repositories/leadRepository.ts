@@ -231,6 +231,21 @@ export const leadRepository = {
     if (!currentLead) {
       throw new Error('Lead not found');
     }
+
+    // BUSINESS RULE:
+    // If Lead Status is changed to "Dead", remove pipeline status entirely.
+    // This ensures Dead leads do not appear in Pipeline columns.
+    if (data.leadStatusId) {
+      const status = await prisma.leadStatus.findUnique({
+        where: { id: data.leadStatusId },
+        select: { name: true },
+      });
+
+      if (status?.name?.toLowerCase() === 'dead') {
+        updateData.pipelineStageId = null;
+        updateData.stageEnteredAt = null;
+      }
+    }
     
     // Handle seller relation - use upsert to create if doesn't exist
     if (data.seller) {
@@ -479,65 +494,76 @@ export const leadRepository = {
     
     console.log('🔍 Search suggestions:', { q, digitsOnly, isPhoneQuery, queryLength: q.length });
     
-    // For phone queries, fetch MORE results to filter in-memory
-    // This handles cases where phone formatting breaks database CONTAINS matching
-    const fetchLimit = isPhoneQuery ? 100 : take;
-    
-    const leads = await prisma.lead.findMany({
-      where: {
-        OR: [
-          { address: { address1: { contains: q, mode: 'insensitive' } } },
-          { seller: { firstName: { contains: q, mode: 'insensitive' } } },
-          { seller: { lastName: { contains: q, mode: 'insensitive' } } },
-          { seller: { email: { contains: q, mode: 'insensitive' } } },
-          { seller: { phone: { contains: q, mode: 'insensitive' } } },
-          // Add digit-only phone search for better matching
-          ...(digitsOnly.length >= 3 ? [
-            { seller: { phone: { contains: digitsOnly, mode: 'insensitive' } } },
-          ] : []),
-          { buyer: { firstName: { contains: q, mode: 'insensitive' } } },
-          { buyer: { lastName: { contains: q, mode: 'insensitive' } } },
-          { buyer: { email: { contains: q, mode: 'insensitive' } } },
-          { buyer: { phone: { contains: q, mode: 'insensitive' } } },
-          // Add digit-only phone search for better matching
-          ...(digitsOnly.length >= 3 ? [
-            { buyer: { phone: { contains: digitsOnly, mode: 'insensitive' } } },
-          ] : []),
-          { vendor: { firstName: { contains: q, mode: 'insensitive' } } },
-          { vendor: { lastName: { contains: q, mode: 'insensitive' } } },
-          { vendor: { email: { contains: q, mode: 'insensitive' } } },
-          { vendor: { phone: { contains: q, mode: 'insensitive' } } },
-          // Add digit-only phone search for better matching
-          ...(digitsOnly.length >= 3 ? [
-            { vendor: { phone: { contains: digitsOnly, mode: 'insensitive' } } },
-          ] : []),
-          // Search in lead owners
-          { owners: { some: { firstName: { contains: q, mode: 'insensitive' } } } },
-          { owners: { some: { lastName: { contains: q, mode: 'insensitive' } } } },
-          { owners: { some: { email: { contains: q, mode: 'insensitive' } } } },
-          { owners: { some: { phone: { contains: q, mode: 'insensitive' } } } },
-          // Add digit-only phone search for lead owners
-          ...(digitsOnly.length >= 3 ? [
-            { owners: { some: { phone: { contains: digitsOnly, mode: 'insensitive' } } } },
-          ] : []),
-        ],
-      },
-      include: { address: true, seller: true, buyer: true, vendor: true, owners: true },
-      take: fetchLimit,
-    });
+    // For phone queries we can't reliably use DB `contains` because formatting breaks substring matching
+    // (ex: "(333) 332-3232" won't match "3333"). So we gather candidates and filter in-memory.
+    const leads: any[] = [];
+
+    if (isPhoneQuery) {
+      // 1) Address matches (keep normal DB contains for address numbers)
+      const addressMatches = await prisma.lead.findMany({
+        where: {
+          address: { address1: { contains: q, mode: 'insensitive' } },
+        },
+        include: { address: true, seller: true, buyer: true, vendor: true, owners: true },
+        take: 50,
+      });
+
+      // 2) Phone candidates (broad) - then digit-filter in-memory
+      const phoneCandidates = await prisma.lead.findMany({
+        where: {
+          OR: [
+            // Phone fields are non-nullable strings in our schema; the right filter is relation existence.
+            // We'll digit-filter in-memory, so we just need a reasonable candidate set.
+            { seller: { isNot: null } },
+            { buyer: { isNot: null } },
+            { vendor: { isNot: null } },
+            { owners: { some: {} } },
+          ],
+        },
+        include: { address: true, seller: true, buyer: true, vendor: true, owners: true },
+        take: 200,
+      });
+
+      // Merge unique by id
+      const byId = new Map<string, any>();
+      for (const l of addressMatches) byId.set(l.id, l);
+      for (const l of phoneCandidates) byId.set(l.id, l);
+      leads.push(...byId.values());
+    } else {
+      // Non-phone queries: use DB contains across searchable fields
+      const fetchLimit = take;
+      const dbLeads = await prisma.lead.findMany({
+        where: {
+          OR: [
+            { address: { address1: { contains: q, mode: 'insensitive' } } },
+            { seller: { firstName: { contains: q, mode: 'insensitive' } } },
+            { seller: { lastName: { contains: q, mode: 'insensitive' } } },
+            { seller: { email: { contains: q, mode: 'insensitive' } } },
+            { seller: { phone: { contains: q, mode: 'insensitive' } } },
+            { buyer: { firstName: { contains: q, mode: 'insensitive' } } },
+            { buyer: { lastName: { contains: q, mode: 'insensitive' } } },
+            { buyer: { email: { contains: q, mode: 'insensitive' } } },
+            { buyer: { phone: { contains: q, mode: 'insensitive' } } },
+            { vendor: { firstName: { contains: q, mode: 'insensitive' } } },
+            { vendor: { lastName: { contains: q, mode: 'insensitive' } } },
+            { vendor: { email: { contains: q, mode: 'insensitive' } } },
+            { vendor: { phone: { contains: q, mode: 'insensitive' } } },
+            // Search in lead owners
+            { owners: { some: { firstName: { contains: q, mode: 'insensitive' } } } },
+            { owners: { some: { lastName: { contains: q, mode: 'insensitive' } } } },
+            { owners: { some: { email: { contains: q, mode: 'insensitive' } } } },
+            { owners: { some: { phone: { contains: q, mode: 'insensitive' } } } },
+          ],
+        },
+        include: { address: true, seller: true, buyer: true, vendor: true, owners: true },
+        take: fetchLimit,
+      });
+      leads.push(...dbLeads);
+    }
     
     console.log('📦 Database results:', leads.length, 'leads found');
     
-    // If no results from database but it's a phone query, try fetching ALL leads to filter
-    if (leads.length === 0 && isPhoneQuery && digitsOnly.length >= 3) {
-      console.log('⚠️ No database results, fetching all leads for in-memory filtering...');
-      const allLeads = await prisma.lead.findMany({
-        include: { address: true, seller: true, buyer: true, vendor: true, owners: true },
-        take: 100,
-      });
-      console.log('📦 Fetched', allLeads.length, 'leads for filtering');
-      leads.push(...allLeads);
-    }
+    // NOTE: phone queries are already handled via broad candidates above (no need for "fetch all" fallback).
     
     if (leads.length > 0 && leads[0].owners) {
       console.log('📱 First lead owners:', leads[0].owners.map(o => ({ name: `${o.firstName} ${o.lastName}`, phone: o.phone })));
@@ -549,7 +575,7 @@ export const leadRepository = {
     if (isPhoneQuery && digitsOnly.length >= 3) {
       console.log('🔢 Filtering by digits only:', digitsOnly);
       
-      filteredLeads = leads.filter((l) => {
+      const phoneMatched = leads.filter((l) => {
         const phoneNumbers = [
           l.seller?.phone,
           l.buyer?.phone,
@@ -569,6 +595,19 @@ export const leadRepository = {
         
         return hasMatch;
       });
+
+      // IMPORTANT: When the query contains digits (ex: "123 Main St112") we still want address matches,
+      // even if the digits don't match a phone number. Otherwise address searches that include numbers break.
+      const qLower = q.toLowerCase();
+      const addressMatched = leads.filter((l) => {
+        const a1 = l.address?.address1;
+        return typeof a1 === 'string' && a1.toLowerCase().includes(qLower);
+      });
+
+      const byId = new Map<string, any>();
+      for (const l of addressMatched) byId.set(l.id, l);
+      for (const l of phoneMatched) byId.set(l.id, l);
+      filteredLeads = [...byId.values()];
       
       console.log('🎯 After digit filtering:', filteredLeads.length, 'leads matched');
     }
