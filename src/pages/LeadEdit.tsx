@@ -730,11 +730,43 @@ const LeadEdit: React.FC = () => {
 
   const loadPipelineStages = async () => {
     try {
-      const response = await makeApiCall(`${API_BASE}/pipeline/ACQUISITIONS/stages`);
-      if (response.ok) {
-        const data = await response.json();
-        setPipelineStages(data.data || []);
-      }
+      const roles = (user?.roles as any[]) || [];
+      const roleNames = roles.map((r: any) => (typeof r === 'string' ? r : r?.name || r?.role?.name)).filter(Boolean);
+
+      const isAdminOrManager = roleNames.includes('ADMIN') || roleNames.includes('MANAGER');
+      const isExecutive = roleNames.includes('EXECUTIVE');
+
+      const pipelineKeysToLoad = (isAdminOrManager || isExecutive)
+        ? ['ACQUISITIONS', 'DISPOSITIONS']
+        : ['ACQUISITIONS'];
+
+      const responses = await Promise.all(
+        pipelineKeysToLoad.map((key) => makeApiCall(`${API_BASE}/pipeline/${key}/stages`))
+      );
+
+      const results = await Promise.all(
+        responses.map(async (r) => (r.ok ? (await r.json().catch(() => ({}))) : {}))
+      );
+
+      const combinedStages = results
+        .flatMap((json, idx) => {
+          const pipelineKey = pipelineKeysToLoad[idx];
+          const stages = (json as any)?.data || [];
+          return stages.map((s: any) => ({ ...s, pipelineKey }));
+        })
+        // de-dupe by stage id (safe)
+        .reduce((acc: any[], s: any) => {
+          if (!acc.some((x) => x?.id === s?.id)) acc.push(s);
+          return acc;
+        }, [])
+        .sort((a: any, b: any) => {
+          const ak = String(a?.pipelineKey || '');
+          const bk = String(b?.pipelineKey || '');
+          if (ak !== bk) return ak.localeCompare(bk);
+          return (a?.orderIndex ?? 0) - (b?.orderIndex ?? 0);
+        });
+
+      setPipelineStages(combinedStages);
     } catch (error) {
       console.error('Error loading pipeline stages:', error);
     }
