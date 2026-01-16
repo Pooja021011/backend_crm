@@ -617,6 +617,8 @@ const Pipeline = () => {
             lastActivityAt: lead.lastActivityAt || lead.updatedAt,
             priceReduction: lead.priceReduction || false,
             clearToClose: lead.clearToClose || false,
+            openTasks: lead.openTasks ?? 0,
+            openTasksMine: lead.openTasksMine ?? 0,
             originalPrice: lead.deal?.contractPrice || 0,
             currentPrice: lead.deal?.soldPrice || 0,
             // IMPORTANT: Always prefer UUID ids for matching pipeline columns
@@ -1148,11 +1150,9 @@ const Pipeline = () => {
             setIsViewDialogOpen(open);
             if (!open) {
               setSelectedLead(null);
+              // Reload pipeline data after closing (lead may have been edited)
+              loadPipelineData();
             }
-          }}
-          onUpdate={() => {
-            // Reload pipeline data after update
-            loadPipelineData();
           }}
         />
       )}

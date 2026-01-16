@@ -31,6 +31,8 @@ interface PipelineColumnProps {
     assignedAgent?: string;
     leadType?: string;
     status?: string;
+    openTasks?: number;
+    openTasksMine?: number;
   }>;
   onLeadClick?: (leadId: string) => void;
   currentPipeline?: string;

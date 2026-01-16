@@ -7,6 +7,8 @@ export interface PipelineLeadFilters {
   assignedUserId?: string;
   leadSourceId?: string;
   dispAgentId?: string;
+  acqAgentIds?: string[];
+  dispAgentIds?: string[];
   createdFrom?: string;
   createdTo?: string;
   lastTouchedFrom?: string;
@@ -274,7 +276,7 @@ export const pipelineService = {
         });
       }
     } catch (error: any) {
-      logger.error('Error updating needs attention status', { error: error.message });
+      logger.error({ error: error.message }, 'Error updating needs attention status');
       throw error;
     }
   },
@@ -313,7 +315,7 @@ export const pipelineService = {
         leadCount: counts.get(stage.id) || 0
       }));
     } catch (error: any) {
-      logger.error('Error getting pipeline stages', { pipelineKey, error: error.message });
+      logger.error({ pipelineKey, error: error.message }, 'Error getting pipeline stages');
       throw error;
     }
   },
@@ -373,7 +375,7 @@ export const pipelineService = {
         leadCount: counts.get(stage.id) || 0
       }));
     } catch (error: any) {
-      logger.error('Error getting pipeline stages for user', { pipelineKey, userRoles, error: error.message });
+      logger.error({ pipelineKey, userRoles, error: error.message }, 'Error getting pipeline stages for user');
       throw error;
     }
   },
@@ -521,6 +523,7 @@ export const pipelineService = {
           tasks: {
             select: {
               id: true,
+              assignedToId: true,
               dueAt: true,
               title: true,
               status: true,
@@ -635,6 +638,9 @@ export const pipelineService = {
           
           // Tasks
           openTasks: lead.tasks.filter(task => task.status === 'OPEN').length,
+          openTasksMine: filters.userId
+            ? lead.tasks.filter(task => task.status === 'OPEN' && task.assignedToId === filters.userId).length
+            : 0,
           overdueTasks: lead.tasks.filter(task => task.status === 'OPEN' && new Date(task.dueAt) < now).length
         };
       });
@@ -675,7 +681,7 @@ export const pipelineService = {
         return String(a.id).localeCompare(String(b.id));
       });
     } catch (error: any) {
-      logger.error('Error getting pipeline leads', { pipelineKey, filters, error: error.message });
+      logger.error({ pipelineKey, filters, error: error.message }, 'Error getting pipeline leads');
       throw error;
     }
   },
@@ -741,22 +747,22 @@ export const pipelineService = {
       });
 
       if (!stage) {
-        logger.error('Pipeline stage not found - cannot move lead', { 
+        logger.error({ 
           stageId, 
           leadId,
           stageIdType: typeof stageId,
           stageIdLength: stageId?.length 
-        });
+        }, 'Pipeline stage not found - cannot move lead');
         
         // Try to find a similar stage by name or list available stages
         const allStages = await prisma.pipelineStage.findMany({
           select: { id: true, name: true, pipelineId: true }
         });
         
-        logger.error('Available stages in database', { 
+        logger.error({ 
           count: allStages.length,
           stages: allStages.map(s => ({ id: s.id, name: s.name }))
-        });
+        }, 'Available stages in database');
         
         throw new Error(`Pipeline stage ${stageId} does not exist in database. Available stages: ${allStages.length}`);
       }
@@ -797,12 +803,12 @@ export const pipelineService = {
         });
       }
 
-      logger.info('Lead moved to new stage', { 
+      logger.info({ 
         leadId, 
         stageId, 
         stageName: stage.name, 
         userId 
-      });
+      }, 'Lead moved to new stage');
       
       // NEW: Auto-update lead status to "Closed" when moved to Closed pipeline stage
       const stageNameLower = stage.name.toLowerCase();
@@ -817,10 +823,10 @@ export const pipelineService = {
             data: { leadStatusId: closedStatus.id }
           });
           
-          logger.info('Lead status automatically updated to Closed', { 
+          logger.info({ 
             leadId, 
             leadStatusId: closedStatus.id 
-          });
+          }, 'Lead status automatically updated to Closed');
         }
       }
       
@@ -836,14 +842,14 @@ export const pipelineService = {
         updatedAt: updatedLead.updatedAt
       };
     } catch (error: any) {
-      logger.error('Error moving lead to stage', { 
+      logger.error({ 
         leadId, 
         stageId, 
         userId, 
         error: error.message,
         stack: error.stack,
         code: error.code
-      });
+      }, 'Error moving lead to stage');
       throw error;
     }
   },
@@ -894,7 +900,7 @@ export const pipelineService = {
         needsAttentionCount: 0 // TODO: Implement needs attention logic
       };
     } catch (error: any) {
-      logger.error('Error getting pipeline stats', { pipelineKey, error: error.message });
+      logger.error({ pipelineKey, error: error.message }, 'Error getting pipeline stats');
       throw error;
     }
   },
@@ -907,7 +913,7 @@ export const pipelineService = {
       const leads = await this.getPipelineLeads(pipelineKey);
       return this.filterNeedsAttentionLeads(leads);
     } catch (error: any) {
-      logger.error('Error getting needs attention leads', { pipelineKey, error: error.message });
+      logger.error({ pipelineKey, error: error.message }, 'Error getting needs attention leads');
       throw error;
     }
   },
@@ -1020,7 +1026,7 @@ export const pipelineService = {
         select: { id: true, name: true }
       });
     } catch (error) {
-      logger.error('Error fetching lead sources:', error);
+      logger.error({ error }, 'Error fetching lead sources');
       throw error;
     }
   },
@@ -1045,9 +1051,9 @@ export const pipelineService = {
         });
       }
 
-      logger.info('Stage role permissions updated', { stageId, allowedRoles });
+      logger.info({ stageId, allowedRoles }, 'Stage role permissions updated');
     } catch (error: any) {
-      logger.error('Error updating stage role permissions', { stageId, error: error.message });
+      logger.error({ stageId, error: error.message }, 'Error updating stage role permissions');
       throw error;
     }
   }

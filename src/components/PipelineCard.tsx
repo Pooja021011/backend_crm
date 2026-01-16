@@ -8,6 +8,7 @@ import {
   Clock, 
   TrendingDown,
   CheckCircle2,
+  CheckSquare,
 } from "lucide-react";
 import { differenceInMinutes } from "date-fns";
 import { useSortable } from "@dnd-kit/sortable";
@@ -36,6 +37,8 @@ interface PipelineCardProps {
     assignedAgent?: string;
     leadType?: string;
     status?: string;
+    openTasks?: number;
+    openTasksMine?: number;
   };
   isDragging?: boolean;
   onViewDetails?: () => void;
@@ -142,12 +145,15 @@ export const PipelineCard = ({ lead, isDragging, onViewDetails, currentPipeline 
           </h3>
         </div>
 
-        {/* Seller */}
+        {/* Seller + Open Tasks */}
         <div className="flex items-center gap-1">
           <User className="w-3 h-3 text-green-500 flex-shrink-0" />
           <span className="text-[12px] text-gray-600 flex-1 truncate">{lead.sellerName}</span>
-          <Badge className="bg-green-100 text-green-700 text-[11px] px-1.5 py-0 rounded">
-            Seller
+          <Badge className="bg-slate-100 text-slate-700 text-[11px] px-1.5 py-0 rounded flex items-center gap-1">
+            <CheckSquare className="w-3 h-3" />
+            <span className="tabular-nums">
+              {(lead.openTasksMine ?? 0)}/{(lead.openTasks ?? 0)}
+            </span>
           </Badge>
         </div>
 
