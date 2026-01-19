@@ -87,17 +87,17 @@ export const stageTransitionService = {
           lead.leadType === 'BUYER' ? lead.buyer :
           lead.vendor;
 
-        if (!nonEmpty(contact?.firstName)) requiredFields.push('firstName');
-        if (!nonEmpty(contact?.lastName)) requiredFields.push('lastName');
+       // if (!nonEmpty(contact?.firstName)) requiredFields.push('firstName');
+       // if (!nonEmpty(contact?.lastName)) requiredFields.push('lastName');
         // Phone is NOT required for stage transition validation (per CRM requirement)
 
         // For property leads (SELLER), address must be present.
-        if (lead.leadType === 'SELLER') {
-          if (!nonEmpty(lead.address?.address1)) requiredFields.push('address1');
-          if (!nonEmpty(lead.address?.city)) requiredFields.push('city');
-          if (!nonEmpty(lead.address?.state)) requiredFields.push('state');
-          if (!nonEmpty(lead.address?.zip)) requiredFields.push('zip');
-        }
+       // if (lead.leadType === 'SELLER') {
+         // if (!nonEmpty(lead.address?.address1)) requiredFields.push('address1');
+          //if (!nonEmpty(lead.address?.city)) requiredFields.push('city');
+          //if (!nonEmpty(lead.address?.state)) requiredFields.push('state');
+          //if (!nonEmpty(lead.address?.zip)) requiredFields.push('zip');
+        //}
 
         if (!customFields.hvacType) requiredFields.push('hvacType');
         if (!customFields.hvacAge) requiredFields.push('hvacAge');
