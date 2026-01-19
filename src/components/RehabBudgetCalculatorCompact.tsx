@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -15,11 +15,11 @@ interface RehabBudgetCalculatorProps {
   readOnly?: boolean;
   onTotalChange?: (total: number) => void;
   onBathroomsChange?: (bathrooms: number) => void;
-  onDataChange?: (data: { finishLevel: string; toggledItems: ToggledItems; numberOfWindows: number; customValues: { miscLabel: string; miscValue: number } }) => void;
+  onDataChange?: (data: { finishLevel: string; toggledItems: ToggledItems; numberOfWindows: number; customValues: any }) => void;
   initialFinishLevel?: 'low_end' | 'mid_range' | 'high_end';
   initialToggledItems?: ToggledItems;
   initialNumberOfWindows?: number;
-  initialCustomValues?: { miscLabel?: string; miscValue?: number };
+  initialCustomValues?: { miscLabel?: string; miscValue?: number; miscLines?: Array<{ label?: string; value?: number }> };
 }
 
 interface ToggledItems {
@@ -48,8 +48,19 @@ export function RehabBudgetCalculatorCompact({
   const [propertySquareFeet, setPropertySquareFeet] = useState(sqft);
   
   const [toggledItems, setToggledItems] = useState<ToggledItems>(initialToggledItems);
-  const [customMiscLabel, setCustomMiscLabel] = useState<string>(initialCustomValues?.miscLabel || '');
-  const [customMiscValue, setCustomMiscValue] = useState<number>(Number(initialCustomValues?.miscValue) || 0);
+  const [customMiscLine, setCustomMiscLine] = useState<{ label: string; value: string }>(() => {
+    const incoming = initialCustomValues?.miscLines;
+    if (Array.isArray(incoming) && incoming.length > 0) {
+      return {
+        label: String(incoming[0]?.label || initialCustomValues?.miscLabel || 'Miscellaneous'),
+        value: String(Number(incoming[0]?.value) || Number(initialCustomValues?.miscValue) || ''),
+      };
+    }
+    return {
+      label: String(initialCustomValues?.miscLabel || 'Miscellaneous'),
+      value: String(Number(initialCustomValues?.miscValue) || ''),
+    };
+  });
   const [calculation, setCalculation] = useState({
     itemizedCosts: {} as { [key: string]: number },
     subtotal: 0,
@@ -63,17 +74,21 @@ export function RehabBudgetCalculatorCompact({
   // Notify parent of data changes
   useEffect(() => {
     if (onDataChange) {
+      const miscValueNum = Math.max(0, Number(customMiscLine.value) || 0);
       onDataChange({
         finishLevel,
         toggledItems,
         numberOfWindows,
         customValues: {
-          miscLabel: customMiscLabel,
-          miscValue: customMiscValue,
+          // Backwards-compatible keys
+          miscLabel: customMiscLine.label || '',
+          miscValue: miscValueNum,
+          // Keep array form for forwards-compat, but only one line
+          miscLines: [{ label: customMiscLine.label || '', value: miscValueNum }],
         }
       });
     }
-  }, [finishLevel, toggledItems, numberOfWindows, customMiscLabel, customMiscValue, onDataChange]);
+  }, [finishLevel, toggledItems, numberOfWindows, customMiscLine, onDataChange]);
 
   // Update property values when props change
   useEffect(() => {
@@ -94,7 +109,11 @@ export function RehabBudgetCalculatorCompact({
     onBathroomsChange?.(next);
   };
 
-  const subtotalWithCustom = calculation.subtotal + (Number(customMiscValue) || 0);
+  const customMiscTotal = useMemo(
+    () => Math.max(0, Number(customMiscLine.value) || 0),
+    [customMiscLine.value]
+  );
+  const subtotalWithCustom = calculation.subtotal + customMiscTotal;
   const contingencyWithCustom = subtotalWithCustom * 0.10;
   const totalWithCustom = subtotalWithCustom + contingencyWithCustom;
 
@@ -135,6 +154,7 @@ export function RehabBudgetCalculatorCompact({
   const handleSave = async () => {
     setSaving(true);
     try {
+      const miscValueNum = Math.max(0, Number(customMiscLine.value) || 0);
       const token = localStorage.getItem('accessToken');
       const response = await fetch(`${API_BASE}/leads/${leadId}/rehab-budget`, {
         method: 'POST',
@@ -146,8 +166,9 @@ export function RehabBudgetCalculatorCompact({
           finishLevel,
           toggledItems,
           customValues: {
-            miscLabel: customMiscLabel,
-            miscValue: customMiscValue,
+            miscLabel: customMiscLine.label || '',
+            miscValue: miscValueNum,
+            miscLines: [{ label: customMiscLine.label || '', value: miscValueNum }],
           },
           subtotal: subtotalWithCustom,
           contingencyAmount: contingencyWithCustom,
@@ -206,25 +227,31 @@ export function RehabBudgetCalculatorCompact({
   };
 
   const renderCustomMiscRow = () => {
-    const value = Number(customMiscValue) || 0;
+    const valueNum = Math.max(0, Number(customMiscLine.value) || 0);
+    const valueDisplay = customMiscLine.value === '' ? '' : String(valueNum);
     return (
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 min-w-0">
           <Input
-            value={customMiscLabel}
-            onChange={(e) => setCustomMiscLabel(e.target.value)}
+            value={customMiscLine.label}
+            onChange={(e) =>
+              setCustomMiscLine((prev) => ({ ...prev, label: e.target.value }))
+            }
             disabled={readOnly}
-            placeholder="Custom line item"
-            className="h-7 text-[10px]"
+            placeholder="Miscellaneous"
+            className="h-6 text-[10px] w-[220px] sm:w-[260px] md:w-[320px]"
           />
         </div>
         <div className="flex items-center gap-1">
           <Input
             type="number"
-            value={Number.isFinite(value) ? value : 0}
-            onChange={(e) => setCustomMiscValue(Number(e.target.value) || 0)}
+            value={valueDisplay}
+            onChange={(e) =>
+              setCustomMiscLine((prev) => ({ ...prev, value: e.target.value }))
+            }
             disabled={readOnly}
-            className="h-7 w-20 text-[10px] tabular-nums"
+            min={0}
+            className="h-6 w-28 text-[10px] tabular-nums"
           />
         </div>
       </div>
@@ -324,7 +351,7 @@ export function RehabBudgetCalculatorCompact({
               {renderGroup('Planning', [
                 { key: 'permits', label: 'Permits' },
                 { key: 'demolition', label: 'Demo' },
-                { key: 'cleanup', label: 'Cleanup (Sqft × 0.8)' },
+                { key: 'cleanup', label: 'Cleanup' },
               ])}
               {renderGroup('Structure', [
                 { key: 'foundation', label: 'Foundation' },
@@ -368,18 +395,18 @@ export function RehabBudgetCalculatorCompact({
             </div>
 
             {/* Row 4 */}
-            <div className="grid grid-cols-1">
-              {renderGroup('Miscellaneous', [
-                { key: 'smartHome', label: 'Smart Home' },
-                { key: 'landscaping', label: 'Landscaping' },
-                { key: 'miscellaneous', label: 'Miscellaneous' },
-              ])}
-              <div className="rounded border border-slate-200 bg-white p-2 mt-2">
-                <div className="text-[10px] font-semibold text-slate-700 mb-1 uppercase tracking-wide">
-                  Miscellaneous (Custom)
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div className="rounded border border-slate-200 bg-white p-2">
+                <div className="text-[10px] font-semibold text-slate-700 mb-1 uppercase tracking-wide">Miscellaneous</div>
+                <div className="space-y-1">
+                  {renderLineItem('smartHome', 'Smart Home')}
+                  {renderLineItem('landscaping', 'Landscaping')}
+                  {/* Custom fillable misc lines (included in totals) */}
+                  {renderCustomMiscRow()}
                 </div>
-                {renderCustomMiscRow()}
               </div>
+              {/* Spacer column so Miscellaneous matches the half-width layout (like Kitchen/Bathrooms) */}
+              <div className="hidden md:block" />
             </div>
           </div>
 
@@ -387,15 +414,15 @@ export function RehabBudgetCalculatorCompact({
           <div className="border-t pt-1 space-y-0.5 text-[10px]">
             <div className="flex justify-between">
               <span className="text-slate-600">Subtotal:</span>
-              <span className="font-medium">{formatCurrency(calculation.subtotal)}</span>
+              <span className="font-medium">{formatCurrency(subtotalWithCustom)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-600">Contingency (10%):</span>
-              <span className="font-medium">{formatCurrency(calculation.contingencyAmount)}</span>
+              <span className="font-medium">{formatCurrency(contingencyWithCustom)}</span>
             </div>
             <div className="flex justify-between font-bold border-t pt-0.5">
               <span>Total:</span>
-              <span className="text-emerald-600">{formatCurrency(calculation.totalCost)}</span>
+              <span className="text-emerald-600">{formatCurrency(totalWithCustom)}</span>
             </div>
           </div>
         </div>
