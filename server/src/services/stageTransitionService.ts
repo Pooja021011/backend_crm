@@ -26,13 +26,13 @@ export const stageTransitionService = {
       });
       
       if (!toStage) {
-        logger.warn('Stage not found during validation, allowing transition', { toStageId, leadId });
+        logger.warn({ toStageId, leadId }, 'Stage not found during validation, allowing transition');
         // Fail open - allow transition if stage not found (might be a data issue)
         return { valid: true };
       }
       
       const stageName = toStage.name.toLowerCase();
-      logger.info('Validating stage transition', { leadId, toStageId, stageName });
+      logger.info({ leadId, toStageId, stageName }, 'Validating stage transition');
       
       const lead = await prisma.lead.findUnique({
         where: { id: leadId },
@@ -47,7 +47,7 @@ export const stageTransitionService = {
       });
       
       if (!lead) {
-        logger.warn('Lead not found during validation, allowing transition', { leadId });
+        logger.warn({ leadId }, 'Lead not found during validation, allowing transition');
         // Fail open - allow transition if lead not found (might be a data issue)
         return { valid: true };
       }
@@ -59,10 +59,10 @@ export const stageTransitionService = {
       // Rule 2A: Appointment Complete requires photo upload
       if (stageName.includes('appointment') && stageName.includes('complete')) {
         // Check if photos exist for this lead
-        const photoCount = await prisma.file.count({
+        const photoCount = await prisma.leadFile.count({
           where: {
             leadId,
-            category: 'PHOTO'
+            file: { category: 'PHOTO' }
           }
         });
         
@@ -139,7 +139,7 @@ export const stageTransitionService = {
       
       return { valid: true, stageName: toStage.name };
     } catch (error: any) {
-      logger.error('Error validating stage transition', { error: error.message, leadId, toStageId });
+      logger.error({ error: error.message, leadId, toStageId }, 'Error validating stage transition');
       // On error, allow transition (fail open to not break existing functionality)
       return { valid: true };
     }
@@ -178,11 +178,11 @@ export const stageTransitionService = {
       const address = lead.address?.address1 || 'Property';
       const customFields = (lead.customFields as any) || {};
       
-      logger.info('Executing post-transition actions', { 
+      logger.info({ 
         leadId, 
         stageName, 
         customFields: JSON.stringify(customFields) 
-      });
+      }, 'Executing post-transition actions');
       
       // Rule 2A: Appointment Complete → Create "Underwrite" task
       if (stageName.includes('appointment') && stageName.includes('complete')) {
@@ -194,7 +194,7 @@ export const stageTransitionService = {
           createdById: userId
         });
         
-        logger.info('Auto-created Underwrite task', { leadId, stageName: stage.name });
+        logger.info({ leadId, stageName: stage.name }, 'Auto-created Underwrite task');
       }
       
       // Rule 2B: Due Diligence Complete → Create "Make Offer" task
@@ -207,18 +207,18 @@ export const stageTransitionService = {
           createdById: userId
         });
         
-        logger.info('Auto-created Make Offer task', { leadId, stageName: stage.name });
+        logger.info({ leadId, stageName: stage.name }, 'Auto-created Make Offer task');
       }
       
       // Rule 2C: Offer Made → Conditional task creation
       if (stageName.includes('offer') && stageName.includes('made')) {
         const response = customFields.offerMadeResponse?.toLowerCase();
         
-        logger.info('Checking offer response for task creation', { 
+        logger.info({ 
           leadId, 
           offerMadeResponse: customFields.offerMadeResponse,
           responseLower: response 
-        });
+        }, 'Checking offer response for task creation');
         
         if (response === 'negotiating') {
           // Follow up in 6 hours
@@ -233,25 +233,15 @@ export const stageTransitionService = {
             createdById: userId
           });
           
-          logger.info('Auto-created Follow Up task (negotiating)', { leadId, stageName: stage.name });
+          logger.info({ leadId, stageName: stage.name }, 'Auto-created Follow Up task (negotiating)');
         } else if (response === 'rejected') {
-          // Re-offer in 2 weeks
-          const dueDate = new Date();
-          dueDate.setDate(dueDate.getDate() + 14);
-          
-          await taskRepository.create(leadId, {
-            title: `Re-Offer on ${address}`,
-            description: 'Prepare revised offer after rejection',
-            dueAt: dueDate,
-            assignedToId: lead.assignedUserId || userId,
-            createdById: userId
-          });
-          
-          logger.info('Auto-created Re-Offer task (rejected)', { leadId, stageName: stage.name });
+          // TEMP: Disable auto-created Re-Offer task.
+          // Keeping the rest of Offer Made automation intact.
+          logger.info({ leadId, stageName: stage.name }, 'Skipped auto-created Re-Offer task (rejected) - temporarily disabled');
         } else if (response === 'accepted') {
           // Send contract via DocuSign
           try {
-            logger.info('Offer accepted - sending contract via DocuSign', { leadId, stageName: stage.name });
+            logger.info({ leadId, stageName: stage.name }, 'Offer accepted - sending contract via DocuSign');
             
             const envelopeResult = await docusignService.createAndSendEnvelopeFromTemplate(leadId);
             
@@ -293,17 +283,17 @@ export const stageTransitionService = {
               createdById: userId
             });
             
-            logger.info('Contract sent via DocuSign successfully', { 
+            logger.info({ 
               leadId, 
               envelopeId: envelopeResult.envelopeId,
               voidAt: envelopeResult.voidAt
-            });
+            }, 'Contract sent via DocuSign successfully');
             
           } catch (error: any) {
-            logger.error('Failed to send contract via DocuSign', { 
+            logger.error({ 
               leadId, 
               error: error.message 
-            });
+            }, 'Failed to send contract via DocuSign');
             
             // Create task for manual follow-up
             await taskRepository.create(leadId, {
@@ -332,15 +322,15 @@ export const stageTransitionService = {
           createdById: userId
         });
         
-        logger.info('Auto-created Void Check task', { leadId, stageName: stage.name });
+        logger.info({ leadId, stageName: stage.name }, 'Auto-created Void Check task');
       }
     } catch (error: any) {
       // Don't throw - task creation failures shouldn't block stage changes
-      logger.error('Error executing post-transition actions', { 
+      logger.error({ 
         error: error.message, 
         leadId, 
         toStageId 
-      });
+      }, 'Error executing post-transition actions');
     }
   }
 };
