@@ -67,7 +67,6 @@ import { PhoneInput } from '@/components/PhoneInput';
 import { normalizeUsPhoneToE164 } from '@/utils/phone';
 import { formatUsPhoneForDisplay } from '@/utils/phone';
 import { LeadOwnerSection, type LeadOwnerSectionRef } from '@/components/LeadOwnerSection';
-import { LeadPhotoGallery } from '@/components/LeadPhotoGallery';
 import { LeadFileGallery } from '@/components/LeadFileGallery';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -2788,16 +2787,6 @@ const LeadEdit: React.FC = () => {
       // Upload multiple photos
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        
-        // Validate file is an image
-        if (!file.type.startsWith('image/')) {
-          toast({
-            title: 'Invalid File',
-            description: `${file.name} is not an image file`,
-            variant: 'destructive'
-          });
-          continue;
-        }
 
         const formData = new FormData();
         formData.append('file', file);
@@ -3407,7 +3396,6 @@ const LeadEdit: React.FC = () => {
                         <input 
                           id="photo-upload" 
                           type="file" 
-                          accept="image/*" 
                           multiple
                           className="hidden" 
                           onChange={handlePhotoUpload} 
@@ -3423,16 +3411,16 @@ const LeadEdit: React.FC = () => {
                           <span className="text-sm">Uploading photos...</span>
                         </div>
                       ) : (
-                        <LeadPhotoGallery
-                          photos={photos}
-                          onDeletePhoto={async (photo) => {
-                            if (confirm('Delete this photo?')) {
+                        <LeadFileGallery
+                          files={photos}
+                          onDeleteFile={async (file) => {
+                            if (confirm('Delete this file?')) {
                               try {
-                                await makeApiCall(`${API_BASE}/files/${photo.id}`, { method: 'DELETE' });
-                                toast({ title: 'Success', description: 'Photo deleted' });
+                                await makeApiCall(`${API_BASE}/files/${file.id}`, { method: 'DELETE' });
+                                toast({ title: 'Success', description: 'File deleted' });
                                 loadPhotos();
                               } catch (error) {
-                                toast({ title: 'Error', description: 'Failed to delete photo', variant: 'destructive' });
+                                toast({ title: 'Error', description: 'Failed to delete file', variant: 'destructive' });
                               }
                             }
                           }}
@@ -3965,7 +3953,8 @@ const LeadEdit: React.FC = () => {
             for (const file of files) {
               const formData = new FormData();
               formData.append('file', file);
-              formData.append('category', 'PHOTO');
+              // Must match what the Photos section filters on (`category === 'photos'`)
+              formData.append('category', 'photos');
               
               const uploadResponse = await makeApiCall(`${API_BASE}/leads/${id}/files`, {
                 method: 'POST',
@@ -3996,8 +3985,8 @@ const LeadEdit: React.FC = () => {
             setShowAppointmentPopup(false);
             setPendingPipelineStatus(null);
             
-            // Reload files to show new photos
-            await loadFiles();
+            // Reload photos so the Photos section updates immediately
+            await loadPhotos();
             
             // Reload lead to show updated stage
             await loadLead();

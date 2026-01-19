@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Upload, X } from "lucide-react";
 
 // Popup for Appointment Complete - Photo Upload Required
@@ -20,10 +20,27 @@ export const AppointmentCompletePopup = ({
 }) => {
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+  const inputId = useId();
   
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      setFiles(Array.from(e.target.files));
+      const incoming = Array.from(e.target.files);
+      // Append so user can select multiple times (bulk upload), while de-duping by file identity
+      setFiles((prev) => {
+        const seen = new Set(prev.map((f) => `${f.name}:${f.size}:${f.lastModified}`));
+        const next = [...prev];
+        for (const f of incoming) {
+          const key = `${f.name}:${f.size}:${f.lastModified}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            next.push(f);
+          }
+        }
+        return next;
+      });
+
+      // Reset input so the same file can be selected again if needed
+      e.target.value = "";
     }
   };
   
@@ -33,7 +50,7 @@ export const AppointmentCompletePopup = ({
     try {
       await onSubmit(files);
       setFiles([]);
-      onClose();
+      onClose(); // close popup after successful upload + stage update
     } catch (error) {
       console.error('Upload failed:', error);
     } finally {
@@ -42,7 +59,12 @@ export const AppointmentCompletePopup = ({
   };
   
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) onClose();
+      }}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Property Photos Required</DialogTitle>
@@ -53,14 +75,16 @@ export const AppointmentCompletePopup = ({
         <div className="space-y-4">
           <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center">
             <Upload className="w-12 h-12 mx-auto mb-2 text-slate-400" />
-            <Label htmlFor="photo-upload" className="cursor-pointer text-sm text-slate-600 hover:text-slate-900">
-              Click to upload photos
+            <Label
+              htmlFor={inputId}
+              className="cursor-pointer text-sm text-slate-600 hover:text-slate-900"
+            >
+              Click to upload files
             </Label>
             <Input 
-              id="photo-upload"
+              id={inputId}
               type="file" 
               multiple 
-              accept="image/*"
               onChange={handleFileChange}
               className="hidden"
             />
@@ -70,7 +94,7 @@ export const AppointmentCompletePopup = ({
                   <div key={idx} className="flex items-center justify-between bg-slate-50 p-2 rounded">
                     <span className="text-sm truncate">{file.name}</span>
                     <button
-                      onClick={() => setFiles(files.filter((_, i) => i !== idx))}
+                      onClick={() => setFiles((prev) => prev.filter((_, i) => i !== idx))}
                       className="text-red-500 hover:text-red-700"
                     >
                       <X className="w-4 h-4" />

@@ -7,25 +7,6 @@ import { fileRepository } from '../repositories/fileRepository.js';
 const uploadDir = path.resolve(process.cwd(), 'server', 'uploads');
 fs.mkdirSync(uploadDir, { recursive: true });
 
-// File type validation
-const allowedMimeTypes = [
-  // Images
-  'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
-  // Documents
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'text/plain',
-  // Audio (voicemail greetings)
-  'audio/wav', 'audio/x-wav', 'audio/wave',
-  // Videos
-  'video/mp4', 'video/avi', 'video/quicktime', 'video/x-msvideo', 'video/webm',
-  // Archives
-  'application/zip', 'application/x-rar-compressed'
-];
-
 const maxFileSize = 50 * 1024 * 1024; // 50MB
 
 const storage = multer.diskStorage({
@@ -37,12 +18,9 @@ const storage = multer.diskStorage({
   }
 });
 
-const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-  if (allowedMimeTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error(`File type ${file.mimetype} not allowed`));
-  }
+// Allow all file types (still enforcing max size via multer limits).
+const fileFilter = (_req: any, _file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  cb(null, true);
 };
 
 export const uploader = multer({ 

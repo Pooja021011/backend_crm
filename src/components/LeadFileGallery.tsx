@@ -101,7 +101,18 @@ export function LeadFileGallery({
       >
         <CarouselContent>
           {files.map((file, idx) => {
-            const isImage = file.mimeType?.startsWith('image/');
+            // Most browsers can't render HEIC/HEIF in <img>, so treat them as non-images
+            // even though their mimeType begins with image/*.
+            const nonPreviewableImageMimes = new Set([
+              'image/heic',
+              'image/heif',
+              'image/heic-sequence',
+              'image/heif-sequence',
+            ]);
+            const isImage =
+              !!file.mimeType &&
+              file.mimeType.startsWith('image/') &&
+              !nonPreviewableImageMimes.has(file.mimeType);
             const previewUrl = getFilePreviewUrl(file.id);
             const downloadUrl = getFileDownloadUrl(file.id);
             
@@ -227,7 +238,13 @@ export function LeadFileGallery({
 
             {activeFile && (
               <>
-                {activeFile.mimeType?.startsWith('image/') ? (
+                {activeFile.mimeType === 'application/pdf' ? (
+                  <iframe
+                    src={getFilePreviewUrl(activeFile.id)}
+                    className="w-full h-[80vh]"
+                    title={activeFile.originalName || activeFile.filename || "PDF Preview"}
+                  />
+                ) : activeFile.mimeType?.startsWith('image/') ? (
                   <img
                     src={getFilePreviewUrl(activeFile.id)}
                     alt={activeFile.originalName || "File"}
