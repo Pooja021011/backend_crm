@@ -637,9 +637,22 @@ export const pipelineService = {
           attentionReason: lead.attentionReason,
           
           // Tasks
-          openTasks: lead.tasks.filter(task => task.status === 'OPEN').length,
+          // NOTE: Exclude mention-generated "Review note on ..." tasks from pipeline card counts.
+          // Those are created from note @mentions and should not inflate operational task KPIs on pipeline cards.
+          openTasks: lead.tasks.filter(task => {
+            if (task.status !== 'OPEN') return false;
+            const title = String(task.title || '');
+            if (title.startsWith('Review note on ')) return false;
+            return true;
+          }).length,
           openTasksMine: filters.userId
-            ? lead.tasks.filter(task => task.status === 'OPEN' && task.assignedToId === filters.userId).length
+            ? lead.tasks.filter(task => {
+                if (task.status !== 'OPEN') return false;
+                if (task.assignedToId !== filters.userId) return false;
+                const title = String(task.title || '');
+                if (title.startsWith('Review note on ')) return false;
+                return true;
+              }).length
             : 0,
           overdueTasks: lead.tasks.filter(task => task.status === 'OPEN' && new Date(task.dueAt) < now).length
         };
