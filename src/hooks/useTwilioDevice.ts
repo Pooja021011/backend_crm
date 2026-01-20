@@ -362,6 +362,23 @@ export const useTwilioDevice = () => {
 
       newDevice.on('error', (error) => {
         console.error('Twilio Device error:', error);
+
+        // Suppress noisy connection errors in UI (e.g., ConnectionError 31005).
+        // These are common transient network/WebRTC issues and should not spam users.
+        const errAny = error as any;
+        const code = errAny?.code;
+        const name = String(errAny?.name || '');
+        const message = String(errAny?.message || '');
+        const lower = message.toLowerCase();
+        if (
+          code === 31005 ||
+          name.toLowerCase().includes('connectionerror') ||
+          lower.includes('31005')
+        ) {
+          console.warn('Suppressing Twilio connection error toast:', { code, name, message });
+          return;
+        }
+
         // If token is invalid/expired, try refreshing token once
         const msg = String((error as any)?.message || '').toLowerCase();
         if (msg.includes('jwt') || msg.includes('token')) {

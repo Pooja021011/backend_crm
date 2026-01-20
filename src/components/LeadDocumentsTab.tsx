@@ -42,12 +42,19 @@ export const LeadDocumentsTab: React.FC<LeadDocumentsTabProps> = ({
         if (response.ok) {
           const data = await response.json();
           const files = data.files || data.data || [];
+
+          // Documents tab should not count photos (they appear in the Photos section).
+          const docsOnly = files.filter((f: any) => {
+            const category = (f?.category || '').toString().toLowerCase();
+            const isPhotoCategory = category === 'photos' || category === 'photo';
+            return !isPhotoCategory;
+          });
           
           // Calculate stats
-          const totalCount = files.length;
+          const totalCount = docsOnly.length;
           const now = new Date();
           const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-          const recentCount = files.filter((f: any) => 
+          const recentCount = docsOnly.filter((f: any) => 
             new Date(f.uploadedAt) >= sevenDaysAgo
           ).length;
           

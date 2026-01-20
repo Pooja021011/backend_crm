@@ -56,7 +56,8 @@ import { LeadTimeline } from '@/components/LeadTimeline';
 import { 
   AppointmentCompletePopup,
   DueDiligencePopup,
-  OfferMadePopup
+  OfferMadePopup,
+  DueDiligenceCompleteRequirementsPopup
 } from '@/components/StageTransitionPopups';
 import { PropertyInfoCard } from '@/components/PropertyInfoCard';
 import { RehabBudgetCalculatorCompact } from '@/components/RehabBudgetCalculatorCompact';
@@ -261,7 +262,10 @@ const LeadEdit: React.FC = () => {
   const [showAppointmentPopup, setShowAppointmentPopup] = useState(false);
   const [showDueDiligencePopup, setShowDueDiligencePopup] = useState(false);
   const [showOfferMadePopup, setShowOfferMadePopup] = useState(false);
+  const [showDueDiligenceCompletePopup, setShowDueDiligenceCompletePopup] = useState(false);
   const [pendingPipelineStatus, setPendingPipelineStatus] = useState<string | null>(null);
+  const [missingDdFields, setMissingDdFields] = useState<string[]>([]);
+  const [missingDdCompleteItems, setMissingDdCompleteItems] = useState<string[]>([]);
   
   // Property info
   const [propertyType, setPropertyType] = useState('');
@@ -490,15 +494,63 @@ const LeadEdit: React.FC = () => {
         });
 
         if (!stageResponse.ok) {
-          const stageError = await stageResponse.json().catch(() => ({}));
+          const stageError: any = await stageResponse.json().catch(() => ({}));
           // Backend returns { success:false, error, code, requiredFields, stageName } for validation
-          throw new Error(stageError?.error || stageError?.message || 'Failed to change pipeline stage');
+          const err: any = new Error(stageError?.error || stageError?.message || 'Failed to change pipeline stage');
+          err.code = stageError?.code;
+          err.requiredFields = stageError?.requiredFields || [];
+          err.stageName = stageError?.stageName;
+          throw err;
         }
 
         setPipelineStatus(stageId);
         // Stage move is its own persisted action; mark autosave as clean
         setAutoSaveStatus('saved');
       } catch (e: any) {
+        // Let callers decide whether to show a validation popup (e.g., pictures required)
+        throw e;
+      }
+    },
+    [id, canEditLead, toast, lead?.pipelineStageId]
+  );
+
+  // Handler for pipeline status changes with validation (popup only when backend requires it)
+  const handlePipelineStatusChange = (newStageId: string) => {
+    const newStage = pipelineStages.find((s) => s.id === newStageId);
+
+    void (async () => {
+      try {
+        await requestStageMove(newStageId);
+      } catch (e: any) {
+        const code = e?.code;
+        const requiredFields: string[] = Array.isArray(e?.requiredFields) ? e.requiredFields : [];
+        const stageNameLower = (newStage?.name || '').toLowerCase();
+
+        if (code === 'VALIDATION_REQUIRED') {
+          setPendingPipelineStatus(newStageId);
+
+          if (requiredFields.includes('photos')) {
+            setShowAppointmentPopup(true);
+            return;
+          }
+          const ddFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
+          if (requiredFields.some((f) => ddFields.includes(f))) {
+            setMissingDdFields(requiredFields.filter((f) => ddFields.includes(f)));
+            setShowDueDiligencePopup(true);
+            return;
+          }
+          const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation'];
+          if (requiredFields.some((f) => ddCompleteFields.includes(f))) {
+            setMissingDdCompleteItems(requiredFields.filter((f) => ddCompleteFields.includes(f)));
+            setShowDueDiligenceCompletePopup(true);
+            return;
+          }
+          if (stageNameLower.includes('offer') && stageNameLower.includes('made')) {
+            setShowOfferMadePopup(true);
+            return;
+          }
+        }
+
         toast({
           title: 'Stage Change Failed',
           description: e?.message || 'Failed to change pipeline stage',
@@ -508,39 +560,7 @@ const LeadEdit: React.FC = () => {
         // Revert UI selection back to server-known stage
         setPipelineStatus(lead?.pipelineStageId || '');
       }
-    },
-    [id, canEditLead, toast, lead?.pipelineStageId]
-  );
-
-  // Handler for pipeline status changes with validation
-  const handlePipelineStatusChange = (newStageId: string) => {
-    const newStage = pipelineStages.find((s) => s.id === newStageId);
-    if (!newStage) {
-      void requestStageMove(newStageId);
-      return;
-    }
-
-    const stageName = (newStage.name || '').toLowerCase();
-
-    // Check if validation popup is needed
-    if (stageName.includes('appointment') && stageName.includes('complete')) {
-      setPendingPipelineStatus(newStageId);
-      setShowAppointmentPopup(true);
-      return;
-    }
-    if (stageName.includes('due diligence') && stageName.includes('complete')) {
-      setPendingPipelineStatus(newStageId);
-      setShowDueDiligencePopup(true);
-      return;
-    }
-    if (stageName.includes('offer') && stageName.includes('made')) {
-      setPendingPipelineStatus(newStageId);
-      setShowOfferMadePopup(true);
-      return;
-    }
-
-    // No validation needed, move immediately
-    void requestStageMove(newStageId);
+    })();
   };
 
   useEffect(() => {
@@ -2432,7 +2452,13 @@ const LeadEdit: React.FC = () => {
       const response = await makeApiCall(`${API_BASE}/leads/${id}/files`);
       if (response.ok) {
         const data = await response.json();
-        setFiles(data.data || []);
+        // Files tab should NOT include photo-category items. Photos are shown in the Photos section.
+        const onlyNonPhotos = (data.data || []).filter((file: any) => {
+          const category = (file?.category || '').toString().toLowerCase();
+          const isPhotoCategory = category === 'photos' || category === 'photo';
+          return !isPhotoCategory;
+        });
+        setFiles(onlyNonPhotos);
       }
     } catch (error) {
       console.error('Error loading files:', error);
@@ -2444,8 +2470,12 @@ const LeadEdit: React.FC = () => {
       const response = await makeApiCall(`${API_BASE}/files/lead/${id}`);
       if (response.ok) {
         const data = await response.json();
-        // Filter only photos category
-        const photoFiles = (data.data || []).filter((file: any) => file.category === 'photos');
+        // Photos section is category-driven: only items categorized as photos appear here.
+        const photoFiles = (data.data || []).filter((file: any) => {
+          const category = (file?.category || '').toString().toLowerCase();
+          const isPhotoCategory = category === 'photos' || category === 'photo';
+          return isPhotoCategory;
+        });
         setPhotos(photoFiles);
       }
     } catch (error) {
@@ -2730,6 +2760,9 @@ const LeadEdit: React.FC = () => {
         try {
           const formData = new FormData();
           formData.append('file', file);
+          // Files tab uploads should remain in Files, even if the file is an image.
+          // Photos section is reserved for items explicitly categorized as 'photos'.
+          formData.append('category', 'other');
 
           const response = await makeApiCall(`${API_BASE}/leads/${id}/files`, {
             method: 'POST',
@@ -3977,9 +4010,37 @@ const LeadEdit: React.FC = () => {
             
             console.log(`📸 Uploaded ${uploadedCount} of ${files.length} photos`);
             
-            // Now move the lead to the new stage using the backend API
+            // Retry stage move; if more is missing, open the next popup automatically
             if (pendingPipelineStatus) {
-              await requestStageMove(pendingPipelineStatus);
+              try {
+                await requestStageMove(pendingPipelineStatus);
+              } catch (e: any) {
+                if (e?.code === 'VALIDATION_REQUIRED') {
+                  const requiredFields: string[] = Array.isArray(e?.requiredFields) ? e.requiredFields : [];
+                  const ddFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
+                  const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation'];
+
+                  if (requiredFields.some((f) => ddFields.includes(f))) {
+                    setMissingDdFields(requiredFields.filter((f) => ddFields.includes(f)));
+                    setShowAppointmentPopup(false);
+                    setShowDueDiligencePopup(true);
+                    return;
+                  }
+                  if (requiredFields.some((f) => ddCompleteFields.includes(f))) {
+                    setMissingDdCompleteItems(requiredFields.filter((f) => ddCompleteFields.includes(f)));
+                    setShowAppointmentPopup(false);
+                    setShowDueDiligenceCompletePopup(true);
+                    return;
+                  }
+                  const stageNameLower = (pipelineStages.find((s) => s.id === pendingPipelineStatus)?.name || '').toLowerCase();
+                  if (stageNameLower.includes('offer') && stageNameLower.includes('made')) {
+                    setShowAppointmentPopup(false);
+                    setShowOfferMadePopup(true);
+                    return;
+                  }
+                }
+                throw e;
+              }
             }
             
             setShowAppointmentPopup(false);
@@ -4010,9 +4071,11 @@ const LeadEdit: React.FC = () => {
         open={showDueDiligencePopup}
         onClose={() => {
           setShowDueDiligencePopup(false);
+          setMissingDdFields([]);
           setPendingPipelineStatus(null);
         }}
         existingData={lead?.customFields}
+        missingFields={missingDdFields}
         onSubmit={async (data) => {
           try {
             // Update lead with property info first
@@ -4032,12 +4095,39 @@ const LeadEdit: React.FC = () => {
               throw new Error(errorData.error || 'Failed to update property information');
             }
             
-            // Now move the lead to the new stage using the backend API
+            // Retry stage move; if more is missing, open the next popup automatically
             if (pendingPipelineStatus) {
-              await requestStageMove(pendingPipelineStatus);
+              try {
+                await requestStageMove(pendingPipelineStatus);
+              } catch (e: any) {
+                if (e?.code === 'VALIDATION_REQUIRED') {
+                  const requiredFields: string[] = Array.isArray(e?.requiredFields) ? e.requiredFields : [];
+                  const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation'];
+
+                  if (requiredFields.includes('photos')) {
+                    setShowDueDiligencePopup(false);
+                    setShowAppointmentPopup(true);
+                    return;
+                  }
+                  if (requiredFields.some((f) => ddCompleteFields.includes(f))) {
+                    setMissingDdCompleteItems(requiredFields.filter((f) => ddCompleteFields.includes(f)));
+                    setShowDueDiligencePopup(false);
+                    setShowDueDiligenceCompletePopup(true);
+                    return;
+                  }
+                  const stageNameLower = (pipelineStages.find((s) => s.id === pendingPipelineStatus)?.name || '').toLowerCase();
+                  if (stageNameLower.includes('offer') && stageNameLower.includes('made')) {
+                    setShowDueDiligencePopup(false);
+                    setShowOfferMadePopup(true);
+                    return;
+                  }
+                }
+                throw e;
+              }
             }
             
             setShowDueDiligencePopup(false);
+            setMissingDdFields([]);
             setPendingPipelineStatus(null);
             
             // Reload lead to show updated data
@@ -4055,6 +4145,16 @@ const LeadEdit: React.FC = () => {
               variant: "destructive"
             });
           }
+        }}
+      />
+
+      <DueDiligenceCompleteRequirementsPopup
+        open={showDueDiligenceCompletePopup}
+        missingItems={missingDdCompleteItems}
+        onClose={() => {
+          setShowDueDiligenceCompletePopup(false);
+          setMissingDdCompleteItems([]);
+          setPendingPipelineStatus(null);
         }}
       />
       
@@ -4094,9 +4194,36 @@ const LeadEdit: React.FC = () => {
             
             console.log('✅ Offer data saved successfully');
             
-            // Now move the lead to the new stage using the backend API
+            // Retry stage move; if more is missing, open the next popup automatically
             if (pendingPipelineStatus) {
-              await requestStageMove(pendingPipelineStatus);
+              try {
+                await requestStageMove(pendingPipelineStatus);
+              } catch (e: any) {
+                if (e?.code === 'VALIDATION_REQUIRED') {
+                  const requiredFields: string[] = Array.isArray(e?.requiredFields) ? e.requiredFields : [];
+                  const ddFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
+                  const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation'];
+
+                  if (requiredFields.includes('photos')) {
+                    setShowOfferMadePopup(false);
+                    setShowAppointmentPopup(true);
+                    return;
+                  }
+                  if (requiredFields.some((f) => ddFields.includes(f))) {
+                    setMissingDdFields(requiredFields.filter((f) => ddFields.includes(f)));
+                    setShowOfferMadePopup(false);
+                    setShowDueDiligencePopup(true);
+                    return;
+                  }
+                  if (requiredFields.some((f) => ddCompleteFields.includes(f))) {
+                    setMissingDdCompleteItems(requiredFields.filter((f) => ddCompleteFields.includes(f)));
+                    setShowOfferMadePopup(false);
+                    setShowDueDiligenceCompletePopup(true);
+                    return;
+                  }
+                }
+                throw e;
+              }
             }
             
             setShowOfferMadePopup(false);

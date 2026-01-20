@@ -14,7 +14,18 @@ export const getApiBaseUrl = (): string => {
     return `${apiUrl}/api/v1`;
   }
   
-  // Fallback to hardcoded server URL if env variable not found
+  // Fallbacks:
+  // - In local dev (vite), default to local backend
+  // - Otherwise default to production
+  try {
+    const host = typeof window !== 'undefined' ? window.location.hostname : '';
+    if (import.meta.env.DEV || host === 'localhost' || host === '127.0.0.1') {
+      return 'http://localhost:4000/api/v1';
+    }
+  } catch {
+    // ignore and use production fallback below
+  }
+
   return 'https://realestate.withai.agency/api/v1';
 };
 
@@ -30,7 +41,27 @@ export const httpFetch = async (url: string, options?: RequestInit): Promise<Res
     headers,
   };
 
-  return fetch(url, defaultOptions);
+  try {
+    return await fetch(url, defaultOptions);
+  } catch (err: any) {
+    // Normalize common browser/network errors (shows as "Failed to fetch" otherwise)
+    let target = url;
+    try {
+      target = new URL(url).origin;
+    } catch {
+      // keep raw url
+    }
+
+    const isNetworkError =
+      err?.name === 'TypeError' ||
+      typeof err?.message === 'string' && err.message.toLowerCase().includes('failed to fetch');
+
+    if (isNetworkError) {
+      throw new Error(`Cannot reach backend API at ${target}. Is the backend running on port 4000?`);
+    }
+
+    throw new Error(err?.message || 'Network request failed');
+  }
 };
 
 // Helper function for API calls with automatic token refresh

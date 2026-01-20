@@ -153,7 +153,17 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({
       }
 
       const data = await response.json();
-      setDocuments(data.files || []);
+      const all = (data.files || data.data || []) as DocumentFile[];
+
+      // This view is for Documents/Files. Photos are shown in the dedicated Photos UI,
+      // so we exclude photo categories to prevent duplication.
+      const filtered = all.filter((doc: any) => {
+        const category = (doc?.category || '').toString().toLowerCase();
+        const isPhotoCategory = category === 'photos' || category === 'photo';
+        return !isPhotoCategory;
+      });
+
+      setDocuments(filtered);
     } catch (error) {
       toast({
         title: "Error",

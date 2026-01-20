@@ -1,10 +1,10 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useId, useState } from "react";
-import { Upload, X } from "lucide-react";
+import { Upload, X, ClipboardList, AlertCircle, DollarSign } from "lucide-react";
 
 // Popup for Appointment Complete - Photo Upload Required
 export const AppointmentCompletePopup = ({ 
@@ -65,21 +65,23 @@ export const AppointmentCompletePopup = ({
         if (!nextOpen) onClose();
       }}
     >
-      <DialogContent>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Property Photos Required</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <Upload className="w-5 h-5 text-purple-600" />
+            Pictures or Files Required
+          </DialogTitle>
           <DialogDescription>
-            Please upload property photos before marking appointment as complete.
+            Please upload at least one picture or file before moving to this stage.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center">
-            <Upload className="w-12 h-12 mx-auto mb-2 text-slate-400" />
+          <div className="border-2 border-dashed border-slate-200 rounded-lg p-5 text-center">
             <Label
               htmlFor={inputId}
               className="cursor-pointer text-sm text-slate-600 hover:text-slate-900"
             >
-              Click to upload files
+              Click to upload
             </Label>
             <Input 
               id={inputId}
@@ -93,27 +95,32 @@ export const AppointmentCompletePopup = ({
                 {files.map((file, idx) => (
                   <div key={idx} className="flex items-center justify-between bg-slate-50 p-2 rounded">
                     <span className="text-sm truncate">{file.name}</span>
-                    <button
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
                       onClick={() => setFiles((prev) => prev.filter((_, i) => i !== idx))}
-                      className="text-red-500 hover:text-red-700"
+                      className="h-8 w-8 text-slate-500 hover:text-red-600"
                     >
                       <X className="w-4 h-4" />
-                    </button>
+                    </Button>
                   </div>
                 ))}
               </div>
             )}
           </div>
-          <div className="flex gap-2">
-            <Button onClick={onClose} variant="outline" className="flex-1">Cancel</Button>
+
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button onClick={onClose} variant="outline">
+              Cancel
+            </Button>
             <Button 
               onClick={handleSubmit} 
               disabled={files.length === 0 || uploading}
-              className="flex-1"
             >
-              {uploading ? 'Uploading...' : `Upload ${files.length} Photo${files.length !== 1 ? 's' : ''}`}
+              {uploading ? 'Uploading...' : `Upload ${files.length} File${files.length !== 1 ? 's' : ''}`}
             </Button>
-          </div>
+          </DialogFooter>
         </div>
       </DialogContent>
     </Dialog>
@@ -125,12 +132,14 @@ export const DueDiligencePopup = ({
   open, 
   onClose, 
   onSubmit, 
-  existingData 
+  existingData,
+  missingFields
 }: {
   open: boolean;
   onClose: () => void;
   onSubmit: (data: any) => Promise<void>;
   existingData?: any;
+  missingFields?: string[];
 }) => {
   const [hvacType, setHvacType] = useState(existingData?.hvacType || '');
   const [hvacAge, setHvacAge] = useState(existingData?.hvacAge?.toString() || '');
@@ -139,19 +148,22 @@ export const DueDiligencePopup = ({
   const [waterType, setWaterType] = useState(existingData?.waterType || '');
   const [sewerType, setSewerType] = useState(existingData?.sewerType || '');
   const [submitting, setSubmitting] = useState(false);
+
+  const want = (key: string) => !missingFields || missingFields.length === 0 || missingFields.includes(key);
   
   const handleSubmit = async () => {
     if (!isValid) return;
     setSubmitting(true);
     try {
-      await onSubmit({
-        hvacType,
-        hvacAge: parseInt(hvacAge),
-        waterHeaterAge: parseInt(waterHeaterAge),
-        roofAge: parseInt(roofAge),
-        waterType,
-        sewerType
-      });
+      const payload: any = {};
+      if (want('hvacType')) payload.hvacType = hvacType;
+      if (want('hvacAge')) payload.hvacAge = parseInt(hvacAge);
+      if (want('waterHeaterAge')) payload.waterHeaterAge = parseInt(waterHeaterAge);
+      if (want('roofAge')) payload.roofAge = parseInt(roofAge);
+      if (want('waterType')) payload.waterType = waterType;
+      if (want('sewerType')) payload.sewerType = sewerType;
+
+      await onSubmit(payload);
       onClose();
     } catch (error) {
       console.error('Submit failed:', error);
@@ -160,87 +172,160 @@ export const DueDiligencePopup = ({
     }
   };
   
-  const isValid = hvacType && hvacAge && waterHeaterAge && roofAge && waterType && sewerType;
+  const isValid =
+    (!want('hvacType') || !!hvacType) &&
+    (!want('hvacAge') || !!hvacAge) &&
+    (!want('waterHeaterAge') || !!waterHeaterAge) &&
+    (!want('roofAge') || !!roofAge) &&
+    (!want('waterType') || !!waterType) &&
+    (!want('sewerType') || !!sewerType);
   
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Property Information Required</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <ClipboardList className="w-5 h-5 text-purple-600" />
+            Property Information Required
+          </DialogTitle>
           <DialogDescription>
             Please provide the following property details to complete due diligence.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-          <div>
-            <Label>HVAC Type *</Label>
-            <Input 
-              value={hvacType} 
-              onChange={(e) => setHvacType(e.target.value)}
-              placeholder="e.g., Central Air, Heat Pump"
-            />
-          </div>
-          <div>
-            <Label>HVAC Age (years) *</Label>
-            <Input 
-              type="number" 
-              value={hvacAge} 
-              onChange={(e) => setHvacAge(e.target.value)}
-              placeholder="0"
-              min="0"
-            />
-          </div>
-          <div>
-            <Label>Water Heater Age (years) *</Label>
-            <Input 
-              type="number" 
-              value={waterHeaterAge} 
-              onChange={(e) => setWaterHeaterAge(e.target.value)}
-              placeholder="0"
-              min="0"
-            />
-          </div>
-          <div>
-            <Label>Roof Age (years) *</Label>
-            <Input 
-              type="number" 
-              value={roofAge} 
-              onChange={(e) => setRoofAge(e.target.value)}
-              placeholder="0"
-              min="0"
-            />
-          </div>
-          <div>
-            <Label>Water Type *</Label>
-            <Select value={waterType} onValueChange={setWaterType}>
-              <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="City">City</SelectItem>
-                <SelectItem value="Well">Well</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>Sewer Type *</Label>
-            <Select value={sewerType} onValueChange={setSewerType}>
-              <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="City">City</SelectItem>
-                <SelectItem value="Septic">Septic</SelectItem>
-              </SelectContent>
-            </Select>
+        <div className="max-h-[60vh] overflow-y-auto px-1 pb-2">
+          <div className="grid grid-cols-2 gap-3">
+          {want('hvacType') && (
+            <div className="space-y-1">
+              <Label className="text-[10px] text-slate-500">HVAC *</Label>
+              <Input 
+                value={hvacType} 
+                onChange={(e) => setHvacType(e.target.value)}
+                placeholder="Type"
+                className="h-7 text-xs"
+              />
+            </div>
+          )}
+          {want('hvacAge') && (
+            <div className="space-y-1">
+              <Label className="text-[10px] text-slate-500">HVAC Age *</Label>
+              <Input 
+                type="number" 
+                value={hvacAge} 
+                onChange={(e) => setHvacAge(e.target.value)}
+                placeholder="Yrs"
+                min="0"
+                className="h-7 text-xs"
+              />
+            </div>
+          )}
+          {want('waterHeaterAge') && (
+            <div className="space-y-1">
+              <Label className="text-[10px] text-slate-500">WH Age *</Label>
+              <Input 
+                type="number" 
+                value={waterHeaterAge} 
+                onChange={(e) => setWaterHeaterAge(e.target.value)}
+                placeholder="Yrs"
+                min="0"
+                className="h-7 text-xs"
+              />
+            </div>
+          )}
+          {want('roofAge') && (
+            <div className="space-y-1">
+              <Label className="text-[10px] text-slate-500">Roof Age *</Label>
+              <Input 
+                type="number" 
+                value={roofAge} 
+                onChange={(e) => setRoofAge(e.target.value)}
+                placeholder="Yrs"
+                min="0"
+                className="h-7 text-xs"
+              />
+            </div>
+          )}
+          {want('waterType') && (
+            <div className="space-y-1">
+              <Label className="text-[10px] text-slate-500">Water *</Label>
+              <Input
+                value={waterType}
+                onChange={(e) => setWaterType(e.target.value)}
+                placeholder="Type"
+                className="h-6 text-xs"
+              />
+            </div>
+          )}
+          {want('sewerType') && (
+            <div className="space-y-1">
+              <Label className="text-[10px] text-slate-500">Sewer *</Label>
+              <Input
+                value={sewerType}
+                onChange={(e) => setSewerType(e.target.value)}
+                placeholder="Type"
+                className="h-6 text-xs"
+              />
+            </div>
+          )}
           </div>
         </div>
-        <div className="flex gap-2 pt-4 border-t">
-          <Button onClick={onClose} variant="outline" className="flex-1">Cancel</Button>
+        <DialogFooter className="gap-2 sm:gap-2">
+          <Button onClick={onClose} variant="outline">
+            Cancel
+          </Button>
           <Button 
             onClick={handleSubmit} 
             disabled={!isValid || submitting}
-            className="flex-1"
           >
             {submitting ? 'Saving...' : 'Submit'}
           </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+export const DueDiligenceCompleteRequirementsPopup = ({
+  open,
+  onClose,
+  missingItems
+}: {
+  open: boolean;
+  onClose: () => void;
+  missingItems: string[];
+}) => {
+  const labelFor = (k: string) => {
+    switch (k) {
+      case 'arv': return 'ARV Input';
+      case 'comparables': return 'Comparable properties';
+      case 'rehabBudget': return 'Rehab Budget';
+      case 'underwritingCalculation': return 'Underwriting Calculator';
+      default: return k;
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-purple-600" />
+            Due Diligence Complete Requirements
+          </DialogTitle>
+          <DialogDescription>
+            Please complete the following items before moving to Due Diligence Complete.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          {(missingItems || []).map((k) => (
+            <div key={k} className="flex items-center gap-2 text-sm">
+              <span className="inline-block h-2 w-2 rounded-full bg-orange-500" />
+              <span>{labelFor(k)}</span>
+            </div>
+          ))}
         </div>
+        <DialogFooter className="gap-2 sm:gap-2">
+          <Button onClick={onClose}>Close</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -284,40 +369,50 @@ export const OfferMadePopup = ({
   
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Offer Details Required</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <DollarSign className="w-5 h-5 text-purple-600" />
+            Offer Details Required
+          </DialogTitle>
           <DialogDescription>
             Please provide offer details to track this opportunity.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
-          <div>
-            <Label>Offer Made Price *</Label>
-            <Input 
-              type="number" 
-              value={offerMadePrice} 
-              onChange={(e) => setOfferMadePrice(e.target.value)}
-              placeholder="0.00"
-              min="0"
-              step="0.01"
-            />
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-[10px] text-slate-500">Offer Price *</Label>
+              <Input 
+                type="number" 
+                value={offerMadePrice} 
+                onChange={(e) => setOfferMadePrice(e.target.value)}
+                placeholder="0"
+                min="0"
+                step="0.01"
+                className="h-7 text-xs"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[10px] text-slate-500">MAO *</Label>
+              <Input 
+                type="number" 
+                value={maxAllowableOffer} 
+                onChange={(e) => setMaxAllowableOffer(e.target.value)}
+                placeholder="0"
+                min="0"
+                step="0.01"
+                className="h-7 text-xs"
+              />
+            </div>
           </div>
-          <div>
-            <Label>Max Allowable Offer *</Label>
-            <Input 
-              type="number" 
-              value={maxAllowableOffer} 
-              onChange={(e) => setMaxAllowableOffer(e.target.value)}
-              placeholder="0.00"
-              min="0"
-              step="0.01"
-            />
-          </div>
-          <div>
-            <Label>Offer Response *</Label>
+
+          <div className="space-y-1">
+            <Label className="text-[10px] text-slate-500">Response *</Label>
             <Select value={offerMadeResponse} onValueChange={setOfferMadeResponse}>
-              <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+              <SelectTrigger className="h-7 text-xs">
+                <SelectValue placeholder="Select..." />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="Accepted">Accepted</SelectItem>
                 <SelectItem value="Negotiating">Negotiating</SelectItem>
@@ -330,27 +425,23 @@ export const OfferMadePopup = ({
               A follow-up task will be created for 6 hours from now.
             </div>
           )}
-          {offerMadeResponse === 'Rejected' && (
-            <div className="bg-orange-50 border border-orange-200 rounded p-3 text-sm text-orange-800">
-              A re-offer task will be created for 2 weeks from now.
-            </div>
-          )}
           {offerMadeResponse === 'Accepted' && (
             <div className="bg-green-50 border border-green-200 rounded p-3 text-sm text-green-800">
               Congratulations! Contract process will begin.
             </div>
           )}
         </div>
-        <div className="flex gap-2 pt-4 border-t">
-          <Button onClick={onClose} variant="outline" className="flex-1">Cancel</Button>
+        <DialogFooter className="gap-2 sm:gap-2">
+          <Button onClick={onClose} variant="outline">
+            Cancel
+          </Button>
           <Button 
             onClick={handleSubmit} 
             disabled={!isValid || submitting}
-            className="flex-1"
           >
             {submitting ? 'Saving...' : 'Submit'}
           </Button>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

@@ -158,13 +158,13 @@ const Leads = () => {
     // Priority 1: Check primary lead owner first
     if (lead.owners && lead.owners.length > 0) {
       const primaryOwner = lead.owners.find((o: any) => o.isPrimary);
-      if (primaryOwner?.firstName || primaryOwner?.lastName) {
-        const fn = (primaryOwner.firstName || '').trim();
-        const ln = (primaryOwner.lastName || '').trim();
+      const primaryFn = (primaryOwner?.firstName || '').trim();
+      const primaryLn = (primaryOwner?.lastName || '').trim();
+      if (primaryFn || primaryLn) {
         return {
-          firstName: fn,
-          lastName: ln,
-          initials: `${fn ? fn[0] : ''}${ln ? ln[0] : ''}`.toUpperCase() || 'UC'
+          firstName: primaryFn,
+          lastName: primaryLn,
+          initials: `${primaryFn ? primaryFn[0] : ''}${primaryLn ? primaryLn[0] : ''}`.toUpperCase() || 'UC'
         };
       }
       
@@ -182,33 +182,33 @@ const Leads = () => {
     }
     
     // Priority 2: Check seller/buyer/vendor as fallback
-    if (lead.seller?.firstName || lead.seller?.lastName) {
-      const fn = (lead.seller.firstName || '').trim();
-      const ln = (lead.seller.lastName || '').trim();
+    const sellerFn = (lead.seller?.firstName || '').trim();
+    const sellerLn = (lead.seller?.lastName || '').trim();
+    if (sellerFn || sellerLn) {
       return {
-        firstName: fn,
-        lastName: ln,
-        initials: `${fn ? fn[0] : ''}${ln ? ln[0] : ''}`.toUpperCase() || 'UC'
+        firstName: sellerFn,
+        lastName: sellerLn,
+        initials: `${sellerFn ? sellerFn[0] : ''}${sellerLn ? sellerLn[0] : ''}`.toUpperCase() || 'UC'
       };
     }
     
-    if (lead.buyer?.firstName || lead.buyer?.lastName) {
-      const fn = (lead.buyer.firstName || '').trim();
-      const ln = (lead.buyer.lastName || '').trim();
+    const buyerFn = (lead.buyer?.firstName || '').trim();
+    const buyerLn = (lead.buyer?.lastName || '').trim();
+    if (buyerFn || buyerLn) {
       return {
-        firstName: fn,
-        lastName: ln,
-        initials: `${fn ? fn[0] : ''}${ln ? ln[0] : ''}`.toUpperCase() || 'UC'
+        firstName: buyerFn,
+        lastName: buyerLn,
+        initials: `${buyerFn ? buyerFn[0] : ''}${buyerLn ? buyerLn[0] : ''}`.toUpperCase() || 'UC'
       };
     }
     
-    if (lead.vendor?.firstName || lead.vendor?.lastName) {
-      const fn = (lead.vendor.firstName || '').trim();
-      const ln = (lead.vendor.lastName || '').trim();
+    const vendorFn = (lead.vendor?.firstName || '').trim();
+    const vendorLn = (lead.vendor?.lastName || '').trim();
+    if (vendorFn || vendorLn) {
       return {
-        firstName: fn,
-        lastName: ln,
-        initials: `${fn ? fn[0] : ''}${ln ? ln[0] : ''}`.toUpperCase() || 'UC'
+        firstName: vendorFn,
+        lastName: vendorLn,
+        initials: `${vendorFn ? vendorFn[0] : ''}${vendorLn ? vendorLn[0] : ''}`.toUpperCase() || 'UC'
       };
     }
     

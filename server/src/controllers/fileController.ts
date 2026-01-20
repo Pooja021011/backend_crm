@@ -86,7 +86,7 @@ export const fileController = {
       }
 
       const leadId = req.params.id; // Get leadId from URL params
-      const { category = 'PHOTO', tags = '[]', description = '', isPublic = 'false' } = req.body;
+      const { category = 'other', tags = '[]', description = '', isPublic = 'false' } = req.body;
       const userId = (req as any).user?.id;
 
       if (!leadId) {
@@ -100,13 +100,21 @@ export const fileController = {
         // If tags is not valid JSON, treat as empty array
       }
 
+      // Normalize legacy categories
+      const normalizedCategory = (() => {
+        const c = String(category || '').trim();
+        if (c.toUpperCase() === 'PHOTO') return 'photos';
+        if (c.toLowerCase() === 'photo') return 'photos';
+        return c || 'other';
+      })();
+
       const created = await fileRepository.createForLead(leadId, {
         filename: file.filename,
         originalName: file.originalname,
         mimeType: file.mimetype,
         size: file.size,
         storageKey: file.filename,
-        category,
+        category: normalizedCategory,
         tags: parsedTags,
         description: description || undefined,
         isPublic: isPublic === 'true',

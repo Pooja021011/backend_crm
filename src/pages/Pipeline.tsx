@@ -10,7 +10,8 @@ import { ViewLeadDialog } from "@/components/ViewLeadDialog";
 import { 
   AppointmentCompletePopup,
   DueDiligencePopup,
-  OfferMadePopup
+  OfferMadePopup,
+  DueDiligenceCompleteRequirementsPopup
 } from "@/components/StageTransitionPopups";
 import { 
   Users, 
@@ -81,12 +82,15 @@ const Pipeline = () => {
   const [showAppointmentPopup, setShowAppointmentPopup] = useState(false);
   const [showDueDiligencePopup, setShowDueDiligencePopup] = useState(false);
   const [showOfferMadePopup, setShowOfferMadePopup] = useState(false);
+  const [showDueDiligenceCompletePopup, setShowDueDiligenceCompletePopup] = useState(false);
   const [pendingStageChange, setPendingStageChange] = useState<{
     leadId: string;
     newStageId: string;
     stageName: string;
     leadToMove: any;
   } | null>(null);
+  const [missingDdFields, setMissingDdFields] = useState<string[]>([]);
+  const [missingDdCompleteItems, setMissingDdCompleteItems] = useState<string[]>([]);
 
   // Drag behavior: distance-based activation (more reliable than delay)
   const sensors = useSensors(
@@ -713,23 +717,7 @@ const Pipeline = () => {
 
     const stageName = pipelineStages.find(s => s.id === newStageId)?.name || newStageId;
     
-    // NEW: Check if validation popup is needed
     const stageNameLower = stageName.toLowerCase();
-    if (stageNameLower.includes('appointment') && stageNameLower.includes('complete')) {
-      setPendingStageChange({ leadId, newStageId, stageName, leadToMove });
-      setShowAppointmentPopup(true);
-      return;
-    }
-    if (stageNameLower.includes('due diligence') && stageNameLower.includes('complete')) {
-      setPendingStageChange({ leadId, newStageId, stageName, leadToMove });
-      setShowDueDiligencePopup(true);
-      return;
-    }
-    if (stageNameLower.includes('offer') && stageNameLower.includes('made')) {
-      setPendingStageChange({ leadId, newStageId, stageName, leadToMove });
-      setShowOfferMadePopup(true);
-      return;
-    }
     
     // EXISTING: Update UI immediately (optimistic update)
     setLeads(prev => prev.map(lead => 
@@ -763,12 +751,19 @@ const Pipeline = () => {
             lead.id === leadId ? leadToMove : lead
           ));
           
-          // Show appropriate validation popup
+          // Show appropriate validation popup (only when backend actually requires it)
           setPendingStageChange({ leadId, newStageId, stageName, leadToMove });
-          if (stageNameLower.includes('appointment') && stageNameLower.includes('complete')) {
+          const requiredFields: string[] = Array.isArray(errorData.requiredFields) ? errorData.requiredFields : [];
+
+          // Pictures/files required (Appointment Complete and beyond)
+          if (requiredFields.includes('photos')) {
             setShowAppointmentPopup(true);
-          } else if (stageNameLower.includes('due diligence') && stageNameLower.includes('complete')) {
+          } else if (requiredFields.some((f) => ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'].includes(f))) {
+            setMissingDdFields(requiredFields.filter((f) => ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'].includes(f)));
             setShowDueDiligencePopup(true);
+          } else if (requiredFields.some((f) => ['arv','comparables','rehabBudget','underwritingCalculation'].includes(f))) {
+            setMissingDdCompleteItems(requiredFields.filter((f) => ['arv','comparables','rehabBudget','underwritingCalculation'].includes(f)));
+            setShowDueDiligenceCompletePopup(true);
           } else if (stageNameLower.includes('offer') && stageNameLower.includes('made')) {
             setShowOfferMadePopup(true);
           }
@@ -819,6 +814,77 @@ const Pipeline = () => {
         description: "Failed to move lead. Please try again.",
         variant: "destructive"
       });
+    }
+  };
+
+  const handleValidationRequired = (requiredFields: string[], stageNameLower: string) => {
+    if (requiredFields.includes('photos')) {
+      setShowAppointmentPopup(true);
+      return;
+    }
+    const ddFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
+    if (requiredFields.some((f) => ddFields.includes(f))) {
+      setMissingDdFields(requiredFields.filter((f) => ddFields.includes(f)));
+      setShowDueDiligencePopup(true);
+      return;
+    }
+    const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation'];
+    if (requiredFields.some((f) => ddCompleteFields.includes(f))) {
+      setMissingDdCompleteItems(requiredFields.filter((f) => ddCompleteFields.includes(f)));
+      setShowDueDiligenceCompletePopup(true);
+      return;
+    }
+    if (stageNameLower.includes('offer') && stageNameLower.includes('made')) {
+      setShowOfferMadePopup(true);
+      return;
+    }
+  };
+
+  const retryPendingStageMove = async () => {
+    if (!pendingStageChange) return;
+    const { leadId, newStageId, stageName, leadToMove } = pendingStageChange;
+    const stageNameLower = (stageName || '').toLowerCase();
+    try {
+      // optimistic update
+      setLeads(prev => prev.map(lead =>
+        lead.id === leadId
+          ? {
+              ...lead,
+              stage: newStageId,
+              stagePipelineKey: getStagePipelineKey(newStageId),
+              statusChangedDate: new Date().toISOString(),
+            }
+          : lead
+      ));
+
+      const response = await makeApiCall(`${API_BASE}/pipeline/leads/${leadId}/move`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stageId: newStageId })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        if (errorData?.error?.code === 'VALIDATION_REQUIRED' || errorData?.code === 'VALIDATION_REQUIRED') {
+          // revert
+          setLeads(prev => prev.map(lead => (lead.id === leadId ? leadToMove : lead)));
+          const requiredFields: string[] = Array.isArray(errorData.requiredFields) ? errorData.requiredFields : [];
+          handleValidationRequired(requiredFields, stageNameLower);
+          return;
+        }
+        throw new Error(errorData?.error || 'Failed to move lead');
+      }
+
+      // Success: close all popups and clear pending
+      setShowAppointmentPopup(false);
+      setShowDueDiligencePopup(false);
+      setShowDueDiligenceCompletePopup(false);
+      setShowOfferMadePopup(false);
+      setMissingDdFields([]);
+      setMissingDdCompleteItems([]);
+      setPendingStageChange(null);
+    } catch (e) {
+      console.error('Error retrying stage move:', e);
     }
   };
 
@@ -1223,12 +1289,14 @@ const Pipeline = () => {
             leadId={pendingStageChange.leadId}
             onSubmit={async (files) => {
               try {
-                // Upload photos
+                // Upload pictures/files
                 let uploadedCount = 0;
                 for (const file of files) {
                   const formData = new FormData();
                   formData.append('file', file);
-                  formData.append('category', 'PHOTO');
+                  // Must match what Lead Detail Photos section filters on (`category === 'photos'`).
+                  // We also keep backend validation generic (any attachment counts), so this is mainly for display grouping.
+                  formData.append('category', 'photos');
                   
                   const uploadResponse = await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}/files`, {
                     method: 'POST',
@@ -1250,34 +1318,9 @@ const Pipeline = () => {
                 }
                 
                 console.log(`📸 Uploaded ${uploadedCount} of ${files.length} photos`);
-                
-                // Now proceed with stage change
-                setLeads(prev => prev.map(lead => 
-                  lead.id === pendingStageChange.leadId 
-                    ? {
-                        ...lead,
-                        stage: pendingStageChange.newStageId,
-                        stagePipelineKey: getStagePipelineKey(pendingStageChange.newStageId),
-                        statusChangedDate: new Date().toISOString(),
-                      }
-                    : lead
-                ));
-                
-                const response = await makeApiCall(`${API_BASE}/pipeline/leads/${pendingStageChange.leadId}/move`, {
-                  method: 'PUT',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ stageId: pendingStageChange.newStageId })
-                });
-                
-                if (response.ok) {
-                  // Success notification removed - only show errors
-                } else {
-                  const errorData = await response.json();
-                  throw new Error(errorData.error || 'Failed to move lead');
-                }
-                
-                setShowAppointmentPopup(false);
-                setPendingStageChange(null);
+
+                // Retry stage move; if more is missing, this will open the next popup automatically
+                await retryPendingStageMove();
               } catch (error: any) {
                 console.error('Error in appointment complete flow:', error);
                 toast({
@@ -1296,6 +1339,7 @@ const Pipeline = () => {
               setPendingStageChange(null);
             }}
             existingData={pendingStageChange.leadToMove.customFields}
+            missingFields={missingDdFields}
             onSubmit={async (data) => {
               // Update lead with property info
               await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`, {
@@ -1308,30 +1352,20 @@ const Pipeline = () => {
                   }
                 })
               });
-              
-              // Now proceed with stage change
-              setLeads(prev => prev.map(lead => 
-                lead.id === pendingStageChange.leadId 
-                  ? {
-                      ...lead,
-                      stage: pendingStageChange.newStageId,
-                      stagePipelineKey: getStagePipelineKey(pendingStageChange.newStageId),
-                      statusChangedDate: new Date().toISOString(),
-                    }
-                  : lead
-              ));
-              
-              const response = await makeApiCall(`${API_BASE}/pipeline/leads/${pendingStageChange.leadId}/move`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ stageId: pendingStageChange.newStageId })
-              });
-              
-              if (response.ok) {
-                // Success notification removed - only show errors
-              }
-              
               setShowDueDiligencePopup(false);
+              setMissingDdFields([]);
+
+              // Retry stage move; if more is missing, open the next popup automatically
+              await retryPendingStageMove();
+            }}
+          />
+
+          <DueDiligenceCompleteRequirementsPopup
+            open={showDueDiligenceCompletePopup}
+            missingItems={missingDdCompleteItems}
+            onClose={() => {
+              setShowDueDiligenceCompletePopup(false);
+              setMissingDdCompleteItems([]);
               setPendingStageChange(null);
             }}
           />
@@ -1355,31 +1389,10 @@ const Pipeline = () => {
                   }
                 })
               });
-              
-              // Now proceed with stage change
-              setLeads(prev => prev.map(lead => 
-                lead.id === pendingStageChange.leadId 
-                  ? {
-                      ...lead,
-                      stage: pendingStageChange.newStageId,
-                      stagePipelineKey: getStagePipelineKey(pendingStageChange.newStageId),
-                      statusChangedDate: new Date().toISOString(),
-                    }
-                  : lead
-              ));
-              
-              const response = await makeApiCall(`${API_BASE}/pipeline/leads/${pendingStageChange.leadId}/move`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ stageId: pendingStageChange.newStageId })
-              });
-              
-              if (response.ok) {
-                // Success notification removed - only show errors
-              }
-              
               setShowOfferMadePopup(false);
-              setPendingStageChange(null);
+
+              // Retry stage move; if more is missing, open the next popup automatically
+              await retryPendingStageMove();
             }}
           />
         </>

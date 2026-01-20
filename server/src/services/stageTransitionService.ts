@@ -22,7 +22,7 @@ export const stageTransitionService = {
     try {
       const toStage = await prisma.pipelineStage.findUnique({
         where: { id: toStageId },
-        select: { name: true }
+        select: { id: true, name: true, pipelineId: true, orderIndex: true }
       });
       
       if (!toStage) {
@@ -55,28 +55,84 @@ export const stageTransitionService = {
       const customFields = (lead.customFields as any) || {};
       const requiredFields: string[] = [];
       const errors: string[] = [];
+
+      const isMissing = (v: any) => {
+        if (v === null || v === undefined) return true;
+        if (typeof v === 'string') return v.trim().length === 0;
+        return false;
+      };
+
+      const asNumber = (v: any): number | null => {
+        if (typeof v === 'number' && Number.isFinite(v)) return v;
+        if (typeof v === 'string') {
+          const n = parseFloat(v);
+          return Number.isFinite(n) ? n : null;
+        }
+        return null;
+      };
       
-      // Rule 2A: Appointment Complete requires photo upload
-      if (stageName.includes('appointment') && stageName.includes('complete')) {
-        // Check if photos exist for this lead
+      // Rule 2A: Appointment Complete (and any stage after it) requires at least one photo in the Photos section.
+      // Stages are configurable (Settings), so we find the Appointment Complete stage dynamically in the same pipeline.
+      // IMPORTANT: This is category-driven (photos), so Files/Documents do not satisfy the requirement.
+      const appointmentCompleteStage = await prisma.pipelineStage.findFirst({
+        where: {
+          pipelineId: toStage.pipelineId,
+          AND: [
+            { name: { contains: 'appointment', mode: 'insensitive' } },
+            { name: { contains: 'complete', mode: 'insensitive' } },
+          ],
+        },
+        select: { id: true, name: true, orderIndex: true },
+      });
+
+      if (appointmentCompleteStage && toStage.orderIndex >= appointmentCompleteStage.orderIndex) {
         const photoCount = await prisma.leadFile.count({
           where: {
             leadId,
-            file: { category: 'PHOTO' }
-          }
+            file: {
+              category: { equals: 'photos', mode: 'insensitive' },
+            },
+          },
         });
-        
+
         if (photoCount === 0) {
           return {
             valid: false,
             stageName: toStage.name,
             requiredFields: ['photos'],
-            errors: ['Property photos are required before marking appointment as complete']
+            errors: ['Property photos are required before moving to this stage'],
+          };
+        }
+      }
+
+      // Rule 2B: Due Diligence (and any stage after it) requires Additional Property Info fields.
+      // We locate the Due Diligence stage dynamically (name contains "due diligence" but NOT "complete").
+      const dueDiligenceStage = await prisma.pipelineStage.findFirst({
+        where: {
+          pipelineId: toStage.pipelineId,
+          AND: [
+            { name: { contains: 'due diligence', mode: 'insensitive' } },
+            { NOT: { name: { contains: 'complete', mode: 'insensitive' } } },
+          ],
+        },
+        select: { id: true, name: true, orderIndex: true },
+      });
+
+      if (dueDiligenceStage && toStage.orderIndex >= dueDiligenceStage.orderIndex) {
+        const ddRequired = ['hvacType', 'hvacAge', 'waterHeaterAge', 'roofAge', 'waterType', 'sewerType'] as const;
+        const missing = ddRequired.filter((k) => isMissing(customFields[k]));
+
+        if (missing.length > 0) {
+          return {
+            valid: false,
+            stageName: toStage.name,
+            requiredFields: missing as any,
+            errors: ['Additional property information is required before moving to this stage'],
           };
         }
       }
       
-      // Rule 2B: Due Diligence Complete requires property questions
+      // Rule 2C: Due Diligence Complete requires property questions + completion checklist
       if (stageName.includes('due diligence') && stageName.includes('complete')) {
         // Also require basic contact/address info before allowing Due Diligence Complete.
         // Email is optional by requirement.
@@ -117,6 +173,45 @@ export const stageTransitionService = {
             stageName: toStage.name,
             requiredFields,
             errors: errors.length ? errors : [`Property information required: ${requiredFields.join(', ')}`]
+          };
+        }
+
+        // DD Complete checklist: ARV input, comparables, rehab budget, underwriting calculator
+        const ddCompleteMissing: string[] = [];
+
+        const arv = asNumber(customFields.arv);
+        if (!arv || arv <= 0) ddCompleteMissing.push('arv');
+
+        // Comparable properties can be entered as rows OR uploaded as comp PDFs.
+        const comparableCount = await prisma.leadComparable.count({ where: { leadId } });
+        const compPdfCount = await prisma.leadCompPdf.count({ where: { leadId } });
+        if (comparableCount <= 0 && compPdfCount <= 0) ddCompleteMissing.push('comparables');
+
+        // Rehab Budget can be stored as a RehabBudget row OR reflected in customFields (UI uses this value).
+        const rehabBudgetRow = await prisma.rehabBudget.findUnique({ where: { leadId } });
+        const rehabBudgetFromFields = asNumber(customFields.rehabBudget);
+        const rehabBudgetValue = (rehabBudgetRow?.totalCost ?? rehabBudgetFromFields ?? 0);
+        if (!rehabBudgetRow && (!rehabBudgetFromFields || rehabBudgetFromFields <= 0)) ddCompleteMissing.push('rehabBudget');
+
+        // Underwriting can be saved as an UnderwritingCalculation row OR inferred from ARV + Rehab Budget.
+        // This matches the UI, where Final Offer is derived from ARV + rehab budget without always persisting a row.
+        const underwritingCalc = await prisma.underwritingCalculation.findFirst({ where: { leadId } });
+        const finalOfferFromFields = asNumber(customFields.finalOffer);
+        const inferredFinalOffer = arv && rehabBudgetValue
+          ? (arv * 0.72) - rehabBudgetValue - 25000
+          : 0;
+        const hasUnderwriting =
+          !!underwritingCalc ||
+          (!!finalOfferFromFields && finalOfferFromFields > 0) ||
+          (Number.isFinite(inferredFinalOffer) && inferredFinalOffer > 0);
+        if (!hasUnderwriting) ddCompleteMissing.push('underwritingCalculation');
+
+        if (ddCompleteMissing.length > 0) {
+          return {
+            valid: false,
+            stageName: toStage.name,
+            requiredFields: ddCompleteMissing,
+            errors: ['Due diligence checklist must be completed before moving to Due Diligence Complete'],
           };
         }
       }
