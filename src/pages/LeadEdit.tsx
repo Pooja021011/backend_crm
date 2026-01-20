@@ -1397,7 +1397,24 @@ const LeadEdit: React.FC = () => {
 
           if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.message || 'Failed to auto-save lead');
+            if (errorData?.code === 'VALIDATION_REQUIRED') {
+              const requiredFields: string[] = Array.isArray(errorData?.requiredFields) ? errorData.requiredFields : [];
+              if (requiredFields.includes('followUpTask')) {
+                toast({
+                  title: 'Task Required',
+                  description:
+                    errorData?.message ||
+                    'Please add a task to follow up before setting Lead Status to Follow Up.',
+                  variant: 'destructive',
+                });
+
+                // Revert UI selection back to server-known lead status
+                setLeadStatus(lead?.leadStatus?.id || lead?.leadStatusId || '');
+                return;
+              }
+            }
+
+            throw new Error(errorData.message || errorData.error || 'Failed to auto-save lead');
           }
 
           lastSavedPayloadRef.current = payloadStr;

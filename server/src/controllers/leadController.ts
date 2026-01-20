@@ -38,8 +38,21 @@ export const leadController = {
   },
 
   async update(req: Request, res: Response) {
-    const updated = await leadService.update(req.params.id, req.body);
-    res.json({ data: updated });
+    try {
+      const updated = await leadService.update(req.params.id, req.body);
+      res.json({ data: updated });
+    } catch (error: any) {
+      if (error?.code === 'VALIDATION_REQUIRED') {
+        return res.status(400).json({
+          success: false,
+          message: error.message || 'Validation required',
+          code: error.code,
+          requiredFields: error.requiredFields || [],
+        });
+      }
+      logger.error({ error: error?.message || error }, 'Error updating lead');
+      res.status(500).json({ success: false, error: 'Failed to update lead' });
+    }
   },
 
   async get(req: Request, res: Response) {

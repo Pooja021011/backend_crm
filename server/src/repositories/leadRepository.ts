@@ -266,6 +266,26 @@ export const leadRepository = {
         select: { name: true },
       });
 
+      // BUSINESS RULE:
+      // Lead Status "Follow Up" requires at least one real Task (notes do NOT count).
+      // Requirement: any task (OPEN or DONE) is acceptable, but exclude auto-generated mention tasks.
+      if (status?.name?.toLowerCase() === 'follow up') {
+        const taskCount = await prisma.task.count({
+          where: {
+            leadId: id,
+            NOT: { title: { startsWith: 'Review note on ' } },
+          },
+        });
+
+        if (taskCount <= 0) {
+          const err: any = new Error('Please add a task to follow up before setting Lead Status to Follow Up.');
+          err.status = 400;
+          err.code = 'VALIDATION_REQUIRED';
+          err.requiredFields = ['followUpTask'];
+          throw err;
+        }
+      }
+
       if (status?.name?.toLowerCase() === 'dead') {
         updateData.pipelineStageId = null;
         updateData.stageEnteredAt = null;
