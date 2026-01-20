@@ -11,7 +11,8 @@ import {
   AppointmentCompletePopup,
   DueDiligencePopup,
   OfferMadePopup,
-  DueDiligenceCompleteRequirementsPopup
+  DueDiligenceCompleteRequirementsPopup,
+  FollowUpTaskRequiredPopup
 } from "@/components/StageTransitionPopups";
 import { 
   Users, 
@@ -83,6 +84,7 @@ const Pipeline = () => {
   const [showDueDiligencePopup, setShowDueDiligencePopup] = useState(false);
   const [showOfferMadePopup, setShowOfferMadePopup] = useState(false);
   const [showDueDiligenceCompletePopup, setShowDueDiligenceCompletePopup] = useState(false);
+  const [showFollowUpTaskPopup, setShowFollowUpTaskPopup] = useState(false);
   const [pendingStageChange, setPendingStageChange] = useState<{
     leadId: string;
     newStageId: string;
@@ -758,6 +760,8 @@ const Pipeline = () => {
           // Pictures/files required (Appointment Complete and beyond)
           if (requiredFields.includes('photos')) {
             setShowAppointmentPopup(true);
+          } else if (requiredFields.includes('followUpTask')) {
+            setShowFollowUpTaskPopup(true);
           } else if (requiredFields.some((f) => ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'].includes(f))) {
             setMissingDdFields(requiredFields.filter((f) => ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'].includes(f)));
             setShowDueDiligencePopup(true);
@@ -822,6 +826,10 @@ const Pipeline = () => {
       setShowAppointmentPopup(true);
       return;
     }
+    if (requiredFields.includes('followUpTask')) {
+      setShowFollowUpTaskPopup(true);
+      return;
+    }
     const ddFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
     if (requiredFields.some((f) => ddFields.includes(f))) {
       setMissingDdFields(requiredFields.filter((f) => ddFields.includes(f)));
@@ -880,6 +888,7 @@ const Pipeline = () => {
       setShowDueDiligencePopup(false);
       setShowDueDiligenceCompletePopup(false);
       setShowOfferMadePopup(false);
+      setShowFollowUpTaskPopup(false);
       setMissingDdFields([]);
       setMissingDdCompleteItems([]);
       setPendingStageChange(null);
@@ -1390,6 +1399,31 @@ const Pipeline = () => {
                 })
               });
               setShowOfferMadePopup(false);
+
+              // Retry stage move; if more is missing, open the next popup automatically
+              await retryPendingStageMove();
+            }}
+          />
+
+          <FollowUpTaskRequiredPopup
+            open={showFollowUpTaskPopup}
+            onClose={() => {
+              setShowFollowUpTaskPopup(false);
+              setPendingStageChange(null);
+            }}
+            onSubmit={async ({ title, dueAt }) => {
+              // Create follow-up task (no notes)
+              await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}/tasks`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  title,
+                  dueAt: new Date(dueAt).toISOString(),
+                  assignedToId: user?.id || undefined,
+                }),
+              });
+
+              setShowFollowUpTaskPopup(false);
 
               // Retry stage move; if more is missing, open the next popup automatically
               await retryPendingStageMove();

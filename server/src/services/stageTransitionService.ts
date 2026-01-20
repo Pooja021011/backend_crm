@@ -70,6 +70,28 @@ export const stageTransitionService = {
         }
         return null;
       };
+
+      // Rule: Long Term Follow Up requires at least one OPEN task (not a note/mention task).
+      // Notes are NOT accepted for this requirement — task only.
+      const normalizedStageName = (toStage.name || '').toLowerCase().replace(/\s+/g, ' ').trim();
+      if (normalizedStageName === 'long term follow up') {
+        const openTaskCount = await prisma.task.count({
+          where: {
+            leadId,
+            status: 'OPEN',
+            NOT: { title: { startsWith: 'Review note on ' } },
+          },
+        });
+
+        if (openTaskCount <= 0) {
+          return {
+            valid: false,
+            stageName: toStage.name,
+            requiredFields: ['followUpTask'],
+            errors: ['Please add a follow-up task before moving this lead to Long Term Follow Up.'],
+          };
+        }
+      }
       
       // Rule 2A: Appointment Complete (and any stage after it) requires at least one photo in the Photos section.
       // Stages are configurable (Settings), so we find the Appointment Complete stage dynamically in the same pipeline.

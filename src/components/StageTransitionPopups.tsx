@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useId, useState } from "react";
-import { Upload, X, ClipboardList, AlertCircle, DollarSign } from "lucide-react";
+import { Upload, X, ClipboardList, AlertCircle, DollarSign, Calendar } from "lucide-react";
 
 // Popup for Appointment Complete - Photo Upload Required
 export const AppointmentCompletePopup = ({ 
@@ -426,6 +426,85 @@ export const OfferMadePopup = ({
             disabled={!isValid || submitting}
           >
             {submitting ? 'Saving...' : 'Submit'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// Popup for Long Term Follow Up - Follow-up Task Required (task only; no notes)
+export const FollowUpTaskRequiredPopup = ({
+  open,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSubmit: (data: { title: string; dueAt: string }) => Promise<void>;
+}) => {
+  const [title, setTitle] = useState('');
+  const [dueAt, setDueAt] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const isValid = title.trim().length > 0 && dueAt.trim().length > 0;
+
+  const handleSubmit = async () => {
+    if (!isValid) return;
+    setSubmitting(true);
+    try {
+      await onSubmit({ title: title.trim(), dueAt });
+      setTitle('');
+      setDueAt('');
+      onClose();
+    } catch (e) {
+      console.error('Submit failed:', e);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-purple-600" />
+            Follow-up Task Required
+          </DialogTitle>
+          <DialogDescription>
+            Please create a follow-up task before moving this lead to Long Term Follow Up.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label className="text-[10px] text-slate-500">Task Title *</Label>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Follow up with lead"
+              className="h-7 text-xs"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-[10px] text-slate-500">Due Date & Time *</Label>
+            <Input
+              type="datetime-local"
+              value={dueAt}
+              onChange={(e) => setDueAt(e.target.value)}
+              className="h-7 text-xs"
+            />
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2 sm:gap-2">
+          <Button onClick={onClose} variant="outline">
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit} disabled={!isValid || submitting}>
+            {submitting ? 'Saving...' : 'Create Task'}
           </Button>
         </DialogFooter>
       </DialogContent>

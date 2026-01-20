@@ -57,7 +57,8 @@ import {
   AppointmentCompletePopup,
   DueDiligencePopup,
   OfferMadePopup,
-  DueDiligenceCompleteRequirementsPopup
+  DueDiligenceCompleteRequirementsPopup,
+  FollowUpTaskRequiredPopup
 } from '@/components/StageTransitionPopups';
 import { PropertyInfoCard } from '@/components/PropertyInfoCard';
 import { RehabBudgetCalculatorCompact } from '@/components/RehabBudgetCalculatorCompact';
@@ -263,6 +264,7 @@ const LeadEdit: React.FC = () => {
   const [showDueDiligencePopup, setShowDueDiligencePopup] = useState(false);
   const [showOfferMadePopup, setShowOfferMadePopup] = useState(false);
   const [showDueDiligenceCompletePopup, setShowDueDiligenceCompletePopup] = useState(false);
+  const [showFollowUpTaskPopup, setShowFollowUpTaskPopup] = useState(false);
   const [pendingPipelineStatus, setPendingPipelineStatus] = useState<string | null>(null);
   const [missingDdFields, setMissingDdFields] = useState<string[]>([]);
   const [missingDdCompleteItems, setMissingDdCompleteItems] = useState<string[]>([]);
@@ -531,6 +533,10 @@ const LeadEdit: React.FC = () => {
 
           if (requiredFields.includes('photos')) {
             setShowAppointmentPopup(true);
+            return;
+          }
+          if (requiredFields.includes('followUpTask')) {
+            setShowFollowUpTaskPopup(true);
             return;
           }
           const ddFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
@@ -4109,6 +4115,11 @@ const LeadEdit: React.FC = () => {
                     setShowAppointmentPopup(true);
                     return;
                   }
+                  if (requiredFields.includes('followUpTask')) {
+                    setShowDueDiligencePopup(false);
+                    setShowFollowUpTaskPopup(true);
+                    return;
+                  }
                   if (requiredFields.some((f) => ddCompleteFields.includes(f))) {
                     setMissingDdCompleteItems(requiredFields.filter((f) => ddCompleteFields.includes(f)));
                     setShowDueDiligencePopup(false);
@@ -4209,6 +4220,11 @@ const LeadEdit: React.FC = () => {
                     setShowAppointmentPopup(true);
                     return;
                   }
+                  if (requiredFields.includes('followUpTask')) {
+                    setShowOfferMadePopup(false);
+                    setShowFollowUpTaskPopup(true);
+                    return;
+                  }
                   if (requiredFields.some((f) => ddFields.includes(f))) {
                     setMissingDdFields(requiredFields.filter((f) => ddFields.includes(f)));
                     setShowOfferMadePopup(false);
@@ -4242,6 +4258,42 @@ const LeadEdit: React.FC = () => {
               title: "Error",
               description: error.message || "Failed to update offer information",
               variant: "destructive"
+            });
+          }
+        }}
+      />
+
+      <FollowUpTaskRequiredPopup
+        open={showFollowUpTaskPopup}
+        onClose={() => {
+          setShowFollowUpTaskPopup(false);
+          setPendingPipelineStatus(null);
+        }}
+        onSubmit={async ({ title, dueAt }) => {
+          try {
+            if (!id) return;
+            await makeApiCall(`${API_BASE}/leads/${id}/tasks`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                title,
+                dueAt: new Date(dueAt).toISOString(),
+                assignedToId: user?.id || undefined,
+              }),
+            });
+
+            setShowFollowUpTaskPopup(false);
+
+            if (pendingPipelineStatus) {
+              await requestStageMove(pendingPipelineStatus);
+              setPendingPipelineStatus(null);
+              await loadLead();
+            }
+          } catch (e: any) {
+            toast({
+              title: 'Error',
+              description: e?.message || 'Failed to create follow-up task',
+              variant: 'destructive',
             });
           }
         }}
