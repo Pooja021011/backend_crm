@@ -344,7 +344,6 @@ export const OfferMadePopup = ({
   existingData?: any;
 }) => {
   const [offerMadePrice, setOfferMadePrice] = useState(existingData?.offerMadePrice?.toString() || '');
-  const [maxAllowableOffer, setMaxAllowableOffer] = useState(existingData?.maxAllowableOffer?.toString() || '');
   const [offerMadeResponse, setOfferMadeResponse] = useState(existingData?.offerMadeResponse || '');
   const [submitting, setSubmitting] = useState(false);
   
@@ -354,7 +353,6 @@ export const OfferMadePopup = ({
     try {
       await onSubmit({
         offerMadePrice: parseFloat(offerMadePrice),
-        maxAllowableOffer: parseFloat(maxAllowableOffer),
         offerMadeResponse
       });
       onClose();
@@ -365,7 +363,7 @@ export const OfferMadePopup = ({
     }
   };
   
-  const isValid = offerMadePrice && maxAllowableOffer && offerMadeResponse;
+  const isValid = offerMadePrice && offerMadeResponse;
   
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -380,25 +378,13 @@ export const OfferMadePopup = ({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3">
             <div className="space-y-1">
               <Label className="text-[10px] text-slate-500">Offer Price *</Label>
               <Input 
                 type="number" 
                 value={offerMadePrice} 
                 onChange={(e) => setOfferMadePrice(e.target.value)}
-                placeholder="0"
-                min="0"
-                step="0.01"
-                className="h-7 text-xs"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[10px] text-slate-500">MAO *</Label>
-              <Input 
-                type="number" 
-                value={maxAllowableOffer} 
-                onChange={(e) => setMaxAllowableOffer(e.target.value)}
                 placeholder="0"
                 min="0"
                 step="0.01"

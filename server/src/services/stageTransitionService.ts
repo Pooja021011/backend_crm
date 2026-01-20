@@ -132,8 +132,20 @@ export const stageTransitionService = {
         }
       }
       
-      // Rule 2C: Due Diligence Complete requires property questions + completion checklist
-      if (stageName.includes('due diligence') && stageName.includes('complete')) {
+      // Rule 2C: Due Diligence Complete (and any stage after it) requires property questions + completion checklist.
+      // We locate the "Due Diligence Complete" stage dynamically so jumps to later stages are progressively gated.
+      const dueDiligenceCompleteStage = await prisma.pipelineStage.findFirst({
+        where: {
+          pipelineId: toStage.pipelineId,
+          AND: [
+            { name: { contains: 'due diligence', mode: 'insensitive' } },
+            { name: { contains: 'complete', mode: 'insensitive' } },
+          ],
+        },
+        select: { id: true, name: true, orderIndex: true },
+      });
+
+      if (dueDiligenceCompleteStage && toStage.orderIndex >= dueDiligenceCompleteStage.orderIndex) {
         // Also require basic contact/address info before allowing Due Diligence Complete.
         // Email is optional by requirement.
         const nonEmpty = (v: any) => typeof v === 'string' && v.trim().length > 0;
@@ -155,12 +167,13 @@ export const stageTransitionService = {
           //if (!nonEmpty(lead.address?.zip)) requiredFields.push('zip');
         //}
 
-        if (!customFields.hvacType) requiredFields.push('hvacType');
-        if (!customFields.hvacAge) requiredFields.push('hvacAge');
-        if (!customFields.waterHeaterAge) requiredFields.push('waterHeaterAge');
-        if (!customFields.roofAge) requiredFields.push('roofAge');
-        if (!customFields.waterType) requiredFields.push('waterType');
-        if (!customFields.sewerType) requiredFields.push('sewerType');
+        // Property info must be present (use same "missing" semantics as Due Diligence gate).
+        if (isMissing(customFields.hvacType)) requiredFields.push('hvacType');
+        if (isMissing(customFields.hvacAge)) requiredFields.push('hvacAge');
+        if (isMissing(customFields.waterHeaterAge)) requiredFields.push('waterHeaterAge');
+        if (isMissing(customFields.roofAge)) requiredFields.push('roofAge');
+        if (isMissing(customFields.waterType)) requiredFields.push('waterType');
+        if (isMissing(customFields.sewerType)) requiredFields.push('sewerType');
         
         if (requiredFields.length > 0) {
           // Build a clear message: separate “basic info” from “property info” (custom fields).
@@ -216,11 +229,23 @@ export const stageTransitionService = {
         }
       }
       
-      // Rule 2C: Offer Made requires offer tracking fields
-      if (stageName.includes('offer') && stageName.includes('made')) {
-        if (!customFields.offerMadePrice) requiredFields.push('offerMadePrice');
-        if (!customFields.maxAllowableOffer) requiredFields.push('maxAllowableOffer');
-        if (!customFields.offerMadeResponse) requiredFields.push('offerMadeResponse');
+      // Rule 2D: Offer Made (and any stage after it) requires offer tracking fields.
+      // We locate the "Offer Made" stage dynamically so jumps to later stages are progressively gated.
+      const offerMadeStage = await prisma.pipelineStage.findFirst({
+        where: {
+          pipelineId: toStage.pipelineId,
+          AND: [
+            { name: { contains: 'offer', mode: 'insensitive' } },
+            { name: { contains: 'made', mode: 'insensitive' } },
+          ],
+        },
+        select: { id: true, name: true, orderIndex: true },
+      });
+
+      if (offerMadeStage && toStage.orderIndex >= offerMadeStage.orderIndex) {
+        if (isMissing(customFields.offerMadePrice)) requiredFields.push('offerMadePrice');
+        // MAO removed by requirement.
+        if (isMissing(customFields.offerMadeResponse)) requiredFields.push('offerMadeResponse');
         
         if (requiredFields.length > 0) {
           return { 
