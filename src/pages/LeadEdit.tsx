@@ -1410,6 +1410,21 @@ const LeadEdit: React.FC = () => {
 
                 // Revert UI selection back to server-known lead status
                 setLeadStatus(lead?.leadStatus?.id || lead?.leadStatusId || '');
+
+                // IMPORTANT: Stop autosave retry loops.
+                // A pending rerun can fire before React state finishes reverting, causing repeated 400s.
+                autoSavePendingRef.current = false;
+                setAutoSaveError('');
+                setAutoSaveStatus('idle');
+
+                // After state settles, refresh the baseline payload so scheduleAutoSave doesn't re-trigger.
+                setTimeout(() => {
+                  try {
+                    lastSavedPayloadRef.current = JSON.stringify(buildLeadPatchPayload({ includeLeadOwners: false }));
+                  } catch {
+                    // ignore
+                  }
+                }, 0);
                 return;
               }
             }
