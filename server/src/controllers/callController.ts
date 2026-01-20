@@ -338,6 +338,14 @@ export const callController = {
           },
         });
 
+        // If this is a real call recording (not voicemail) for an OUTBOUND call, it implies the callee answered.
+        // Promote pipeline stage to "Contact Made" when currently in "New Lead" or "No Contact Made".
+        if (!isVoicemail && String(existing.direction || '').toUpperCase() === 'OUTBOUND') {
+          await communicationResponseService
+            .handleCommunicationEvent(existing.leadId, 'INBOUND', 'CALL')
+            .catch(() => {});
+        }
+
         // DEBUG LOG: Recording attached to existing Communication
         logger.info({
           event: 'RECORDING_ATTACHED_TO_EXISTING',
@@ -415,6 +423,13 @@ export const callController = {
             },
           },
         });
+
+        // Same promotion for OUTBOUND calls where we matched by phone (Communication lacked callSid initially).
+        if (!isVoicemail && String(recentOutbound.direction || '').toUpperCase() === 'OUTBOUND') {
+          await communicationResponseService
+            .handleCommunicationEvent(recentOutbound.leadId, 'INBOUND', 'CALL')
+            .catch(() => {});
+        }
 
         // DEBUG LOG: Recording attached to OUTBOUND Communication
         logger.info({

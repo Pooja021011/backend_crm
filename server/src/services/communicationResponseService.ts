@@ -20,8 +20,7 @@ export const communicationResponseService = {
       const lead = await prisma.lead.findUnique({
         where: { id: leadId },
         include: {
-          pipelineStage: { select: { name: true } },
-          leadStatus: { select: { name: true } }
+          pipelineStage: { select: { id: true, name: true, orderIndex: true, pipelineId: true } },
         }
       });
       
@@ -30,73 +29,73 @@ export const communicationResponseService = {
         return;
       }
       
-      const currentStatus = lead.leadStatus?.name?.toLowerCase() || '';
-      
-      // Rule 3: Auto status changes based on communication
-      if (direction === 'OUTBOUND') {
-        // First outbound → Set to "No Contact Made" (if not already past this)
-        // Only update if current status doesn't indicate contact has been made
-        // NOTE: lastContactAt is NOT updated here - only when call is answered (handled in callService)
-        if (!currentStatus.includes('contact')) {
-          const noContactStatus = await prisma.leadStatus.findFirst({
-            where: { 
-              name: { 
-                contains: 'No Contact', 
-                mode: 'insensitive' 
-              } 
-            }
+      const currentStageName = (lead.pipelineStage?.name || '').toLowerCase();
+      const currentStageId = lead.pipelineStage?.id || null;
+      const currentOrderIndex = typeof lead.pipelineStage?.orderIndex === 'number' ? lead.pipelineStage.orderIndex : null;
+      const pipelineId = lead.pipelineStage?.pipelineId || null;
+
+      if (!pipelineId) {
+        logger.warn('Lead has no pipelineStage/pipelineId; skipping pipeline automation', { leadId });
+        return;
+      }
+
+      const findStageByExactName = async (name: string) => {
+        return prisma.pipelineStage.findFirst({
+          where: {
+            pipelineId,
+            name: { equals: name, mode: 'insensitive' },
+          },
+          select: { id: true, name: true, orderIndex: true },
+        });
+      };
+
+      const moveLeadToStage = async (toStage: { id: string; name: string; orderIndex: number } | null) => {
+        if (!toStage) return;
+        if (toStage.id === currentStageId) return;
+        if (currentOrderIndex !== null && typeof toStage.orderIndex === 'number' && toStage.orderIndex < currentOrderIndex) return;
+
+        await prisma.lead.update({
+          where: { id: leadId },
+          data: {
+            pipelineStageId: toStage.id,
+            stageEnteredAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+
+        if (currentStageId) {
+          await prisma.stageHistory.create({
+            data: {
+              leadId,
+              fromStageId: currentStageId,
+              toStageId: toStage.id,
+              changedById: null,
+              changedAt: new Date(),
+            },
           });
-          
-          if (noContactStatus) {
-            await prisma.lead.update({
-              where: { id: leadId },
-              data: { 
-                leadStatusId: noContactStatus.id
-                // lastContactAt removed - only update when call is answered
-              }
-            });
-            
-            logger.info('Auto-updated lead status to No Contact Made', { 
-              leadId, 
-              communicationType: type,
-              direction 
-            });
-          }
+        }
+
+        logger.info('Auto-updated lead pipeline stage', {
+          leadId,
+          fromStage: lead.pipelineStage?.name,
+          toStage: toStage.name,
+          communicationType: type,
+          direction,
+        });
+      };
+      
+      // Rule: Auto pipeline stage changes based on communication
+      if (direction === 'OUTBOUND') {
+        // Outbound CALL/SMS attempt: if current stage is exactly "New Lead" → set to "No Contact Made"
+        if (currentStageName === 'new lead') {
+          const noContactMadeStage = await findStageByExactName('No Contact Made');
+          await moveLeadToStage(noContactMadeStage);
         }
       } else if (direction === 'INBOUND') {
-        // First inbound response → Set to "Contact Made" (forward only)
-        // Only update if current status is "No Contact" or doesn't mention contact
-        if (currentStatus.includes('no contact') || !currentStatus.includes('contact')) {
-          const contactMadeStatus = await prisma.leadStatus.findFirst({
-            where: { 
-              name: { 
-                contains: 'Contact Made', 
-                mode: 'insensitive' 
-              } 
-            }
-          });
-          
-          if (contactMadeStatus) {
-            await prisma.lead.update({
-              where: { id: leadId },
-              data: { 
-                leadStatusId: contactMadeStatus.id,
-                lastContactAt: new Date() // Update lastContactAt
-              }
-            });
-            
-            logger.info('Auto-updated lead status to Contact Made', { 
-              leadId, 
-              communicationType: type,
-              direction 
-            });
-          }
-        } else {
-          // Even if status doesn't change, update lastContactAt for inbound
-          await prisma.lead.update({
-            where: { id: leadId },
-            data: { lastContactAt: new Date() }
-          });
+        // Inbound CALL/SMS from lead: if current stage is "New Lead" or "No Contact Made" → set to "Contact Made"
+        if (currentStageName === 'new lead' || currentStageName === 'no contact made') {
+          const contactMadeStage = await findStageByExactName('Contact Made');
+          await moveLeadToStage(contactMadeStage);
         }
       }
     } catch (error: any) {
