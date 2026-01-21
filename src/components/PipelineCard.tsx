@@ -28,6 +28,7 @@ interface PipelineCardProps {
     lastContactDate?: Date | string;
     lastTouchedAt?: Date | string;
     lastActivityAt?: Date | string;
+    lastAttemptedContactAt?: Date | string | null;
     priceReduction: boolean;
     clearToClose: boolean;
     originalPrice?: number;
@@ -78,7 +79,9 @@ export const PipelineCard = ({ lead, isDragging, onViewDetails, currentPipeline 
 
   const getTimeSinceLastActivity = () => {
     try {
-      const lastAt = safeDate(lead.lastActivityAt || lead.statusChangedDate);
+      // STRICT: last attempted contact only. If no attempt yet, show 0 Minutes.
+      if (!lead.lastAttemptedContactAt) return '0 Minutes';
+      const lastAt = safeDate(lead.lastAttemptedContactAt);
       const now = new Date();
       const totalMinutes = Math.max(0, differenceInMinutes(now, lastAt));
 
@@ -99,7 +102,8 @@ export const PipelineCard = ({ lead, isDragging, onViewDetails, currentPipeline 
 
   const getActivityAgingClass = () => {
     try {
-      const lastAt = safeDate(lead.lastActivityAt || lead.statusChangedDate);
+      if (!lead.lastAttemptedContactAt) return "text-gray-500";
+      const lastAt = safeDate(lead.lastAttemptedContactAt);
       const now = new Date();
       const totalMinutes = Math.max(0, differenceInMinutes(now, lastAt));
       const hours = totalMinutes / 60;

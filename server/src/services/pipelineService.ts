@@ -559,8 +559,12 @@ export const pipelineService = {
       const transformedLeads = leads.map(lead => {
         const lastCommAt = lead.communications[0]?.occurredAt || lead.communications[0]?.createdAt;
         const lastTaskAt = lead.tasks[0]?.updatedAt || lead.tasks[0]?.createdAt;
-        // lastActivityAt now only tracks communications (lastContactAt), not general updates
-        const lastActivityAt = lead.lastContactAt || (lastCommAt ? new Date(lastCommAt) : new Date(lead.createdAt));
+        // For "last attempted contact" timer:
+        // - Use ONLY lead.lastContactAt (which we update for outbound/inbound call attempts + SMS attempts)
+        // - If null, UI should show 0 Minutes (no attempt).
+        const lastAttemptedContactAt = lead.lastContactAt || null;
+        // Keep lastActivityAt for other UI needs, but it should mirror attempted contact for pipeline timing.
+        const lastActivityAt = lastAttemptedContactAt;
 
         const contactComms = lead.communications.filter((c: any) => {
           const t = String(c.type || '').toUpperCase();
@@ -598,6 +602,7 @@ export const pipelineService = {
           dateCreated: lead.createdAt,
           statusChangedDate: lead.updatedAt,
           lastContactDate: lastContact,
+          lastAttemptedContactAt: lastAttemptedContactAt,
           lastTouchedAt: lastTouchedAt,
           lastActivityAt: lastActivityAt,
           timeInCurrentStatus: timeInCurrentStatus,
