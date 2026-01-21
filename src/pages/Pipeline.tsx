@@ -630,6 +630,8 @@ const Pipeline = () => {
             dateCreated: lead.createdAt,
             statusChangedDate: lead.stageEnteredAt || lead.updatedAt,
             lastContactDate: lead.lastContactAt || lead.updatedAt,
+            // STRICT "last attempted contact" timer: PipelineCard uses this field.
+            lastAttemptedContactAt: lead.lastAttemptedContactAt ?? lead.lastContactAt ?? null,
             lastTouchedAt: lead.lastTouchedAt || lead.lastContactAt || lead.updatedAt,
             lastActivityAt: lead.lastActivityAt || lead.updatedAt,
             priceReduction: lead.priceReduction || false,
