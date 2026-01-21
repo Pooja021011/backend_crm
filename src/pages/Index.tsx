@@ -393,10 +393,6 @@ const Index = () => {
     // If taskId is provided, remove the task from the list
     if (taskId) {
       setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
-      toast({
-        title: "Task Completed & Lead Opened",
-        description: `Opened ${leadTitle || 'lead'} details and removed task from list`,
-      });
     } else {
       toast({
         title: "Opening Lead Details",

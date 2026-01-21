@@ -385,11 +385,6 @@ const Inbox = () => {
         console.log('🔗 Navigation URL:', navigationUrl);
         console.log('🆔 Lead ID:', email.leadId);
         navigate(navigationUrl);
-
-        toast({
-          title: "Lead Opened",
-          description: `Opened ${email.from} details`,
-        });
       } else {
         console.log('❌ No leadId found, navigating to leads page anyway');
         navigate('/leads');
@@ -434,11 +429,6 @@ const Inbox = () => {
       
       // Navigate to lead
       navigate(`/leads/${email.leadId}/edit`);
-      
-      toast({
-        title: "Lead Opened",
-        description: `Viewing lead details`,
-      });
       return;
     }
     
@@ -452,11 +442,6 @@ const Inbox = () => {
       
       // Mark reminder as completed (remove from list)
       setReminders(prevReminders => prevReminders.filter(reminder => reminder.id !== email.id));
-      
-      toast({
-        title: "Reminder Completed & Lead Opened",
-        description: `Opened ${email.from} details and completed reminder`,
-      });
       return;
     }
     
@@ -486,11 +471,6 @@ const Inbox = () => {
       } else if (email.leadAddress) {
         navigate(`/leads?address=${encodeURIComponent(email.leadAddress)}`);
       }
-      
-      toast({
-        title: "Notification Read & Lead Opened",
-        description: `Opened ${email.from} details and marked notification as read`,
-      });
       return;
     }
     
@@ -526,10 +506,6 @@ const Inbox = () => {
         console.error('Failed to dismiss email:', e);
       }
       
-      toast({
-        title: "Lead Opened",
-        description: `Opened lead details for email from ${email.from}`,
-      });
       return;
     }
     
