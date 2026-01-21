@@ -299,6 +299,8 @@ export const DueDiligenceCompleteRequirementsPopup = ({
       case 'comparables': return 'Comparable properties';
       case 'rehabBudget': return 'Rehab Budget';
       case 'underwritingCalculation': return 'Underwriting Calculator';
+      case 'underwritingTaxes': return 'Annual Taxes';
+      case 'underwritingTimeline': return 'Timeline (Months)';
       default: return k;
     }
   };

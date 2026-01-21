@@ -836,7 +836,7 @@ const Pipeline = () => {
       setShowDueDiligencePopup(true);
       return;
     }
-    const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation'];
+    const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation','underwritingTaxes','underwritingTimeline'];
     if (requiredFields.some((f) => ddCompleteFields.includes(f))) {
       setMissingDdCompleteItems(requiredFields.filter((f) => ddCompleteFields.includes(f)));
       setShowDueDiligenceCompletePopup(true);

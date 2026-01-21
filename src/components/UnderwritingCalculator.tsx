@@ -25,8 +25,9 @@ export function UnderwritingCalculator({
   suppressSuccessToasts = false,
   onValuesChange,
   initialArv = 0,
-  initialTaxes = 1000,
-  initialTimeline = 6
+  // These are placeholders, NOT real defaults. Use 0 to represent "unset".
+  initialTaxes = 0,
+  initialTimeline = 0
 }: UnderwritingCalculatorProps) {
   const { toast } = useToast();
   const [expanded, setExpanded] = useState(false);
@@ -102,6 +103,14 @@ export function UnderwritingCalculator({
   const handleSave = async () => {
     if (arv === 0) {
       toast({ title: 'Error', description: 'Please enter ARV', variant: 'destructive' });
+      return;
+    }
+    if (!taxes || taxes <= 0) {
+      toast({ title: 'Error', description: 'Please enter Annual Taxes', variant: 'destructive' });
+      return;
+    }
+    if (!timeline || timeline <= 0) {
+      toast({ title: 'Error', description: 'Please enter Timeline (Months)', variant: 'destructive' });
       return;
     }
 
@@ -198,8 +207,8 @@ export function UnderwritingCalculator({
                 }}
                 onBlur={() => setTaxesDisplay(taxes ? formatCurrency(taxes) : '')}
                 disabled={readOnly}
-                className="h-6 text-xs"
-                placeholder="1000"
+                className="h-6 text-xs placeholder:text-slate-400"
+                placeholder="$1,000"
               />
             </div>
 
@@ -211,7 +220,7 @@ export function UnderwritingCalculator({
                 value={timeline || ''}
                 onChange={(e) => setTimeline(Number(e.target.value) || 0)}
                 disabled={readOnly}
-                className="h-6 text-xs"
+                className="h-6 text-xs placeholder:text-slate-400"
                 placeholder="6"
                 min={1}
               />

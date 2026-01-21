@@ -346,8 +346,9 @@ const LeadEdit: React.FC = () => {
   
   // Underwriting values (for passing to Projections)
   const [underwritingArv, setUnderwritingArv] = useState(0);
-  const [underwritingTaxes, setUnderwritingTaxes] = useState(1000);
-  const [underwritingTimeline, setUnderwritingTimeline] = useState(6);
+  // Placeholders only; 0 means "unset" (user must enter real values).
+  const [underwritingTaxes, setUnderwritingTaxes] = useState(0);
+  const [underwritingTimeline, setUnderwritingTimeline] = useState(0);
   const [underwritingRehabCost, setUnderwritingRehabCost] = useState(0);
   const [finalOffer, setFinalOffer] = useState(0);
 
@@ -547,7 +548,7 @@ const LeadEdit: React.FC = () => {
             setShowDueDiligencePopup(true);
             return;
           }
-          const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation'];
+          const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation','underwritingTaxes','underwritingTimeline'];
           if (requiredFields.some((f) => ddCompleteFields.includes(f))) {
             setMissingDdCompleteItems(requiredFields.filter((f) => ddCompleteFields.includes(f)));
             setShowDueDiligenceCompletePopup(true);
@@ -4064,7 +4065,7 @@ const LeadEdit: React.FC = () => {
                 if (e?.code === 'VALIDATION_REQUIRED') {
                   const requiredFields: string[] = Array.isArray(e?.requiredFields) ? e.requiredFields : [];
                   const ddFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
-                  const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation'];
+                  const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation','underwritingTaxes','underwritingTimeline'];
 
                   if (requiredFields.some((f) => ddFields.includes(f))) {
                     setMissingDdFields(requiredFields.filter((f) => ddFields.includes(f)));
@@ -4148,7 +4149,7 @@ const LeadEdit: React.FC = () => {
               } catch (e: any) {
                 if (e?.code === 'VALIDATION_REQUIRED') {
                   const requiredFields: string[] = Array.isArray(e?.requiredFields) ? e.requiredFields : [];
-                  const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation'];
+                  const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation','underwritingTaxes','underwritingTimeline'];
 
                   if (requiredFields.includes('photos')) {
                     setShowDueDiligencePopup(false);
@@ -4253,7 +4254,7 @@ const LeadEdit: React.FC = () => {
                 if (e?.code === 'VALIDATION_REQUIRED') {
                   const requiredFields: string[] = Array.isArray(e?.requiredFields) ? e.requiredFields : [];
                   const ddFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
-                  const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation'];
+                  const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation','underwritingTaxes','underwritingTimeline'];
 
                   if (requiredFields.includes('photos')) {
                     setShowOfferMadePopup(false);

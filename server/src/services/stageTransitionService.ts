@@ -232,6 +232,10 @@ export const stageTransitionService = {
         // This matches the UI, where Final Offer is derived from ARV + rehab budget without always persisting a row.
         const underwritingCalc = await prisma.underwritingCalculation.findFirst({ where: { leadId } });
         const finalOfferFromFields = asNumber(customFields.finalOffer);
+        const taxesFromFields = asNumber((customFields as any).underwritingTaxes);
+        const timelineFromFields = asNumber((customFields as any).underwritingTimeline);
+        const taxesValue = (underwritingCalc as any)?.taxes ?? taxesFromFields ?? 0;
+        const timelineValue = (underwritingCalc as any)?.timeline ?? timelineFromFields ?? 0;
         const inferredFinalOffer = arv && rehabBudgetValue
           ? (arv * 0.72) - rehabBudgetValue - 25000
           : 0;
@@ -240,6 +244,9 @@ export const stageTransitionService = {
           (!!finalOfferFromFields && finalOfferFromFields > 0) ||
           (Number.isFinite(inferredFinalOffer) && inferredFinalOffer > 0);
         if (!hasUnderwriting) ddCompleteMissing.push('underwritingCalculation');
+        // Annual Taxes + Timeline must be explicitly entered (placeholders do not count).
+        if (!taxesValue || taxesValue <= 0) ddCompleteMissing.push('underwritingTaxes');
+        if (!timelineValue || timelineValue <= 0) ddCompleteMissing.push('underwritingTimeline');
 
         if (ddCompleteMissing.length > 0) {
           return {

@@ -88,10 +88,17 @@ export const underwritingController = {
       const { arv, rehabCost, taxes, timeline, notes } = req.body;
       const userId = (req as any).user?.id;
 
-      if (!arv || !rehabCost) {
+      // Taxes/timeline must be provided by user (no auto-defaults).
+      if (!arv || !rehabCost || !taxes || !timeline) {
         return res.status(400).json({
           success: false,
-          error: 'Missing required fields: arv, rehabCost'
+          error: 'Missing required fields: arv, rehabCost, taxes, timeline'
+        });
+      }
+      if (Number(taxes) <= 0 || Number(timeline) <= 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Taxes and timeline must be greater than 0'
         });
       }
 
@@ -102,8 +109,8 @@ export const underwritingController = {
         leadId,
         arv,
         rehabCost,
-        taxes: taxes || 1000,
-        timeline: timeline || 6,
+        taxes,
+        timeline,
         finalOffer: Math.round(finalOffer * 100) / 100,
         calculatedBy: userId,
         notes
