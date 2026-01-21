@@ -672,11 +672,12 @@ const Inbox = () => {
         
         // Auto-clear notifications for ACQ/DISP agents
         try {
+          const accessToken = localStorage.getItem('accessToken');
           const autoClearResponse = await fetch(`${API_BASE}/notifications/auto-clear/message-reply`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${accessToken}`
+              ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {})
             },
             body: JSON.stringify({
               leadId: selectedEmail.leadId || selectedEmail.id // Use leadId if available
@@ -1017,11 +1018,20 @@ const Inbox = () => {
       const result = await response.json();
       
       if (result.success) {
+        // Only show calls on/after Jan 20, 2026 (same cutoff rule as other inbox tabs)
+        const cutoffDate = new Date('2026-01-20T00:00:00Z');
         // Filter to show only missed calls in inbox
         const missedCalls = (result.data.calls || [])
           .filter((call: any) => (call.status === 'missed' || call.status === 'no-answer'))
           // Safety: only show calls tied to an existing Lead (backend should already enforce this)
-          .filter((call: any) => Boolean(call?.leadId));
+          .filter((call: any) => Boolean(call?.leadId))
+          // Date cutoff filter (use timestamp when present; fallback to occurredAt/createdAt)
+          .filter((call: any) => {
+            const raw = call?.timestamp || call?.occurredAt || call?.createdAt;
+            const dt = raw ? new Date(raw) : null;
+            if (!dt || Number.isNaN(dt.getTime())) return false;
+            return dt >= cutoffDate;
+          });
         setCallHistory(missedCalls);
       } else {
         throw new Error(result.error || 'Failed to fetch call history');
@@ -2039,9 +2049,7 @@ const Inbox = () => {
                                 {formatUsPhoneForDisplay(call.phoneNumber)}
                               </span>
                               {call.duration > 0 && (
-                                <span className="text-sm text-gray-500">
-                                  Duration: {Math.floor(call.duration / 60)}:{(call.duration % 60).toString().padStart(2, '0')}
-                                </span>
+                                null
                               )}
                             </div>
                           </div>
