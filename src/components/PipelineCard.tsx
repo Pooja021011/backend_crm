@@ -10,7 +10,6 @@ import {
   CheckCircle2,
   CheckSquare,
 } from "lucide-react";
-import { differenceInMinutes } from "date-fns";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { safeDate, safeDateFormat } from "@/utils/validation";
@@ -80,10 +79,16 @@ export const PipelineCard = ({ lead, isDragging, onViewDetails, currentPipeline 
   const getTimeSinceLastActivity = () => {
     try {
       // STRICT: last attempted contact only. If no attempt yet, show 0 Minutes.
-      if (!lead.lastAttemptedContactAt) return '0 Minutes';
+      if (!lead.lastAttemptedContactAt) return '0 Seconds';
       const lastAt = safeDate(lead.lastAttemptedContactAt);
       const now = new Date();
-      const totalMinutes = Math.max(0, differenceInMinutes(now, lastAt));
+      const totalSeconds = Math.max(0, Math.floor((now.getTime() - lastAt.getTime()) / 1000));
+
+      if (totalSeconds < 60) {
+        return `${totalSeconds} Second${totalSeconds === 1 ? '' : 's'}`;
+      }
+
+      const totalMinutes = Math.floor(totalSeconds / 60);
 
       const days = Math.floor(totalMinutes / (60 * 24));
       if (days >= 1) return `${days} day${days > 1 ? 's' : ''}`;
@@ -96,7 +101,7 @@ export const PipelineCard = ({ lead, isDragging, onViewDetails, currentPipeline 
       return `${hours} Hour${hours === 1 ? '' : 's'} ${minutes} Minute${minutes === 1 ? '' : 's'}`;
     } catch (error) {
       console.warn('Error calculating time since last activity:', error);
-      return '0 Minutes';
+      return '0 Seconds';
     }
   };
 
@@ -105,8 +110,8 @@ export const PipelineCard = ({ lead, isDragging, onViewDetails, currentPipeline 
       if (!lead.lastAttemptedContactAt) return "text-gray-500";
       const lastAt = safeDate(lead.lastAttemptedContactAt);
       const now = new Date();
-      const totalMinutes = Math.max(0, differenceInMinutes(now, lastAt));
-      const hours = totalMinutes / 60;
+      const totalSeconds = Math.max(0, Math.floor((now.getTime() - lastAt.getTime()) / 1000));
+      const hours = totalSeconds / 3600;
       if (hours >= 48) return "text-red-600";
       if (hours >= 24) return "text-yellow-600";
       return "text-gray-500";
