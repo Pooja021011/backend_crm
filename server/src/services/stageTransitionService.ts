@@ -326,6 +326,10 @@ export const stageTransitionService = {
       const stageName = stage.name.toLowerCase();
       const address = lead.address?.address1 || 'Property';
       const customFields = (lead.customFields as any) || {};
+
+      // Disable ONLY stage-transition auto tasks by default.
+      // Set ENABLE_STAGE_AUTO_TASKS=true to re-enable.
+      const stageAutoTasksEnabled = String(process.env.ENABLE_STAGE_AUTO_TASKS || '').toLowerCase() === 'true';
       
       logger.info({ 
         leadId, 
@@ -335,28 +339,36 @@ export const stageTransitionService = {
       
       // Rule 2A: Appointment Complete → Create "Underwrite" task
       if (stageName.includes('appointment') && stageName.includes('complete')) {
-        await taskRepository.create(leadId, {
-          title: `Underwrite ${address}`,
-          description: 'Review property photos and underwrite the deal',
-          dueAt: new Date(),
-          assignedToId: lead.assignedUserId || userId,
-          createdById: userId
-        });
-        
-        logger.info({ leadId, stageName: stage.name }, 'Auto-created Underwrite task');
+        if (stageAutoTasksEnabled) {
+          await taskRepository.create(leadId, {
+            title: `Underwrite ${address}`,
+            description: 'Review property photos and underwrite the deal',
+            dueAt: new Date(),
+            assignedToId: lead.assignedUserId || userId,
+            createdById: userId
+          });
+          
+          logger.info({ leadId, stageName: stage.name }, 'Auto-created Underwrite task');
+        } else {
+          logger.info({ leadId, stageName: stage.name }, 'Skipped auto-created Underwrite task (disabled)');
+        }
       }
       
       // Rule 2B: Due Diligence Complete → Create "Make Offer" task
       if (stageName.includes('due diligence') && stageName.includes('complete')) {
-        await taskRepository.create(leadId, {
-          title: `Make Offer on ${address}`,
-          description: 'Prepare and submit offer based on due diligence findings',
-          dueAt: new Date(),
-          assignedToId: lead.assignedUserId || userId,
-          createdById: userId
-        });
-        
-        logger.info({ leadId, stageName: stage.name }, 'Auto-created Make Offer task');
+        if (stageAutoTasksEnabled) {
+          await taskRepository.create(leadId, {
+            title: `Make Offer on ${address}`,
+            description: 'Prepare and submit offer based on due diligence findings',
+            dueAt: new Date(),
+            assignedToId: lead.assignedUserId || userId,
+            createdById: userId
+          });
+          
+          logger.info({ leadId, stageName: stage.name }, 'Auto-created Make Offer task');
+        } else {
+          logger.info({ leadId, stageName: stage.name }, 'Skipped auto-created Make Offer task (disabled)');
+        }
       }
       
       // Rule 2C: Offer Made → Conditional task creation
@@ -370,19 +382,23 @@ export const stageTransitionService = {
         }, 'Checking offer response for task creation');
         
         if (response === 'negotiating') {
-          // Follow up in 6 hours
-          const dueDate = new Date();
-          dueDate.setHours(dueDate.getHours() + 6);
-          
-          await taskRepository.create(leadId, {
-            title: `Follow Up With ${address}`,
-            description: 'Check on offer negotiation status',
-            dueAt: dueDate,
-            assignedToId: lead.assignedUserId || userId,
-            createdById: userId
-          });
-          
-          logger.info({ leadId, stageName: stage.name }, 'Auto-created Follow Up task (negotiating)');
+          if (stageAutoTasksEnabled) {
+            // Follow up in 6 hours
+            const dueDate = new Date();
+            dueDate.setHours(dueDate.getHours() + 6);
+            
+            await taskRepository.create(leadId, {
+              title: `Follow Up With ${address}`,
+              description: 'Check on offer negotiation status',
+              dueAt: dueDate,
+              assignedToId: lead.assignedUserId || userId,
+              createdById: userId
+            });
+            
+            logger.info({ leadId, stageName: stage.name }, 'Auto-created Follow Up task (negotiating)');
+          } else {
+            logger.info({ leadId, stageName: stage.name }, 'Skipped auto-created Follow Up task (disabled)');
+          }
         } else if (response === 'rejected') {
           // TEMP: Disable auto-created Re-Offer task.
           // Keeping the rest of Offer Made automation intact.

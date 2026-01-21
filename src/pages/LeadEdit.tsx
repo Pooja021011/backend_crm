@@ -260,6 +260,12 @@ const LeadEdit: React.FC = () => {
   const [pipelineStatus, setPipelineStatus] = useState('');
   const [acquisitionsAgent, setAcquisitionsAgent] = useState('');
   const [dispositionsAgent, setDispositionsAgent] = useState('');
+
+  // Keep pipeline stage in-sync with backend automation (calls/SMS) without page reload.
+  // Polls the lead record and updates ONLY pipelineStageId-related state (safe for forms).
+  const pipelineStatusRef = useRef<string>('');
+  const pendingPipelineStatusRef = useRef<string | null>(null);
+  const popupOpenRef = useRef<boolean>(false);
   
   // Stage transition validation popups
   const [showAppointmentPopup, setShowAppointmentPopup] = useState(false);
@@ -270,6 +276,24 @@ const LeadEdit: React.FC = () => {
   const [pendingPipelineStatus, setPendingPipelineStatus] = useState<string | null>(null);
   const [missingDdFields, setMissingDdFields] = useState<string[]>([]);
   const [missingDdCompleteItems, setMissingDdCompleteItems] = useState<string[]>([]);
+
+  // Refs for polling safety (avoid overwriting user-driven stage changes / active popups)
+  useEffect(() => {
+    pipelineStatusRef.current = pipelineStatus;
+  }, [pipelineStatus]);
+
+  useEffect(() => {
+    pendingPipelineStatusRef.current = pendingPipelineStatus;
+  }, [pendingPipelineStatus]);
+
+  useEffect(() => {
+    popupOpenRef.current =
+      !!showAppointmentPopup ||
+      !!showDueDiligencePopup ||
+      !!showOfferMadePopup ||
+      !!showDueDiligenceCompletePopup ||
+      !!showFollowUpTaskPopup;
+  }, [showAppointmentPopup, showDueDiligencePopup, showOfferMadePopup, showDueDiligenceCompletePopup, showFollowUpTaskPopup]);
   
   // Property info
   const [propertyType, setPropertyType] = useState('');
@@ -589,6 +613,74 @@ const LeadEdit: React.FC = () => {
     loadBuyers();
     loadTasks();
     loadCommunications();
+  }, [id]);
+
+  // Poll backend for pipelineStageId updates (auto-moves from calls/SMS) so UI updates without reload.
+  useEffect(() => {
+    if (!id) return;
+
+    let cancelled = false;
+
+    const tick = async () => {
+      if (cancelled) return;
+      // Don't fight with an in-progress user stage move or required popups.
+      if (pendingPipelineStatusRef.current) return;
+      if (popupOpenRef.current) return;
+
+      try {
+        const response = await makeApiCall(`${API_BASE}/leads/${id}`);
+        if (!response.ok) return;
+        const json = await response.json().catch(() => ({}));
+        const leadData = (json as any)?.data || (json as any);
+
+        const serverStageId = String(leadData?.pipelineStageId || '');
+        if (!serverStageId) return;
+
+        const localStageId = pipelineStatusRef.current;
+        if (serverStageId !== localStageId) {
+          // Update ONLY stage-related UI (avoid re-hydrating the full form while user edits).
+          setPipelineStatus(serverStageId);
+          setLead((prev: any) =>
+            prev
+              ? {
+                  ...prev,
+                  pipelineStageId: serverStageId,
+                  stageEnteredAt: leadData?.stageEnteredAt ?? prev.stageEnteredAt,
+                  lastContactAt: leadData?.lastContactAt ?? prev.lastContactAt,
+                  updatedAt: leadData?.updatedAt ?? prev.updatedAt,
+                }
+              : prev
+          );
+        } else {
+          // Keep timers fresh if backend updated lastContactAt/stageEnteredAt.
+          setLead((prev: any) =>
+            prev
+              ? {
+                  ...prev,
+                  stageEnteredAt: leadData?.stageEnteredAt ?? prev.stageEnteredAt,
+                  lastContactAt: leadData?.lastContactAt ?? prev.lastContactAt,
+                  updatedAt: leadData?.updatedAt ?? prev.updatedAt,
+                }
+              : prev
+          );
+        }
+      } catch {
+        // silent
+      }
+    };
+
+    // initial sync
+    void tick();
+
+    const interval = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      void tick();
+    }, 10_000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [id]);
 
   // Check permissions after lead and tasks are loaded
