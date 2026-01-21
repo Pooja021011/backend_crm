@@ -124,14 +124,14 @@ export const inboxRepository = {
     let filteredItems = items;
     if (isNoteInternal && filters.userId) {
       filteredItems = items.filter((item: any) => {
-        // Requirement: show ONLY notes where logged-in user was tagged by someone else
-        if (item.createdById === filters.userId) return false;
         const metadata = item.metadata as any;
         const mentionedUserIds = metadata?.mentionedUserIds;
         const isMentioned = Array.isArray(mentionedUserIds) && mentionedUserIds.includes(filters.userId);
         if (isMentioned) {
           console.log('✅ User IS mentioned in communication:', item.id);
         }
+        // Requirement: show ONLY notes where the logged-in user was @mentioned (including self-mentions).
+        // If user A mentions user B, A should NOT see it unless A is also mentioned.
         return isMentioned;
       });
       console.log('🔍 After filtering by mentions:', filteredItems.length);

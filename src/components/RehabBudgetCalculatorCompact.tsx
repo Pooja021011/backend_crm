@@ -13,6 +13,7 @@ interface RehabBudgetCalculatorProps {
   sqft?: number;
   bathrooms?: number;
   readOnly?: boolean;
+  suppressSuccessToasts?: boolean;
   onTotalChange?: (total: number) => void;
   onBathroomsChange?: (bathrooms: number) => void;
   onDataChange?: (data: { finishLevel: string; toggledItems: ToggledItems; numberOfWindows: number; customValues: any }) => void;
@@ -31,6 +32,7 @@ export function RehabBudgetCalculatorCompact({
   sqft = 0,
   bathrooms = 0,
   readOnly = false,
+  suppressSuccessToasts = false,
   onTotalChange,
   onBathroomsChange,
   onDataChange,
@@ -61,6 +63,13 @@ export function RehabBudgetCalculatorCompact({
       value: String(Number(initialCustomValues?.miscValue) || ''),
     };
   });
+  const [customMiscEnabled, setCustomMiscEnabled] = useState<boolean>(() => {
+    const incoming = initialCustomValues?.miscLines;
+    const initialVal = Array.isArray(incoming) && incoming.length > 0
+      ? Number(incoming[0]?.value)
+      : Number(initialCustomValues?.miscValue);
+    return Number.isFinite(initialVal) && (initialVal || 0) > 0;
+  });
   const [calculation, setCalculation] = useState({
     itemizedCosts: {} as { [key: string]: number },
     subtotal: 0,
@@ -74,7 +83,7 @@ export function RehabBudgetCalculatorCompact({
   // Notify parent of data changes
   useEffect(() => {
     if (onDataChange) {
-      const miscValueNum = Math.max(0, Number(customMiscLine.value) || 0);
+      const miscValueNum = customMiscEnabled ? Math.max(0, Number(customMiscLine.value) || 0) : 0;
       onDataChange({
         finishLevel,
         toggledItems,
@@ -88,7 +97,7 @@ export function RehabBudgetCalculatorCompact({
         }
       });
     }
-  }, [finishLevel, toggledItems, numberOfWindows, customMiscLine, onDataChange]);
+  }, [finishLevel, toggledItems, numberOfWindows, customMiscLine, customMiscEnabled, onDataChange]);
 
   // Update property values when props change
   useEffect(() => {
@@ -110,8 +119,8 @@ export function RehabBudgetCalculatorCompact({
   };
 
   const customMiscTotal = useMemo(
-    () => Math.max(0, Number(customMiscLine.value) || 0),
-    [customMiscLine.value]
+    () => (customMiscEnabled ? Math.max(0, Number(customMiscLine.value) || 0) : 0),
+    [customMiscLine.value, customMiscEnabled]
   );
   const subtotalWithCustom = calculation.subtotal + customMiscTotal;
   const contingencyWithCustom = subtotalWithCustom * 0.10;
@@ -154,7 +163,7 @@ export function RehabBudgetCalculatorCompact({
   const handleSave = async () => {
     setSaving(true);
     try {
-      const miscValueNum = Math.max(0, Number(customMiscLine.value) || 0);
+      const miscValueNum = customMiscEnabled ? Math.max(0, Number(customMiscLine.value) || 0) : 0;
       const token = localStorage.getItem('accessToken');
       const response = await fetch(`${API_BASE}/leads/${leadId}/rehab-budget`, {
         method: 'POST',
@@ -177,7 +186,7 @@ export function RehabBudgetCalculatorCompact({
       });
 
       if (response.ok) {
-        toast({ title: 'Success', description: 'Rehab budget saved' });
+        if (!suppressSuccessToasts) toast({ title: 'Success', description: 'Rehab budget saved' });
       }
     } catch (error) {
       toast({ title: 'Error', description: 'Failed to save', variant: 'destructive' });
@@ -232,6 +241,13 @@ export function RehabBudgetCalculatorCompact({
     return (
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 min-w-0">
+          <Checkbox
+            id="customMiscEnabled"
+            checked={customMiscEnabled}
+            onCheckedChange={() => setCustomMiscEnabled((p) => !p)}
+            disabled={readOnly}
+            className="h-3 w-3"
+          />
           <Input
             value={customMiscLine.label}
             onChange={(e) =>
@@ -239,20 +255,28 @@ export function RehabBudgetCalculatorCompact({
             }
             disabled={readOnly}
             placeholder="Miscellaneous"
-            className="h-6 text-[10px] w-[220px] sm:w-[260px] md:w-[320px]"
+            // Match Lead Detail "Property Information" inputs (height + font)
+            className="h-6 text-xs w-[16ch] sm:w-[18ch] md:w-[20ch]"
           />
         </div>
         <div className="flex items-center gap-1">
-          <Input
-            type="number"
-            value={valueDisplay}
-            onChange={(e) =>
-              setCustomMiscLine((prev) => ({ ...prev, value: e.target.value }))
-            }
-            disabled={readOnly}
-            min={0}
-            className="h-6 w-28 text-[10px] tabular-nums"
-          />
+          <div className={`relative ${customMiscEnabled ? '' : 'opacity-60'}`}>
+            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-500 select-none">
+              $
+            </span>
+            <Input
+              type="number"
+              value={valueDisplay}
+              onChange={(e) =>
+                setCustomMiscLine((prev) => ({ ...prev, value: e.target.value }))
+              }
+              disabled={readOnly}
+              min={0}
+              placeholder="0"
+              // Match Lead Detail "Property Information" inputs (height + font)
+              className="h-6 w-[9ch] pl-4 pr-2 text-xs tabular-nums text-right"
+            />
+          </div>
         </div>
       </div>
     );

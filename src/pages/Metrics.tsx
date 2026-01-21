@@ -1372,44 +1372,54 @@ const Metrics = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Metrics</h1>
-        
-        {/* Global Filters Toggle */}
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-2"
-          onClick={() => setShowFilters(!showFilters)}
-        >
-          <Filter className="w-4 h-4" />
-          {showFilters ? 'Hide' : 'Filter'}
-        </Button>
-      </div>
+      {/* Header + Filters (no extra top margin between divider, filter button, and panel) */}
+      <div className="space-y-0">
+        {/* Header (match Leads page: title with divider line under it) */}
+        <div className="bg-white border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-bold text-gray-900">Metrics</h1>
+          </div>
+        </div>
 
-      {/* Global Filters Panel */}
-      {showFilters && (
-        <div className="bg-white border-t border-b border-gray-200 px-6 py-3">
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
-            {/* 1) Lead Source (multi-select) */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-700">Lead Source</label>
-              <MultiSelect
-                options={availableSources.map((source) => ({
-                  label: source,
-                  value: source,
-                }))}
-                selected={selectedSources}
-                onChange={setSelectedSources}
-                placeholder="All Sources"
-              />
-            </div>
+        {/* Filter button below the divider line (only when panel is closed) */}
+        {!showFilters && (
+          <div className="flex items-center justify-end pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => setShowFilters(true)}
+            >
+              <Filter className="w-4 h-4" />
+              Filter
+            </Button>
+          </div>
+        )}
+
+        {/* Global Filters Panel */}
+        {showFilters && (
+          <div className="bg-white border-b border-gray-200 px-4 py-2">
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-2">
+              {/* 1) Lead Source (multi-select) */}
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-700">Lead Source</label>
+                <MultiSelect
+                  options={availableSources.map((source) => ({
+                    label: source,
+                    value: source,
+                  }))}
+                  selected={selectedSources}
+                  onChange={setSelectedSources}
+                  placeholder="All Sources"
+                  className="h-8"
+                />
+              </div>
 
             {/* 2) Date Range */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-gray-700">Date Range</label>
               <select
-                className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 h-9"
+                className="w-full h-8 px-2 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                 value={selectedPeriod}
                 onChange={(e) => setSelectedPeriod(e.target.value)}
               >
@@ -1435,7 +1445,7 @@ const Metrics = () => {
                         from: e.target.value ? new Date(e.target.value) : undefined,
                       }))
                     }
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 h-9"
+                    className="w-full h-8 px-2 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
                 <div className="space-y-1">
@@ -1449,7 +1459,7 @@ const Metrics = () => {
                         to: e.target.value ? new Date(e.target.value) : undefined,
                       }))
                     }
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 h-9"
+                    className="w-full h-8 px-2 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
               </>
@@ -1457,7 +1467,8 @@ const Metrics = () => {
           </div>
 
           {/* Filter Actions (same layout as Leads/Pipeline) */}
-          <div className="flex items-center justify-end mt-4 pt-4 border-t border-gray-200">
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200">
+            <div className="text-sm text-gray-600" />
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
@@ -1480,9 +1491,10 @@ const Metrics = () => {
                 Close Panel
               </Button>
             </div>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Navigation Buttons */}
       <div className="space-y-2 mb-6">

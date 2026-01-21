@@ -121,6 +121,12 @@ export const callService = {
             status: call.status,
           },
         });
+
+        // Update lastContactAt for outbound call attempt (regardless of eventual outcome)
+        await prisma.lead.update({
+          where: { id: callRequest.leadId },
+          data: { lastContactAt: new Date() },
+        });
         
         // NEW: Auto-update lead status based on communication
         await communicationResponseService.handleCommunicationEvent(
@@ -271,15 +277,12 @@ export const callService = {
               subject: status === 'missed' ? `⚠️ MISSED CALL from ${safeFrom}` : `Incoming call from ${safeFrom}`,
             },
           });
-          
-          // Update lastContactAt ONLY for completed (answered) calls, not missed calls
-          if (status === 'completed') {
-            await prisma.lead.update({
-              where: { id: leadId },
-              data: { lastContactAt: new Date() }
-            });
-            logger.info({ leadId, callSid, status }, 'Updated lastContactAt for answered inbound call');
-          }
+
+          // Update lastContactAt for ANY call attempt (last attempted contact, regardless of status)
+          await prisma.lead.update({
+            where: { id: leadId },
+            data: { lastContactAt: new Date() }
+          });
           
           // Create notification for status update (especially for missed calls)
           if (status === 'missed' || status === 'completed') {
@@ -336,14 +339,11 @@ export const callService = {
           metadata: baseMetadata,
         });
 
-        // Update lastContactAt ONLY for completed (answered) calls, not missed calls
-        if (status === 'completed') {
-          await prisma.lead.update({
-            where: { id: leadId },
-            data: { lastContactAt: new Date() }
-          });
-          logger.info({ leadId, callSid, status }, 'Updated lastContactAt for answered inbound call');
-        }
+        // Update lastContactAt for ANY call attempt (last attempted contact, regardless of status)
+        await prisma.lead.update({
+          where: { id: leadId },
+          data: { lastContactAt: new Date() }
+        });
 
         // Create notification for incoming call
         const lead = await prisma.lead.findUnique({

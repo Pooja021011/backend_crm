@@ -203,6 +203,12 @@ export const smsService = {
                 status: smsStatus,
               },
             });
+
+            // Update lastContactAt for inbound SMS (last attempted contact)
+            await prisma.lead.update({
+              where: { id: lead.id },
+              data: { lastContactAt: new Date() },
+            });
             
             logger.info('Incoming SMS stored in communication history', { 
               leadId: lead.id, 

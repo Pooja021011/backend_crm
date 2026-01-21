@@ -124,6 +124,9 @@ interface UnifiedCommunicationFeedProps {
     createdById?: string;
     dispAgentId?: string;
   };
+
+  // Lead Detail UX: suppress success toasts (show only errors)
+  suppressSuccessToasts?: boolean;
 }
 
 export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> = ({
@@ -166,6 +169,7 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
   addingNote,
   onAddNote,
   onOpenTaskDialog,
+  suppressSuccessToasts = false,
 }) => {
   const { toast } = useToast();
   // Dialog states
@@ -331,7 +335,7 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
       if (updated?.id) onNoteUpdated?.(updated);
       setEditingNote(null);
       setEditNoteBody('');
-      toast({ title: 'Updated', description: 'Note updated' });
+      if (!suppressSuccessToasts) toast({ title: 'Updated', description: 'Note updated' });
       // Ensure UI refresh happens even if caller returns a Promise.
       await Promise.resolve(onRefreshCommunications?.());
       await Promise.resolve(onRefreshTasks?.());
@@ -393,7 +397,7 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
       const json = await response.json().catch(() => ({}));
       const updated = (json as any)?.data || (json as any);
       if (updated?.id) onTaskUpdated?.(updated);
-      toast({ title: 'Updated', description: 'Task updated' });
+      if (!suppressSuccessToasts) toast({ title: 'Updated', description: 'Task updated' });
       setEditingTask(null);
       setTaskEditDuePickerOpen(false);
       await Promise.resolve(onRefreshTasks?.());

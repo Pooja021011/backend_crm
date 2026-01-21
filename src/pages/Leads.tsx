@@ -969,15 +969,15 @@ const Leads = () => {
         {/* Header */}
         <div className="bg-white border-b border-gray-200">
           <div className="flex items-center gap-4">
-            <h1 className="text-xl font-semibold text-gray-900">Lead Management</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Lead Management</h1>
           </div>
         </div>
 
 
         {/* Collapsible Filters */}
         {showFilters && (
-          <div className="bg-white border-b border-gray-200 px-6 py-3">
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
+          <div className="bg-white border-b border-gray-200 px-4 py-2">
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-2">
               {/* Status Filter - Multi-select Dropdown */}
               <div className="space-y-1">
                 <label className="text-xs font-medium text-gray-700">Lead Status</label>
@@ -990,6 +990,7 @@ const Leads = () => {
                   onChange={setSelectedStatuses}
                   placeholder="All Statuses"
                   disabled={loadingFilters}
+                  className="h-8"
                 />
               </div>
 
@@ -1005,6 +1006,7 @@ const Leads = () => {
                   onChange={setSelectedPipelineStatuses}
                   placeholder="All Stages"
                   disabled={loadingFilters}
+                  className="h-8"
                 />
               </div>
 
@@ -1020,6 +1022,7 @@ const Leads = () => {
                   onChange={setSelectedLeadSources}
                   placeholder="All Sources"
                   disabled={loadingFilters}
+                  className="h-8"
                 />
               </div>
 
@@ -1027,7 +1030,7 @@ const Leads = () => {
               <div className="space-y-1">
                 <label className="text-xs font-medium text-gray-700">Date Created</label>
                 <select 
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full h-8 px-2 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                   value={selectedDateRange}
                   onChange={(e) => setSelectedDateRange(e.target.value)}
                 >
@@ -1048,7 +1051,7 @@ const Leads = () => {
                         type="date"
                         value={customDateFrom}
                         onChange={(e) => setCustomDateFrom(e.target.value)}
-                        className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-full h-8 px-2 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </div>
                     <div className="space-y-1">
@@ -1057,7 +1060,7 @@ const Leads = () => {
                         type="date"
                         value={customDateTo}
                         onChange={(e) => setCustomDateTo(e.target.value)}
-                        className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-full h-8 px-2 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </div>
                   </div>
@@ -1082,6 +1085,7 @@ const Leads = () => {
                     onChange={setSelectedAgents}
                     placeholder="All ACQ Agents"
                     disabled={loadingFilters}
+                    className="h-8"
                   />
                 </div>
               )}
@@ -1103,13 +1107,14 @@ const Leads = () => {
                     onChange={setSelectedAgents}
                     placeholder="All DISP Agents"
                     disabled={loadingFilters}
+                    className="h-8"
                   />
                 </div>
               )}
             </div>
 
             {/* Filter Actions */}
-            <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200">
               <div className="text-sm text-gray-600">
                 {currentLeads.length} leads found
               </div>
@@ -1331,16 +1336,18 @@ const Leads = () => {
                   </DropdownMenu>
                 )}
                 
-                {/* Filter Button */}
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="gap-2"
-                  onClick={() => setShowFilters(!showFilters)}
-                >
-                  <Filter className="w-4 h-4" />
-                  {showFilters ? 'Hide' : 'Filter'}
-                </Button>
+                {/* Filter Button (no "Hide" button; close via "Close Panel") */}
+                {!showFilters && (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="gap-2"
+                    onClick={() => setShowFilters(true)}
+                  >
+                    <Filter className="w-4 h-4" />
+                    Filter
+                  </Button>
+                )}
                 
                 {/* Add Lead Button/Dialog */}
                 <Button 

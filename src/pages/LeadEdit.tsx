@@ -132,6 +132,8 @@ const LeadEdit: React.FC = () => {
   const navigate = useNavigate();
   const { state: pipelineNavState, getPrevNext } = usePipelineNav();
   const { toast } = useToast();
+  // Lead Detail UX: show toasts ONLY for errors (suppress success/info toasts)
+  const showSuccessToasts = false;
   const { user } = useAuth();
   const hasPipelineNavContext = !!pipelineNavState?.leadIds?.length;
   const { prevLeadId, nextLeadId } = getPrevNext(id || '');
@@ -839,7 +841,7 @@ const LeadEdit: React.FC = () => {
         throw new Error('Failed to add owner');
       }
 
-      toast({ title: 'Success', description: 'Owner added successfully' });
+      // Success toast suppressed on Lead Detail (show only errors)
       setNewOwnerInline({ firstName: '', lastName: '', phone: '', email: '' });
       setShowAddOwnerInline(false);
       await loadOwners();
@@ -1087,10 +1089,12 @@ const LeadEdit: React.FC = () => {
         });
 
         if (response.ok) {
-          toast({
-            title: "Task Updated",
-            description: "Task has been updated successfully"
-          });
+          if (showSuccessToasts) {
+            toast({
+              title: "Task Updated",
+              description: "Task has been updated successfully"
+            });
+          }
           await loadTasks();
           closeTaskDialog();
         } else {
@@ -1104,10 +1108,12 @@ const LeadEdit: React.FC = () => {
         });
 
         if (response.ok) {
-          toast({
-            title: "Task Created",
-            description: "New task has been created successfully"
-          });
+          if (showSuccessToasts) {
+            toast({
+              title: "Task Created",
+              description: "New task has been created successfully"
+            });
+          }
           await loadTasks();
           closeTaskDialog();
         } else {
@@ -1135,10 +1141,12 @@ const LeadEdit: React.FC = () => {
       });
 
       if (response.ok) {
-        toast({
-          title: "Task Deleted",
-          description: "Task has been deleted successfully"
-        });
+        if (showSuccessToasts) {
+          toast({
+            title: "Task Deleted",
+            description: "Task has been deleted successfully"
+          });
+        }
         await loadTasks();
       } else {
         throw new Error('Failed to delete task');
@@ -1164,10 +1172,12 @@ const LeadEdit: React.FC = () => {
       });
 
       if (response.ok) {
-        toast({
-          title: newStatus === 'DONE' ? "Task Completed" : "Task Reopened",
-          description: `Task marked as ${newStatus.toLowerCase()}`
-        });
+        if (showSuccessToasts) {
+          toast({
+            title: newStatus === 'DONE' ? "Task Completed" : "Task Reopened",
+            description: `Task marked as ${newStatus.toLowerCase()}`
+          });
+        }
         await loadTasks();
       } else {
         throw new Error('Failed to update task status');
@@ -1803,10 +1813,7 @@ const LeadEdit: React.FC = () => {
           setEditOwnerForm(null);
         }
         
-        toast({
-          title: 'Success',
-          description: 'Lead updated successfully'
-        });
+        // Success toast suppressed on Lead Detail (show only errors)
         
         // Reload lead data to reflect changes
         await loadLead();
@@ -2010,10 +2017,7 @@ const LeadEdit: React.FC = () => {
       });
 
       if (response.ok) {
-        toast({
-          title: 'Success',
-          description: 'Note added successfully'
-        });
+        // Success toast suppressed on Lead Detail (show only errors)
         setNoteText('');
         loadCommunications(); // Reload all communications
       } else {
@@ -2212,10 +2216,12 @@ const LeadEdit: React.FC = () => {
       // Refresh communications
       await loadCommunications();
       
-      toast({
-        title: 'Call Started',
-        description: 'Call connected successfully'
-      });
+      if (showSuccessToasts) {
+        toast({
+          title: 'Call Started',
+          description: 'Call connected successfully'
+        });
+      }
       
     } catch (error: any) {
       console.error('❌ Error making call:', error);
@@ -2256,10 +2262,12 @@ const LeadEdit: React.FC = () => {
       
       await loadCommunications();
       
-      toast({
-        title: 'Call Started',
-        description: 'Call connected successfully'
-      });
+      if (showSuccessToasts) {
+        toast({
+          title: 'Call Started',
+          description: 'Call connected successfully'
+        });
+      }
       
     } catch (error: any) {
       console.error('❌ Error making call:', error);
@@ -2324,10 +2332,12 @@ const LeadEdit: React.FC = () => {
       const result = await response.json();
       
       if (result.success) {
-        toast({
-          title: 'SMS Sent',
-          description: 'Message sent successfully'
-        });
+        if (showSuccessToasts) {
+          toast({
+            title: 'SMS Sent',
+            description: 'Message sent successfully'
+          });
+        }
         setSmsText('');
         await loadCommunications();
       } else {
@@ -2818,19 +2828,20 @@ const LeadEdit: React.FC = () => {
         }
       }
 
-      // Show summary toast
-      if (successCount > 0) {
-        toast({
-          title: 'Success',
-          description: `${successCount} file${successCount > 1 ? 's' : ''} uploaded successfully${failCount > 0 ? `, ${failCount} failed` : ''}`
-        });
-        loadFiles();
-      } else if (failCount > 0) {
+      // Lead Detail UX: show toasts ONLY for errors
+      if (failCount > 0) {
         toast({
           title: 'Error',
-          description: `Failed to upload ${failCount} file${failCount > 1 ? 's' : ''}`,
+          description:
+            successCount > 0
+              ? `${failCount} file${failCount > 1 ? 's' : ''} failed to upload`
+              : `Failed to upload ${failCount} file${failCount > 1 ? 's' : ''}`,
           variant: 'destructive'
         });
+      }
+
+      if (successCount > 0) {
+        loadFiles();
       }
     } catch (error: any) {
       console.error('Error uploading files:', error);
@@ -2879,11 +2890,7 @@ const LeadEdit: React.FC = () => {
         }
       }
 
-      toast({
-        title: 'Success',
-        description: `${files.length} photo(s) uploaded successfully`
-      });
-      
+      // Lead Detail UX: no success toast (show only errors)
       loadPhotos();
       // Reset the input
       event.target.value = '';
@@ -3110,10 +3117,7 @@ const LeadEdit: React.FC = () => {
                           if (response.ok) {
                             const responseData = await response.json();
                             console.log('✅ Address saved successfully:', responseData.data?.address);
-                            toast({
-                              title: 'Success',
-                              description: 'Address updated successfully'
-                            });
+                            // Success toast suppressed on Lead Detail (show only errors)
                             setEditingAddress(false);
                             await loadLead();
                           } else {
@@ -3161,7 +3165,7 @@ const LeadEdit: React.FC = () => {
 
             {/* Owner Section - Using LeadOwnerSection Component */}
             <div className="col-span-12 md:col-span-6">
-              {id && <LeadOwnerSection ref={ownerSectionRef} leadId={id} readOnly={!canEditLead} onEditingChange={handleOwnerEditingChange} />}
+              {id && <LeadOwnerSection ref={ownerSectionRef} leadId={id} readOnly={!canEditLead} onEditingChange={handleOwnerEditingChange} suppressSuccessToasts />}
             </div>
           </div>
         </div>
@@ -3488,7 +3492,7 @@ const LeadEdit: React.FC = () => {
                             if (confirm('Delete this file?')) {
                               try {
                                 await makeApiCall(`${API_BASE}/files/${file.id}`, { method: 'DELETE' });
-                                toast({ title: 'Success', description: 'File deleted' });
+                                // Success toast suppressed on Lead Detail (show only errors)
                                 loadPhotos();
                               } catch (error) {
                                 toast({ title: 'Error', description: 'Failed to delete file', variant: 'destructive' });
@@ -3515,6 +3519,7 @@ const LeadEdit: React.FC = () => {
                   }}
                   onArvBlur={() => setArvDisplay(arvValue ? formatCurrency(arvValue) : '')}
                   canEditArv={canEditLead}
+                  suppressSuccessToasts
                   leadAddress={lead?.address ? {
                     address1: lead.address.address1,
                     city: lead.address.city,
@@ -3530,6 +3535,7 @@ const LeadEdit: React.FC = () => {
                   // Keep Rehab bathrooms input in sync with Property Information baths (integer-only)
                   bathrooms={Math.max(0, parseInt(bathrooms || '0', 10) || 0)}
                   readOnly={false}
+                  suppressSuccessToasts
                   initialFinishLevel={rehabFinishLevel}
                   initialToggledItems={rehabToggledItems}
                   initialNumberOfWindows={rehabNumberOfWindows}
@@ -3554,6 +3560,7 @@ const LeadEdit: React.FC = () => {
                     leadId={id!}
                     rehabCost={parseInt(rehabBudget) || 0}
                     readOnly={false}
+                    suppressSuccessToasts
                     initialArv={underwritingArv}
                     initialTaxes={underwritingTaxes}
                     initialTimeline={underwritingTimeline}
@@ -3721,7 +3728,7 @@ const LeadEdit: React.FC = () => {
                       if (confirm('Delete this file?')) {
                         try {
                           await makeApiCall(`${API_BASE}/files/${file.id}`, { method: 'DELETE' });
-                          toast({ title: 'Success', description: 'File deleted' });
+                          // Success toast suppressed on Lead Detail (show only errors)
                           loadFiles();
                         } catch (error) {
                           toast({ title: 'Error', description: 'Failed to delete file', variant: 'destructive' });
@@ -3743,6 +3750,7 @@ const LeadEdit: React.FC = () => {
                 communications={communications}
                 tasks={tasks}
                 loadingCommunications={loadingCommunications}
+                suppressSuccessToasts
                 currentUser={user ? { id: user.id, roles: user.roles as any } : undefined}
                 canEditLead={canEditLead}
                 onRefreshCommunications={loadCommunications}

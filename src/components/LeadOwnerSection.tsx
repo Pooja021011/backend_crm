@@ -22,6 +22,7 @@ interface LeadOwnerSectionProps {
   leadId: string;
   readOnly?: boolean;
   onEditingChange?: (isEditing: boolean, ownerId: string | null, ownerData: { firstName: string; lastName: string; phone: string; email: string } | null) => void;
+  suppressSuccessToasts?: boolean;
 }
 
 export interface LeadOwnerSectionRef {
@@ -29,7 +30,7 @@ export interface LeadOwnerSectionRef {
   refresh: () => void;
 }
 
-export const LeadOwnerSection = forwardRef<LeadOwnerSectionRef, LeadOwnerSectionProps>(({ leadId, readOnly = false, onEditingChange }, ref) => {
+export const LeadOwnerSection = forwardRef<LeadOwnerSectionRef, LeadOwnerSectionProps>(({ leadId, readOnly = false, onEditingChange, suppressSuccessToasts = false }, ref) => {
   const [owners, setOwners] = useState<LeadOwner[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -114,10 +115,12 @@ export const LeadOwnerSection = forwardRef<LeadOwnerSectionRef, LeadOwnerSection
       });
 
       if (response.ok) {
-        toast({
-          title: 'Success',
-          description: 'Owner added successfully'
-        });
+        if (!suppressSuccessToasts) {
+          toast({
+            title: 'Success',
+            description: 'Owner added successfully'
+          });
+        }
         setNewOwner({ firstName: '', lastName: '', phone: '', email: '' });
         setIsAdding(false);
         fetchOwners();
@@ -157,10 +160,12 @@ export const LeadOwnerSection = forwardRef<LeadOwnerSectionRef, LeadOwnerSection
       });
 
       if (response.ok) {
-        toast({
-          title: 'Success',
-          description: 'Owner deleted successfully'
-        });
+        if (!suppressSuccessToasts) {
+          toast({
+            title: 'Success',
+            description: 'Owner deleted successfully'
+          });
+        }
         fetchOwners();
       }
     } catch (error) {
@@ -183,10 +188,12 @@ export const LeadOwnerSection = forwardRef<LeadOwnerSectionRef, LeadOwnerSection
       });
 
       if (response.ok) {
-        toast({
-          title: 'Success',
-          description: 'Primary owner updated'
-        });
+        if (!suppressSuccessToasts) {
+          toast({
+            title: 'Success',
+            description: 'Primary owner updated'
+          });
+        }
         fetchOwners();
       }
     } catch (error) {
@@ -240,10 +247,12 @@ export const LeadOwnerSection = forwardRef<LeadOwnerSectionRef, LeadOwnerSection
       });
 
       if (response.ok) {
-        toast({
-          title: 'Success',
-          description: 'Owner updated successfully'
-        });
+        if (!suppressSuccessToasts) {
+          toast({
+            title: 'Success',
+            description: 'Owner updated successfully'
+          });
+        }
         setEditingOwnerId(null);
         setEditOwner({ firstName: '', lastName: '', phone: '', email: '' });
         onEditingChange?.(false, null, null);

@@ -47,6 +47,7 @@ interface CompsManagerProps {
     state: string;
     zip: string;
   };
+  suppressSuccessToasts?: boolean;
 }
 
 export const CompsManager: React.FC<CompsManagerProps> = ({
@@ -58,6 +59,7 @@ export const CompsManager: React.FC<CompsManagerProps> = ({
   onArvBlur,
   canEditArv = true,
   arvHelpText = 'This value feeds the Underwriting ARV input automatically.',
+  suppressSuccessToasts = false,
 }) => {
   const [leadComps, setLeadComps] = useState<LeadComparable[]>([]);
   const [searchResults, setSearchResults] = useState<LeadComparable[]>([]);
@@ -260,16 +262,27 @@ export const CompsManager: React.FC<CompsManagerProps> = ({
       // Show summary toast only if files were processed
       if (successCount > 0 || errorCount > 0) {
         if (successCount > 0 && errorCount === 0) {
-          toast({ 
-            title: 'Success', 
-            description: `${successCount} file${successCount > 1 ? 's' : ''} uploaded successfully` 
-          });
+          if (!suppressSuccessToasts) {
+            toast({ 
+              title: 'Success', 
+              description: `${successCount} file${successCount > 1 ? 's' : ''} uploaded successfully` 
+            });
+          }
         } else if (successCount > 0 && errorCount > 0) {
-          toast({ 
-            title: 'Partial Success', 
-            description: `${successCount} uploaded, ${errorCount} failed. Check console for details.`,
-            variant: 'default'
-          });
+          // Lead Detail UX: suppress success/partial-success popups; only show errors
+          if (!suppressSuccessToasts) {
+            toast({ 
+              title: 'Partial Success', 
+              description: `${successCount} uploaded, ${errorCount} failed. Check console for details.`,
+              variant: 'default'
+            });
+          } else {
+            toast({ 
+              title: 'Upload Failed', 
+              description: errors[0] || `Failed to upload ${errorCount} file${errorCount > 1 ? 's' : ''}`,
+              variant: 'destructive' 
+            });
+          }
         } else if (errorCount > 0) {
           toast({ 
             title: 'Upload Failed', 
@@ -299,7 +312,7 @@ export const CompsManager: React.FC<CompsManagerProps> = ({
       if (!response.ok && response.status !== 204) {
         throw new Error('Failed to delete PDF');
       }
-      toast({ title: 'Success', description: 'PDF removed' });
+      if (!suppressSuccessToasts) toast({ title: 'Success', description: 'PDF removed' });
       await loadLeadCompPdfs();
     } catch (e: any) {
       toast({ title: 'Error', description: e?.message || 'Failed to delete PDF', variant: 'destructive' });

@@ -171,13 +171,13 @@ async function createTasksForMentions(leadId: string, noteBody: string, createdB
       });
     });
 
+    // IMPORTANT:
+    // - For inbox targeting, we MUST include self-mentions in mentionedUserIds.
+    // - But for task creation, we should NOT create a task assigned to the author.
     const uniqueMentionedUserIds = Array.from(
-      new Set(
-        matchedUsers
-          .map(u => u.id)
-          .filter(id => Boolean(id) && (!createdById || id !== createdById))
-      )
+      new Set(matchedUsers.map(u => u.id).filter(id => Boolean(id)))
     );
+    const taskRecipientUserIds = uniqueMentionedUserIds.filter(id => !createdById || id !== createdById);
 
     console.log(
       '🔍 Matched users:',
@@ -197,7 +197,7 @@ async function createTasksForMentions(leadId: string, noteBody: string, createdB
             : 'Lead';
 
       await Promise.all(
-        uniqueMentionedUserIds.map(mentionedUserId =>
+        taskRecipientUserIds.map(mentionedUserId =>
           prisma.task.create({
             data: {
               leadId,
@@ -211,7 +211,7 @@ async function createTasksForMentions(leadId: string, noteBody: string, createdB
           })
         )
       );
-      console.log(`✅ Created ${uniqueMentionedUserIds.length} tasks for @mentions in note`);
+      console.log(`✅ Created ${taskRecipientUserIds.length} tasks for @mentions in note`);
     } catch (taskError) {
       console.error('❌ Task creation failed for mentions (continuing):', taskError);
     }

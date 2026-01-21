@@ -953,23 +953,25 @@ const Pipeline = () => {
 
   return (
     <div className="space-y-3 max-w-full overflow-hidden">
-      {/* Title (must appear above filter panel) */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold">Pipeline</h1>
-          {pipelineAccess?.canViewAssignedOnly && (
-            <Badge variant="secondary" className="flex items-center gap-1">
-              <Users className="h-3 w-3" />
-              My Leads Only
-            </Badge>
-          )}
+      {/* Header + Filters (no extra margin between divider and filter panel) */}
+      <div className="space-y-0">
+        {/* Title (must appear above filter panel) */}
+        <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-gray-200">
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-gray-900">Pipeline</h1>
+            {pipelineAccess?.canViewAssignedOnly && (
+              <Badge variant="secondary" className="flex items-center gap-1">
+                <Users className="h-3 w-3" />
+                My Leads Only
+              </Badge>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* Collapsible Filters - Same layout as Leads page (moved above header controls) */}
-      {isAdminOrManager && showFilters && (
-        <div className="bg-white border-t border-b border-gray-200 px-6 py-3">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* Collapsible Filters */}
+        {isAdminOrManager && showFilters && (
+          <div className="bg-white border-b border-gray-200 px-4 py-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
             {/* Acquisitions Agent Filter - Multi-select */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-gray-700">Acquisitions Agent</label>
@@ -981,6 +983,7 @@ const Pipeline = () => {
                 selected={selectedAcqAgents}
                 onChange={setSelectedAcqAgents}
                 placeholder="All ACQ Agents"
+                className="h-8"
               />
             </div>
 
@@ -995,6 +998,7 @@ const Pipeline = () => {
                 selected={selectedDispAgents}
                 onChange={setSelectedDispAgents}
                 placeholder="All DISP Agents"
+                className="h-8"
               />
             </div>
 
@@ -1002,7 +1006,7 @@ const Pipeline = () => {
             <div className="space-y-1">
               <label className="text-xs font-medium text-gray-700">Lead Created</label>
               <select
-                className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 h-9"
+                className="w-full h-8 px-2 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                 value={createdDateRange}
                 onChange={(e) => {
                   const range = e.target.value;
@@ -1037,7 +1041,7 @@ const Pipeline = () => {
                         setCreatedCustomFrom(v);
                         setCreatedFrom(v);
                       }}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full h-8 px-2 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
                   <div className="space-y-1">
@@ -1050,7 +1054,7 @@ const Pipeline = () => {
                         setCreatedCustomTo(v);
                         setCreatedTo(v);
                       }}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full h-8 px-2 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
                 </div>
@@ -1061,7 +1065,7 @@ const Pipeline = () => {
             <div className="space-y-1">
               <label className="text-xs font-medium text-gray-700">Last Touched</label>
               <select
-                className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 h-9"
+                className="w-full h-8 px-2 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                 value={lastTouchedDateRange}
                 onChange={(e) => {
                   const range = e.target.value;
@@ -1095,7 +1099,7 @@ const Pipeline = () => {
                         setLastTouchedCustomFrom(v);
                         setLastTouchedFrom(v);
                       }}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full h-8 px-2 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
                   <div className="space-y-1">
@@ -1108,7 +1112,7 @@ const Pipeline = () => {
                         setLastTouchedCustomTo(v);
                         setLastTouchedTo(v);
                       }}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full h-8 px-2 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
                 </div>
@@ -1117,7 +1121,7 @@ const Pipeline = () => {
           </div>
 
           {/* Filter Actions - Same as Leads page */}
-          <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200">
             <div className="text-sm text-gray-600">
               {leads.length} leads in pipeline
             </div>
@@ -1153,23 +1157,25 @@ const Pipeline = () => {
               </Button>
             </div>
           </div>
-        </div>
-      )}
+          </div>
+        )}
+      </div>
 
-      {/* Controls row (Filter button must be below filter panel) */}
+      {/* Controls row */}
       <div className="flex items-center justify-end flex-wrap gap-4">
         {/* Role-based controls */}
-          {isAdminOrManager && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-2"
-              onClick={() => setShowFilters(!showFilters)}
-            >
-              <Filter className="w-4 h-4" />
-              {showFilters ? 'Hide' : 'Filter'}
-            </Button>
-          )}
+        {/* Filter button before Transaction Pipeline toggle (like before) */}
+        {isAdminOrManager && !showFilters && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => setShowFilters(true)}
+          >
+            <Filter className="w-4 h-4" />
+            Filter
+          </Button>
+        )}
           {pipelineAccess?.availableToggles?.includes('TRANSACTION_PIPELINE') && (
             <div className="flex items-center space-x-2">
             <Switch

@@ -1336,6 +1336,8 @@ const Inbox = () => {
     try {
       const accessToken = localStorage.getItem('accessToken');
       console.log('🔑 Using token for communications:', accessToken ? 'Token exists' : 'NO TOKEN!');
+      // Communications tab (mentions inbox):
+      // - Show only notes where the logged-in user was @mentioned (including self-mentions).
       const res = await fetch(
         `${API_BASE}/inbox/communications?timeframe=This%20Month&leadOnly=true&userScope=me&internal=true&type=NOTE`,
         { headers: { 'Authorization': `Bearer ${accessToken}` } }
@@ -1368,9 +1370,11 @@ const Inbox = () => {
         from: c.createdBy ? `${c.createdBy.firstName} ${c.createdBy.lastName}`.trim() : 'User',
         subject: c.body ? c.body.substring(0, 120) + (c.body.length > 120 ? '…' : '') : (c.subject || ''),
         preview: '',
+        occurredAt: c.occurredAt,
         time: new Date(c.occurredAt).toLocaleString(),
         type: 'communication',
         source: 'communications',
+        // Inbox communications: unread = no read record for this viewer.
         unread: !(c.reads && Array.isArray(c.reads) && c.reads.length > 0),
         starred: false,
         priority: 'normal',
@@ -1599,12 +1603,30 @@ const Inbox = () => {
       console.log(`🔍 Getting SMS for display: ${smsConversations.length} items`, smsConversations);
       return smsConversations;
     } else if (source === 'tasks') {
-      console.log(`🔍 Getting tasks for display: ${assignedTasks.length} items`, assignedTasks);
-      return assignedTasks;
+      const cutoffMs = new Date(2026, 0, 20).getTime(); // Jan 20, 2026 (local)
+      const filteredTasks = assignedTasks.filter((t: any) => {
+        const dueMs = t?.dueAt ? new Date(t.dueAt).getTime() : NaN;
+        if (!Number.isFinite(dueMs)) return false;
+        return dueMs >= cutoffMs;
+      });
+      console.log(
+        `🔍 Getting tasks for display: ${filteredTasks.length} (due >= Jan 20, 2026) out of ${assignedTasks.length}`,
+        filteredTasks
+      );
+      return filteredTasks;
     } else if (source === 'communications') {
       // Only show unread communications in Inbox
-      const unreadComms = leadCommunications.filter(comm => comm.unread);
-      console.log(`🔍 Getting communications for display: ${unreadComms.length} unread out of ${leadCommunications.length} total`, unreadComms);
+      const cutoffMs = new Date(2026, 0, 20).getTime(); // Jan 20, 2026 (local)
+      const unreadComms = leadCommunications.filter((comm: any) => {
+        if (!comm?.unread) return false;
+        const occurredMs = comm?.occurredAt ? new Date(comm.occurredAt).getTime() : NaN;
+        if (!Number.isFinite(occurredMs)) return false;
+        return occurredMs >= cutoffMs;
+      });
+      console.log(
+        `🔍 Getting communications for display: ${unreadComms.length} unread (>= Jan 20, 2026) out of ${leadCommunications.length} total`,
+        unreadComms
+      );
       return unreadComms;
     } else if (source === 'reminders') {
       // Combine reminders and notifications for the reminders tab

@@ -779,6 +779,12 @@ export const callController = {
         },
       });
 
+      // Update lastContactAt for outbound call attempt (last attempted contact, regardless of outcome)
+      await prisma.lead.update({
+        where: { id: leadId },
+        data: { lastContactAt: new Date() },
+      });
+
       // Keep lead automation consistent with other call logging
       await communicationResponseService
         .handleCommunicationEvent(leadId, 'OUTBOUND', 'CALL')

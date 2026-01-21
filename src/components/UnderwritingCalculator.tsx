@@ -10,6 +10,7 @@ interface UnderwritingCalculatorProps {
   leadId: string;
   rehabCost: number; // Auto-filled from Rehab Calculator
   readOnly?: boolean;
+  suppressSuccessToasts?: boolean;
   onValuesChange?: (values: { arv: number; taxes: number; timeline: number; finalOffer: number; rehabCost: number }) => void;
   // Initial values from customFields
   initialArv?: number;
@@ -21,6 +22,7 @@ export function UnderwritingCalculator({
   leadId, 
   rehabCost,
   readOnly = false,
+  suppressSuccessToasts = false,
   onValuesChange,
   initialArv = 0,
   initialTaxes = 1000,
@@ -121,7 +123,7 @@ export function UnderwritingCalculator({
       });
 
       if (response.ok) {
-        toast({ title: 'Success', description: 'Underwriting saved' });
+        if (!suppressSuccessToasts) toast({ title: 'Success', description: 'Underwriting saved' });
       }
     } catch (error) {
       toast({ title: 'Error', description: 'Failed to save', variant: 'destructive' });
