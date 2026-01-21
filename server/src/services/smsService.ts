@@ -2,6 +2,7 @@ import twilio from 'twilio';
 import { logger } from '../config/logger.js';
 import { prisma } from '../config/db.js';
 import { communicationRepository } from '../repositories/communicationRepository.js';
+import { leadRepository } from '../repositories/leadRepository.js';
 import { smsSettingsRepository } from '../repositories/smsSettingsRepository.js';
 import { communicationResponseService } from './communicationResponseService.js';
 import { notificationService } from './notificationService.js';
@@ -184,65 +185,113 @@ export const smsService = {
         const userSmsSettings = await smsSettingsRepository.findByPhoneNumber(to);
         
         if (userSmsSettings) {
-          // Try to find lead by phone number
-          const lead = await this.findLeadByPhoneNumber(from);
-          
-          if (lead) {
-            // Store incoming SMS in communication history
-            await communicationRepository.create(lead.id, {
-              type: 'SMS',
-              direction: 'INBOUND',
-              subject: `SMS from ${from}`,
-              body: text,
-              occurredAt: new Date(),
-              createdById: userSmsSettings.userId,
-              metadata: {
-                from,
-                to,
-                messageSid: messageId,
-                status: smsStatus,
-              },
+          const buildUnknownEmail = (_phone: string) => {
+            // No longer generate fake emails - keep blank
+            return '';
+          };
+
+          const ensureLead = async (userId: string) => {
+            // Mirror inbound call behavior:
+            // - Prefer leads scoped to the receiving user (avoid cross-agent collisions)
+            // - Auto-create a minimal SELLER lead if none exists
+            const existing = await this.findLeadByPhoneNumber(from, userId);
+            if (existing) return existing;
+
+            // If this is a brand-new inbound-SMS lead, set leadSource to "Mailer" (from DB)
+            const mailerSource = await prisma.leadSource.findFirst({
+              where: { active: true, name: { equals: 'Mailer', mode: 'insensitive' as any } },
+              select: { id: true },
             });
 
-            // Update lastContactAt for inbound SMS (last attempted contact)
-            await prisma.lead.update({
-              where: { id: lead.id },
-              data: { lastContactAt: new Date() },
-            });
-            
-            logger.info('Incoming SMS stored in communication history', { 
-              leadId: lead.id, 
-              from, 
-              userId: userSmsSettings.userId 
-            });
-            
-            // Create notification for incoming SMS
-            const leadName = lead.seller?.firstName || lead.buyer?.firstName || lead.vendor?.firstName || 'Lead';
-            await notificationService.createNotification({
-              type: 'NEW_SMS',
-              title: `New SMS from ${leadName}`,
-              message: text.substring(0, 100), // First 100 chars
-              priority: 'MEDIUM',
-              targetUserId: lead.assignedUserId || userSmsSettings.userId,
-              leadId: lead.id,
-              triggeredBy: null, // External source
-              data: {
-                from,
-                to,
-                messageSid: messageId,
-                communicationType: 'SMS'
-              }
-            }).catch(err => logger.error('Failed to create SMS notification', { err }));
-            
-            // NEW: Auto-update lead status based on communication
-            await communicationResponseService.handleCommunicationEvent(
-              lead.id,
-              'INBOUND',
-              'SMS'
-            ).catch(err => logger.error('Failed to handle communication event', { err }));
-          } else {
-            logger.info('No lead found for incoming SMS phone number', { from });
+            const created = await leadRepository.create(
+              {
+                type: 'SELLER',
+                assignedUserId: userId,
+                leadSourceId: mailerSource?.id,
+                address: {
+                  address1: 'Unknown',
+                  city: 'Unknown',
+                  state: 'NA',
+                  zip: '00000',
+                },
+                seller: {
+                  firstName: '',
+                  lastName: '',
+                  phone: from || '',
+                  email: buildUnknownEmail(from),
+                },
+              },
+              userId
+            );
+
+            logger.info(
+              { leadId: created?.id, from, assignedUserId: userId },
+              'Auto-created lead for unknown inbound SMS'
+            );
+
+            return created;
+          };
+
+          // Try to find lead by phone number; if none, auto-create (same behavior as inbound calls)
+          const lead = await ensureLead(userSmsSettings.userId);
+
+          if (!lead) {
+            logger.error('Failed to ensure lead for incoming SMS', { from, to, userId: userSmsSettings.userId });
+            return;
           }
+
+          // Store incoming SMS in communication history
+          await communicationRepository.create(lead.id, {
+            type: 'SMS',
+            direction: 'INBOUND',
+            subject: `SMS from ${from}`,
+            body: text,
+            occurredAt: new Date(),
+            createdById: userSmsSettings.userId,
+            metadata: {
+              from,
+              to,
+              messageSid: messageId,
+              status: smsStatus,
+            },
+          });
+
+          // Update lastContactAt for inbound SMS (last attempted contact)
+          await prisma.lead.update({
+            where: { id: lead.id },
+            data: { lastContactAt: new Date() },
+          });
+          
+          logger.info('Incoming SMS stored in communication history', { 
+            leadId: lead.id, 
+            from, 
+            userId: userSmsSettings.userId 
+          });
+          
+          // Create notification for incoming SMS
+          const leadName = lead.seller?.firstName || lead.buyer?.firstName || lead.vendor?.firstName || 'Lead';
+          await notificationService.createNotification({
+            type: 'NEW_SMS',
+            title: `New SMS from ${leadName}`,
+            message: text.substring(0, 100), // First 100 chars
+            priority: 'MEDIUM',
+            targetUserId: lead.assignedUserId || userSmsSettings.userId,
+            leadId: lead.id,
+            triggeredBy: null, // External source
+            data: {
+              from,
+              to,
+              messageSid: messageId,
+              communicationType: 'SMS'
+            }
+          }).catch(err => logger.error('Failed to create SMS notification', { err }));
+          
+          // NEW: Auto-update lead status based on communication
+          await communicationResponseService.handleCommunicationEvent(
+            lead.id,
+            'INBOUND',
+            'SMS'
+          ).catch(err => logger.error('Failed to handle communication event', { err }));
         } else {
           logger.info('No user found for SMS destination number', { to });
         }
@@ -265,35 +314,52 @@ export const smsService = {
   /**
    * Find lead by phone number
    */
-  async findLeadByPhoneNumber(phoneNumber: string): Promise<any> {
+  async findLeadByPhoneNumber(phoneNumber: string, userId?: string): Promise<any> {
     try {
       // #region agent log
       fetch('http://127.0.0.1:7242/ingest/06111847-3345-4786-9a5d-89cc38601516',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'smsService.ts:155',message:'Finding lead by phone',data:{phoneNumber,phoneLength:phoneNumber?.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
       // #endregion
       // Search in lead detail tables (seller, buyer, vendor, owners) for phone numbers
+      const phoneMatches = {
+        OR: [
+          { seller: { phone: phoneNumber } },
+          { seller: { phone: phoneNumber.replace(/\D/g, '') } },
+          { seller: { phone: phoneNumber.replace(/^\+1/, '') } },
+          { buyer: { phone: phoneNumber } },
+          { buyer: { phone: phoneNumber.replace(/\D/g, '') } },
+          { buyer: { phone: phoneNumber.replace(/^\+1/, '') } },
+          { vendor: { phone: phoneNumber } },
+          { vendor: { phone: phoneNumber.replace(/\D/g, '') } },
+          { vendor: { phone: phoneNumber.replace(/^\+1/, '') } },
+          { owners: { some: { phone: phoneNumber } } },
+          { owners: { some: { phone: phoneNumber.replace(/\D/g, '') } } },
+          { owners: { some: { phone: phoneNumber.replace(/^\+1/, '') } } },
+        ],
+      };
+
+      const where = userId
+        ? {
+            AND: [
+              {
+                OR: [
+                  { assignedUserId: userId },
+                  { createdById: userId },
+                  { dispAgentId: userId },
+                ],
+              },
+              phoneMatches,
+            ],
+          }
+        : phoneMatches;
+
       const lead = await prisma.lead.findFirst({
-        where: {
-          OR: [
-            { seller: { phone: phoneNumber } },
-            { seller: { phone: phoneNumber.replace(/\D/g, '') } },
-            { seller: { phone: phoneNumber.replace(/^\+1/, '') } },
-            { buyer: { phone: phoneNumber } },
-            { buyer: { phone: phoneNumber.replace(/\D/g, '') } },
-            { buyer: { phone: phoneNumber.replace(/^\+1/, '') } },
-            { vendor: { phone: phoneNumber } },
-            { vendor: { phone: phoneNumber.replace(/\D/g, '') } },
-            { vendor: { phone: phoneNumber.replace(/^\+1/, '') } },
-            { owners: { some: { phone: phoneNumber } } },
-            { owners: { some: { phone: phoneNumber.replace(/\D/g, '') } } },
-            { owners: { some: { phone: phoneNumber.replace(/^\+1/, '') } } },
-          ]
-        },
+        where: where as any,
         include: {
           seller: true,
           buyer: true,
           vendor: true,
           owners: true,
-        }
+        },
       });
       // #region agent log
       fetch('http://127.0.0.1:7242/ingest/06111847-3345-4786-9a5d-89cc38601516',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'smsService.ts:178',message:'Lead search result',data:{found:!!lead,leadId:lead?.id,leadType:lead?.leadType},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
