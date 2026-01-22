@@ -2281,14 +2281,12 @@ const Inbox = () => {
                             </div>
                           </div>
                           
-                          {/* Time + Task actions */}
-                          {message.type !== 'task' && (
-                            <div className="flex-shrink-0 flex items-center gap-2">
-                              <div className="text-sm text-gray-500">
-                                {message.time}
-                              </div>
+                          {/* Time for all message types including tasks */}
+                          <div className="flex-shrink-0 flex items-center gap-2">
+                            <div className="text-sm text-gray-500">
+                              {message.time}
                             </div>
-                          )}
+                          </div>
                         </div>
                       ))}
                     </div>
