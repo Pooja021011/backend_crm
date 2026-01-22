@@ -12,6 +12,8 @@ interface UnderwritingCalculatorProps {
   readOnly?: boolean;
   suppressSuccessToasts?: boolean;
   onValuesChange?: (values: { arv: number; taxes: number; timeline: number; finalOffer: number; rehabCost: number }) => void;
+  // Optional: let parent trigger an immediate autosave when user leaves an input.
+  onBlurSave?: () => void;
   // Initial values from customFields
   initialArv?: number;
   initialTaxes?: number;
@@ -24,6 +26,7 @@ export function UnderwritingCalculator({
   readOnly = false,
   suppressSuccessToasts = false,
   onValuesChange,
+  onBlurSave,
   initialArv = 0,
   // These are placeholders, NOT real defaults. Use 0 to represent "unset".
   initialTaxes = 0,
@@ -78,7 +81,7 @@ export function UnderwritingCalculator({
   // Calculate Final Offer when inputs change
   useEffect(() => {
     calculateFinalOffer();
-  }, [arv, rehabCostValue]);
+  }, [arv, rehabCostValue, taxes, timeline]);
 
   const calculateFinalOffer = () => {
     if (arv === 0) {
@@ -205,7 +208,10 @@ export function UnderwritingCalculator({
                   setTaxesDisplay(raw);
                   setTaxes(parseCurrencyInput(raw));
                 }}
-                onBlur={() => setTaxesDisplay(taxes ? formatCurrency(taxes) : '')}
+                onBlur={() => {
+                  setTaxesDisplay(taxes ? formatCurrency(taxes) : '');
+                  onBlurSave?.();
+                }}
                 disabled={readOnly}
                 className="h-6 text-xs placeholder:text-slate-400"
                 placeholder="$1,000"
@@ -219,6 +225,7 @@ export function UnderwritingCalculator({
                 type="number"
                 value={timeline || ''}
                 onChange={(e) => setTimeline(Number(e.target.value) || 0)}
+                onBlur={() => onBlurSave?.()}
                 disabled={readOnly}
                 className="h-6 text-xs placeholder:text-slate-400"
                 placeholder="6"

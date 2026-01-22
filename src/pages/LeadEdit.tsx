@@ -287,13 +287,29 @@ const LeadEdit: React.FC = () => {
   }, [pendingPipelineStatus]);
 
   useEffect(() => {
-    popupOpenRef.current =
+    const nextPopupOpen =
       !!showAppointmentPopup ||
       !!showDueDiligencePopup ||
       !!showOfferMadePopup ||
       !!showDueDiligenceCompletePopup ||
       !!showFollowUpTaskPopup;
-  }, [showAppointmentPopup, showDueDiligencePopup, showOfferMadePopup, showDueDiligenceCompletePopup, showFollowUpTaskPopup]);
+
+    popupOpenRef.current = nextPopupOpen;
+
+    // IMPORTANT: while stage-validation popups are open (or a stage move is pending),
+    // cancel any scheduled autosave so it cannot fire mid-flow and wipe data.
+    if ((nextPopupOpen || !!pendingPipelineStatus) && autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+  }, [
+    showAppointmentPopup,
+    showDueDiligencePopup,
+    showOfferMadePopup,
+    showDueDiligenceCompletePopup,
+    showFollowUpTaskPopup,
+    pendingPipelineStatus,
+  ]);
   
   // Property info
   const [propertyType, setPropertyType] = useState('');
@@ -1466,6 +1482,10 @@ const LeadEdit: React.FC = () => {
     async (reason: 'debounce' | 'blur' | 'manual' | 'pending' = 'manual') => {
       if (!id || !lead || !canEditLead) return;
 
+      // Never autosave while stage validation is in progress (popups open / pending stage move).
+      // This prevents PATCH requests with incomplete local state from wiping persisted data.
+      if (popupOpenRef.current || pendingPipelineStatusRef.current) return;
+
       // Coalesce saves: if one is in-flight, request another run once it finishes
       if (autoSaveInFlightRef.current) {
         autoSavePendingRef.current = true;
@@ -1623,6 +1643,8 @@ const LeadEdit: React.FC = () => {
 
   const scheduleAutoSave = useCallback(() => {
     if (!id || !lead || !canEditLead) return;
+    // Never autosave while stage validation is in progress (popups open / pending stage move).
+    if (popupOpenRef.current || pendingPipelineStatusRef.current) return;
 
     // Skip the very first run after load/hydrate
     if (suppressNextAutoSaveRef.current) {
@@ -1664,6 +1686,8 @@ const LeadEdit: React.FC = () => {
     const bestEffortKeepaliveSave = () => {
       try {
         if (!autoSaveBaselineReadyRef.current) return;
+        // Never autosave while stage validation is in progress (popups open / pending stage move).
+        if (popupOpenRef.current || pendingPipelineStatusRef.current) return;
       const payload = buildLeadPatchPayload({ includeLeadOwners: false });
         const payloadStr = JSON.stringify(payload);
         if (!payloadStr || payloadStr === lastSavedPayloadRef.current) return;
@@ -3663,7 +3687,10 @@ const LeadEdit: React.FC = () => {
                       setUnderwritingTimeline(values.timeline);
                       setUnderwritingRehabCost(values.rehabCost);
                       setFinalOffer(values.finalOffer);
+                      // Ensure underwriting inputs participate in LeadEdit autosave (debounced)
+                      scheduleAutoSave();
                     }}
+                    onBlurSave={() => void flushAutoSave('blur')}
                     key={`underwriting-${rehabBudget}`}
                   />
                 )}
@@ -4148,6 +4175,9 @@ const LeadEdit: React.FC = () => {
             }
             
             console.log(`📸 Uploaded ${uploadedCount} of ${files.length} photos`);
+
+            // Reload photos so the Photos section updates immediately (persisted first)
+            await loadPhotos();
             
             // Retry stage move; if more is missing, open the next popup automatically
             if (pendingPipelineStatus) {
@@ -4184,9 +4214,6 @@ const LeadEdit: React.FC = () => {
             
             setShowAppointmentPopup(false);
             setPendingPipelineStatus(null);
-            
-            // Reload photos so the Photos section updates immediately
-            await loadPhotos();
             
             // Reload lead to show updated stage
             await loadLead();
@@ -4233,6 +4260,9 @@ const LeadEdit: React.FC = () => {
               const errorData = await response.json();
               throw new Error(errorData.error || 'Failed to update property information');
             }
+
+            // Reload lead so "Additional Property Info" section shows persisted values before stage move
+            await loadLead();
             
             // Retry stage move; if more is missing, open the next popup automatically
             if (pendingPipelineStatus) {
