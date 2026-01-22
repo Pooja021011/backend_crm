@@ -474,9 +474,13 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
 
   // Merge communications and tasks into one array
   // Filter out auto-generated mention tasks (they only appear in Inbox, not in lead communications)
-  const filteredTasks = tasks.filter(task => 
-    !task.title?.startsWith('Review note on ')
-  );
+  // Auto-mention tasks have both: title starting with "Review note on " AND description starting with "You were mentioned in a note:"
+  const filteredTasks = tasks.filter(task => {
+    const isAutoMentionTask = 
+      task.title?.startsWith('Review note on ') && 
+      task.description?.startsWith('You were mentioned in a note:');
+    return !isAutoMentionTask;
+  });
 
   // Badge count should reflect only CALL + SMS + EMAIL (not notes/tasks)
   const communicationsBadgeCount = (communications || []).filter((c: any) =>
