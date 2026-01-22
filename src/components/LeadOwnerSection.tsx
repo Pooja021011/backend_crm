@@ -23,6 +23,7 @@ interface LeadOwnerSectionProps {
   readOnly?: boolean;
   onEditingChange?: (isEditing: boolean, ownerId: string | null, ownerData: { firstName: string; lastName: string; phone: string; email: string } | null) => void;
   suppressSuccessToasts?: boolean;
+  onOwnerChange?: () => void; // Callback when owner is added/updated/deleted
 }
 
 export interface LeadOwnerSectionRef {
@@ -30,7 +31,7 @@ export interface LeadOwnerSectionRef {
   refresh: () => void;
 }
 
-export const LeadOwnerSection = forwardRef<LeadOwnerSectionRef, LeadOwnerSectionProps>(({ leadId, readOnly = false, onEditingChange, suppressSuccessToasts = false }, ref) => {
+export const LeadOwnerSection = forwardRef<LeadOwnerSectionRef, LeadOwnerSectionProps>(({ leadId, readOnly = false, onEditingChange, suppressSuccessToasts = false, onOwnerChange }, ref) => {
   const [owners, setOwners] = useState<LeadOwner[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -124,6 +125,7 @@ export const LeadOwnerSection = forwardRef<LeadOwnerSectionRef, LeadOwnerSection
         setNewOwner({ firstName: '', lastName: '', phone: '', email: '' });
         setIsAdding(false);
         fetchOwners();
+        onOwnerChange?.(); // Notify parent that owner changed
       } else {
         throw new Error('Failed to add owner');
       }
@@ -167,6 +169,7 @@ export const LeadOwnerSection = forwardRef<LeadOwnerSectionRef, LeadOwnerSection
           });
         }
         fetchOwners();
+        onOwnerChange?.(); // Notify parent that owner changed
       }
     } catch (error) {
       toast({
@@ -195,6 +198,7 @@ export const LeadOwnerSection = forwardRef<LeadOwnerSectionRef, LeadOwnerSection
           });
         }
         fetchOwners();
+        onOwnerChange?.(); // Notify parent that owner changed
       }
     } catch (error) {
       toast({
@@ -257,6 +261,7 @@ export const LeadOwnerSection = forwardRef<LeadOwnerSectionRef, LeadOwnerSection
         setEditOwner({ firstName: '', lastName: '', phone: '', email: '' });
         onEditingChange?.(false, null, null);
         fetchOwners();
+        onOwnerChange?.(); // Notify parent that owner changed
       } else {
         throw new Error('Failed to update owner');
       }

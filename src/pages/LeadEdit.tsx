@@ -718,6 +718,17 @@ const LeadEdit: React.FC = () => {
     }
   }, [lead, tasks, user, loading, loadingTasks]);
 
+  // Auto-select email address when leadOwners change
+  useEffect(() => {
+    const availableEmails = getAllEmailAddresses();
+    if (availableEmails.length > 0 && !selectedEmail) {
+      // Prefer primary email, otherwise first email
+      const primaryEmail = availableEmails.find(e => e.isPrimary);
+      const emailToSelect = primaryEmail ? primaryEmail.email : availableEmails[0].email;
+      setSelectedEmail(emailToSelect);
+    }
+  }, [leadOwners]);
+
   const loadLead = async () => {
     try {
       const response = await makeApiCall(`${API_BASE}/leads/${id}`);
@@ -3346,7 +3357,7 @@ const LeadEdit: React.FC = () => {
 
             {/* Owner Section - Using LeadOwnerSection Component */}
             <div className="col-span-12 md:col-span-6">
-              {id && <LeadOwnerSection ref={ownerSectionRef} leadId={id} readOnly={!canEditLead} onEditingChange={handleOwnerEditingChange} suppressSuccessToasts />}
+              {id && <LeadOwnerSection ref={ownerSectionRef} leadId={id} readOnly={!canEditLead} onEditingChange={handleOwnerEditingChange} suppressSuccessToasts onOwnerChange={loadOwners} />}
             </div>
           </div>
         </div>
