@@ -473,8 +473,23 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
   }, [recordingUrls]);
 
   // Merge communications and tasks into one array
-  // Show all tasks in Communications section (filtering only happens in Inbox)
-  const filteredTasks = tasks;
+  // Filter out ALL auto-created tasks (same as Inbox filtering)
+  const autoCreatedTaskPrefixes = [
+    'Review note on ',              // Auto-mention tasks
+    'Underwrite ',                  // Stage transition: Appointment Complete
+    'Make Offer on ',               // Stage transition: Due Diligence Complete
+    'Follow Up With ',              // Stage transition: Offer Made (negotiating)
+    'Contract Sent - Awaiting Signature for ', // DocuSign success
+    'URGENT: DocuSign Failed for ', // DocuSign failure
+    'Check Voided Contract With ',  // Contract void
+  ];
+  
+  const filteredTasks = tasks.filter(task => {
+    const title = task.title || '';
+    // Hide all auto-created tasks
+    const isAutoCreated = autoCreatedTaskPrefixes.some(prefix => title.startsWith(prefix));
+    return !isAutoCreated;
+  });
 
   // Badge count should reflect only CALL + SMS + EMAIL (not notes/tasks)
   const communicationsBadgeCount = (communications || []).filter((c: any) =>

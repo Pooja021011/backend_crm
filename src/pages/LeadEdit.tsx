@@ -1067,8 +1067,26 @@ const LeadEdit: React.FC = () => {
       const response = await makeApiCall(`${API_BASE}/leads/${id}/tasks`);
       if (response.ok) {
         const data = await response.json();
-        // No filtering - show all tasks for this lead
-        setTasks(data.data || []);
+        
+        // Filter out ALL auto-created tasks (same as Inbox filtering)
+        const autoCreatedTaskPrefixes = [
+          'Review note on ',              // Auto-mention tasks
+          'Underwrite ',                  // Stage transition: Appointment Complete
+          'Make Offer on ',               // Stage transition: Due Diligence Complete
+          'Follow Up With ',              // Stage transition: Offer Made (negotiating)
+          'Contract Sent - Awaiting Signature for ', // DocuSign success
+          'URGENT: DocuSign Failed for ', // DocuSign failure
+          'Check Voided Contract With ',  // Contract void
+        ];
+        
+        const filteredTasks = (data.data || []).filter((t: any) => {
+          const title = t.title || '';
+          // Hide all auto-created tasks
+          const isAutoCreated = autoCreatedTaskPrefixes.some(prefix => title.startsWith(prefix));
+          return !isAutoCreated;
+        });
+        
+        setTasks(filteredTasks);
       }
     } catch (error) {
       console.error('Error loading tasks:', error);
