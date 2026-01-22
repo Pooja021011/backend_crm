@@ -473,9 +473,33 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
   }, [recordingUrls]);
 
   // Merge communications and tasks into one array
-  // Filter out ALL tasks (including manually created tasks) from lead detail communications
-  // Tasks should only appear in the dedicated Tasks section, not mixed with communications
-  const filteredTasks = [];
+  // Filter out ONLY OLD auto-created tasks (created before Jan 22, 2026)
+  // New tasks with these titles can be manually created and should appear
+  const autoTaskDisabledDate = new Date('2026-01-22T00:00:00Z');
+  const autoCreatedTaskPrefixes = [
+    'Review note on ',              // Auto-mention tasks
+    'Underwrite ',                  // Stage transition: Appointment Complete
+    'Make Offer on ',               // Stage transition: Due Diligence Complete
+    'Follow Up With ',              // Stage transition: Offer Made (negotiating)
+    'Contract Sent - Awaiting Signature for ', // DocuSign success
+    'URGENT: DocuSign Failed for ', // DocuSign failure
+    'Check Voided Contract With ',  // Contract void
+  ];
+  
+  const filteredTasks = tasks.filter(task => {
+    const title = task.title || '';
+    const createdAt = task.createdAt ? new Date(task.createdAt) : null;
+    
+    // Check if title matches an auto-created task pattern
+    const matchesAutoPattern = autoCreatedTaskPrefixes.some(prefix => title.startsWith(prefix));
+    
+    // Only filter out if: matches pattern AND created before cutoff date
+    if (matchesAutoPattern && createdAt && createdAt < autoTaskDisabledDate) {
+      return false; // Hide old auto-created tasks
+    }
+    
+    return true; // Show all other tasks
+  });
 
   // Badge count should reflect only CALL + SMS + EMAIL (not notes/tasks)
   const communicationsBadgeCount = (communications || []).filter((c: any) =>
