@@ -877,18 +877,26 @@ const Pipeline = () => {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const errorData = await response.json().catch((e) => {
+          console.error('❌ Failed to parse error response:', e);
+          return {};
+        });
         console.log('❌ Stage move validation failed:', errorData);
+        console.log('🔍 Error code check:', { 
+          errorCode: errorData?.error?.code, 
+          code: errorData?.code,
+          requiredFields: errorData?.requiredFields 
+        });
         
         if (errorData?.error?.code === 'VALIDATION_REQUIRED' || errorData?.code === 'VALIDATION_REQUIRED') {
           // revert
           setLeads(prev => prev.map(lead => (lead.id === leadId ? leadToMove : lead)));
           const requiredFields: string[] = Array.isArray(errorData.requiredFields) ? errorData.requiredFields : [];
-          console.log('📋 Additional validation required:', requiredFields);
+          console.log('📋 Additional validation required:', requiredFields, 'stageName:', stageNameLower);
           handleValidationRequired(requiredFields, stageNameLower);
           return;
         }
-        throw new Error(errorData?.error?.message || errorData?.message || 'Failed to move lead');
+        throw new Error(errorData?.error?.message || errorData?.error || errorData?.message || 'Failed to move lead');
       }
 
       console.log('✅ Stage move successful');
