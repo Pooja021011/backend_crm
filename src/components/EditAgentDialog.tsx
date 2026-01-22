@@ -194,10 +194,7 @@ export const EditAgentDialog: React.FC<EditAgentDialogProps> = ({
 
       await updateAgent(agent.id, updateData);
       
-      toast({
-        title: "Agent Updated",
-        description: `${formData.firstName} ${formData.lastName} has been updated successfully.`,
-      });
+      // Success toast removed - only show errors
 
       onAgentUpdated();
       onOpenChange(false);

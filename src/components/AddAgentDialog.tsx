@@ -176,10 +176,7 @@ export const AddAgentDialog: React.FC<AddAgentDialogProps> = ({
         setGeneratedPassword(result.generatedPassword);
       }
 
-      toast({
-        title: "Agent Created",
-        description: `${formData.firstName} ${formData.lastName} has been created successfully.`,
-      });
+      // Success toast removed - only show errors
 
       // Don't close dialog immediately if password was generated
       if (!result.generatedPassword) {
