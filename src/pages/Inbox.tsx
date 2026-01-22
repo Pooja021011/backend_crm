@@ -1199,9 +1199,8 @@ const Inbox = () => {
       console.log('📋 RAW TASKS DATA:', json.data);
       
       if (json.data && Array.isArray(json.data)) {
-        // Filter out ONLY OLD auto-created tasks (created before Jan 22, 2026)
-        // New tasks with these titles can be manually created and should appear
-        const autoTaskDisabledDate = new Date('2026-01-22T00:00:00Z');
+        // Filter out ALL auto-created tasks (auto-task creation is now disabled)
+        // These tasks have specific title patterns that identify them as system-generated
         const autoCreatedTaskPrefixes = [
           'Review note on ',              // Auto-mention tasks
           'Underwrite ',                  // Stage transition: Appointment Complete
@@ -1214,17 +1213,12 @@ const Inbox = () => {
         
         const filteredTasks = json.data.filter((t: any) => {
           const title = t.title || '';
-          const createdAt = t.createdAt ? new Date(t.createdAt) : null;
           
           // Check if title matches an auto-created task pattern
-          const matchesAutoPattern = autoCreatedTaskPrefixes.some(prefix => title.startsWith(prefix));
+          const isAutoCreated = autoCreatedTaskPrefixes.some(prefix => title.startsWith(prefix));
           
-          // Only filter out if: matches pattern AND created before cutoff date
-          if (matchesAutoPattern && createdAt && createdAt < autoTaskDisabledDate) {
-            return false; // Hide old auto-created tasks
-          }
-          
-          return true; // Show all other tasks
+          // Hide all auto-created tasks
+          return !isAutoCreated;
         });
         
         const items = filteredTasks.map((t: any) => ({
