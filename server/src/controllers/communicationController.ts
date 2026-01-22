@@ -196,22 +196,23 @@ async function createTasksForMentions(leadId: string, noteBody: string, createdB
             ? `${lead.buyer.firstName} ${lead.buyer.lastName}`
             : 'Lead';
 
-      await Promise.all(
-        taskRecipientUserIds.map(mentionedUserId =>
-          prisma.task.create({
-            data: {
-              leadId,
-              title: `Review note on ${leadDescription}`,
-              description: `You were mentioned in a note:\n\n${noteBody.substring(0, 500)}${noteBody.length > 500 ? '...' : ''}`,
-              dueAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // Due in 24 hours
-              status: 'OPEN' as any,
-              assignedToId: mentionedUserId,
-              createdById: createdById || null,
-            },
-          })
-        )
-      );
-      console.log(`✅ Created ${taskRecipientUserIds.length} tasks for @mentions in note`);
+      // DISABLED: Auto-task creation completely disabled
+      // await Promise.all(
+      //   taskRecipientUserIds.map(mentionedUserId =>
+      //     prisma.task.create({
+      //       data: {
+      //         leadId,
+      //         title: `Review note on ${leadDescription}`,
+      //         description: `You were mentioned in a note:\n\n${noteBody.substring(0, 500)}${noteBody.length > 500 ? '...' : ''}`,
+      //         dueAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // Due in 24 hours
+      //         status: 'OPEN' as any,
+      //         assignedToId: mentionedUserId,
+      //         createdById: createdById || null,
+      //       },
+      //     })
+      //   )
+      // );
+      console.log(`✅ Skipped creating ${taskRecipientUserIds.length} mention tasks (auto-task creation disabled)`);
     } catch (taskError) {
       console.error('❌ Task creation failed for mentions (continuing):', taskError);
     }

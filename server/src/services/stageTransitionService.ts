@@ -338,40 +338,43 @@ export const stageTransitionService = {
       }, 'Executing post-transition actions');
       
       // Rule 2A: Appointment Complete → Create "Underwrite" task
+      // DISABLED: Auto-task creation completely disabled
       if (stageName.includes('appointment') && stageName.includes('complete')) {
-        if (stageAutoTasksEnabled) {
-          await taskRepository.create(leadId, {
-            title: `Underwrite ${address}`,
-            description: 'Review property photos and underwrite the deal',
-            dueAt: new Date(),
-            assignedToId: lead.assignedUserId || userId,
-            createdById: userId
-          });
-          
-          logger.info({ leadId, stageName: stage.name }, 'Auto-created Underwrite task');
-        } else {
+        // if (stageAutoTasksEnabled) {
+        //   await taskRepository.create(leadId, {
+        //     title: `Underwrite ${address}`,
+        //     description: 'Review property photos and underwrite the deal',
+        //     dueAt: new Date(),
+        //     assignedToId: lead.assignedUserId || userId,
+        //     createdById: userId
+        //   });
+        //   
+        //   logger.info({ leadId, stageName: stage.name }, 'Auto-created Underwrite task');
+        // } else {
           logger.info({ leadId, stageName: stage.name }, 'Skipped auto-created Underwrite task (disabled)');
-        }
+        // }
       }
       
       // Rule 2B: Due Diligence Complete → Create "Make Offer" task
+      // DISABLED: Auto-task creation completely disabled
       if (stageName.includes('due diligence') && stageName.includes('complete')) {
-        if (stageAutoTasksEnabled) {
-          await taskRepository.create(leadId, {
-            title: `Make Offer on ${address}`,
-            description: 'Prepare and submit offer based on due diligence findings',
-            dueAt: new Date(),
-            assignedToId: lead.assignedUserId || userId,
-            createdById: userId
-          });
-          
-          logger.info({ leadId, stageName: stage.name }, 'Auto-created Make Offer task');
-        } else {
+        // if (stageAutoTasksEnabled) {
+        //   await taskRepository.create(leadId, {
+        //     title: `Make Offer on ${address}`,
+        //     description: 'Prepare and submit offer based on due diligence findings',
+        //     dueAt: new Date(),
+        //     assignedToId: lead.assignedUserId || userId,
+        //     createdById: userId
+        //   });
+        //   
+        //   logger.info({ leadId, stageName: stage.name }, 'Auto-created Make Offer task');
+        // } else {
           logger.info({ leadId, stageName: stage.name }, 'Skipped auto-created Make Offer task (disabled)');
-        }
+        // }
       }
       
       // Rule 2C: Offer Made → Conditional task creation
+      // DISABLED: Auto-task creation completely disabled
       if (stageName.includes('offer') && stageName.includes('made')) {
         const response = customFields.offerMadeResponse?.toLowerCase();
         
@@ -382,23 +385,23 @@ export const stageTransitionService = {
         }, 'Checking offer response for task creation');
         
         if (response === 'negotiating') {
-          if (stageAutoTasksEnabled) {
-            // Follow up in 6 hours
-            const dueDate = new Date();
-            dueDate.setHours(dueDate.getHours() + 6);
-            
-            await taskRepository.create(leadId, {
-              title: `Follow Up With ${address}`,
-              description: 'Check on offer negotiation status',
-              dueAt: dueDate,
-              assignedToId: lead.assignedUserId || userId,
-              createdById: userId
-            });
-            
-            logger.info({ leadId, stageName: stage.name }, 'Auto-created Follow Up task (negotiating)');
-          } else {
+          // if (stageAutoTasksEnabled) {
+          //   // Follow up in 6 hours
+          //   const dueDate = new Date();
+          //   dueDate.setHours(dueDate.getHours() + 6);
+          //   
+          //   await taskRepository.create(leadId, {
+          //     title: `Follow Up With ${address}`,
+          //     description: 'Check on offer negotiation status',
+          //     dueAt: dueDate,
+          //     assignedToId: lead.assignedUserId || userId,
+          //     createdById: userId
+          //   });
+          //   
+          //   logger.info({ leadId, stageName: stage.name }, 'Auto-created Follow Up task (negotiating)');
+          // } else {
             logger.info({ leadId, stageName: stage.name }, 'Skipped auto-created Follow Up task (disabled)');
-          }
+          // }
         } else if (response === 'rejected') {
           // TEMP: Disable auto-created Re-Offer task.
           // Keeping the rest of Offer Made automation intact.
@@ -439,20 +442,21 @@ export const stageTransitionService = {
               });
             }
             
+            // DISABLED: Auto-task creation completely disabled
             // Create task to follow up
-            await taskRepository.create(leadId, {
-              title: `Contract Sent - Awaiting Signature for ${address}`,
-              description: `DocuSign contract sent. Expires on ${envelopeResult.voidAt.toLocaleDateString()}. Envelope ID: ${envelopeResult.envelopeId}`,
-              dueAt: new Date(envelopeResult.voidAt.getTime() - 24 * 60 * 60 * 1000), // 1 day before expiration
-              assignedToId: lead.assignedUserId || userId,
-              createdById: userId
-            });
+            // await taskRepository.create(leadId, {
+            //   title: `Contract Sent - Awaiting Signature for ${address}`,
+            //   description: `DocuSign contract sent. Expires on ${envelopeResult.voidAt.toLocaleDateString()}. Envelope ID: ${envelopeResult.envelopeId}`,
+            //   dueAt: new Date(envelopeResult.voidAt.getTime() - 24 * 60 * 60 * 1000), // 1 day before expiration
+            //   assignedToId: lead.assignedUserId || userId,
+            //   createdById: userId
+            // });
             
             logger.info({ 
               leadId, 
               envelopeId: envelopeResult.envelopeId,
               voidAt: envelopeResult.voidAt
-            }, 'Contract sent via DocuSign successfully');
+            }, 'Contract sent via DocuSign successfully (auto-task creation disabled)');
             
           } catch (error: any) {
             logger.error({ 
@@ -460,14 +464,17 @@ export const stageTransitionService = {
               error: error.message 
             }, 'Failed to send contract via DocuSign');
             
+            // DISABLED: Auto-task creation completely disabled
             // Create task for manual follow-up
-            await taskRepository.create(leadId, {
-              title: `URGENT: DocuSign Failed for ${address}`,
-              description: `Failed to send contract via DocuSign: ${error.message}. Please send contract manually.`,
-              dueAt: new Date(),
-              assignedToId: lead.assignedUserId || userId,
-              createdById: userId
-            });
+            // await taskRepository.create(leadId, {
+            //   title: `URGENT: DocuSign Failed for ${address}`,
+            //   description: `Failed to send contract via DocuSign: ${error.message}. Please send contract manually.`,
+            //   dueAt: new Date(),
+            //   assignedToId: lead.assignedUserId || userId,
+            //   createdById: userId
+            // });
+            
+            logger.error({ leadId }, 'DocuSign failed - auto-task creation disabled, please handle manually');
             
             // Don't throw - log error but don't block stage transition
           }
@@ -475,19 +482,20 @@ export const stageTransitionService = {
       }
       
       // Rule 2D: Contract Void → Create check task
+      // DISABLED: Auto-task creation completely disabled
       if (stageName.includes('void')) {
-        const dueDate = new Date();
-        dueDate.setHours(dueDate.getHours() + 1); // 1 hour from now
+        // const dueDate = new Date();
+        // dueDate.setHours(dueDate.getHours() + 1); // 1 hour from now
+        // 
+        // await taskRepository.create(leadId, {
+        //   title: `Check Voided Contract With ${address}`,
+        //   description: 'Review voided contract and determine next steps',
+        //   dueAt: dueDate,
+        //   assignedToId: lead.assignedUserId || userId,
+        //   createdById: userId
+        // });
         
-        await taskRepository.create(leadId, {
-          title: `Check Voided Contract With ${address}`,
-          description: 'Review voided contract and determine next steps',
-          dueAt: dueDate,
-          assignedToId: lead.assignedUserId || userId,
-          createdById: userId
-        });
-        
-        logger.info({ leadId, stageName: stage.name }, 'Auto-created Void Check task');
+        logger.info({ leadId, stageName: stage.name }, 'Skipped auto-created Void Check task (disabled)');
       }
     } catch (error: any) {
       // Don't throw - task creation failures shouldn't block stage changes
