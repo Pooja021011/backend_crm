@@ -357,7 +357,7 @@ const Settings = () => {
       // Keep blob optional; UI should show preview even after refresh.
       setVoicemailBlob(null);
 
-      toast({ title: 'Saved', description: 'Voicemail greeting saved successfully' });
+      // Success toast removed - only show errors
     } catch (err: any) {
       toast({ title: 'Error', description: err?.message || 'Failed to save voicemail greeting', variant: 'destructive' });
     } finally {
@@ -395,7 +395,7 @@ const Settings = () => {
       setVoicemailDuration(null);
       setSavedVoicemailAt('');
 
-      toast({ title: 'Deleted', description: 'Voicemail greeting deleted successfully' });
+      // Success toast removed - only show errors
     } catch (err: any) {
       toast({ title: 'Error', description: err?.message || 'Failed to delete voicemail greeting', variant: 'destructive' });
     } finally {

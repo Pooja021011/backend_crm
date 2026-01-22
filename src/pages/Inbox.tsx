@@ -1319,7 +1319,7 @@ const Inbox = () => {
         }),
       });
 
-      toast({ title: 'Task Updated', description: 'Task updated successfully' });
+      // Success toast removed - only show errors
       setShowTaskEdit(false);
       setEditingTask(null);
       fetchTasks();
@@ -1338,7 +1338,7 @@ const Inbox = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'DONE' }),
       });
-      toast({ title: 'Task Completed', description: 'Task marked as completed' });
+      // Success toast removed - only show errors
       // Remove immediately from inbox list (inbox only shows OPEN due tasks)
       setAssignedTasks(prev => prev.filter(t => t.id !== task.id));
     } catch (e: any) {
