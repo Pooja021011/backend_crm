@@ -854,6 +854,9 @@ const Pipeline = () => {
     if (!pendingStageChange) return;
     const { leadId, newStageId, stageName, leadToMove } = pendingStageChange;
     const stageNameLower = (stageName || '').toLowerCase();
+    
+    console.log('🔄 Retrying stage move:', { leadId, newStageId, stageName });
+    
     try {
       // optimistic update
       setLeads(prev => prev.map(lead =>
@@ -875,16 +878,21 @@ const Pipeline = () => {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        console.log('❌ Stage move validation failed:', errorData);
+        
         if (errorData?.error?.code === 'VALIDATION_REQUIRED' || errorData?.code === 'VALIDATION_REQUIRED') {
           // revert
           setLeads(prev => prev.map(lead => (lead.id === leadId ? leadToMove : lead)));
           const requiredFields: string[] = Array.isArray(errorData.requiredFields) ? errorData.requiredFields : [];
+          console.log('📋 Additional validation required:', requiredFields);
           handleValidationRequired(requiredFields, stageNameLower);
           return;
         }
-        throw new Error(errorData?.error || 'Failed to move lead');
+        throw new Error(errorData?.error?.message || errorData?.message || 'Failed to move lead');
       }
 
+      console.log('✅ Stage move successful');
+      
       // Success: close all popups and clear pending
       setShowAppointmentPopup(false);
       setShowDueDiligencePopup(false);
@@ -895,7 +903,7 @@ const Pipeline = () => {
       setMissingDdCompleteItems([]);
       setPendingStageChange(null);
     } catch (e: any) {
-      console.error('Error retrying stage move:', e);
+      console.error('❌ Error retrying stage move:', e);
       
       // Revert the optimistic update
       if (pendingStageChange) {
