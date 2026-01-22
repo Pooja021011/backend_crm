@@ -894,8 +894,25 @@ const Pipeline = () => {
       setMissingDdFields([]);
       setMissingDdCompleteItems([]);
       setPendingStageChange(null);
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error retrying stage move:', e);
+      
+      // Revert the optimistic update
+      if (pendingStageChange) {
+        setLeads(prev => prev.map(lead => 
+          lead.id === pendingStageChange.leadId ? pendingStageChange.leadToMove : lead
+        ));
+      }
+      
+      // Show error message
+      toast({
+        title: "Failed to Move Lead",
+        description: e?.message || "Could not move the lead. Please try again or complete requirements on the Lead Detail page.",
+        variant: "destructive",
+      });
+      
+      // Clear pending state
+      setPendingStageChange(null);
     }
   };
 
@@ -1384,6 +1401,13 @@ const Pipeline = () => {
               setShowDueDiligenceCompletePopup(false);
               setMissingDdCompleteItems([]);
               setPendingStageChange(null);
+              
+              // Show error message with guidance
+              toast({
+                title: "Requirements Not Met",
+                description: "Please complete the required items (ARV, Comparables, Rehab Budget, Underwriting) on the Lead Detail page before moving to Due Diligence Complete.",
+                variant: "destructive",
+              });
             }}
           />
           
