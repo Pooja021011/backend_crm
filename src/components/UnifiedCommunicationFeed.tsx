@@ -740,7 +740,7 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
       </div>
 
       {/* Unified Feed - All Items */}
-      <div ref={feedRef} className="flex-1 overflow-y-auto space-y-1 min-h-[300px] max-h-[420px] pr-1 mb-2">
+      <div ref={feedRef} className="flex-1 overflow-y-auto space-y-1 min-h-[300px] max-h-[420px] pr-1 mb-2 w-full">
         {loadingCommunications ? (
           <div className="flex items-center justify-center py-8 text-slate-500">
             <Loader2 className="w-5 h-5 animate-spin mr-2" />
@@ -752,17 +752,17 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
           </div>
         ) : (
           sortedItems.map((item) => (
-            <div key={item.id} className="flex gap-1.5 p-1.5 hover:bg-slate-50 rounded border-b border-slate-100">
+            <div key={item.id} className="flex gap-1.5 p-1.5 hover:bg-slate-50 rounded border-b border-slate-100 w-full">
               {/* Icon */}
               <div className="flex-shrink-0 mt-1">
                 {getIconForType(item.type)}
               </div>
 
               {/* Content */}
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 w-full overflow-hidden">
                 {/* Header */}
                 <div className="flex items-start justify-between gap-2 mb-0.5">
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap min-w-0">
                     {/* For NOTES, show "Note from [Name]" prominently */}
                     {item.type === 'NOTE' && item.user ? (
                       <span className="text-xs font-semibold text-slate-700">
@@ -853,7 +853,7 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
 
                 {/* Task Title */}
                 {item.type === 'TASK' && item.title && (
-                  <p className="text-xs font-medium text-slate-900 mb-0.5">
+                  <p className="text-xs font-medium text-slate-900 mb-0.5 break-words">
                     {item.title}
                   </p>
                 )}
@@ -875,14 +875,14 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
 
                 {/* Email Subject */}
                 {item.subject && (
-                  <p className="text-xs font-medium text-slate-700 mb-0.5">
+                  <p className="text-xs font-medium text-slate-700 mb-0.5 break-words">
                     {formatPhonesInText(item.subject)}
                   </p>
                 )}
 
                 {/* Body / Description */}
                 {(item.body || item.description) && (
-                  <p className="text-xs text-slate-600 whitespace-pre-wrap">
+                  <p className="text-xs text-slate-600 whitespace-pre-wrap break-words overflow-wrap-anywhere">
                     {formatPhonesInText(item.body || item.description)}
                   </p>
                 )}

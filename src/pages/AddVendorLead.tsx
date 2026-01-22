@@ -144,11 +144,6 @@ const AddVendorLead = () => {
             variant: "destructive",
           });
         }
-      } else {
-        toast({
-          title: "Vendor Lead Added Successfully",
-          description: `${formData.firstName} ${formData.lastName} from ${formData.company} has been added to your vendor leads.`,
-        });
       }
       
       navigate('/leads');

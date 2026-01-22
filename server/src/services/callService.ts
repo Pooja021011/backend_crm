@@ -405,13 +405,6 @@ export const callService = {
               { leadId: lead.id, from: safeFrom, userId: userSmsSettings.userId, callSid },
               'Incoming call stored in communication history'
             );
-            
-            // NEW: Auto-update lead status based on communication
-            await communicationResponseService.handleCommunicationEvent(
-              lead.id,
-              'INBOUND',
-              'CALL'
-            ).catch(err => logger.error({ err }, 'Failed to handle communication event'));
           }
         } else {
           logger.info({ to: safeTo }, 'No user found for call destination number');
@@ -474,6 +467,15 @@ export const callService = {
               { leadId: lead.id, callSid, finalStatus, dialCallStatus, duration },
               'Call status updated'
             );
+            
+            // Auto-update lead status ONLY if call was actually completed (answered), not missed
+            if (!wasMissed) {
+              await communicationResponseService.handleCommunicationEvent(
+                lead.id,
+                'INBOUND',
+                'CALL'
+              ).catch(err => logger.error({ err }, 'Failed to handle communication event for completed call'));
+            }
           }
         }
       } else if (callStatus === 'completed' && direction === 'inbound') {

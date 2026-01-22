@@ -204,10 +204,7 @@ export const PipelineSettings: React.FC<PipelineSettingsProps> = ({ userRoles })
           requiresAction: false,
           attentionThresholdHours: 24
         });
-        toast({
-          title: "Success",
-          description: "Pipeline stage created successfully"
-        });
+        // Success toast removed - only show errors
       }
     } catch (error) {
       toast({
@@ -259,10 +256,7 @@ export const PipelineSettings: React.FC<PipelineSettingsProps> = ({ userRoles })
         setPipelines(updatedPipelines);
         setSelectedPipeline(updatedSelectedPipeline);
         
-        toast({
-          title: "Success",
-          description: "Pipeline stage updated successfully"
-        });
+        // Success toast removed - only show errors
       }
     } catch (error) {
       toast({
@@ -309,10 +303,7 @@ export const PipelineSettings: React.FC<PipelineSettingsProps> = ({ userRoles })
         setPipelines(updatedPipelines);
         setSelectedPipeline(updatedSelectedPipeline);
         
-        toast({
-          title: "Success",
-          description: "Pipeline stage deleted successfully"
-        });
+        // Success toast removed - only show errors
       }
     } catch (error) {
       toast({
@@ -380,10 +371,7 @@ export const PipelineSettings: React.FC<PipelineSettingsProps> = ({ userRoles })
         });
 
         if (response.ok) {
-          toast({
-            title: "Success",
-            description: "Pipeline stages reordered successfully"
-          });
+          // Success toast removed - only show errors
         } else {
           // If API fails, revert the optimistic update
           await loadPipelines();

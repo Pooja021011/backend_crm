@@ -274,6 +274,7 @@ const LeadEdit: React.FC = () => {
   const [showDueDiligenceCompletePopup, setShowDueDiligenceCompletePopup] = useState(false);
   const [showFollowUpTaskPopup, setShowFollowUpTaskPopup] = useState(false);
   const [pendingPipelineStatus, setPendingPipelineStatus] = useState<string | null>(null);
+  const [pendingLeadStatus, setPendingLeadStatus] = useState<string | null>(null);
   const [missingDdFields, setMissingDdFields] = useState<string[]>([]);
   const [missingDdCompleteItems, setMissingDdCompleteItems] = useState<string[]>([]);
 
@@ -292,13 +293,14 @@ const LeadEdit: React.FC = () => {
       !!showDueDiligencePopup ||
       !!showOfferMadePopup ||
       !!showDueDiligenceCompletePopup ||
-      !!showFollowUpTaskPopup;
+      !!showFollowUpTaskPopup ||
+      !!showTaskDialog;
 
     popupOpenRef.current = nextPopupOpen;
 
     // IMPORTANT: while stage-validation popups are open (or a stage move is pending),
     // cancel any scheduled autosave so it cannot fire mid-flow and wipe data.
-    if ((nextPopupOpen || !!pendingPipelineStatus) && autoSaveTimerRef.current) {
+    if ((nextPopupOpen || !!pendingPipelineStatus || !!pendingLeadStatus) && autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);
       autoSaveTimerRef.current = null;
     }
@@ -308,7 +310,9 @@ const LeadEdit: React.FC = () => {
     showOfferMadePopup,
     showDueDiligenceCompletePopup,
     showFollowUpTaskPopup,
+    showTaskDialog,
     pendingPipelineStatus,
+    pendingLeadStatus,
   ]);
   
   // Property info
@@ -565,6 +569,10 @@ const LeadEdit: React.FC = () => {
 
     void (async () => {
       try {
+        // Flush any pending autosave before validating the stage move
+        // This ensures validation uses the latest data the user just entered
+        await flushAutoSave('manual');
+        
         await requestStageMove(newStageId);
       } catch (e: any) {
         const code = e?.code;
@@ -585,12 +593,16 @@ const LeadEdit: React.FC = () => {
           const ddFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
           if (requiredFields.some((f) => ddFields.includes(f))) {
             setMissingDdFields(requiredFields.filter((f) => ddFields.includes(f)));
+            // Reload lead to get fresh customFields (user may have edited/cleared fields)
+            await loadLead();
             setShowDueDiligencePopup(true);
             return;
           }
           const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation','underwritingTaxes','underwritingTimeline'];
           if (requiredFields.some((f) => ddCompleteFields.includes(f))) {
             setMissingDdCompleteItems(requiredFields.filter((f) => ddCompleteFields.includes(f)));
+            // Reload lead to get fresh customFields
+            await loadLead();
             setShowDueDiligenceCompletePopup(true);
             return;
           }
@@ -1244,6 +1256,44 @@ const LeadEdit: React.FC = () => {
           }
           await loadTasks();
           closeTaskDialog();
+          
+          // If we have a pending pipeline status (e.g., user tried to move to Long Term Follow Up),
+          // retry the stage move now that the task is created
+          if (pendingPipelineStatus) {
+            await requestStageMove(pendingPipelineStatus);
+            setPendingPipelineStatus(null);
+            await loadLead();
+          }
+          
+          // If we have a pending lead status (e.g., user tried to set Lead Status to "Follow Up"),
+          // retry setting it now that the task is created
+          if (pendingLeadStatus) {
+            try {
+              // Directly update via API to ensure it's persisted immediately
+              const response = await makeApiCall(`${API_BASE}/leads/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ leadStatusId: pendingLeadStatus })
+              });
+              
+              if (response.ok) {
+                // Update local state to reflect the change
+                setLeadStatus(pendingLeadStatus);
+                setPendingLeadStatus(null);
+                // Reload lead to get fresh data
+                await loadLead();
+              } else {
+                throw new Error('Failed to update Lead Status');
+              }
+            } catch (error: any) {
+              toast({
+                title: "Error",
+                description: error.message || "Failed to update Lead Status",
+                variant: "destructive"
+              });
+              setPendingLeadStatus(null);
+            }
+          }
         } else {
           throw new Error('Failed to create task');
         }
@@ -1503,7 +1553,7 @@ const LeadEdit: React.FC = () => {
 
       // Never autosave while stage validation is in progress (popups open / pending stage move).
       // This prevents PATCH requests with incomplete local state from wiping persisted data.
-      if (popupOpenRef.current || pendingPipelineStatusRef.current) return;
+      if (popupOpenRef.current || pendingPipelineStatusRef.current || pendingLeadStatus) return;
 
       // Coalesce saves: if one is in-flight, request another run once it finishes
       if (autoSaveInFlightRef.current) {
@@ -1542,14 +1592,6 @@ const LeadEdit: React.FC = () => {
             if (errorData?.code === 'VALIDATION_REQUIRED') {
               const requiredFields: string[] = Array.isArray(errorData?.requiredFields) ? errorData.requiredFields : [];
               if (requiredFields.includes('followUpTask')) {
-                toast({
-                  title: 'Task Required',
-                  description:
-                    errorData?.message ||
-                    'Please add a task to follow up before setting Lead Status to Follow Up.',
-                  variant: 'destructive',
-                });
-
                 // Revert UI selection back to server-known lead status
                 setLeadStatus(lead?.leadStatus?.id || lead?.leadStatusId || '');
 
@@ -1559,14 +1601,21 @@ const LeadEdit: React.FC = () => {
                 setAutoSaveError('');
                 setAutoSaveStatus('idle');
 
-                // After state settles, refresh the baseline payload so scheduleAutoSave doesn't re-trigger.
+                // After state settles, refresh the baseline payload and open task dialog
                 setTimeout(() => {
                   try {
                     lastSavedPayloadRef.current = JSON.stringify(buildLeadPatchPayload({ includeLeadOwners: false }));
                   } catch {
                     // ignore
                   }
-                }, 0);
+                  
+                  // Store the lead status they tried to set, so we can retry after task creation
+                  setPendingLeadStatus(payload.leadStatusId);
+                  
+                  // Open task creation dialog so user can add the required task
+                  openTaskDialog();
+                }, 100);
+                
                 return;
               }
             }
@@ -3854,11 +3903,13 @@ const LeadEdit: React.FC = () => {
                 <div className="border border-slate-200 rounded-lg bg-white p-2 min-h-[120px]">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-medium text-slate-600">Files</span>
-                    <Button size="sm" variant="ghost" className="h-7 text-xs px-2" disabled={uploading}>
-                      <Upload className="w-3 h-3 mr-1" />
-                      <label htmlFor="file-upload" className="cursor-pointer">{uploading ? 'Uploading...' : 'Upload'}</label>
-                      <input id="file-upload" type="file" className="hidden" onChange={handleFileUpload} disabled={uploading} multiple />
-                    </Button>
+                    <label htmlFor="file-upload" className="cursor-pointer">
+                      <Button size="sm" variant="ghost" className="h-7 text-xs px-2 pointer-events-none" disabled={uploading}>
+                        <Upload className="w-3 h-3 mr-1" />
+                        {uploading ? 'Uploading...' : 'Upload'}
+                      </Button>
+                    </label>
+                    <input id="file-upload" type="file" className="hidden" onChange={handleFileUpload} disabled={uploading} multiple />
                   </div>
                   <LeadFileGallery
                     files={files}
@@ -4325,11 +4376,6 @@ const LeadEdit: React.FC = () => {
             
             // Reload lead to show updated data
             await loadLead();
-            
-            toast({
-              title: "Success",
-              description: "Property information updated and stage changed",
-            });
           } catch (error: any) {
             console.error('Error updating property info:', error);
             toast({
@@ -4430,10 +4476,7 @@ const LeadEdit: React.FC = () => {
             // Reload lead to show updated data
             await loadLead();
             
-            toast({
-              title: "Success",
-              description: "Offer information updated and stage changed",
-            });
+            // Success toast removed - only show errors
           } catch (error: any) {
             console.error('Error updating offer info:', error);
             toast({

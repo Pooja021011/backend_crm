@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useId, useState } from "react";
+import { useId, useState, useEffect } from "react";
 import { Upload, X, ClipboardList, AlertCircle, DollarSign, Calendar } from "lucide-react";
 
 // Popup for Appointment Complete - Photo Upload Required
@@ -152,26 +152,26 @@ export const DueDiligencePopup = ({
   const want = (key: string) => !missingFields || missingFields.length === 0 || missingFields.includes(key);
   
   const handleSubmit = async () => {
-    if (!isValid) return;
     setSubmitting(true);
     try {
       const payload: any = {};
-      if (want('hvacType')) payload.hvacType = hvacType;
-      if (want('hvacAge')) payload.hvacAge = parseInt(hvacAge);
-      if (want('waterHeaterAge')) payload.waterHeaterAge = parseInt(waterHeaterAge);
-      if (want('roofAge')) payload.roofAge = parseInt(roofAge);
-      if (want('waterType')) payload.waterType = waterType;
-      if (want('sewerType')) payload.sewerType = sewerType;
+      if (want('hvacType') && hvacType) payload.hvacType = hvacType;
+      if (want('hvacAge') && hvacAge) payload.hvacAge = parseInt(hvacAge);
+      if (want('waterHeaterAge') && waterHeaterAge) payload.waterHeaterAge = parseInt(waterHeaterAge);
+      if (want('roofAge') && roofAge) payload.roofAge = parseInt(roofAge);
+      if (want('waterType') && waterType) payload.waterType = waterType;
+      if (want('sewerType') && sewerType) payload.sewerType = sewerType;
 
       await onSubmit(payload);
-      onClose();
+      // Don't call onClose here - let the parent handle it
     } catch (error) {
-      console.error('Submit failed:', error);
+      console.error('❌ Submit failed with error:', error);
     } finally {
       setSubmitting(false);
     }
   };
   
+  // Only validate fields that are actually required (in missingFields)
   const isValid =
     (!want('hvacType') || !!hvacType) &&
     (!want('hvacAge') || !!hvacAge) &&
@@ -410,7 +410,7 @@ export const OfferMadePopup = ({
           </div>
           {offerMadeResponse === 'Negotiating' && (
             <div className="bg-blue-50 border border-blue-200 rounded p-3 text-sm text-blue-800">
-              A follow-up task will be created for 6 hours from now.
+              Offer is being negotiated. Please create a follow-up task manually if needed.
             </div>
           )}
           {offerMadeResponse === 'Accepted' && (

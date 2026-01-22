@@ -97,10 +97,7 @@ export const LeadSourceSettings = () => {
       });
 
       if (data.success || data.data) {
-        toast({
-          title: "Success",
-          description: "Lead source created successfully",
-        });
+        // Success toast removed - only show errors
         setFormData({
           name: "",
         });
@@ -140,10 +137,7 @@ export const LeadSourceSettings = () => {
       });
 
       if (data.success || data.data) {
-        toast({
-          title: "Success",
-          description: "Lead source updated successfully",
-        });
+        // Success toast removed - only show errors
         setEditingId(null);
         setFormData({
           name: "",
@@ -174,10 +168,7 @@ export const LeadSourceSettings = () => {
       });
 
       if (data.success !== false) {
-        toast({
-          title: "Success",
-          description: "Lead source deleted successfully",
-        });
+        // Success toast removed - only show errors
         fetchSources();
       }
     } catch (error: any) {

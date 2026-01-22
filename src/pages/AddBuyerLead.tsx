@@ -180,11 +180,6 @@ const AddBuyerLead = () => {
             variant: "destructive",
           });
         }
-      } else {
-        toast({
-          title: "Buyer Lead Added Successfully",
-          description: `${formData.firstName} ${formData.lastName} has been added to your buyer leads.`,
-        });
       }
       
       navigate('/leads');

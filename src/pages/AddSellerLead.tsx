@@ -220,11 +220,6 @@ const AddSellerLead = () => {
             variant: "destructive",
           });
         }
-      } else {
-        toast({
-          title: "Seller Lead Added Successfully",
-          description: `${formData.firstName} ${formData.lastName} has been added to your leads.`,
-        });
       }
       
       navigate('/leads');

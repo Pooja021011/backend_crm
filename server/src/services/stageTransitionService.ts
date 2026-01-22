@@ -94,8 +94,9 @@ export const stageTransitionService = {
       }
       
       // Rule 2A: Appointment Complete (and any stage after it) requires at least one photo in the Photos section.
-      // Stages are configurable (Settings), so we find the Appointment Complete stage dynamically in the same pipeline.
-      // IMPORTANT: This is category-driven (photos), so Files/Documents do not satisfy the requirement.
+      // Rule 2B: Due Diligence (and any stage after it) requires Additional Property Info fields.
+      // IMPORTANT: Collect ALL validation errors instead of returning early, so frontend can show all required popups.
+      
       const appointmentCompleteStage = await prisma.pipelineStage.findFirst({
         where: {
           pipelineId: toStage.pipelineId,
@@ -107,28 +108,6 @@ export const stageTransitionService = {
         select: { id: true, name: true, orderIndex: true },
       });
 
-      if (appointmentCompleteStage && toStage.orderIndex >= appointmentCompleteStage.orderIndex) {
-        const photoCount = await prisma.leadFile.count({
-          where: {
-            leadId,
-            file: {
-              category: { equals: 'photos', mode: 'insensitive' },
-            },
-          },
-        });
-
-        if (photoCount === 0) {
-          return {
-            valid: false,
-            stageName: toStage.name,
-            requiredFields: ['photos'],
-            errors: ['Property photos are required before moving to this stage'],
-          };
-        }
-      }
-
-      // Rule 2B: Due Diligence (and any stage after it) requires Additional Property Info fields.
-      // We locate the Due Diligence stage dynamically (name contains "due diligence" but NOT "complete").
       const dueDiligenceStage = await prisma.pipelineStage.findFirst({
         where: {
           pipelineId: toStage.pipelineId,
@@ -140,19 +119,39 @@ export const stageTransitionService = {
         select: { id: true, name: true, orderIndex: true },
       });
 
+      // Collect validation errors instead of returning early
+      const allRequiredFields: string[] = [];
+      const allErrors: string[] = [];
+
+      // Check photos requirement (Appointment Complete+)
+      if (appointmentCompleteStage && toStage.orderIndex >= appointmentCompleteStage.orderIndex) {
+        const photoCount = await prisma.leadFile.count({
+          where: {
+            leadId,
+            file: {
+              category: { equals: 'photos', mode: 'insensitive' },
+            },
+          },
+        });
+
+        if (photoCount === 0) {
+          allRequiredFields.push('photos');
+          allErrors.push('Property photos are required before moving to this stage');
+        }
+      }
+
+      // Check property info requirement (Due Diligence+)
       if (dueDiligenceStage && toStage.orderIndex >= dueDiligenceStage.orderIndex) {
         const ddRequired = ['hvacType', 'hvacAge', 'waterHeaterAge', 'roofAge', 'waterType', 'sewerType'] as const;
         const missing = ddRequired.filter((k) => isMissing(customFields[k]));
 
         if (missing.length > 0) {
-          return {
-            valid: false,
-            stageName: toStage.name,
-            requiredFields: missing as any,
-            errors: ['Additional property information is required before moving to this stage'],
-          };
+          allRequiredFields.push(...(missing as any));
+          allErrors.push('Additional property information is required before moving to this stage');
         }
       }
+
+      // DO NOT RETURN EARLY - continue checking DD Complete requirements too
       
       // Rule 2C: Due Diligence Complete (and any stage after it) requires property questions + completion checklist.
       // We locate the "Due Diligence Complete" stage dynamically so jumps to later stages are progressively gated.
@@ -168,65 +167,29 @@ export const stageTransitionService = {
       });
 
       if (dueDiligenceCompleteStage && toStage.orderIndex >= dueDiligenceCompleteStage.orderIndex) {
-        // Also require basic contact/address info before allowing Due Diligence Complete.
-        // Email is optional by requirement.
-        const nonEmpty = (v: any) => typeof v === 'string' && v.trim().length > 0;
-
-        const contact =
-          lead.leadType === 'SELLER' ? lead.seller :
-          lead.leadType === 'BUYER' ? lead.buyer :
-          lead.vendor;
-
-       // if (!nonEmpty(contact?.firstName)) requiredFields.push('firstName');
-       // if (!nonEmpty(contact?.lastName)) requiredFields.push('lastName');
-        // Phone is NOT required for stage transition validation (per CRM requirement)
-
-        // For property leads (SELLER), address must be present.
-       // if (lead.leadType === 'SELLER') {
-         // if (!nonEmpty(lead.address?.address1)) requiredFields.push('address1');
-          //if (!nonEmpty(lead.address?.city)) requiredFields.push('city');
-          //if (!nonEmpty(lead.address?.state)) requiredFields.push('state');
-          //if (!nonEmpty(lead.address?.zip)) requiredFields.push('zip');
-        //}
-
-        // Property info must be present (use same "missing" semantics as Due Diligence gate).
-        if (isMissing(customFields.hvacType)) requiredFields.push('hvacType');
-        if (isMissing(customFields.hvacAge)) requiredFields.push('hvacAge');
-        if (isMissing(customFields.waterHeaterAge)) requiredFields.push('waterHeaterAge');
-        if (isMissing(customFields.roofAge)) requiredFields.push('roofAge');
-        if (isMissing(customFields.waterType)) requiredFields.push('waterType');
-        if (isMissing(customFields.sewerType)) requiredFields.push('sewerType');
-        
-        if (requiredFields.length > 0) {
-          // Build a clear message: separate “basic info” from “property info” (custom fields).
-          const basic = requiredFields.filter(f => ['firstName','lastName','address1','city','state','zip'].includes(f));
-          const dd = requiredFields.filter(f => !basic.includes(f));
-          if (basic.length) errors.push(`Basic information required: ${basic.join(', ')}`);
-          if (dd.length) errors.push(`Property information required: ${dd.join(', ')}`);
-          return { 
-            valid: false,
-            stageName: toStage.name,
-            requiredFields,
-            errors: errors.length ? errors : [`Property information required: ${requiredFields.join(', ')}`]
-          };
-        }
+        // Property info validation (these were already checked above for DD stage, but DD Complete also needs them)
+        // Only add if not already in the list
+        const ddPropertyFields = ['hvacType', 'hvacAge', 'waterHeaterAge', 'roofAge', 'waterType', 'sewerType'];
+        ddPropertyFields.forEach(field => {
+          if (isMissing(customFields[field]) && !allRequiredFields.includes(field)) {
+            allRequiredFields.push(field);
+          }
+        });
 
         // DD Complete checklist: ARV input, comparables, rehab budget, underwriting calculator
-        const ddCompleteMissing: string[] = [];
-
         const arv = asNumber(customFields.arv);
-        if (!arv || arv <= 0) ddCompleteMissing.push('arv');
+        if (!arv || arv <= 0) allRequiredFields.push('arv');
 
         // Comparable properties can be entered as rows OR uploaded as comp PDFs.
         const comparableCount = await prisma.leadComparable.count({ where: { leadId } });
         const compPdfCount = await prisma.leadCompPdf.count({ where: { leadId } });
-        if (comparableCount <= 0 && compPdfCount <= 0) ddCompleteMissing.push('comparables');
+        if (comparableCount <= 0 && compPdfCount <= 0) allRequiredFields.push('comparables');
 
         // Rehab Budget can be stored as a RehabBudget row OR reflected in customFields (UI uses this value).
         const rehabBudgetRow = await prisma.rehabBudget.findUnique({ where: { leadId } });
         const rehabBudgetFromFields = asNumber(customFields.rehabBudget);
         const rehabBudgetValue = (rehabBudgetRow?.totalCost ?? rehabBudgetFromFields ?? 0);
-        if (!rehabBudgetRow && (!rehabBudgetFromFields || rehabBudgetFromFields <= 0)) ddCompleteMissing.push('rehabBudget');
+        if (!rehabBudgetRow && (!rehabBudgetFromFields || rehabBudgetFromFields <= 0)) allRequiredFields.push('rehabBudget');
 
         // Underwriting can be saved as an UnderwritingCalculation row OR inferred from ARV + Rehab Budget.
         // This matches the UI, where Final Offer is derived from ARV + rehab budget without always persisting a row.
@@ -243,19 +206,27 @@ export const stageTransitionService = {
           !!underwritingCalc ||
           (!!finalOfferFromFields && finalOfferFromFields > 0) ||
           (Number.isFinite(inferredFinalOffer) && inferredFinalOffer > 0);
-        if (!hasUnderwriting) ddCompleteMissing.push('underwritingCalculation');
+        if (!hasUnderwriting) allRequiredFields.push('underwritingCalculation');
         // Annual Taxes + Timeline must be explicitly entered (placeholders do not count).
-        if (!taxesValue || taxesValue <= 0) ddCompleteMissing.push('underwritingTaxes');
-        if (!timelineValue || timelineValue <= 0) ddCompleteMissing.push('underwritingTimeline');
+        if (!taxesValue || taxesValue <= 0) allRequiredFields.push('underwritingTaxes');
+        if (!timelineValue || timelineValue <= 0) allRequiredFields.push('underwritingTimeline');
 
-        if (ddCompleteMissing.length > 0) {
-          return {
-            valid: false,
-            stageName: toStage.name,
-            requiredFields: ddCompleteMissing,
-            errors: ['Due diligence checklist must be completed before moving to Due Diligence Complete'],
-          };
+        // Build error message for DD Complete requirements
+        const ddCompleteFields = ['arv', 'comparables', 'rehabBudget', 'underwritingCalculation', 'underwritingTaxes', 'underwritingTimeline'];
+        const hasDdCompleteIssues = allRequiredFields.some(f => ddCompleteFields.includes(f));
+        if (hasDdCompleteIssues && !allErrors.includes('Due diligence checklist must be completed before moving to Due Diligence Complete')) {
+          allErrors.push('Due diligence checklist must be completed before moving to Due Diligence Complete');
         }
+      }
+      
+      // Return ALL collected validation errors at once
+      if (allRequiredFields.length > 0) {
+        return {
+          valid: false,
+          stageName: toStage.name,
+          requiredFields: allRequiredFields,
+          errors: allErrors,
+        };
       }
       
       // Rule 2D: Offer Made (and any stage after it) requires offer tracking fields.

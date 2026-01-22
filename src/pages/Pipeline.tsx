@@ -90,9 +90,11 @@ const Pipeline = () => {
     newStageId: string;
     stageName: string;
     leadToMove: any;
+    allRequiredFields?: string[]; // Track ALL required fields from backend
   } | null>(null);
   const [missingDdFields, setMissingDdFields] = useState<string[]>([]);
   const [missingDdCompleteItems, setMissingDdCompleteItems] = useState<string[]>([]);
+  const isTransitioningPopupsRef = useRef(false); // Flag to prevent clearing pendingStageChange during transitions
 
   // Drag behavior: distance-based activation (more reliable than delay)
   const sensors = useSensors(
@@ -756,10 +758,19 @@ const Pipeline = () => {
           ));
           
           // Show appropriate validation popup (only when backend actually requires it)
-          setPendingStageChange({ leadId, newStageId, stageName, leadToMove });
           const requiredFields: string[] = Array.isArray(errorData.requiredFields) ? errorData.requiredFields : [];
+          
+          // Store ALL required fields in pendingStageChange
+          setPendingStageChange({ 
+            leadId, 
+            newStageId, 
+            stageName, 
+            leadToMove,
+            allRequiredFields: requiredFields 
+          });
 
-          // Pictures/files required (Appointment Complete and beyond)
+          // Show the FIRST required popup
+          // Priority order: photos → followUpTask → DD fields → DD Complete fields → offer
           if (requiredFields.includes('photos')) {
             setShowAppointmentPopup(true);
           } else if (requiredFields.includes('followUpTask')) {
@@ -767,8 +778,8 @@ const Pipeline = () => {
           } else if (requiredFields.some((f) => ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'].includes(f))) {
             setMissingDdFields(requiredFields.filter((f) => ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'].includes(f)));
             setShowDueDiligencePopup(true);
-          } else if (requiredFields.some((f) => ['arv','comparables','rehabBudget','underwritingCalculation'].includes(f))) {
-            setMissingDdCompleteItems(requiredFields.filter((f) => ['arv','comparables','rehabBudget','underwritingCalculation'].includes(f)));
+          } else if (requiredFields.some((f) => ['arv','comparables','rehabBudget','underwritingCalculation','underwritingTaxes','underwritingTimeline'].includes(f))) {
+            setMissingDdCompleteItems(requiredFields.filter((f) => ['arv','comparables','rehabBudget','underwritingCalculation','underwritingTaxes','underwritingTimeline'].includes(f)));
             setShowDueDiligenceCompletePopup(true);
           } else if (stageNameLower.includes('offer') && stageNameLower.includes('made')) {
             setShowOfferMadePopup(true);
@@ -893,6 +904,16 @@ const Pipeline = () => {
           setLeads(prev => prev.map(lead => (lead.id === leadId ? leadToMove : lead)));
           const requiredFields: string[] = Array.isArray(errorData.requiredFields) ? errorData.requiredFields : [];
           console.log('📋 Additional validation required:', requiredFields, 'stageName:', stageNameLower);
+          
+          // Update pendingStageChange with the NEW required fields (backend re-validated)
+          setPendingStageChange({ 
+            leadId, 
+            newStageId, 
+            stageName, 
+            leadToMove,
+            allRequiredFields: requiredFields 
+          });
+          
           handleValidationRequired(requiredFields, stageNameLower);
           return;
         }
@@ -1327,18 +1348,18 @@ const Pipeline = () => {
         </Card>
       )}
       
-      {/* Stage Transition Validation Popups */}
-      {pendingStageChange && (
-        <>
-          <AppointmentCompletePopup
-            open={showAppointmentPopup}
-            onClose={() => {
-              setShowAppointmentPopup(false);
-              setPendingStageChange(null);
-            }}
-            leadId={pendingStageChange.leadId}
-            onSubmit={async (files) => {
-              try {
+      {/* Stage Transition Validation Popups - Render independently */}
+      <AppointmentCompletePopup
+        open={showAppointmentPopup}
+        onClose={() => {
+          console.log('🚨 AppointmentCompletePopup onClose called!');
+          setShowAppointmentPopup(false);
+          // DON'T clear pendingStageChange here - the onSubmit handler manages the flow
+        }}
+        leadId={pendingStageChange?.leadId || ''}
+        onSubmit={async (files) => {
+          if (!pendingStageChange) return;
+          try {
                 // Upload pictures/files
                 let uploadedCount = 0;
                 for (const file of files) {
@@ -1368,9 +1389,77 @@ const Pipeline = () => {
                 }
                 
                 console.log(`📸 Uploaded ${uploadedCount} of ${files.length} photos`);
+                
+                // Check if there are more requirements to fulfill (from the original validation response)
+                console.log('🔍 DEBUG: pendingStageChange =', pendingStageChange);
+                console.log('🔍 DEBUG: allRequiredFields =', pendingStageChange?.allRequiredFields);
 
-                // Retry stage move; if more is missing, this will open the next popup automatically
-                await retryPendingStageMove();
+                if (pendingStageChange?.allRequiredFields) {
+                  const remaining = pendingStageChange.allRequiredFields.filter(f => f !== 'photos');
+                  console.log('🔍 DEBUG: remaining after removing photos =', remaining);
+                  
+                  if (remaining.length > 0) {
+                    console.log('📋 More requirements pending:', remaining);
+                    
+                    // SET FLAG FIRST before any state changes!
+                    isTransitioningPopupsRef.current = true;
+                    console.log('🔍 DEBUG: Flag set to TRUE before closing popup');
+                    
+                    // Show the next required popup without making another API call
+                    const ddFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
+                    const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation','underwritingTaxes','underwritingTimeline'];
+                    
+                    console.log('🔍 DEBUG: Checking DD fields...', remaining.some(f => ddFields.includes(f)));
+                    console.log('🔍 DEBUG: Checking DD Complete fields...', remaining.some(f => ddCompleteFields.includes(f)));
+                    
+                    // Close current popup
+                    setShowAppointmentPopup(false);
+                    
+                    // Small delay to ensure dialog closes before opening next one
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    
+                    if (remaining.some(f => ddFields.includes(f))) {
+                      const ddFieldsToShow = remaining.filter(f => ddFields.includes(f));
+                      console.log('✅ Showing DueDiligencePopup with fields:', ddFieldsToShow);
+                      setMissingDdFields(ddFieldsToShow);
+                      setShowDueDiligencePopup(true);
+                      
+                      // Small delay to ensure popup is rendered
+                      await new Promise(resolve => setTimeout(resolve, 50));
+                      
+                      // Now safe to clear flag
+                      isTransitioningPopupsRef.current = false;
+                    } else if (remaining.some(f => ddCompleteFields.includes(f))) {
+                      const ddCompleteFieldsToShow = remaining.filter(f => ddCompleteFields.includes(f));
+                      console.log('✅ Showing DueDiligenceCompletePopup with fields:', ddCompleteFieldsToShow);
+                      setMissingDdCompleteItems(ddCompleteFieldsToShow);
+                      setShowDueDiligenceCompletePopup(true);
+                      console.log('✅ After setState - showDueDiligenceCompletePopup should be true');
+                      console.log('✅ pendingStageChange still exists:', !!pendingStageChange);
+                      
+                      // Small delay to ensure popup is rendered
+                      await new Promise(resolve => setTimeout(resolve, 50));
+                      
+                      // Now safe to clear flag
+                      isTransitioningPopupsRef.current = false;
+                    } else {
+                      console.log('⚠️ No matching popup found, calling retryPendingStageMove');
+                      isTransitioningPopupsRef.current = false;
+                      // No more known requirements, try the move
+                      await retryPendingStageMove();
+                    }
+                  } else {
+                    console.log('✅ All requirements fulfilled, calling retryPendingStageMove');
+                    setShowAppointmentPopup(false);
+                    // All requirements fulfilled, try the move
+                    await retryPendingStageMove();
+                  }
+                } else {
+                  console.log('⚠️ No allRequiredFields found, calling retryPendingStageMove');
+                  setShowAppointmentPopup(false);
+                  // Fallback: retry stage move (will trigger validation again)
+                  await retryPendingStageMove();
+                }
               } catch (error: any) {
                 console.error('Error in appointment complete flow:', error);
                 toast({
@@ -1385,29 +1474,110 @@ const Pipeline = () => {
           <DueDiligencePopup
             open={showDueDiligencePopup}
             onClose={() => {
+              console.log('🚨 DueDiligencePopup onClose called!');
               setShowDueDiligencePopup(false);
-              setPendingStageChange(null);
+              // DON'T clear pendingStageChange here - the onSubmit handler manages the flow
             }}
-            existingData={pendingStageChange.leadToMove.customFields}
+            existingData={pendingStageChange?.leadToMove?.customFields || {}}
             missingFields={missingDdFields}
             onSubmit={async (data) => {
-              // Update lead with property info
+              console.log('🎯 Pipeline DueDiligencePopup onSubmit called with data:', data);
+              console.log('🎯 pendingStageChange:', pendingStageChange);
+              
+              if (!pendingStageChange) {
+                console.error('❌ pendingStageChange is null! Cannot proceed.');
+                return;
+              }
+              
+              try {
+              
+              // Set flag FIRST to prevent onClose from clearing pendingStageChange
+              isTransitioningPopupsRef.current = true;
+              
+              // Fetch FRESH customFields from API to avoid overwriting existing data
+              let freshCustomFields = {};
+              try {
+                const freshLeadResponse = await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`);
+                if (freshLeadResponse.ok) {
+                  const freshLeadData = await freshLeadResponse.json();
+                  freshCustomFields = (freshLeadData.data || freshLeadData).customFields || {};
+                  console.log('✅ Fetched fresh customFields:', freshCustomFields);
+                }
+              } catch (e) {
+                console.warn('⚠️ Failed to fetch fresh customFields, using cached data');
+                freshCustomFields = pendingStageChange.leadToMove.customFields || {};
+              }
+              
+              // Update lead with property info (merge with fresh data)
               await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   customFields: {
-                    ...pendingStageChange.leadToMove.customFields,
-                    ...data
+                    ...freshCustomFields, // Use fresh data from API
+                    ...data // Merge new data
                   }
                 })
               });
+              
               setShowDueDiligencePopup(false);
               setMissingDdFields([]);
 
-              // Retry stage move; if more is missing, open the next popup automatically
-              await retryPendingStageMove();
-            }}
+              // Check if there are more requirements (DD Complete fields)
+              if (pendingStageChange?.allRequiredFields) {
+                const ddFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
+                const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation','underwritingTaxes','underwritingTimeline'];
+                // Filter out the DD fields we just completed
+                const remaining = pendingStageChange.allRequiredFields.filter(f => 
+                  !ddFields.includes(f) && f !== 'photos'
+                );
+                
+                if (remaining.length > 0 && remaining.some(f => ddCompleteFields.includes(f))) {
+                  console.log('📋 DD Complete requirements pending:', remaining);
+                  
+                  // Small delay
+                  console.log('⏳ Waiting 100ms...');
+                  await new Promise(resolve => setTimeout(resolve, 100));
+                  
+                  console.log('✅ Setting DD Complete popup state...');
+                  setMissingDdCompleteItems(remaining.filter(f => ddCompleteFields.includes(f)));
+                  setShowDueDiligenceCompletePopup(true);
+                  
+                  console.log('✅ DD Complete popup state set, waiting 50ms...');
+                  
+                  // Small delay to ensure popup is rendered
+                  await new Promise(resolve => setTimeout(resolve, 50));
+                  
+                  console.log('✅ Clearing flag');
+                  // Clear flag
+                  isTransitioningPopupsRef.current = false;
+                } else {
+                  console.log('✅ No DD Complete requirements, calling retryPendingStageMove');
+                  isTransitioningPopupsRef.current = false;
+                  // All requirements fulfilled, try the move
+                  await retryPendingStageMove();
+                  // Clear pending state after successful move
+                  setPendingStageChange(null);
+                }
+              } else {
+                console.log('⚠️ No allRequiredFields, calling retryPendingStageMove');
+                isTransitioningPopupsRef.current = false;
+                // Fallback: retry stage move
+                await retryPendingStageMove();
+                // Clear pending state after successful move
+                setPendingStageChange(null);
+              }
+            } catch (e: any) {
+              console.error('❌ Error in DueDiligencePopup onSubmit:', e);
+              // Clear pending state on error
+              setPendingStageChange(null);
+              toast({
+                title: "Error",
+                description: e.message || "Failed to update property information",
+                variant: "destructive"
+              });
+            }
+          }}
           />
 
           <DueDiligenceCompleteRequirementsPopup
@@ -1433,8 +1603,9 @@ const Pipeline = () => {
               setShowOfferMadePopup(false);
               setPendingStageChange(null);
             }}
-            existingData={pendingStageChange.leadToMove.customFields}
+            existingData={pendingStageChange?.leadToMove?.customFields || {}}
             onSubmit={async (data) => {
+              if (!pendingStageChange) return;
               // Update lead with offer info
               await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`, {
                 method: 'PATCH',
@@ -1460,6 +1631,7 @@ const Pipeline = () => {
               setPendingStageChange(null);
             }}
             onSubmit={async ({ title, dueAt }) => {
+              if (!pendingStageChange) return;
               // Create follow-up task (no notes)
               await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}/tasks`, {
                 method: 'POST',
@@ -1477,8 +1649,6 @@ const Pipeline = () => {
               await retryPendingStageMove();
             }}
           />
-        </>
-      )}
 
     </div>
   );
