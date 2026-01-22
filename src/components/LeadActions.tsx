@@ -49,10 +49,6 @@ export const LeadActions: React.FC<LeadActionsProps> = ({ lead, onLeadUpdated })
   const handleDelete = async () => {
     try {
       await deleteLead(lead.id);
-      toast({
-        title: "Lead Deleted",
-        description: "The lead has been successfully deleted.",
-      });
       onLeadUpdated?.();
     } catch (error) {
       toast({

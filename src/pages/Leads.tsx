@@ -786,13 +786,6 @@ const Leads = () => {
     try {
       const result = await importLeadsFromCSV(file, leadType);
       
-      if (result.success > 0) {
-        toast({
-          title: "Import Successful",
-          description: `Successfully imported ${result.success} leads.`,
-        });
-      }
-      
       if (result.errors.length > 0) {
         toast({
           title: "Import Warnings",
@@ -824,18 +817,10 @@ const Leads = () => {
     }
     
     exportLeadsToCSV(currentLeads, activeTab);
-    toast({
-      title: "Export Successful",
-      description: `Exported ${currentLeads.length} ${activeTab.toLowerCase()} leads.`,
-    });
   };
   
   const handleDownloadTemplate = () => {
     generateCSVTemplate(activeTab);
-    toast({
-      title: "Template Downloaded",
-      description: `CSV template for ${activeTab.toLowerCase()} leads downloaded.`,
-    });
   };
 
   const handleSelectAll = () => {
@@ -885,15 +870,8 @@ const Leads = () => {
         }
       }
 
-      // Show success/error toast
-      if (successCount > 0) {
-        toast({
-          title: `${pendingBulkAction === 'delete' ? 'Deleted' : 'Archived'} ${successCount} lead${successCount > 1 ? 's' : ''}`,
-          description: errorCount > 0 ? `${errorCount} lead${errorCount > 1 ? 's' : ''} failed to ${pendingBulkAction}` : undefined,
-        });
-      }
-
-      if (errorCount > 0 && successCount === 0) {
+      // Show error toast only if there were errors
+      if (errorCount > 0) {
         toast({
           title: `Failed to ${pendingBulkAction} leads`,
           description: `${errorCount} lead${errorCount > 1 ? 's' : ''} could not be ${pendingBulkAction}d`,
@@ -1323,10 +1301,6 @@ const Leads = () => {
                         <DropdownMenuItem onClick={() => {
                           const selectedLeads = getCurrentLeads.filter(lead => selectedItems.includes(lead.id));
                           exportLeadsToCSV(selectedLeads, activeTab);
-                          toast({
-                            title: "Export Successful",
-                            description: `Exported ${selectedLeads.length} selected leads.`,
-                          });
                         }}>
                           <Download className="w-4 h-4 mr-2" />
                           Export Selected ({selectedItems.length})

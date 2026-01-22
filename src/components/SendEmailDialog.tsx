@@ -302,11 +302,6 @@ export const SendEmailDialog: React.FC<SendEmailDialogProps> = ({
       //   leadId: lead.id
       // });
 
-      toast({
-        title: "Email Sent",
-        description: `Email sent successfully to ${emailData.to}`,
-      });
-
       onOpenChange(false);
     } catch (error) {
       toast({

@@ -2592,10 +2592,6 @@ const LeadEdit: React.FC = () => {
       const result = await response.json();
       
       if (result.success) {
-        toast({
-          title: 'Email Sent',
-          description: 'Email sent successfully'
-        });
         setEmailSubject('');
         setEmailBody('');
         await loadCommunications();
