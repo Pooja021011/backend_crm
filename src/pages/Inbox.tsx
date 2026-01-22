@@ -1216,6 +1216,7 @@ const Inbox = () => {
         title: t.title,
         description: t.description || '',
         createdByName: t.createdBy ? `${t.createdBy.firstName} ${t.createdBy.lastName}` : 'Unknown',
+        assignedToName: t.assignedTo ? `${t.assignedTo.firstName} ${t.assignedTo.lastName}` : 'Unknown',
         leadAddress: t.lead?.address ? (
           // Check if address1 already contains city/state
           t.lead.address.address1.includes(t.lead.address.city) ? 
@@ -2220,6 +2221,11 @@ const Inbox = () => {
                                   <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
                                     Due
                                   </Badge>
+                                  {message.assignedToName && (
+                                    <Badge variant="outline" className="text-xs bg-blue-50 text-blue-600 border-blue-200">
+                                      Assigned: {message.assignedToName}
+                                    </Badge>
+                                  )}
                                   {message.createdByName && (
                                     <Badge variant="outline" className="text-xs bg-gray-50 text-gray-600 border-gray-200">
                                       Created by: {message.createdByName}

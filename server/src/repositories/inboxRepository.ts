@@ -12,7 +12,8 @@ export const inboxRepository = {
       orderBy: { dueAt: 'asc' },
       include: { 
         lead: { include: { address: true, seller: true, buyer: true, vendor: true } },
-        createdBy: { select: { firstName: true, lastName: true, email: true } }
+        createdBy: { select: { firstName: true, lastName: true, email: true } },
+        assignedTo: { select: { firstName: true, lastName: true, email: true } }
       },
     }),
 
