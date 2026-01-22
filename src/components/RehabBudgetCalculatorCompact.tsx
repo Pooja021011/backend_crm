@@ -53,14 +53,18 @@ export function RehabBudgetCalculatorCompact({
   const [customMiscLine, setCustomMiscLine] = useState<{ label: string; value: string }>(() => {
     const incoming = initialCustomValues?.miscLines;
     if (Array.isArray(incoming) && incoming.length > 0) {
+      const label = String(incoming[0]?.label || initialCustomValues?.miscLabel || '');
+      const valueNum = Number(incoming[0]?.value) || Number(initialCustomValues?.miscValue) || 0;
       return {
-        label: String(incoming[0]?.label || initialCustomValues?.miscLabel || 'Miscellaneous'),
-        value: String(Number(incoming[0]?.value) || Number(initialCustomValues?.miscValue) || ''),
+        // Default blank unless persisted values exist
+        label,
+        value: valueNum > 0 ? String(valueNum) : '',
       };
     }
     return {
-      label: String(initialCustomValues?.miscLabel || 'Miscellaneous'),
-      value: String(Number(initialCustomValues?.miscValue) || ''),
+      // Default blank unless persisted values exist
+      label: String(initialCustomValues?.miscLabel || ''),
+      value: Number(initialCustomValues?.miscValue) > 0 ? String(Number(initialCustomValues?.miscValue) || 0) : '',
     };
   });
   const [customMiscEnabled, setCustomMiscEnabled] = useState<boolean>(() => {
@@ -207,6 +211,18 @@ export function RehabBudgetCalculatorCompact({
     }).format(value);
   };
 
+  const parseCurrencyInput = (raw: string): number => {
+    const digits = raw.replace(/[^\d]/g, '');
+    return digits ? Number(digits) : 0;
+  };
+
+  // Keep the custom misc value visually consistent with the other line items (e.g. "$0")
+  const [customMiscValueDisplay, setCustomMiscValueDisplay] = useState<string>(() => {
+    const n = Math.max(0, Number(customMiscLine.value) || 0);
+    // Default blank (placeholder shows "$0")
+    return n > 0 ? formatCurrency(n) : '';
+  });
+
   const getItemCost = (key: string): number => {
     return (calculation.itemizedCosts && calculation.itemizedCosts[key]) ? calculation.itemizedCosts[key] : 0;
   };
@@ -237,7 +253,6 @@ export function RehabBudgetCalculatorCompact({
 
   const renderCustomMiscRow = () => {
     const valueNum = Math.max(0, Number(customMiscLine.value) || 0);
-    const valueDisplay = customMiscLine.value === '' ? '' : String(valueNum);
     return (
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 min-w-0">
@@ -255,29 +270,33 @@ export function RehabBudgetCalculatorCompact({
             }
             disabled={readOnly}
             placeholder="Miscellaneous"
-            // Match Lead Detail "Property Information" inputs (height + font)
-            className="h-6 text-xs w-[16ch] sm:w-[18ch] md:w-[20ch]"
+            style={{ fontSize: '10px', fontWeight: 400 }}
+            className="h-6 px-2 w-[16ch] sm:w-[18ch] md:w-[20ch]"
           />
         </div>
-        <div className="flex items-center gap-1">
-          <div className={`relative ${customMiscEnabled ? '' : 'opacity-60'}`}>
-            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-500 select-none">
-              $
-            </span>
-            <Input
-              type="number"
-              value={valueDisplay}
-              onChange={(e) =>
-                setCustomMiscLine((prev) => ({ ...prev, value: e.target.value }))
-              }
-              disabled={readOnly}
-              min={0}
-              placeholder="0"
-              // Match Lead Detail "Property Information" inputs (height + font)
-              className="h-6 w-[9ch] pl-4 pr-2 text-xs tabular-nums text-right"
-            />
-          </div>
-        </div>
+        <Input
+          type="text"
+          inputMode="numeric"
+          value={customMiscValueDisplay}
+          onChange={(e) => {
+            const raw = e.target.value;
+            setCustomMiscValueDisplay(raw);
+            const next = parseCurrencyInput(raw);
+            setCustomMiscLine((prev) => ({ ...prev, value: String(next) }));
+          }}
+          onBlur={() => {
+            // Always show like other items (e.g. "$0")
+            if (!customMiscLine.value) {
+              setCustomMiscValueDisplay('');
+              return;
+            }
+            setCustomMiscValueDisplay(formatCurrency(valueNum));
+          }}
+          disabled={readOnly}
+          placeholder="$0"
+          style={{ fontSize: '10px', fontWeight: 400 }}
+          className={`h-6 px-2 tabular-nums text-right w-[10ch] ${customMiscEnabled ? 'text-slate-700' : 'text-slate-400'}`}
+        />
       </div>
     );
   };
