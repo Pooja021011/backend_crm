@@ -1246,18 +1246,12 @@ const Inbox = () => {
         ) : ''
         }));
         
-        // Sort tasks by creation date descending (latest first)
+        // Sort tasks by due date descending (latest due date first)
         items.sort((a, b) => {
-          const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-          const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-          return dateB - dateA; // Descending order (newest first)
+          const dateA = a.dueAt ? new Date(a.dueAt).getTime() : 0;
+          const dateB = b.dueAt ? new Date(b.dueAt).getTime() : 0;
+          return dateB - dateA; // Descending order (latest first)
         });
-        
-        console.log('📋 Tasks sorted by createdAt (latest first):', items.map(t => ({ 
-          title: t.title, 
-          createdAt: t.createdAt,
-          dueAt: t.dueAt 
-        })));
         
         setAssignedTasks(items);
         console.log('✅ Processed tasks:', items.length);
