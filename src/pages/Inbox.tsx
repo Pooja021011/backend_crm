@@ -1199,7 +1199,15 @@ const Inbox = () => {
       console.log('📋 RAW TASKS DATA:', json.data);
       
       if (json.data && Array.isArray(json.data)) {
-        const items = json.data.map((t: any) => ({
+        // Filter out auto-generated mention tasks (title starts with "Review note on " AND description starts with "You were mentioned in a note:")
+        const filteredTasks = json.data.filter((t: any) => {
+          const isAutoMentionTask = 
+            t.title?.startsWith('Review note on ') && 
+            t.description?.startsWith('You were mentioned in a note:');
+          return !isAutoMentionTask;
+        });
+        
+        const items = filteredTasks.map((t: any) => ({
         id: t.id,
         from: t.lead ? createLeadTitle(t.lead) : 'Task',
         subject: t.title,
