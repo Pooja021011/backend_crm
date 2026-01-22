@@ -1237,8 +1237,7 @@ const Inbox = () => {
         status: t.status,
         title: t.title,
         description: t.description || '',
-        createdByName: t.createdBy ? `${t.createdBy.firstName} ${t.createdBy.lastName}` : 'Unknown',
-        assignedToName: t.assignedTo ? `${t.assignedTo.firstName} ${t.assignedTo.lastName}` : 'Unknown',
+        createdAt: t.createdAt, // Keep for sorting
         leadAddress: t.lead?.address ? (
           // Check if address1 already contains city/state
           t.lead.address.address1.includes(t.lead.address.city) ? 
@@ -1246,6 +1245,14 @@ const Inbox = () => {
             `${t.lead.address.address1}, ${t.lead.address.city}, ${t.lead.address.state}`
         ) : ''
         }));
+        
+        // Sort tasks by creation date descending (latest first)
+        items.sort((a, b) => {
+          const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return dateB - dateA; // Descending order (newest first)
+        });
+        
         setAssignedTasks(items);
         console.log('✅ Processed tasks:', items.length);
         console.log('📋 Sample task data:', items[0]);
@@ -2243,16 +2250,6 @@ const Inbox = () => {
                                   <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
                                     Due
                                   </Badge>
-                                  {message.assignedToName && (
-                                    <Badge variant="outline" className="text-xs bg-blue-50 text-blue-600 border-blue-200">
-                                      Assigned: {message.assignedToName}
-                                    </Badge>
-                                  )}
-                                  {message.createdByName && (
-                                    <Badge variant="outline" className="text-xs bg-gray-50 text-gray-600 border-gray-200">
-                                      Created by: {message.createdByName}
-                                    </Badge>
-                                  )}
                                 </>
                               ) : (
                                 <Badge 
