@@ -1253,6 +1253,12 @@ const Inbox = () => {
           return dateB - dateA; // Descending order (newest first)
         });
         
+        console.log('📋 Tasks sorted by createdAt (latest first):', items.map(t => ({ 
+          title: t.title, 
+          createdAt: t.createdAt,
+          dueAt: t.dueAt 
+        })));
+        
         setAssignedTasks(items);
         console.log('✅ Processed tasks:', items.length);
         console.log('📋 Sample task data:', items[0]);
