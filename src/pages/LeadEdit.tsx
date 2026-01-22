@@ -1729,7 +1729,7 @@ const LeadEdit: React.FC = () => {
 
     autoSaveTimerRef.current = setTimeout(() => {
       void flushAutoSave('debounce');
-    }, 2000); // Increased from 800ms to 2000ms to allow user to finish typing
+    }, 500); // 500ms (0.5 seconds) for faster autosave to prevent data loss
   }, [id, lead, canEditLead, buildLeadPatchPayload, flushAutoSave]);
 
   // Best-effort: if user navigates away/unmounts quickly, try to persist pending edits.
