@@ -585,10 +585,7 @@ const Settings = () => {
       const result = await response.json();
       if (result.success) {
         setSmsSettings(result.data);
-        toast({
-          title: "SMS Settings Saved",
-          description: "Your SMS settings have been saved successfully!",
-        });
+        // Success toast removed - only show errors
       } else {
         throw new Error(result.error);
       }
@@ -619,11 +616,7 @@ const Settings = () => {
 
       const result = await response.json();
       if (result.success) {
-        toast({
-          title: "SMS Connection Test Successful",
-          description: `SMS is working correctly with your number ${formatUsPhoneForDisplay(smsSettings.phoneNumber)}`,
-          variant: "default"
-        });
+        // Success toast removed - only show errors
       } else {
         throw new Error(result.error || 'SMS configuration has issues');
       }
@@ -653,11 +646,7 @@ const Settings = () => {
 
       const result = await response.json();
       if (result.success) {
-        toast({
-          title: "Call Connection Test Successful",
-          description: `Call functionality is working correctly with your number ${formatUsPhoneForDisplay(smsSettings.phoneNumber)}`,
-          variant: "default"
-        });
+        // Success toast removed - only show errors
       } else {
         throw new Error(result.error || 'Call configuration has issues');
       }
@@ -698,10 +687,7 @@ const Settings = () => {
         // Refresh user data in AuthContext
         await refreshUser();
         
-        toast({
-          title: "Profile Updated",
-          description: "Your profile has been updated successfully!",
-        });
+        // Success toast removed - only show errors
       } else {
         throw new Error(result.error || 'Failed to update profile');
       }
@@ -757,10 +743,7 @@ const Settings = () => {
 
       const result = await response.json();
       if (result.success) {
-        toast({
-          title: "Password Updated",
-          description: "Your password has been changed successfully!",
-        });
+        // Success toast removed - only show errors
         // Clear the form
         setPasswordData({
           currentPassword: '',
@@ -797,10 +780,7 @@ const Settings = () => {
         setOriginalEmailSettings(emailSettings);
         setEmailSettingsModified(false);
         
-        toast({
-          title: "Settings Saved",
-          description: "Your email settings have been updated successfully!",
-        });
+        // Success toast removed - only show errors
       } else {
         throw new Error(result.error || 'Failed to save settings');
       }
@@ -843,10 +823,7 @@ const Settings = () => {
 
       const result = await response.json();
       if (result.success) {
-        toast({
-          title: "IMAP Connection Successful",
-          description: "IMAP connection test successful! You can now sync emails.",
-        });
+        // Success toast removed - only show errors
       } else {
         throw new Error(result.error);
       }
@@ -881,10 +858,7 @@ const Settings = () => {
       });
       const result = await res.json();
       if (result.success) {
-        toast({
-          title: "SMTP Connection Successful",
-          description: "SMTP connection test successful! You can send emails.",
-        });
+        // Success toast removed - only show errors
       } else {
         throw new Error(result.error);
       }
@@ -976,10 +950,7 @@ const Settings = () => {
           if (saveResult.success) {
             setOriginalEmailSettings(updatedSettings);
             setEmailSettingsModified(false);
-            toast({
-              title: "Gmail Connected",
-              description: "Gmail account connected successfully! You can now sync emails.",
-            });
+            // Success toast removed - only show errors
           } else {
             throw new Error(saveResult.error || 'Failed to save Gmail connection');
           }
@@ -1032,10 +1003,7 @@ const Settings = () => {
 
     try {
       await deleteAgent(agentToDelete.id);
-      toast({
-        title: "Agent Deleted",
-        description: `${agentToDelete.firstName} ${agentToDelete.lastName} has been deleted successfully.`,
-      });
+      // Success toast removed - only show errors
       setShowDeleteDialog(false);
       setAgentToDelete(null);
     } catch (error) {
