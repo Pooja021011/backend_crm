@@ -10,7 +10,10 @@ export const inboxRepository = {
         dueAt: { lte: new Date() },
       },
       orderBy: { dueAt: 'asc' },
-      include: { lead: { include: { address: true, seller: true, buyer: true, vendor: true } } },
+      include: { 
+        lead: { include: { address: true, seller: true, buyer: true, vendor: true } },
+        createdBy: { select: { firstName: true, lastName: true, email: true } }
+      },
     }),
 
   listCommunications: async (filters: {

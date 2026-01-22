@@ -1215,6 +1215,7 @@ const Inbox = () => {
         status: t.status,
         title: t.title,
         description: t.description || '',
+        createdByName: t.createdBy ? `${t.createdBy.firstName} ${t.createdBy.lastName}` : 'Unknown',
         leadAddress: t.lead?.address ? (
           // Check if address1 already contains city/state
           t.lead.address.address1.includes(t.lead.address.city) ? 
@@ -2215,9 +2216,16 @@ const Inbox = () => {
                               
                               {/* Read/Unread Badge */}
                               {message.type === 'task' ? (
-                                <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
-                                  Due
-                                </Badge>
+                                <>
+                                  <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
+                                    Due
+                                  </Badge>
+                                  {message.createdByName && (
+                                    <Badge variant="outline" className="text-xs bg-gray-50 text-gray-600 border-gray-200">
+                                      Created by: {message.createdByName}
+                                    </Badge>
+                                  )}
+                                </>
                               ) : (
                                 <Badge 
                                   variant={message.unread ? "default" : "secondary"} 
