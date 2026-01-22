@@ -1067,7 +1067,36 @@ const LeadEdit: React.FC = () => {
       const response = await makeApiCall(`${API_BASE}/leads/${id}/tasks`);
       if (response.ok) {
         const data = await response.json();
-        setTasks(data.data || []);
+        
+        // Filter out ONLY OLD auto-created tasks (created before Jan 22, 2026)
+        // New tasks with these titles can be manually created and should appear
+        const autoTaskDisabledDate = new Date('2026-01-22T00:00:00Z');
+        const autoCreatedTaskPrefixes = [
+          'Review note on ',              // Auto-mention tasks
+          'Underwrite ',                  // Stage transition: Appointment Complete
+          'Make Offer on ',               // Stage transition: Due Diligence Complete
+          'Follow Up With ',              // Stage transition: Offer Made (negotiating)
+          'Contract Sent - Awaiting Signature for ', // DocuSign success
+          'URGENT: DocuSign Failed for ', // DocuSign failure
+          'Check Voided Contract With ',  // Contract void
+        ];
+        
+        const filteredTasks = (data.data || []).filter((t: any) => {
+          const title = t.title || '';
+          const createdAt = t.createdAt ? new Date(t.createdAt) : null;
+          
+          // Check if title matches an auto-created task pattern
+          const matchesAutoPattern = autoCreatedTaskPrefixes.some(prefix => title.startsWith(prefix));
+          
+          // Only filter out if: matches pattern AND created before cutoff date
+          if (matchesAutoPattern && createdAt && createdAt < autoTaskDisabledDate) {
+            return false; // Hide old auto-created tasks
+          }
+          
+          return true; // Show all other tasks
+        });
+        
+        setTasks(filteredTasks);
       }
     } catch (error) {
       console.error('Error loading tasks:', error);

@@ -1199,12 +1199,32 @@ const Inbox = () => {
       console.log('📋 RAW TASKS DATA:', json.data);
       
       if (json.data && Array.isArray(json.data)) {
-        // Filter out auto-generated mention tasks (title starts with "Review note on " AND description starts with "You were mentioned in a note:")
+        // Filter out ONLY OLD auto-created tasks (created before Jan 22, 2026)
+        // New tasks with these titles can be manually created and should appear
+        const autoTaskDisabledDate = new Date('2026-01-22T00:00:00Z');
+        const autoCreatedTaskPrefixes = [
+          'Review note on ',              // Auto-mention tasks
+          'Underwrite ',                  // Stage transition: Appointment Complete
+          'Make Offer on ',               // Stage transition: Due Diligence Complete
+          'Follow Up With ',              // Stage transition: Offer Made (negotiating)
+          'Contract Sent - Awaiting Signature for ', // DocuSign success
+          'URGENT: DocuSign Failed for ', // DocuSign failure
+          'Check Voided Contract With ',  // Contract void
+        ];
+        
         const filteredTasks = json.data.filter((t: any) => {
-          const isAutoMentionTask = 
-            t.title?.startsWith('Review note on ') && 
-            t.description?.startsWith('You were mentioned in a note:');
-          return !isAutoMentionTask;
+          const title = t.title || '';
+          const createdAt = t.createdAt ? new Date(t.createdAt) : null;
+          
+          // Check if title matches an auto-created task pattern
+          const matchesAutoPattern = autoCreatedTaskPrefixes.some(prefix => title.startsWith(prefix));
+          
+          // Only filter out if: matches pattern AND created before cutoff date
+          if (matchesAutoPattern && createdAt && createdAt < autoTaskDisabledDate) {
+            return false; // Hide old auto-created tasks
+          }
+          
+          return true; // Show all other tasks
         });
         
         const items = filteredTasks.map((t: any) => ({
