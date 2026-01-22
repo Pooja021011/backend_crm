@@ -148,10 +148,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
         localStorage.setItem('user', JSON.stringify(data.user));
         setUser(data.user);
-        toast({
-          title: "Login Successful",
-          description: `Welcome back, ${data.user.firstName}!`,
-        });
+        // Success toast removed - only show errors
         return true;
       } else {
         toast({
@@ -281,10 +278,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       localStorage.removeItem('refreshToken');
       localStorage.removeItem('user');
       setUser(null);
-      toast({
-        title: "Logged Out",
-        description: "You have been successfully logged out.",
-      });
+      // Success toast removed - only show errors
     }
   };
 
