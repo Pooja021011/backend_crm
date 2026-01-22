@@ -4287,11 +4287,6 @@ const LeadEdit: React.FC = () => {
             
             // Reload lead to show updated stage
             await loadLead();
-            
-            toast({
-              title: "Success",
-              description: `${uploadedCount} photo(s) uploaded and stage updated`,
-            });
           } catch (error: any) {
             console.error('Error uploading photos:', error);
             toast({
