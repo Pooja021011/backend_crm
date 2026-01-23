@@ -1685,7 +1685,10 @@ const Inbox = () => {
       case 'call': return <Phone className="w-3 h-3" />;
       case 'task': return <CheckSquare className="w-3 h-3" />;
       case 'communication': return <MessageCircle className="w-3 h-3" />;
-      case 'reminder': return <Bell className="w-3 h-3" />;
+      case 'reminder': 
+        return message.reminderType === 'TASK_OVERDUE' ? 
+          <CheckSquare className="w-3 h-3" /> : 
+          <Bell className="w-3 h-3" />;
       case 'notification': return <Bell className="w-3 h-3" />;
       default: return <Mail className="w-3 h-3" />;
     }
