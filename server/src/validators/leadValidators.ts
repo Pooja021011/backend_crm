@@ -32,6 +32,7 @@ export const changeStageSchema = z.object({
 export const createSellerLeadSchema = z.object({
   type: z.literal('SELLER'),
   marketId: z.string().uuid().optional(),
+  leadSourceId: z.string().uuid().optional(),
   address: z.object({
     address1: z.string().default(''),
     city: z.string().default(''),
@@ -54,6 +55,7 @@ export const createSellerLeadSchema = z.object({
 export const createBuyerLeadSchema = z.object({
   type: z.literal('BUYER'),
   marketId: z.string().uuid().optional(),
+  leadSourceId: z.string().uuid().optional(),
   buyer: z.object({
     firstName: z.string().default(''),
     lastName: z.string().default(''),
@@ -73,6 +75,7 @@ export const createBuyerLeadSchema = z.object({
 export const createVendorLeadSchema = z.object({
   type: z.literal('VENDOR'),
   marketId: z.string().uuid().optional(),
+  leadSourceId: z.string().uuid().optional(),
   vendor: z.object({
     firstName: z.string().default(''),
     lastName: z.string().default(''),

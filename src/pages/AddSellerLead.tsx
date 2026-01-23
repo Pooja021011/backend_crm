@@ -152,6 +152,7 @@ const AddSellerLead = () => {
     try {
       const leadData = {
         type: 'SELLER' as const,
+        leadSourceId: formData.leadSource || undefined,
         seller: {
           firstName: formData.firstName.trim(),
           lastName: formData.lastName.trim(),
@@ -352,7 +353,7 @@ const AddSellerLead = () => {
                   </SelectTrigger>
                   <SelectContent>
                     {leadSources.map((source) => (
-                      <SelectItem key={source.id} value={source.name}>
+                      <SelectItem key={source.id} value={source.id}>
                         {source.name}
                       </SelectItem>
                     ))}
