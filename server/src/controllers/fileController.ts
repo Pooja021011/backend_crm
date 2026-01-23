@@ -3,6 +3,8 @@ import path from 'node:path';
 import multer from 'multer';
 import type { Request, Response } from 'express';
 import { fileRepository } from '../repositories/fileRepository.js';
+import heicConvert from 'heic-convert';
+import sharp from 'sharp';
 
 const uploadDir = path.resolve(process.cwd(), 'server', 'uploads');
 fs.mkdirSync(uploadDir, { recursive: true });
@@ -28,6 +30,48 @@ export const uploader = multer({
   fileFilter,
   limits: { fileSize: maxFileSize }
 });
+
+// Helper function to convert HEIC to JPEG
+async function convertHeicToJpeg(filePath: string): Promise<{ 
+  path: string; 
+  filename: string; 
+  size: number; 
+}> {
+  try {
+    const inputBuffer = fs.readFileSync(filePath);
+    
+    // Convert HEIC to JPEG
+    const outputBuffer = await heicConvert({
+      buffer: inputBuffer,
+      format: 'JPEG',
+      quality: 0.9
+    });
+
+    // Optimize with Sharp
+    const optimizedBuffer = await sharp(outputBuffer as Buffer)
+      .jpeg({ quality: 90 })
+      .toBuffer();
+
+    // Generate new filename with .jpg extension
+    const jpegPath = filePath.replace(/\.(heic|heif)$/i, '.jpg');
+    const jpegFilename = path.basename(jpegPath);
+    
+    // Write the converted file
+    fs.writeFileSync(jpegPath, optimizedBuffer);
+    
+    // Delete the original HEIC file
+    fs.unlinkSync(filePath);
+    
+    return {
+      path: jpegPath,
+      filename: jpegFilename,
+      size: optimizedBuffer.length
+    };
+  } catch (error) {
+    console.error('Error converting HEIC to JPEG:', error);
+    throw new Error('Failed to convert HEIC image');
+  }
+}
 
 export const fileController = {
   // List files for a specific lead
@@ -80,7 +124,7 @@ export const fileController = {
   // Upload new file (for route /leads/:id/files)
   async uploadFile(req: Request, res: Response) {
     try {
-      const file = (req as any).file as Express.Multer.File;
+      let file = (req as any).file as Express.Multer.File;
       if (!file) {
         return res.status(400).json({ success: false, error: 'No file provided' });
       }
@@ -107,6 +151,53 @@ export const fileController = {
         if (c.toLowerCase() === 'photo') return 'photos';
         return c || 'other';
       })();
+
+      // Validate file types for photos category ONLY
+      if (normalizedCategory === 'photos') {
+        const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/heic', 'image/heif'];
+        const allowedExtensions = ['.jpg', '.jpeg', '.png', '.heic', '.heif'];
+        
+        const fileName = file.originalname.toLowerCase();
+        const hasValidExtension = allowedExtensions.some(ext => fileName.endsWith(ext));
+        const hasValidMimeType = allowedMimeTypes.includes(file.mimetype.toLowerCase());
+        
+        if (!hasValidExtension && !hasValidMimeType) {
+          // Delete the uploaded file
+          fs.unlinkSync(file.path);
+          return res.status(400).json({ 
+            success: false, 
+            error: 'Invalid file type. Only JPEG, PNG, and HEIC images are allowed for photos.' 
+          });
+        }
+
+        // Convert HEIC/HEIF to JPEG
+        const isHeic = file.mimetype.toLowerCase().includes('heic') || 
+                       file.mimetype.toLowerCase().includes('heif') ||
+                       fileName.endsWith('.heic') ||
+                       fileName.endsWith('.heif');
+        
+        if (isHeic) {
+          try {
+            console.log(`🔄 Converting HEIC to JPEG: ${file.originalname}`);
+            const converted = await convertHeicToJpeg(file.path);
+            
+            // Update file info
+            file.filename = converted.filename;
+            file.originalname = file.originalname.replace(/\.(heic|heif)$/i, '.jpg');
+            file.mimetype = 'image/jpeg';
+            file.size = converted.size;
+            file.path = converted.path;
+            
+            console.log(`✅ Converted HEIC to JPEG: ${converted.filename}`);
+          } catch (error) {
+            console.error('HEIC conversion failed:', error);
+            return res.status(500).json({ 
+              success: false, 
+              error: 'Failed to process HEIC image' 
+            });
+          }
+        }
+      }
 
       const created = await fileRepository.createForLead(leadId, {
         filename: file.filename,
@@ -278,10 +369,51 @@ export const fileController = {
         return res.status(404).json({ error: 'File not found on disk' });
       }
 
-      res.setHeader('Content-Type', file.mimeType);
-      res.setHeader('Content-Disposition', `inline; filename="${file.originalName}"`);
-      
-      fs.createReadStream(filePath).pipe(res);
+      // Check if file is HEIC/HEIF and needs on-the-fly conversion
+      const isHeic = file.mimeType.toLowerCase().includes('heic') || 
+                     file.mimeType.toLowerCase().includes('heif') ||
+                     filePath.toLowerCase().endsWith('.heic') ||
+                     filePath.toLowerCase().endsWith('.heif');
+
+      if (isHeic) {
+        try {
+          console.log(`🔄 Converting HEIC to JPEG for preview: ${file.originalName}`);
+          
+          // Read the HEIC file
+          const inputBuffer = fs.readFileSync(filePath);
+          
+          // Convert to JPEG
+          const outputBuffer = await heicConvert({
+            buffer: inputBuffer,
+            format: 'JPEG',
+            quality: 0.9
+          });
+
+          // Optimize with Sharp
+          const optimizedBuffer = await sharp(outputBuffer as Buffer)
+            .jpeg({ quality: 90 })
+            .toBuffer();
+
+          // Send as JPEG
+          res.setHeader('Content-Type', 'image/jpeg');
+          res.setHeader('Content-Disposition', `inline; filename="${file.originalName.replace(/\.(heic|heif)$/i, '.jpg')}"`);
+          res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+          res.send(optimizedBuffer);
+          
+          console.log(`✅ HEIC converted successfully for preview`);
+        } catch (error) {
+          console.error('Error converting HEIC for preview:', error);
+          // Fallback to original file if conversion fails
+          res.setHeader('Content-Type', file.mimeType);
+          res.setHeader('Content-Disposition', `inline; filename="${file.originalName}"`);
+          fs.createReadStream(filePath).pipe(res);
+        }
+      } else {
+        // Normal file serving
+        res.setHeader('Content-Type', file.mimeType);
+        res.setHeader('Content-Disposition', `inline; filename="${file.originalName}"`);
+        fs.createReadStream(filePath).pipe(res);
+      }
     } catch (error) {
       console.error('Error previewing file:', error);
       res.status(500).json({ error: 'Failed to preview file' });

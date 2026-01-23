@@ -594,6 +594,21 @@ const Pipeline = () => {
       
       // Transform API data to match our component interface
       const transformedLeads = allLeadsData.map((lead: any) => {
+          // Debug: Log lead data to see what's available
+          if (!lead.owners || lead.owners.length === 0) {
+            console.log('⚠️ Lead without owners:', {
+              id: lead.id,
+              address: lead.address,
+              hasOwners: !!lead.owners,
+              ownerCount: lead.owners?.length || 0,
+              seller: lead.seller,
+              buyer: lead.buyer,
+              vendor: lead.vendor,
+              sellerName: lead.sellerName,
+              buyerName: lead.buyerName
+            });
+          }
+          
           // Handle address - backend returns string, but we need to handle both formats
           let addressDisplay = 'No address';
           if (typeof lead.address === 'string') {
@@ -604,19 +619,64 @@ const Pipeline = () => {
             addressDisplay = lead.address.address1;
           }
           
-          // Handle seller/buyer/vendor name
-          let ownerName = 'No seller';
-          if (lead.sellerName) {
-            ownerName = lead.sellerName;
-          } else if (lead.seller) {
-            ownerName = `${lead.seller.firstName} ${lead.seller.lastName}`;
-          } else if (lead.buyerName) {
-            ownerName = lead.buyerName;
-          } else if (lead.buyer) {
-            ownerName = `${lead.buyer.firstName} ${lead.buyer.lastName}`;
-          } else if (lead.vendor) {
-            ownerName = `${lead.vendor.firstName} ${lead.vendor.lastName}`;
+          // Handle seller/buyer/vendor name - same logic as Leads page
+          let ownerName = 'Unknown Caller';
+          
+          // Priority 1: Check lead owners first (primary source of truth)
+          if (lead.owners && lead.owners.length > 0) {
+            const primaryOwner = lead.owners.find((o: any) => o.isPrimary);
+            const primaryFn = (primaryOwner?.firstName || '').trim();
+            const primaryLn = (primaryOwner?.lastName || '').trim();
+            
+            if (primaryFn || primaryLn) {
+              ownerName = `${primaryFn} ${primaryLn}`.trim();
+            } else {
+              // If no primary, get first owner with name
+              const ownerWithName = lead.owners.find((o: any) => 
+                (o.firstName && String(o.firstName).trim()) || 
+                (o.lastName && String(o.lastName).trim())
+              );
+              if (ownerWithName) {
+                const fn = (ownerWithName.firstName || '').trim();
+                const ln = (ownerWithName.lastName || '').trim();
+                ownerName = `${fn} ${ln}`.trim();
+              }
+            }
           }
+          
+          // Priority 2: Fallback to existing seller/buyer/vendor logic
+          if (ownerName === 'Unknown Caller') {
+            if (lead.sellerName && lead.sellerName.trim()) {
+              ownerName = lead.sellerName.trim();
+            } else if (lead.seller) {
+              const sellerFn = (lead.seller.firstName || '').trim();
+              const sellerLn = (lead.seller.lastName || '').trim();
+              if (sellerFn || sellerLn) {
+                ownerName = `${sellerFn} ${sellerLn}`.trim();
+              }
+            } else if (lead.buyerName && lead.buyerName.trim()) {
+              ownerName = lead.buyerName.trim();
+            } else if (lead.buyer) {
+              const buyerFn = (lead.buyer.firstName || '').trim();
+              const buyerLn = (lead.buyer.lastName || '').trim();
+              if (buyerFn || buyerLn) {
+                ownerName = `${buyerFn} ${buyerLn}`.trim();
+              }
+            } else if (lead.vendor) {
+              const vendorFn = (lead.vendor.firstName || '').trim();
+              const vendorLn = (lead.vendor.lastName || '').trim();
+              if (vendorFn || vendorLn) {
+                ownerName = `${vendorFn} ${vendorLn}`.trim();
+              }
+            }
+          }
+          
+          // Final check: if ownerName is still empty string or only whitespace, set to "Unknown Caller"
+          if (!ownerName || ownerName.trim() === '') {
+            ownerName = 'Unknown Caller';
+          }
+          
+          console.log('👤 Final ownerName for lead:', lead.id, '→', ownerName);
           
           const stageId = lead.pipelineStageId || lead.stage || lead.pipelineStage?.id || 'unknown-stage';
           const stagePipelineKey =

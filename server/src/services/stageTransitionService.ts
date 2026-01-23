@@ -2,6 +2,7 @@ import { prisma } from '../config/db.js';
 import { taskRepository } from '../repositories/taskRepository.js';
 import { logger } from '../config/logger.js';
 import { docusignService } from './docusignService.js';
+import { env } from '../config/env.js';
 
 /**
  * Service for handling stage transition rules and validations
@@ -204,8 +205,8 @@ export const stageTransitionService = {
           : 0;
         const hasUnderwriting =
           !!underwritingCalc ||
-          (!!finalOfferFromFields && finalOfferFromFields > 0) ||
-          (Number.isFinite(inferredFinalOffer) && inferredFinalOffer > 0);
+          (finalOfferFromFields !== null && finalOfferFromFields !== undefined && Number.isFinite(finalOfferFromFields)) ||
+          (Number.isFinite(inferredFinalOffer)); // Removed > 0 check to allow $0 final offers
         if (!hasUnderwriting) allRequiredFields.push('underwritingCalculation');
         // Annual Taxes + Timeline must be explicitly entered (placeholders do not count).
         if (!taxesValue || taxesValue <= 0) allRequiredFields.push('underwritingTaxes');
@@ -378,25 +379,84 @@ export const stageTransitionService = {
           // Keeping the rest of Offer Made automation intact.
           logger.info({ leadId, stageName: stage.name }, 'Skipped auto-created Re-Offer task (rejected) - temporarily disabled');
         } else if (response === 'accepted') {
-          // Send contract via DocuSign
-          try {
-            logger.info({ leadId, stageName: stage.name }, 'Offer accepted - sending contract via DocuSign');
-            
-            const envelopeResult = await docusignService.createAndSendEnvelopeFromTemplate(leadId);
-            
-            // Update lead with DocuSign envelope info and change status to CONTRACT_SENT
-            await prisma.lead.update({
-              where: { id: leadId },
-              data: {
-                docusignEnvelopeId: envelopeResult.envelopeId,
-                contractSentAt: envelopeResult.sentAt,
-                contractVoidAt: envelopeResult.voidAt,
-                contractStatus: 'SENT',
-                esignProvider: 'docusign'
+          // Check if DocuSign is enabled
+          if (env.DOCUSIGN_ENABLED) {
+            // Send contract via DocuSign
+            try {
+              logger.info({ leadId, stageName: stage.name }, 'Offer accepted - sending contract via DocuSign');
+              
+              const envelopeResult = await docusignService.createAndSendEnvelopeFromTemplate(leadId);
+              
+              // Update lead with DocuSign envelope info and change status to CONTRACT_SENT
+              await prisma.lead.update({
+                where: { id: leadId },
+                data: {
+                  docusignEnvelopeId: envelopeResult.envelopeId,
+                  contractSentAt: envelopeResult.sentAt,
+                  contractVoidAt: envelopeResult.voidAt,
+                  contractStatus: 'SENT',
+                  esignProvider: 'docusign'
+                }
+              });
+              
+              // Find "Contract Sent" status and update lead
+              const contractSentStatus = await prisma.leadStatus.findFirst({
+                where: { 
+                  name: { 
+                    contains: 'Contract Sent', 
+                    mode: 'insensitive' 
+                  } 
+                }
+              });
+              
+              if (contractSentStatus) {
+                await prisma.lead.update({
+                  where: { id: leadId },
+                  data: { leadStatusId: contractSentStatus.id }
+                });
               }
-            });
+              
+              // DISABLED: Auto-task creation completely disabled
+              // Create task to follow up
+              // await taskRepository.create(leadId, {
+              //   title: `Contract Sent - Awaiting Signature for ${address}`,
+              //   description: `DocuSign contract sent. Expires on ${envelopeResult.voidAt.toLocaleDateString()}. Envelope ID: ${envelopeResult.envelopeId}`,
+              //   dueAt: new Date(envelopeResult.voidAt.getTime() - 24 * 60 * 60 * 1000), // 1 day before expiration
+              //   assignedToId: lead.assignedUserId || userId,
+              //   createdById: userId
+              // });
+              
+              logger.info({ 
+                leadId, 
+                envelopeId: envelopeResult.envelopeId,
+                voidAt: envelopeResult.voidAt
+              }, 'Contract sent via DocuSign successfully (auto-task creation disabled)');
+              
+            } catch (error: any) {
+              logger.error({ 
+                leadId, 
+                error: error.message 
+              }, 'Failed to send contract via DocuSign');
+              
+              // DISABLED: Auto-task creation completely disabled
+              // Create task for manual follow-up
+              // await taskRepository.create(leadId, {
+              //   title: `URGENT: DocuSign Failed for ${address}`,
+              //   description: `Failed to send contract via DocuSign: ${error.message}. Please send contract manually.`,
+              //   dueAt: new Date(),
+              //   assignedToId: lead.assignedUserId || userId,
+              //   createdById: userId
+              // });
+              
+              logger.error({ leadId }, 'DocuSign failed - auto-task creation disabled, please handle manually');
+              
+              // Don't throw - log error but don't block stage transition
+            }
+          } else {
+            // DocuSign is disabled - handle contract manually
+            logger.info({ leadId, stageName: stage.name }, 'Offer accepted - DocuSign is DISABLED, contract must be handled manually');
             
-            // Find "Contract Sent" status and update lead
+            // Find "Contract Sent" status and update lead to indicate manual process
             const contractSentStatus = await prisma.leadStatus.findFirst({
               where: { 
                 name: { 
@@ -405,49 +465,17 @@ export const stageTransitionService = {
                 } 
               }
             });
-            
+
             if (contractSentStatus) {
               await prisma.lead.update({
                 where: { id: leadId },
-                data: { leadStatusId: contractSentStatus.id }
+                data: { 
+                  leadStatusId: contractSentStatus.id,
+                  contractStatus: 'MANUAL' // Mark as requiring manual handling
+                }
               });
+              logger.info({ leadId }, 'Lead status updated to Contract Sent (MANUAL) - DocuSign disabled');
             }
-            
-            // DISABLED: Auto-task creation completely disabled
-            // Create task to follow up
-            // await taskRepository.create(leadId, {
-            //   title: `Contract Sent - Awaiting Signature for ${address}`,
-            //   description: `DocuSign contract sent. Expires on ${envelopeResult.voidAt.toLocaleDateString()}. Envelope ID: ${envelopeResult.envelopeId}`,
-            //   dueAt: new Date(envelopeResult.voidAt.getTime() - 24 * 60 * 60 * 1000), // 1 day before expiration
-            //   assignedToId: lead.assignedUserId || userId,
-            //   createdById: userId
-            // });
-            
-            logger.info({ 
-              leadId, 
-              envelopeId: envelopeResult.envelopeId,
-              voidAt: envelopeResult.voidAt
-            }, 'Contract sent via DocuSign successfully (auto-task creation disabled)');
-            
-          } catch (error: any) {
-            logger.error({ 
-              leadId, 
-              error: error.message 
-            }, 'Failed to send contract via DocuSign');
-            
-            // DISABLED: Auto-task creation completely disabled
-            // Create task for manual follow-up
-            // await taskRepository.create(leadId, {
-            //   title: `URGENT: DocuSign Failed for ${address}`,
-            //   description: `Failed to send contract via DocuSign: ${error.message}. Please send contract manually.`,
-            //   dueAt: new Date(),
-            //   assignedToId: lead.assignedUserId || userId,
-            //   createdById: userId
-            // });
-            
-            logger.error({ leadId }, 'DocuSign failed - auto-task creation disabled, please handle manually');
-            
-            // Don't throw - log error but don't block stage transition
           }
         }
       }

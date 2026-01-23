@@ -76,10 +76,8 @@ const SMSWidget: React.FC = () => {
         setRecentMessages(prev => [result, ...prev.slice(0, 4)]);
         setPhoneNumber('');
         setMessage('');
-        toast({
-          title: "SMS Sent Successfully",
-          description: `Message sent to ${formatUsPhoneForDisplay(formattedPhone)}`,
-        });
+        // Success toast removed - show only errors
+        console.log(`✅ SMS sent to ${formatUsPhoneForDisplay(formattedPhone)}`);
       } else {
         throw new Error(result.error || 'Failed to send SMS');
       }

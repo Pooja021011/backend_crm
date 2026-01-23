@@ -101,18 +101,15 @@ export function LeadFileGallery({
       >
         <CarouselContent>
           {files.map((file, idx) => {
-            // Most browsers can't render HEIC/HEIF in <img>, so treat them as non-images
-            // even though their mimeType begins with image/*.
-            const nonPreviewableImageMimes = new Set([
-              'image/heic',
-              'image/heif',
-              'image/heic-sequence',
-              'image/heif-sequence',
-            ]);
+            // Check if file is HEIC/HEIF by extension (handles cases where MIME type is application/octet-stream)
+            const fileName = (file.originalName || file.filename || '').toLowerCase();
+            const isHeicByExtension = fileName.endsWith('.heic') || fileName.endsWith('.heif');
+            
+            // Backend converts HEIC/HEIF to JPEG on-the-fly via /preview endpoint,
+            // so we can treat them as previewable images
             const isImage =
-              !!file.mimeType &&
-              file.mimeType.startsWith('image/') &&
-              !nonPreviewableImageMimes.has(file.mimeType);
+              (!!file.mimeType && file.mimeType.startsWith('image/')) || 
+              isHeicByExtension;
             const previewUrl = getFilePreviewUrl(file.id);
             const downloadUrl = getFileDownloadUrl(file.id);
             
@@ -238,34 +235,49 @@ export function LeadFileGallery({
 
             {activeFile && (
               <>
-                {activeFile.mimeType === 'application/pdf' ? (
-                  <iframe
-                    src={getFilePreviewUrl(activeFile.id)}
-                    className="w-full h-[80vh]"
-                    title={activeFile.originalName || activeFile.filename || "PDF Preview"}
-                  />
-                ) : activeFile.mimeType?.startsWith('image/') ? (
-                  <img
-                    src={getFilePreviewUrl(activeFile.id)}
-                    alt={activeFile.originalName || "File"}
-                    className="w-full max-h-[80vh] object-contain"
-                  />
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-[60vh] text-white">
-                    <FileText className="w-24 h-24 mb-4" />
-                    <p className="text-lg mb-2">{activeFile.originalName || activeFile.filename}</p>
-                    <p className="text-sm text-gray-400 mb-4">
-                      {((activeFile.size || 0) / 1024).toFixed(0)}KB
-                    </p>
-                    <Button
-                      onClick={() => window.open(getFilePreviewUrl(activeFile.id), '_blank')}
-                      className="bg-white text-black hover:bg-gray-200"
-                    >
-                      <FileText className="w-4 h-4 mr-2" />
-                      Open Preview
-                    </Button>
-                  </div>
-                )}
+                {(() => {
+                  // Check if file is HEIC/HEIF by extension (handles cases where MIME type is application/octet-stream)
+                  const fileName = (activeFile.originalName || activeFile.filename || '').toLowerCase();
+                  const isHeicByExtension = fileName.endsWith('.heic') || fileName.endsWith('.heif');
+                  
+                  // Check if it's an image (including HEIC/HEIF which backend converts)
+                  const isImage = activeFile.mimeType?.startsWith('image/') || isHeicByExtension;
+                  
+                  if (activeFile.mimeType === 'application/pdf') {
+                    return (
+                      <iframe
+                        src={getFilePreviewUrl(activeFile.id)}
+                        className="w-full h-[80vh]"
+                        title={activeFile.originalName || activeFile.filename || "PDF Preview"}
+                      />
+                    );
+                  } else if (isImage) {
+                    return (
+                      <img
+                        src={getFilePreviewUrl(activeFile.id)}
+                        alt={activeFile.originalName || "File"}
+                        className="w-full max-h-[80vh] object-contain"
+                      />
+                    );
+                  } else {
+                    return (
+                      <div className="flex flex-col items-center justify-center h-[60vh] text-white">
+                        <FileText className="w-24 h-24 mb-4" />
+                        <p className="text-lg mb-2">{activeFile.originalName || activeFile.filename}</p>
+                        <p className="text-sm text-gray-400 mb-4">
+                          {((activeFile.size || 0) / 1024).toFixed(0)}KB
+                        </p>
+                        <Button
+                          onClick={() => window.open(getFilePreviewUrl(activeFile.id), '_blank')}
+                          className="bg-white text-black hover:bg-gray-200"
+                        >
+                          <FileText className="w-4 h-4 mr-2" />
+                          Open Preview
+                        </Button>
+                      </div>
+                    );
+                  }
+                })()}
               </>
             )}
 

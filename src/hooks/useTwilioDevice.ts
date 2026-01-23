@@ -480,22 +480,15 @@ export const useTwilioDevice = () => {
             // Clear incoming call popup
             setIncomingCall(null);
             
-            toast({
-              title: 'Missed Call',
-              description: `Missed call from ${from}`,
-              duration: 3000,
-            });
+            // No toast - just log
+            console.log(`📵 Missed call from ${from}`);
           }, 20000); // 20 seconds - standard phone ring timeout
           
           // Store timeout ID to clear it if call is answered/rejected manually
           (call as any).missedCallTimeout = missedCallTimeout;
           
-          // Show toast notification
-          toast({
-            title: '📞 Call Waiting',
-            description: `Incoming call from ${from} while on active call`,
-            duration: 5000,
-          });
+          // No toast notification - only log
+          console.log(`📞 Call Waiting: Incoming call from ${from} while on active call`);
           
           return; // Don't auto-answer - show waiting popup
         }
@@ -561,11 +554,8 @@ export const useTwilioDevice = () => {
           // Clear incoming call popup
           setIncomingCall(null);
           
-          toast({
-            title: 'Missed Call',
-            description: `Missed call from ${from}`,
-            duration: 3000,
-          });
+          // No toast - just log
+          console.log(`📵 Missed call from ${from} (cancelled)`);
         });
         
         // Handle call disconnect (backup for cancelled)
@@ -609,22 +599,15 @@ export const useTwilioDevice = () => {
           // Clear incoming call popup
           setIncomingCall(null);
           
-          toast({
-            title: 'Missed Call',
-            description: `Missed call from ${from}`,
-            duration: 3000,
-          });
+          // No toast - just log
+          console.log(`📵 Missed call from ${from} (timed out)`);
         }, 20000); // 20 seconds - standard phone ring timeout
         
         // Store timeout ID to clear it if call is answered/rejected manually
         (call as any).missedCallTimeout = missedCallTimeout;
         
-        // Show toast notification
-        toast({
-          title: '📞 Incoming Call',
-          description: `Call from ${from}`,
-          duration: 10000,
-        });
+        // No toast notification - only log
+        console.log(`📞 Incoming Call from ${from}`);
       });
 
       // Register the device
@@ -869,19 +852,9 @@ export const useTwilioDevice = () => {
 
         cleanupCall('disconnect');
         
-        // Only show "Call Ended" if call was actually connected
-        // Otherwise, it was just ringing or busy
-        if (remoteAnswered) {
-          toast({
-            title: 'Call Ended',
-            description: 'The call has been disconnected',
-          });
-        } else {
-          toast({
-            title: 'Call Not Answered',
-            description: 'The call was not answered',
-          });
-        }
+        // Call ended - no toast notification (user initiated disconnect)
+        // Log for debugging only
+        console.log(remoteAnswered ? '✅ Call ended normally' : '📵 Call not answered');
       });
 
       call.on('cancel', () => {
@@ -898,10 +871,8 @@ export const useTwilioDevice = () => {
         }
         cleanupCall('cancel');
         
-        toast({
-          title: 'Call Cancelled',
-          description: 'The call was cancelled',
-        });
+        // No toast - user cancelled the call themselves
+        console.log('📵 Call cancelled by user');
       });
 
       call.on('reject', () => {
@@ -1080,10 +1051,8 @@ export const useTwilioDevice = () => {
           durationIntervalRef.current = null;
         }
 
-        toast({
-          title: 'Call Ended',
-          description: 'The call has been disconnected',
-        });
+        // No toast - just log
+        console.log('✅ Call ended (answered call disconnected)');
       });
 
       call.on('error', (error) => {
@@ -1110,10 +1079,8 @@ export const useTwilioDevice = () => {
         });
       });
 
-      toast({
-        title: 'Call Connected',
-        description: 'You are now connected',
-      });
+      // No toast - just log
+      console.log('✅ Call Connected - answered incoming call');
 
     } catch (error: any) {
       console.error('Error answering call:', error);
@@ -1182,10 +1149,8 @@ export const useTwilioDevice = () => {
       incomingCall.call.reject();
       setIncomingCall(null);
       
-      toast({
-        title: 'Call Sent to Voicemail',
-        description: 'The caller can leave a voicemail message',
-      });
+      // No toast - just log
+      console.log('📵 Call sent to voicemail');
     } catch (error: any) {
       console.error('Error rejecting call:', error);
       setIncomingCall(null);

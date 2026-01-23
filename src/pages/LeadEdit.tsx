@@ -274,6 +274,10 @@ const LeadEdit: React.FC = () => {
   const [showDueDiligenceCompletePopup, setShowDueDiligenceCompletePopup] = useState(false);
   const [showFollowUpTaskPopup, setShowFollowUpTaskPopup] = useState(false);
   const [pendingPipelineStatus, setPendingPipelineStatus] = useState<string | null>(null);
+  const [previousPipelineStatus, setPreviousPipelineStatus] = useState<string | null>(null); // Store original status before validation
+  const [pipelineSelectKey, setPipelineSelectKey] = useState(0); // Force Select re-render
+  const [previousLeadStatus, setPreviousLeadStatus] = useState<string | null>(null); // Store original lead status before validation
+  const [leadSelectKey, setLeadSelectKey] = useState(0); // Force Lead Status Select re-render
   const [pendingLeadStatus, setPendingLeadStatus] = useState<string | null>(null);
   const [missingDdFields, setMissingDdFields] = useState<string[]>([]);
   const [missingDdCompleteItems, setMissingDdCompleteItems] = useState<string[]>([]);
@@ -566,27 +570,44 @@ const LeadEdit: React.FC = () => {
   // Handler for pipeline status changes with validation (popup only when backend requires it)
   const handlePipelineStatusChange = (newStageId: string) => {
     const newStage = pipelineStages.find((s) => s.id === newStageId);
+    
+    console.log('🔄 Pipeline status change requested:', { 
+      from: pipelineStatus, 
+      to: newStageId, 
+      stageName: newStage?.name 
+    });
 
     void (async () => {
       try {
+        // Save current status before attempting change (for potential rollback)
+        setPreviousPipelineStatus(pipelineStatus);
+        
         // Flush any pending autosave before validating the stage move
         // This ensures validation uses the latest data the user just entered
         await flushAutoSave('manual');
         
         await requestStageMove(newStageId);
+        
+        // If successful, clear the previous status
+        setPreviousPipelineStatus(null);
+        console.log('✅ Pipeline status changed successfully');
       } catch (e: any) {
         const code = e?.code;
         const requiredFields: string[] = Array.isArray(e?.requiredFields) ? e.requiredFields : [];
         const stageNameLower = (newStage?.name || '').toLowerCase();
 
+        console.log('❌ Pipeline status change failed:', { code, requiredFields });
+
         if (code === 'VALIDATION_REQUIRED') {
           setPendingPipelineStatus(newStageId);
 
           if (requiredFields.includes('photos')) {
+            console.log('📸 Opening photo upload popup');
             setShowAppointmentPopup(true);
             return;
           }
           if (requiredFields.includes('followUpTask')) {
+            console.log('📋 Opening follow-up task popup');
             setShowFollowUpTaskPopup(true);
             return;
           }
@@ -612,6 +633,13 @@ const LeadEdit: React.FC = () => {
           }
         }
 
+        // If validation fails and no popup was shown, revert the status
+        if (previousPipelineStatus) {
+          console.log('⏪ Reverting pipeline status to:', previousPipelineStatus);
+          setPipelineStatus(previousPipelineStatus);
+          setPreviousPipelineStatus(null);
+        }
+
         toast({
           title: 'Stage Change Failed',
           description: e?.message || 'Failed to change pipeline stage',
@@ -622,6 +650,80 @@ const LeadEdit: React.FC = () => {
         setPipelineStatus(lead?.pipelineStageId || '');
       }
     })();
+  };
+
+  // Handler for lead status changes with validation
+  const handleLeadStatusChange = (newStatusId: string) => {
+    const newStatus = leadStatuses.find((s) => s.id === newStatusId);
+    const statusName = newStatus?.name?.toLowerCase() || '';
+    
+    console.log('🔄 Lead status change requested:', { 
+      from: leadStatus, 
+      to: newStatusId, 
+      statusName: newStatus?.name 
+    });
+
+    // Check if this is "Follow Up" status which requires a task
+    if (statusName === 'follow up') {
+      void (async () => {
+        try {
+          // Save current status before attempting change
+          setPreviousLeadStatus(leadStatus);
+          
+          // Flush autosave first
+          await flushAutoSave('manual');
+          
+          // Try to update the lead status
+          const updateResponse = await makeApiCall(`${API_BASE}/leads/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ leadStatusId: newStatusId })
+          });
+
+          if (!updateResponse.ok) {
+            const errorData: any = await updateResponse.json().catch(() => ({}));
+            
+            if (errorData.code === 'VALIDATION_REQUIRED' && errorData.requiredFields?.includes('followUpTask')) {
+              // Open the full task dialog instead of the simple popup
+              console.log('📋 Follow Up status requires task - opening task dialog');
+              setPendingLeadStatus(newStatusId);
+              openTaskDialog();
+              return;
+            }
+            
+            throw new Error(errorData.error || errorData.message || 'Failed to update lead status');
+          }
+
+          // Success - update local state
+          setLeadStatus(newStatusId);
+          setPreviousLeadStatus(null);
+          console.log('✅ Lead status changed successfully');
+          
+        } catch (e: any) {
+          console.log('❌ Lead status change failed:', e.message);
+          
+          // Revert to previous status
+          if (previousLeadStatus) {
+            console.log('⏪ Reverting lead status to:', previousLeadStatus);
+            setLeadStatus(previousLeadStatus);
+            setPreviousLeadStatus(null);
+          }
+          
+          // Only show toast if validation popup wasn't shown
+          if (!e.message?.includes('task')) {
+            toast({
+              title: 'Status Change Failed',
+              description: e.message || 'Failed to update lead status',
+              variant: 'destructive',
+            });
+          }
+        }
+      })();
+    } else {
+      // For other statuses, just update normally (will be auto-saved)
+      setLeadStatus(newStatusId);
+      scheduleAutoSave();
+    }
   };
 
   useEffect(() => {
@@ -1198,6 +1300,26 @@ const LeadEdit: React.FC = () => {
   };
 
   const closeTaskDialog = () => {
+    console.log('🚪 Task dialog closed');
+    
+    // If there was a pending lead status change, revert it
+    if (pendingLeadStatus && previousLeadStatus) {
+      console.log('⏪ Reverting lead status from', leadStatus, 'to', previousLeadStatus);
+      setLeadStatus(previousLeadStatus);
+      setLeadSelectKey(prev => prev + 1);
+      setPendingLeadStatus(null);
+      setPreviousLeadStatus(null);
+    }
+    
+    // If there was a pending pipeline status change, revert it
+    if (pendingPipelineStatus && previousPipelineStatus) {
+      console.log('⏪ Reverting pipeline status from', pipelineStatus, 'to', previousPipelineStatus);
+      setPipelineStatus(previousPipelineStatus);
+      setPipelineSelectKey(prev => prev + 1);
+      setPendingPipelineStatus(null);
+      setPreviousPipelineStatus(null);
+    }
+    
     setShowTaskDialog(false);
     setEditingTask(null);
     setTaskForm({
@@ -1273,6 +1395,7 @@ const LeadEdit: React.FC = () => {
           if (pendingPipelineStatus) {
             await requestStageMove(pendingPipelineStatus);
             setPendingPipelineStatus(null);
+            setPreviousPipelineStatus(null); // Clear previous status on success
             await loadLead();
           }
           
@@ -1291,6 +1414,8 @@ const LeadEdit: React.FC = () => {
                 // Update local state to reflect the change
                 setLeadStatus(pendingLeadStatus);
                 setPendingLeadStatus(null);
+                setPreviousLeadStatus(null); // Clear previous status on success
+                console.log('✅ Lead Status updated to Follow Up after task creation');
                 // Reload lead to get fresh data
                 await loadLead();
               } else {
@@ -1303,6 +1428,7 @@ const LeadEdit: React.FC = () => {
                 variant: "destructive"
               });
               setPendingLeadStatus(null);
+              setPreviousLeadStatus(null); // Clear on error too
             }
           }
         } else {
@@ -2775,10 +2901,8 @@ const LeadEdit: React.FC = () => {
 
         setDeal(data.data);
         setEditingDeal(false);
-        toast({
-          title: "Success",
-          description: "Transaction details saved successfully"
-        });
+        // Success toast removed - show only errors
+        console.log('✅ Transaction details saved successfully');
       } else {
         throw new Error('Failed to save deal');
       }
@@ -2863,10 +2987,8 @@ const LeadEdit: React.FC = () => {
         setOfferAmount('');
         setOfferStatus('PENDING');
         setOfferNotes('');
-        toast({
-          title: "Success",
-          description: "Buyer offer created successfully"
-        });
+        // Success toast removed - show only errors
+        console.log('✅ Buyer offer created successfully');
       } else {
         const error = await response.json();
         throw new Error(error.error || 'Failed to create offer');
@@ -2896,10 +3018,8 @@ const LeadEdit: React.FC = () => {
 
       if (response.ok) {
         await loadBuyerOffers();
-        toast({
-          title: "Success",
-          description: `Offer ${newStatus.toLowerCase()} successfully`
-        });
+        // Success toast removed - show only errors
+        console.log(`✅ Offer ${newStatus.toLowerCase()} successfully`);
       }
     } catch (error) {
       console.error('Error updating offer status:', error);
@@ -2919,10 +3039,8 @@ const LeadEdit: React.FC = () => {
 
       if (response.ok) {
         await loadBuyerOffers();
-        toast({
-          title: "Success",
-          description: "Offer deleted successfully"
-        });
+        // Success toast removed - show only errors
+        console.log('✅ Offer deleted successfully');
       }
     } catch (error) {
       console.error('Error deleting offer:', error);
@@ -2966,10 +3084,8 @@ const LeadEdit: React.FC = () => {
         setNewBuyerEmail('');
         setNewBuyerPhone('');
         setNewBuyerSegmentation('');
-        toast({
-          title: "Success",
-          description: "Buyer created successfully"
-        });
+        // Success toast removed - show only errors
+        console.log('✅ Buyer created successfully');
       } else {
         const error = await response.json();
         throw new Error(error.error || 'Failed to create buyer');
@@ -3053,14 +3169,52 @@ const LeadEdit: React.FC = () => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
+    // Validate file types
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/heic', 'image/heif'];
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.heic', '.heif'];
+    
+    const invalidFiles: string[] = [];
+    const validFiles: File[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const fileName = file.name.toLowerCase();
+      const fileType = file.type.toLowerCase();
+      
+      // Check both extension and mime type
+      const hasValidExtension = allowedExtensions.some(ext => fileName.endsWith(ext));
+      const hasValidMimeType = allowedTypes.includes(fileType);
+      
+      if (hasValidExtension || hasValidMimeType) {
+        validFiles.push(file);
+      } else {
+        invalidFiles.push(file.name);
+      }
+    }
+
+    // Show error if any invalid files
+    if (invalidFiles.length > 0) {
+      toast({
+        title: 'Invalid File Type',
+        description: `Only JPEG, PNG, and HEIC images are allowed. Rejected: ${invalidFiles.join(', ')}`,
+        variant: 'destructive'
+      });
+      
+      // Reset input
+      event.target.value = '';
+      
+      // If no valid files, return early
+      if (validFiles.length === 0) return;
+    }
+
     // Automatically expand the Photos section to show upload progress
     setIsPhotosOpen(true);
     setUploadingPhoto(true);
     
     try {
-      // Upload multiple photos
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+      // Upload valid photos only
+      for (let i = 0; i < validFiles.length; i++) {
+        const file = validFiles[i];
 
         const formData = new FormData();
         formData.append('file', file);
@@ -3082,6 +3236,9 @@ const LeadEdit: React.FC = () => {
         }
       }
 
+      console.log(`✅ Photo uploaded: ${validFiles.map(f => f.name).join(', ')}`);
+      console.log(`📸 Uploaded ${validFiles.length} of ${files.length} photos`);
+      
       // Lead Detail UX: no success toast (show only errors)
       loadPhotos();
       // Reset the input
@@ -3388,7 +3545,12 @@ const LeadEdit: React.FC = () => {
 
               <div>
                 <Label className="text-[9px] text-slate-500">Lead Status</Label>
-                <Select value={leadStatus} onValueChange={setLeadStatus} disabled={!canEditLead}>
+                <Select 
+                  key={leadSelectKey} 
+                  value={leadStatus} 
+                  onValueChange={handleLeadStatusChange} 
+                  disabled={!canEditLead}
+                >
                   <SelectTrigger className="h-5 text-[10px]"><SelectValue placeholder="Lead Status" /></SelectTrigger>
                   <SelectContent>
                     {leadStatuses.map((status) => (
@@ -3402,7 +3564,12 @@ const LeadEdit: React.FC = () => {
 
               <div>
                 <Label className="text-[9px] text-slate-500">Pipeline Status</Label>
-                <Select value={pipelineStatus} onValueChange={handlePipelineStatusChange} disabled={!canEditLead}>
+                <Select 
+                  key={pipelineSelectKey} 
+                  value={pipelineStatus} 
+                  onValueChange={handlePipelineStatusChange} 
+                  disabled={!canEditLead}
+                >
                   <SelectTrigger className="h-5 px-2 py-0 text-[10px] [&>span]:w-full [&>span]:text-left">
                     <SelectValue className="text-left" placeholder="Pipeline Status" />
                   </SelectTrigger>
@@ -3664,6 +3831,7 @@ const LeadEdit: React.FC = () => {
                           id="photo-upload" 
                           type="file" 
                           multiple
+                          accept=".jpg,.jpeg,.png,.heic,.heif,image/jpeg,image/png,image/heic,image/heif"
                           className="hidden" 
                           onChange={handlePhotoUpload} 
                           disabled={uploadingPhoto} 
@@ -4218,8 +4386,17 @@ const LeadEdit: React.FC = () => {
       <AppointmentCompletePopup
         open={showAppointmentPopup}
         onClose={() => {
+          console.log('🚪 Appointment popup closed');
           setShowAppointmentPopup(false);
+          // Revert to previous status since user cancelled
+          if (previousPipelineStatus) {
+            console.log('⏪ Reverting status to:', previousPipelineStatus);
+            setPipelineStatus(previousPipelineStatus);
+          }
           setPendingPipelineStatus(null);
+          setPreviousPipelineStatus(null);
+          // Force Select component to re-render
+          setPipelineSelectKey(prev => prev + 1);
         }}
         leadId={id || ''}
         onSubmit={async (files) => {
@@ -4291,6 +4468,7 @@ const LeadEdit: React.FC = () => {
             
             setShowAppointmentPopup(false);
             setPendingPipelineStatus(null);
+            setPreviousPipelineStatus(null);
             
             // Reload lead to show updated stage
             await loadLead();
@@ -4308,9 +4486,18 @@ const LeadEdit: React.FC = () => {
       <DueDiligencePopup
         open={showDueDiligencePopup}
         onClose={() => {
+          console.log('🚪 Due Diligence popup closed');
           setShowDueDiligencePopup(false);
           setMissingDdFields([]);
+          // Revert to previous status since user cancelled
+          if (previousPipelineStatus) {
+            console.log('⏪ Reverting status to:', previousPipelineStatus);
+            setPipelineStatus(previousPipelineStatus);
+          }
           setPendingPipelineStatus(null);
+          setPreviousPipelineStatus(null);
+          // Force Select component to re-render
+          setPipelineSelectKey(prev => prev + 1);
         }}
         existingData={lead?.customFields}
         missingFields={missingDdFields}
@@ -4375,6 +4562,7 @@ const LeadEdit: React.FC = () => {
             setShowDueDiligencePopup(false);
             setMissingDdFields([]);
             setPendingPipelineStatus(null);
+            setPreviousPipelineStatus(null);
             
             // Reload lead to show updated data
             await loadLead();
@@ -4393,17 +4581,35 @@ const LeadEdit: React.FC = () => {
         open={showDueDiligenceCompletePopup}
         missingItems={missingDdCompleteItems}
         onClose={() => {
+          console.log('🚪 Due Diligence Complete popup closed');
           setShowDueDiligenceCompletePopup(false);
           setMissingDdCompleteItems([]);
+          // Revert to previous status since user cancelled
+          if (previousPipelineStatus) {
+            console.log('⏪ Reverting status to:', previousPipelineStatus);
+            setPipelineStatus(previousPipelineStatus);
+          }
           setPendingPipelineStatus(null);
+          setPreviousPipelineStatus(null);
+          // Force Select component to re-render
+          setPipelineSelectKey(prev => prev + 1);
         }}
       />
       
       <OfferMadePopup
         open={showOfferMadePopup}
         onClose={() => {
+          console.log('🚪 Offer Made popup closed');
           setShowOfferMadePopup(false);
+          // Revert to previous status since user cancelled
+          if (previousPipelineStatus) {
+            console.log('⏪ Reverting status to:', previousPipelineStatus);
+            setPipelineStatus(previousPipelineStatus);
+          }
           setPendingPipelineStatus(null);
+          setPreviousPipelineStatus(null);
+          // Force Select component to re-render
+          setPipelineSelectKey(prev => prev + 1);
         }}
         existingData={lead?.customFields}
         onSubmit={async (data) => {
@@ -4474,6 +4680,7 @@ const LeadEdit: React.FC = () => {
             
             setShowOfferMadePopup(false);
             setPendingPipelineStatus(null);
+            setPreviousPipelineStatus(null);
             
             // Reload lead to show updated data
             await loadLead();
@@ -4492,9 +4699,44 @@ const LeadEdit: React.FC = () => {
 
       <FollowUpTaskRequiredPopup
         open={showFollowUpTaskPopup}
+        message={
+          pendingLeadStatus 
+            ? 'Please create a follow-up task before changing Lead Status to Follow Up.' 
+            : 'Please create a follow-up task before moving this lead to Long Term Follow Up.'
+        }
         onClose={() => {
+          console.log('🚪 Follow-up task popup closed without creating task');
+          console.log('📊 State before close:', { 
+            showFollowUpTaskPopup, 
+            pipelineStatus, 
+            previousPipelineStatus,
+            pendingPipelineStatus,
+            leadStatus,
+            previousLeadStatus,
+            pendingLeadStatus
+          });
+          
           setShowFollowUpTaskPopup(false);
+          
+          // Revert pipeline status if that's what triggered the popup
+          if (previousPipelineStatus) {
+            console.log('⏪ Reverting pipeline status from', pipelineStatus, 'to', previousPipelineStatus);
+            setPipelineStatus(previousPipelineStatus);
+            setPipelineSelectKey(prev => prev + 1);
+          }
           setPendingPipelineStatus(null);
+          setPreviousPipelineStatus(null);
+          
+          // Revert lead status if that's what triggered the popup
+          if (previousLeadStatus) {
+            console.log('⏪ Reverting lead status from', leadStatus, 'to', previousLeadStatus);
+            setLeadStatus(previousLeadStatus);
+            setLeadSelectKey(prev => prev + 1);
+          }
+          setPendingLeadStatus(null);
+          setPreviousLeadStatus(null);
+          
+          console.log('✅ Popup cleanup complete, Selects will re-render');
         }}
         onSubmit={async ({ title, dueAt }) => {
           try {
@@ -4511,9 +4753,29 @@ const LeadEdit: React.FC = () => {
 
             setShowFollowUpTaskPopup(false);
 
+            // Handle pipeline status change if that's what triggered this
             if (pendingPipelineStatus) {
               await requestStageMove(pendingPipelineStatus);
               setPendingPipelineStatus(null);
+              setPreviousPipelineStatus(null);
+              await loadLead();
+            }
+            
+            // Handle lead status change if that's what triggered this
+            if (pendingLeadStatus) {
+              const updateResponse = await makeApiCall(`${API_BASE}/leads/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ leadStatusId: pendingLeadStatus })
+              });
+              
+              if (updateResponse.ok) {
+                setLeadStatus(pendingLeadStatus);
+                console.log('✅ Lead status updated to Follow Up after task creation');
+              }
+              
+              setPendingLeadStatus(null);
+              setPreviousLeadStatus(null);
               await loadLead();
             }
           } catch (e: any) {

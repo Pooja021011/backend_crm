@@ -27,5 +27,7 @@ export const env = {
   DOCUSIGN_TEMPLATE_ID: process.env.DOCUSIGN_TEMPLATE_ID || '',
   DOCUSIGN_WEBHOOK_SECRET: process.env.DOCUSIGN_WEBHOOK_SECRET || '',
   CONTRACT_EXPIRATION_DAYS: Number(process.env.CONTRACT_EXPIRATION_DAYS || 7),
+  // DocuSign Feature Flag - Set to 'true' to enable, 'false' or omit to disable
+  DOCUSIGN_ENABLED: process.env.DOCUSIGN_ENABLED === 'true',
 };
 

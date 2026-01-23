@@ -167,10 +167,8 @@ export const EnhancedPipeline: React.FC<EnhancedPipelineProps> = ({ pipelineKey,
       // Reload data after updating attention status
       await loadPipelineData();
       
-      toast({
-        title: "Success",
-        description: "Needs attention status updated"
-      });
+      // Success toast removed - show only errors
+      console.log('✅ Needs attention status updated');
     } catch (error) {
       toast({
         title: "Error",
@@ -193,10 +191,8 @@ export const EnhancedPipeline: React.FC<EnhancedPipelineProps> = ({ pipelineKey,
 
       if (response.ok) {
         await loadPipelineData();
-        toast({
-          title: "Success",
-          description: "Lead moved successfully"
-        });
+        // Success toast removed - show only errors
+        console.log('✅ Lead moved successfully');
       }
     } catch (error) {
       toast({

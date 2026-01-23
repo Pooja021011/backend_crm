@@ -25,11 +25,23 @@ export const AppointmentCompletePopup = ({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const incoming = Array.from(e.target.files);
+      
+      // Filter for images only (JPEG, PNG, HEIC)
+      const allowedExtensions = ['.jpg', '.jpeg', '.png', '.heic', '.heif'];
+      const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/heic', 'image/heif'];
+      
+      const validFiles = incoming.filter(file => {
+        const fileName = file.name.toLowerCase();
+        const hasValidExtension = allowedExtensions.some(ext => fileName.endsWith(ext));
+        const hasValidMimeType = allowedMimeTypes.includes(file.type.toLowerCase());
+        return hasValidExtension || hasValidMimeType;
+      });
+      
       // Append so user can select multiple times (bulk upload), while de-duping by file identity
       setFiles((prev) => {
         const seen = new Set(prev.map((f) => `${f.name}:${f.size}:${f.lastModified}`));
         const next = [...prev];
-        for (const f of incoming) {
+        for (const f of validFiles) {
           const key = `${f.name}:${f.size}:${f.lastModified}`;
           if (!seen.has(key)) {
             seen.add(key);
@@ -69,10 +81,10 @@ export const AppointmentCompletePopup = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Upload className="w-5 h-5 text-purple-600" />
-            Pictures or Files Required
+            Pictures Required
           </DialogTitle>
           <DialogDescription>
-            Please upload at least one picture or file before moving to this stage.
+            Please upload at least one picture before moving to this stage. Only JPEG, PNG, and HEIC images are allowed.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -87,6 +99,7 @@ export const AppointmentCompletePopup = ({
               id={inputId}
               type="file" 
               multiple 
+              accept=".jpg,.jpeg,.png,.heic,.heif,image/jpeg,image/png,image/heic,image/heif"
               onChange={handleFileChange}
               className="hidden"
             />
@@ -118,7 +131,7 @@ export const AppointmentCompletePopup = ({
               onClick={handleSubmit} 
               disabled={files.length === 0 || uploading}
             >
-              {uploading ? 'Uploading...' : `Upload ${files.length} File${files.length !== 1 ? 's' : ''}`}
+              {uploading ? 'Uploading...' : `Upload ${files.length} Picture${files.length !== 1 ? 's' : ''}`}
             </Button>
           </DialogFooter>
         </div>
@@ -440,10 +453,12 @@ export const FollowUpTaskRequiredPopup = ({
   open,
   onClose,
   onSubmit,
+  message,
 }: {
   open: boolean;
   onClose: () => void;
   onSubmit: (data: { title: string; dueAt: string }) => Promise<void>;
+  message?: string;
 }) => {
   const [title, setTitle] = useState('');
   const [dueAt, setDueAt] = useState('');
@@ -475,7 +490,7 @@ export const FollowUpTaskRequiredPopup = ({
             Follow-up Task Required
           </DialogTitle>
           <DialogDescription>
-            Please create a follow-up task before moving this lead to Long Term Follow Up.
+            {message || 'Please create a follow-up task for this lead.'}
           </DialogDescription>
         </DialogHeader>
 

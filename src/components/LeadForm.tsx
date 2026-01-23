@@ -185,10 +185,8 @@ export const LeadForm: React.FC<LeadFormProps> = ({ type, onSubmit, onCancel, is
   const onFormSubmit = async (data: any) => {
     try {
       await onSubmit(data);
-      toast({
-        title: "Success!",
-        description: `${type.toLowerCase()} lead created successfully.`,
-      });
+      // Success toast removed - show only errors
+      console.log(`✅ ${type.toLowerCase()} lead created successfully`);
     } catch (error: any) {
       toast({
         title: "Error",

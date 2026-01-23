@@ -19,6 +19,12 @@ export const docusignService = {
    * Get JWT access token for DocuSign API
    */
   async getAccessToken(): Promise<string> {
+    // Check if DocuSign is enabled
+    if (!env.DOCUSIGN_ENABLED) {
+      logger.warn('DocuSign is disabled - skipping access token request');
+      return ''; // Return empty string instead of throwing
+    }
+
     try {
       const apiClient = new docusign.ApiClient();
       apiClient.setBasePath(env.DOCUSIGN_BASE_PATH);
@@ -58,6 +64,18 @@ export const docusignService = {
    * Create and send envelope from template for a lead
    */
   async createAndSendEnvelopeFromTemplate(leadId: string): Promise<EnvelopeResult> {
+    // Check if DocuSign is enabled
+    if (!env.DOCUSIGN_ENABLED) {
+      logger.warn({ leadId }, 'DocuSign is disabled - skipping envelope creation');
+      // Return a dummy result to prevent errors
+      return {
+        envelopeId: 'DISABLED',
+        status: 'disabled',
+        voidAt: new Date(),
+        sentAt: new Date()
+      };
+    }
+
     try {
       // 1. Fetch lead with all necessary data
       const lead = await prisma.lead.findUnique({
@@ -198,6 +216,19 @@ export const docusignService = {
    * Get envelope status from DocuSign
    */
   async getEnvelopeStatus(envelopeId: string): Promise<any> {
+    // Check if DocuSign is enabled
+    if (!env.DOCUSIGN_ENABLED) {
+      logger.warn({ envelopeId }, 'DocuSign is disabled - skipping envelope status check');
+      return {
+        envelopeId,
+        status: 'disabled',
+        sentDateTime: null,
+        completedDateTime: null,
+        voidedDateTime: null,
+        declinedDateTime: null
+      };
+    }
+
     try {
       const apiClient = await this.getApiClient();
       const envelopesApi = new docusign.EnvelopesApi(apiClient);
@@ -222,6 +253,12 @@ export const docusignService = {
    * Download signed document
    */
   async downloadSignedDocument(envelopeId: string): Promise<Buffer> {
+    // Check if DocuSign is enabled
+    if (!env.DOCUSIGN_ENABLED) {
+      logger.warn({ envelopeId }, 'DocuSign is disabled - skipping document download');
+      return Buffer.from(''); // Return empty buffer instead of throwing
+    }
+
     try {
       const apiClient = await this.getApiClient();
       const envelopesApi = new docusign.EnvelopesApi(apiClient);

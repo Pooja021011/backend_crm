@@ -35,6 +35,15 @@ export const docusignWebhookController = {
    */
   async handleWebhook(req: Request, res: Response) {
     try {
+      // Check if DocuSign is enabled
+      if (!env.DOCUSIGN_ENABLED) {
+        logger.warn('DocuSign webhook received but DocuSign is DISABLED');
+        return res.status(503).json({ 
+          error: 'DocuSign is disabled',
+          message: 'DocuSign integration is currently disabled on this server' 
+        });
+      }
+
       // Verify signature (optional but recommended)
       if (env.DOCUSIGN_WEBHOOK_SECRET) {
         const isValid = docusignWebhookController.verifyWebhookSignature(req);

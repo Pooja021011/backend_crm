@@ -10,6 +10,17 @@ export const docusignTestController = {
    * Test DocuSign configuration and credentials
    */
   async testConfiguration(req: Request, res: Response) {
+    // Check if DocuSign is enabled first
+    if (!env.DOCUSIGN_ENABLED) {
+      return res.json({
+        timestamp: new Date().toISOString(),
+        overallStatus: '⚠️ DocuSign is DISABLED',
+        ready: false,
+        message: 'DocuSign integration is currently disabled. Set DOCUSIGN_ENABLED=true in .env to enable.',
+        checks: []
+      });
+    }
+
     const results: any = {
       timestamp: new Date().toISOString(),
       checks: []
@@ -119,6 +130,15 @@ export const docusignTestController = {
    */
   async testSendEnvelope(req: Request, res: Response) {
     try {
+      // Check if DocuSign is enabled
+      if (!env.DOCUSIGN_ENABLED) {
+        return res.status(503).json({
+          success: false,
+          error: 'DocuSign is disabled',
+          message: 'DocuSign integration is currently disabled. Set DOCUSIGN_ENABLED=true in .env to enable.'
+        });
+      }
+
       const { leadId } = req.params;
 
       if (!leadId) {
@@ -151,6 +171,7 @@ export const docusignTestController = {
     }
   }
 };
+
 
 
 
