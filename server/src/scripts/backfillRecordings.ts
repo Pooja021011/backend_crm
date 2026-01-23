@@ -155,10 +155,10 @@ async function backfillRecording(options: BackfillOptions) {
     const phoneNormalized = phone.replace(/[\s\(\)\-]/g, '');
     console.log(`🔍 Searching for Communication with phone: ${phone}...`);
     
-    // Search within recording date ±10 minutes
+    // Search within recording date ±30 minutes for better matching
     const recordingDate = new Date(recordingData.dateCreated);
-    const startTime = new Date(recordingDate.getTime() - 10 * 60 * 1000);
-    const endTime = new Date(recordingDate.getTime() + 10 * 60 * 1000);
+    const startTime = new Date(recordingDate.getTime() - 30 * 60 * 1000);
+    const endTime = new Date(recordingDate.getTime() + 30 * 60 * 1000);
 
     communication = await prisma.communication.findFirst({
       where: {
@@ -186,8 +186,8 @@ async function backfillRecording(options: BackfillOptions) {
     console.log(`🔍 Searching for Communication in Lead: ${leadId}...`);
     
     const recordingDate = new Date(recordingData.dateCreated);
-    const startTime = new Date(recordingDate.getTime() - 10 * 60 * 1000);
-    const endTime = new Date(recordingDate.getTime() + 10 * 60 * 1000);
+    const startTime = new Date(recordingDate.getTime() - 30 * 60 * 1000);
+    const endTime = new Date(recordingDate.getTime() + 30 * 60 * 1000);
 
     communication = await prisma.communication.findFirst({
       where: {

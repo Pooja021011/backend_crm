@@ -364,7 +364,7 @@ export const callController = {
       const fromNormalized = typeof from === 'string' ? from.replace(/[\s\(\)\-]/g, '') : from;
       
       // DEBUG LOG: Before OUTBOUND phone search with normalization details (H2, H3, H4)
-      const timeWindowStart = new Date(Date.now() - 10 * 60 * 1000); // Extended to 10 minutes for better matching
+      const timeWindowStart = new Date(Date.now() - 30 * 60 * 1000); // Extended to 30 minutes to catch late callbacks
       logger.info({
         event: 'RECORDING_SEARCH_BY_PHONE',
         to,
@@ -373,35 +373,57 @@ export const callController = {
         fromNormalized,
         toLast10: toNormalized.slice(-10),
         timeWindowStart: timeWindowStart.toISOString(),
-        timeWindowMinutes: 10
+        timeWindowMinutes: 30
       }, 'Searching for OUTBOUND Communication by phone number');
       
       console.log('🔍 Searching for OUTBOUND Communication without callSid:', {
         toNormalized,
-        fromNormalized
+        fromNormalized,
+        last10: toNormalized.slice(-10)
       });
 
-      // Search for recent OUTBOUND calls (within last 10 minutes) matching the phone number
+      // Search for recent OUTBOUND calls (within last 30 minutes) matching the phone number
       // Extended time window and improved matching for browser calls
-      const recentOutbound = await prisma.communication.findFirst({
+      // First, try to find one without a recording already attached
+      let recentOutbound = await prisma.communication.findFirst({
         where: {
           type: 'CALL',
           direction: 'OUTBOUND',
           occurredAt: {
-            gte: new Date(Date.now() - 10 * 60 * 1000) // Last 10 minutes (extended for slower callbacks)
+            gte: new Date(Date.now() - 30 * 60 * 1000) // Last 30 minutes (extended to catch late callbacks)
           },
           OR: [
             { metadata: { path: ['to'], string_contains: toNormalized.slice(-10) } },
             { subject: { contains: toNormalized.slice(-10) } }
           ],
-          // Prefer Communications without a recording already attached
-          metadata: {
-            path: ['recordingSid'],
-            equals: null
+          // Exclude Communications that already have a recording
+          NOT: {
+            metadata: {
+              path: ['recordingSid'],
+              not: null
+            }
           }
         },
         orderBy: { occurredAt: 'desc' }
       });
+
+      // If no match found without recording, try without the recording filter (fallback)
+      if (!recentOutbound) {
+        recentOutbound = await prisma.communication.findFirst({
+          where: {
+            type: 'CALL',
+            direction: 'OUTBOUND',
+            occurredAt: {
+              gte: new Date(Date.now() - 30 * 60 * 1000)
+            },
+            OR: [
+              { metadata: { path: ['to'], string_contains: toNormalized.slice(-10) } },
+              { subject: { contains: toNormalized.slice(-10) } }
+            ]
+          },
+          orderBy: { occurredAt: 'desc' }
+        });
+      }
 
       // DEBUG LOG: After OUTBOUND search with age calculation (H2, H3)
       logger.info({
