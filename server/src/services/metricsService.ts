@@ -255,8 +255,10 @@ export const metricsService = {
       });
       const leadsReceivedCount = leadsReceived.length;
 
-      const leadsPerContractPct = leadsReceivedCount
-        ? (totalContracts / leadsReceivedCount) * 100
+      // Leads per contract ratio: how many leads needed to get one contract
+      // Example: 100 leads received, 10 contracts = 10.00 (10 leads per contract)
+      const leadsPerContract = totalContracts > 0
+        ? leadsReceivedCount / totalContracts
         : 0;
 
       // Mishandled = SLA breaches on new leads this month + stale 48h on all active ACQ leads
@@ -291,7 +293,7 @@ export const metricsService = {
       return {
         mode: 'acq' as const,
         totalContracts,
-        leadsPerContract: Number(leadsPerContractPct.toFixed(2)),
+        leadsPerContract: Number(leadsPerContract.toFixed(2)),
         leadsReceived: leadsReceivedCount,
         leadsMishandled,
         slaBreaches,
