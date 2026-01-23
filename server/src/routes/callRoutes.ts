@@ -68,6 +68,11 @@ router.post('/log-outbound', (req, res, next) =>
   callController.logOutbound(req, res).catch(next)
 );
 
+// Log when outbound call connects/is answered
+router.post('/log-outbound-connected', (req, res, next) =>
+  callController.logOutboundConnected(req, res).catch(next)
+);
+
 // Get call history
 router.get('/history', (req, res, next) => 
   callController.getCallHistory(req, res).catch(next)

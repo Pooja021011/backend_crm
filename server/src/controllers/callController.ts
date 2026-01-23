@@ -326,37 +326,33 @@ export const callController = {
         await prisma.communication.update({
           where: { id: existing.id },
           data: {
-            metadata: {
-              ...prev,
-              callSid,
-              recordingSid,
-              recordingUrl,
-              recordingDuration,
-              recordingSource,
-              isVoicemail,
-            },
-          },
-        });
+        metadata: {
+          ...prev,
+          callSid,
+          recordingSid,
+          recordingUrl,
+          recordingDuration,
+          recordingSource,
+          isVoicemail,
+        },
+      },
+    });
 
-        // If this is a real call recording (not voicemail) for an OUTBOUND call, it implies the callee answered.
-        // Promote pipeline stage to "Contact Made" when currently in "New Lead" or "No Contact Made".
-        if (!isVoicemail && String(existing.direction || '').toUpperCase() === 'OUTBOUND') {
-          await communicationResponseService
-            .handleCommunicationEvent(existing.leadId, 'INBOUND', 'CALL')
-            .catch(() => {});
-        }
+    // NOTE: We no longer move to "Contact Made" here for OUTBOUND calls
+    // because we now handle it in logOutboundConnected when the call connects
+    // This prevents voicemails from incorrectly moving leads to "Contact Made"
 
-        // DEBUG LOG: Recording attached to existing Communication
-        logger.info({
-          event: 'RECORDING_ATTACHED_TO_EXISTING',
-          communicationId: existing.id,
-          leadId: existing.leadId,
-          recordingSid
-        }, 'Recording attached to existing Communication');
+    // DEBUG LOG: Recording attached to existing Communication
+    logger.info({
+      event: 'RECORDING_ATTACHED_TO_EXISTING',
+      communicationId: existing.id,
+      leadId: existing.leadId,
+      recordingSid
+    }, 'Recording attached to existing Communication');
 
-        console.log('✅ Recording attached to existing Communication:', existing.id);
-        return res.json({ success: true, updated: true });
-      }
+    console.log('✅ Recording attached to existing Communication:', existing.id);
+    return res.json({ success: true, updated: true });
+  }
 
       // For OUTBOUND calls from browser, the Communication might exist without a callSid
       // Try to find recent OUTBOUND Communication by phone number
@@ -440,36 +436,33 @@ export const callController = {
         await prisma.communication.update({
           where: { id: recentOutbound.id },
           data: {
-            metadata: {
-              ...prev,
-              callSid,
-              recordingSid,
-              recordingUrl,
-              recordingDuration,
-              recordingSource,
-              isVoicemail,
-            },
-          },
-        });
+        metadata: {
+          ...prev,
+          callSid,
+          recordingSid,
+          recordingUrl,
+          recordingDuration,
+          recordingSource,
+          isVoicemail,
+        },
+      },
+    });
 
-        // Same promotion for OUTBOUND calls where we matched by phone (Communication lacked callSid initially).
-        if (!isVoicemail && String(recentOutbound.direction || '').toUpperCase() === 'OUTBOUND') {
-          await communicationResponseService
-            .handleCommunicationEvent(recentOutbound.leadId, 'INBOUND', 'CALL')
-            .catch(() => {});
-        }
+    // NOTE: We no longer move to "Contact Made" here for OUTBOUND calls
+    // because we now handle it in logOutboundConnected when the call connects
+    // This prevents voicemails from incorrectly moving leads to "Contact Made"
 
-        // DEBUG LOG: Recording attached to OUTBOUND Communication
-        logger.info({
-          event: 'RECORDING_ATTACHED_TO_OUTBOUND',
-          communicationId: recentOutbound.id,
-          leadId: recentOutbound.leadId,
-          recordingSid
-        }, 'Recording attached to OUTBOUND Communication');
+    // DEBUG LOG: Recording attached to OUTBOUND Communication
+    logger.info({
+      event: 'RECORDING_ATTACHED_TO_OUTBOUND',
+      communicationId: recentOutbound.id,
+      leadId: recentOutbound.leadId,
+      recordingSid
+    }, 'Recording attached to OUTBOUND Communication');
 
-        console.log('✅ Recording attached to recent OUTBOUND Communication:', recentOutbound.id);
-        return res.json({ success: true, updated: true });
-      }
+    console.log('✅ Recording attached to recent OUTBOUND Communication:', recentOutbound.id);
+    return res.json({ success: true, updated: true });
+  }
 
       // If no existing Communication (common for offline voicemail flows), create one.
       // Determine the owning user by destination phone number.
@@ -822,6 +815,79 @@ export const callController = {
     } catch (error: any) {
       logger.error(`Error logging outbound call: ${String(error?.message || error)}`);
       return res.status(500).json({ success: false, error: 'Failed to log outbound call' });
+    }
+  },
+
+  /**
+   * Log when OUTBOUND call is connected/answered
+   * Called from frontend when call.on('accept') fires
+   */
+  async logOutboundConnected(req: Request, res: Response) {
+    try {
+      const { to, leadId, callSid } = req.body as { to?: string; leadId?: string; callSid?: string };
+      const userId = (req as any).user?.id as string | undefined;
+
+      if (!userId) {
+        return res.status(401).json({ success: false, error: 'Unauthorized' });
+      }
+
+      if (!leadId) {
+        return res.status(400).json({ success: false, error: 'leadId is required' });
+      }
+
+      logger.info({ leadId, to, callSid, userId }, 'OUTBOUND call connected/answered');
+
+      // Find the Communication for this outbound call
+      const toNormalized = to ? to.replace(/[\s\(\)\-]/g, '') : '';
+      
+      const communication = await prisma.communication.findFirst({
+        where: {
+          leadId,
+          type: 'CALL',
+          direction: 'OUTBOUND',
+          occurredAt: {
+            gte: new Date(Date.now() - 5 * 60 * 1000) // Last 5 minutes
+          },
+          ...(toNormalized ? {
+            OR: [
+              { metadata: { path: ['to'], string_contains: toNormalized.slice(-10) } },
+              { subject: { contains: toNormalized.slice(-10) } }
+            ]
+          } : {})
+        },
+        orderBy: { occurredAt: 'desc' }
+      });
+
+      if (communication) {
+        // Update the Communication to mark it as answered/connected
+        const prevMetadata = (communication.metadata as any) || {};
+        await prisma.communication.update({
+          where: { id: communication.id },
+          data: {
+            metadata: {
+              ...prevMetadata,
+              status: 'connected',
+              connectedAt: new Date().toISOString(),
+              ...(callSid ? { callSid } : {})
+            }
+          }
+        });
+
+        // IMPORTANT: Move lead to "Contact Made" since call was answered
+        // This is the reliable way to track answered OUTBOUND calls
+        await communicationResponseService
+          .handleCommunicationEvent(leadId, 'INBOUND', 'CALL')
+          .catch((err) => logger.error({ err }, 'Failed to update lead stage on call connect'));
+
+        logger.info({ leadId, communicationId: communication.id }, 'OUTBOUND call marked as connected, lead moved to Contact Made');
+      } else {
+        logger.warn({ leadId, to }, 'Could not find Communication for outbound call connection');
+      }
+
+      return res.json({ success: true });
+    } catch (error: any) {
+      logger.error(`Error logging outbound call connection: ${String(error?.message || error)}`);
+      return res.status(500).json({ success: false, error: 'Failed to log call connection' });
     }
   },
 

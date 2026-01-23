@@ -766,6 +766,25 @@ export const useTwilioDevice = () => {
 
         setCallStatus({ status: 'connected', duration: 0 });
 
+        // Log to backend that OUTBOUND call was answered (best-effort, don't block)
+        void (async () => {
+          try {
+            const callSid = (call as any).parameters?.CallSid || call.customParameters?.get('CallSid');
+            await makeApiCall(`${API_BASE}/calls/log-outbound-connected`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                to: currentCallNumber,
+                leadId: currentCallLeadId || undefined,
+                callSid: callSid || undefined
+              })
+            });
+            console.log('✅ Logged OUTBOUND call connection to backend');
+          } catch (logError) {
+            console.error('Failed to log OUTBOUND call connection:', logError);
+          }
+        })();
+
         // Start duration counter
         let seconds = 0;
         durationIntervalRef.current = setInterval(() => {
