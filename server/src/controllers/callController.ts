@@ -364,7 +364,7 @@ export const callController = {
       const fromNormalized = typeof from === 'string' ? from.replace(/[\s\(\)\-]/g, '') : from;
       
       // DEBUG LOG: Before OUTBOUND phone search with normalization details (H2, H3, H4)
-      const timeWindowStart = new Date(Date.now() - 5 * 60 * 1000);
+      const timeWindowStart = new Date(Date.now() - 10 * 60 * 1000); // Extended to 10 minutes for better matching
       logger.info({
         event: 'RECORDING_SEARCH_BY_PHONE',
         to,
@@ -373,7 +373,7 @@ export const callController = {
         fromNormalized,
         toLast10: toNormalized.slice(-10),
         timeWindowStart: timeWindowStart.toISOString(),
-        timeWindowMinutes: 5
+        timeWindowMinutes: 10
       }, 'Searching for OUTBOUND Communication by phone number');
       
       console.log('🔍 Searching for OUTBOUND Communication without callSid:', {
@@ -381,18 +381,24 @@ export const callController = {
         fromNormalized
       });
 
-      // Search for recent OUTBOUND calls (within last 5 minutes) matching the phone number
+      // Search for recent OUTBOUND calls (within last 10 minutes) matching the phone number
+      // Extended time window and improved matching for browser calls
       const recentOutbound = await prisma.communication.findFirst({
         where: {
           type: 'CALL',
           direction: 'OUTBOUND',
           occurredAt: {
-            gte: new Date(Date.now() - 5 * 60 * 1000) // Last 5 minutes
+            gte: new Date(Date.now() - 10 * 60 * 1000) // Last 10 minutes (extended for slower callbacks)
           },
           OR: [
             { metadata: { path: ['to'], string_contains: toNormalized.slice(-10) } },
             { subject: { contains: toNormalized.slice(-10) } }
-          ]
+          ],
+          // Prefer Communications without a recording already attached
+          metadata: {
+            path: ['recordingSid'],
+            equals: null
+          }
         },
         orderBy: { occurredAt: 'desc' }
       });
