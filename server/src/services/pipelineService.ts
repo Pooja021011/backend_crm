@@ -506,7 +506,11 @@ export const pipelineService = {
               direction: true,
               createdAt: true,
               occurredAt: true,
-              metadata: true
+              metadata: true,
+              reads: filters.userId ? {
+                where: { userId: filters.userId },
+                select: { readAt: true }
+              } : false
             }
           },
           leadBuyers: {
@@ -593,6 +597,13 @@ export const pipelineService = {
         // Get buyer names for dispositions
         const buyerNames = lead.leadBuyers.map(lb => `${lb.buyer.firstName} ${lb.buyer.lastName}`);
         
+        // Calculate unread count for the current user
+        const unreadCount = filters.userId 
+          ? lead.communications.filter((c: any) => 
+              !c.reads || c.reads.length === 0
+            ).length 
+          : 0;
+        
         return {
           id: lead.id,
           address: lead.address ? `${lead.address.address1}, ${lead.address.city}, ${lead.address.state}` : 'Address not provided',
@@ -641,7 +652,16 @@ export const pipelineService = {
           needsAttention: lead.needsAttention,
           attentionReason: lead.attentionReason,
           
-          // Tasks
+          // Unread communications count
+          unreadCount: unreadCount,
+          
+          // Tasks - store raw tasks for needs attention filtering
+          tasks: lead.tasks,
+          
+          // Communications - store raw communications for needs attention filtering
+          communications: lead.communications,
+          
+          // Tasks counts
           // NOTE: Exclude mention-generated "Review note on ..." tasks from pipeline card counts.
           // Those are created from note @mentions and should not inflate operational task KPIs on pipeline cards.
           openTasks: lead.tasks.filter(task => {
@@ -664,11 +684,150 @@ export const pipelineService = {
       });
 
       // Filter for needs attention if requested
-      if (filters && filters.needsAttention === true) {
+      if (filters && filters.needsAttention === true && filters.userRole && filters.userId) {
         const now = new Date();
+        
+        if (filters.userRole === 'ADMIN') {
+          const filteredLeads = transformedLeads.filter(lead => {
+            // Criterion 1: No outreach in 72h + no open tasks (for ACQ-assigned leads)
+            const hasAcqAgent = !!lead.assignedUserId;
+            const lastContactDate = lead.lastContactDate ? new Date(lead.lastContactDate) : null;
+            const hoursSinceLastContact = lastContactDate 
+              ? (now.getTime() - lastContactDate.getTime()) / (1000 * 60 * 60)
+              : Infinity;
+            const hasNoOpenTasks = !lead.tasks || lead.tasks.filter((t: any) => t.status === 'OPEN').length === 0;
+            const noOutreachNoTasks = hasAcqAgent && hoursSinceLastContact >= 72 && hasNoOpenTasks;
+            
+            // Criterion 2: Task past due for 48+ hours
+            const tasksPastDue48h = lead.tasks?.some((t: any) => {
+              if (t.status !== 'OPEN') return false;
+              const dueDate = new Date(t.dueAt);
+              if (dueDate >= now) return false; // Not overdue
+              const hoursPastDue = (now.getTime() - dueDate.getTime()) / (1000 * 60 * 60);
+              return hoursPastDue >= 48;
+            }) || false;
+            
+            // Criterion 3: Unread communications for this admin
+            const hasUnreadComms = lead.unreadCount > 0;
+            
+            return noOutreachNoTasks || tasksPastDue48h || hasUnreadComms;
+          });
+          
+          return filteredLeads.sort((a: any, b: any) => {
+            const aStageIndex = stageOrderIndexByLeadId.get(a.id) ?? 0;
+            const bStageIndex = stageOrderIndexByLeadId.get(b.id) ?? 0;
+            if (aStageIndex !== bStageIndex) return aStageIndex - bStageIndex;
+            const aAt = new Date(a.lastActivityAt).getTime();
+            const bAt = new Date(b.lastActivityAt).getTime();
+            if (aAt !== bAt) return bAt - aAt; // DESC: most recent first
+            return String(a.id).localeCompare(String(b.id));
+          });
+        }
+        
+        if (filters.userRole === 'MANAGER') {
+          const filteredLeads = transformedLeads.filter(lead => {
+            // Manager only sees ACQ agent leads (SELLER type in Acquisitions pipeline)
+            const isAcqLead = lead.leadType === 'SELLER' && !!lead.assignedUserId;
+            if (!isAcqLead) return false;
+            
+            // Criterion 1: New Leads pipeline stage
+            const stageName = (lead.stageName || '').toLowerCase();
+            const isNewLeadStage = stageName === 'new lead' || stageName === 'new leads';
+            
+            // Criterion 2: No communications in 48h + no open tasks
+            // Check ALL communications (not just lastContactAt)
+            const hasCommunications = lead.communications && lead.communications.length > 0;
+            let hoursSinceLastComm = Infinity;
+            if (hasCommunications) {
+              const lastCommDate = lead.communications[0]?.occurredAt || lead.communications[0]?.createdAt;
+              if (lastCommDate) {
+                hoursSinceLastComm = (now.getTime() - new Date(lastCommDate).getTime()) / (1000 * 60 * 60);
+              }
+            }
+            const hasNoOpenTasks = !lead.tasks || lead.tasks.filter((t: any) => t.status === 'OPEN').length === 0;
+            const noCommNoTasks = hoursSinceLastComm >= 48 && hasNoOpenTasks;
+            
+            // Criterion 3: Task past due for 30+ minutes
+            const tasksPastDue30min = lead.tasks?.some((t: any) => {
+              if (t.status !== 'OPEN') return false;
+              const dueDate = new Date(t.dueAt);
+              if (dueDate >= now) return false; // Not overdue
+              const minutesPastDue = (now.getTime() - dueDate.getTime()) / (1000 * 60);
+              return minutesPastDue >= 30;
+            }) || false;
+            
+            // Criterion 4: Unread communications for this manager
+            const hasUnreadComms = lead.unreadCount > 0;
+            
+            return isNewLeadStage || noCommNoTasks || tasksPastDue30min || hasUnreadComms;
+          });
+          
+          return filteredLeads.sort((a: any, b: any) => {
+            const aStageIndex = stageOrderIndexByLeadId.get(a.id) ?? 0;
+            const bStageIndex = stageOrderIndexByLeadId.get(b.id) ?? 0;
+            if (aStageIndex !== bStageIndex) return aStageIndex - bStageIndex;
+            const aAt = new Date(a.lastActivityAt).getTime();
+            const bAt = new Date(b.lastActivityAt).getTime();
+            if (aAt !== bAt) return bAt - aAt; // DESC: most recent first
+            return String(a.id).localeCompare(String(b.id));
+          });
+        }
+        
+        if (filters.userRole === 'ACQ') {
+          const filteredLeads = transformedLeads.filter(lead => {
+            // ACQ agent only sees their own assigned leads (SELLER type)
+            const isMyLead = lead.leadType === 'SELLER' && lead.assignedUserId === filters.userId;
+            if (!isMyLead) return false;
+            
+            // Criterion 1: New Leads pipeline stage for this user
+            const stageName = (lead.stageName || '').toLowerCase();
+            const isNewLeadStage = stageName === 'new lead' || stageName === 'new leads';
+            
+            // Criterion 2: No communications in 36h + no open tasks for this user's leads
+            // Check ALL communications (not just lastContactAt)
+            const hasCommunications = lead.communications && lead.communications.length > 0;
+            let hoursSinceLastComm = Infinity;
+            if (hasCommunications) {
+              const lastCommDate = lead.communications[0]?.occurredAt || lead.communications[0]?.createdAt;
+              if (lastCommDate) {
+                hoursSinceLastComm = (now.getTime() - new Date(lastCommDate).getTime()) / (1000 * 60 * 60);
+              }
+            }
+            const hasNoOpenTasks = !lead.tasks || lead.tasks.filter((t: any) => t.status === 'OPEN').length === 0;
+            const noCommNoTasks = hoursSinceLastComm >= 36 && hasNoOpenTasks;
+            
+            // Criterion 3: Any past due task for this user (no minimum time threshold)
+            const hasPastDueTask = lead.tasks?.some((t: any) => {
+              if (t.status !== 'OPEN') return false;
+              if (t.assignedToId !== filters.userId) return false; // Only this user's tasks
+              const dueDate = new Date(t.dueAt);
+              return dueDate < now; // Any amount past due
+            }) || false;
+            
+            // Criterion 4: Unread communications for this ACQ agent
+            const hasUnreadComms = lead.unreadCount > 0;
+            
+            return isNewLeadStage || noCommNoTasks || hasPastDueTask || hasUnreadComms;
+          });
+          
+          return filteredLeads.sort((a: any, b: any) => {
+            const aStageIndex = stageOrderIndexByLeadId.get(a.id) ?? 0;
+            const bStageIndex = stageOrderIndexByLeadId.get(b.id) ?? 0;
+            if (aStageIndex !== bStageIndex) return aStageIndex - bStageIndex;
+            const aAt = new Date(a.lastActivityAt).getTime();
+            const bAt = new Date(b.lastActivityAt).getTime();
+            if (aAt !== bAt) return bAt - aAt; // DESC: most recent first
+            return String(a.id).localeCompare(String(b.id));
+          });
+        }
+        
+        // For other roles, fall back to old logic for now (will be updated in future)
         const filteredLeads = transformedLeads.filter(lead => {
           // No contact in 72+ hours
-          const hoursSinceLastContact = Math.floor((now.getTime() - new Date(lead.lastContactDate).getTime()) / (1000 * 60 * 60));
+          const lastContactDate = lead.lastContactDate ? new Date(lead.lastContactDate) : null;
+          const hoursSinceLastContact = lastContactDate
+            ? Math.floor((now.getTime() - lastContactDate.getTime()) / (1000 * 60 * 60))
+            : Infinity;
           
           return (
             hoursSinceLastContact >= 72 ||
