@@ -370,10 +370,13 @@ export const fileController = {
       }
 
       // Check if file is HEIC/HEIF and needs on-the-fly conversion
+      // Check MIME type, file path, AND original filename (for old files with wrong MIME type)
       const isHeic = file.mimeType.toLowerCase().includes('heic') || 
                      file.mimeType.toLowerCase().includes('heif') ||
                      filePath.toLowerCase().endsWith('.heic') ||
-                     filePath.toLowerCase().endsWith('.heif');
+                     filePath.toLowerCase().endsWith('.heif') ||
+                     (file.originalName && file.originalName.toLowerCase().endsWith('.heic')) ||
+                     (file.originalName && file.originalName.toLowerCase().endsWith('.heif'));
 
       if (isHeic) {
         try {
