@@ -109,7 +109,8 @@ interface LeadData {
   leadType?: 'SELLER' | 'BUYER' | 'VENDOR' | string;
   pipelineStageId?: string;
   assignedUserId?: string;
-  dispositionAgentId?: string;
+  // Backend schema uses dispAgentId (Disposition agent)
+  dispAgentId?: string;
   leadSource?: any;
   leadStatus?: any;
   customFields?: Record<string, any>;
@@ -598,18 +599,27 @@ const LeadEdit: React.FC = () => {
 
     void (async () => {
       try {
+        // CRITICAL: Block autosave during stage transition to prevent data loss
+        popupOpenRef.current = true;
+        
         // Save current status before attempting change (for potential rollback)
         setPreviousPipelineStatus(pipelineStatus);
         
-        // Flush any pending autosave before validating the stage move
-        // This ensures validation uses the latest data the user just entered
-        // Use forceAllFields=true to save ALL fields, not just dirty ones
-        await flushAutoSave('manual', { forceAllFields: true });
+        // Save only dirty fields before validation (if any)
+        // Backend will use its own database data for validation
+        if (dirtyFieldsRef.current.size > 0) {
+          await flushAutoSave('manual', { forceAllFields: false });
+        }
         
         await requestStageMove(newStageId);
         
-        // If successful, clear the previous status
+        // If successful, clear the previous status and reload lead to get updated timeline dates
         setPreviousPipelineStatus(null);
+        await loadLead(); // Reload to get offerMadeAt, underContractAt etc from backend
+        
+        // CRITICAL: Re-enable autosave after reload completes
+        popupOpenRef.current = false;
+        
         console.log('✅ Pipeline status changed successfully');
       } catch (e: any) {
         const code = e?.code;
@@ -690,8 +700,10 @@ const LeadEdit: React.FC = () => {
           // Save current status before attempting change
           setPreviousLeadStatus(leadStatus);
           
-          // Flush autosave first
-          await flushAutoSave('manual', { forceAllFields: true });
+          // Save only dirty fields (if any) before status change
+          if (dirtyFieldsRef.current.size > 0) {
+            await flushAutoSave('manual', { forceAllFields: false });
+          }
           
           // Try to update the lead status
           const updateResponse = await makeApiCall(`${API_BASE}/leads/${id}`, {
@@ -883,7 +895,7 @@ const LeadEdit: React.FC = () => {
         console.log('Setting pipeline status:', leadData.pipelineStageId);
         setPipelineStatus(leadData.pipelineStageId || '');
         setAcquisitionsAgent(leadData.assignedUserId || '');
-        setDispositionsAgent(leadData.dispositionAgentId || '');
+        setDispositionsAgent(leadData.dispAgentId || '');
 
         // Reset autosave baseline after hydrating the page to prevent immediate autosave
         suppressNextAutoSaveRef.current = true;
@@ -1538,8 +1550,15 @@ const LeadEdit: React.FC = () => {
   const buildPropertyDetails = useCallback((onlyDirtyFields: boolean = true) => {
     const allFields = {
       // ARV is stored separately from underwriting (but we keep underwritingArv in sync).
-      // Only save ARV if it has a meaningful value (> 0), otherwise don't save it
-      arv: (arvValue && arvValue > 0) ? arvValue : undefined,
+      // IMPORTANT:
+      // - If user clears ARV, we must persist that as NULL (otherwise backend keeps old value).
+      // - Only do this when ARV is actually dirty, so we don't send null during initial hydration.
+      arv:
+        arvValue && arvValue > 0
+          ? arvValue
+          : dirtyFieldsRef.current.has('arv')
+            ? null
+            : undefined,
       propertyType: propertyType || null,
       sqft: sqft ? parseInt(sqft) : null,
       lotSize: lotSize || null,
@@ -1618,7 +1637,7 @@ const LeadEdit: React.FC = () => {
   const buildLeadPatchPayload = useCallback((options?: { includeLeadOwners?: boolean; forceAllFields?: boolean }) => {
     // Note: pipeline stage moves are handled separately via the pipeline move endpoint.
     const updates: any = {};
-    const includeLeadOwners = options?.includeLeadOwners !== false;
+    const includeLeadOwners = options?.includeLeadOwners === true; // Default FALSE - only include when explicitly requested
     const forceAllFields = options?.forceAllFields || false;
 
     // Contacts (primary + multi-contact support)
@@ -1662,11 +1681,18 @@ const LeadEdit: React.FC = () => {
 
     // Custom fields: merge to avoid wiping unknown keys
     // IMPORTANT: Only include dirty fields during autosave to prevent data loss
-    // BUT for stage validation (forceAllFields=true), include ALL fields to ensure backend has complete data
+    // Do NOT spread lead?.customFields because it might be stale - let backend merge handle it
     const propertyDetails = buildPropertyDetails(!forceAllFields); // false = all fields, true = only dirty
     
     // Only update customFields if there are actually dirty fields to save OR if forcing all fields
-    if (Object.keys(propertyDetails).length > 0 || includeLeadOwners || forceAllFields) {
+    if (Object.keys(propertyDetails).length > 0 || includeLeadOwners) {
+      // Send ONLY the dirty/changed fields - backend will merge with existing data
+      updates.customFields = {
+        ...propertyDetails,
+        ...(includeLeadOwners ? { contacts: filteredContacts } : {}),
+      };
+    } else if (forceAllFields) {
+      // When forcing all fields (rare case), include full customFields
       updates.customFields = {
         ...(lead?.customFields || {}),
         ...propertyDetails,
@@ -1689,24 +1715,36 @@ const LeadEdit: React.FC = () => {
     if (autoSaveBaselineReadyRef.current && (lead?.assignedUserId || '') !== (acquisitionsAgent || '')) {
       updates.assignedUserId = acquisitionsAgent ? acquisitionsAgent : null;
     }
-    if (autoSaveBaselineReadyRef.current && (lead?.dispositionAgentId || '') !== (dispositionsAgent || '')) {
-      updates.dispositionAgentId = dispositionsAgent ? dispositionsAgent : null;
+    if (autoSaveBaselineReadyRef.current && ((lead as any)?.dispAgentId || '') !== (dispositionsAgent || '')) {
+      updates.dispAgentId = dispositionsAgent ? dispositionsAgent : null;
     }
 
     // Lead source
     if (leadSource) {
       const source = leadSources.find((s) => s.name === leadSource || s.id === leadSource);
-      updates.leadSourceId = source?.id || null;
+      const nextId = source?.id || null;
+      const currentId = (lead as any)?.leadSourceId || (lead as any)?.leadSource?.id || null;
+      if (autoSaveBaselineReadyRef.current && nextId !== currentId) {
+        updates.leadSourceId = nextId;
+      }
     } else if (lead?.leadSource?.id) {
-      updates.leadSourceId = null;
+      if (autoSaveBaselineReadyRef.current) {
+        updates.leadSourceId = null;
+      }
     }
 
     // Lead status
     if (leadStatus) {
       const status = leadStatuses.find((s) => s.id === leadStatus || s.name === leadStatus);
-      updates.leadStatusId = status?.id || null;
+      const nextId = status?.id || null;
+      const currentId = (lead as any)?.leadStatusId || (lead as any)?.leadStatus?.id || null;
+      if (autoSaveBaselineReadyRef.current && nextId !== currentId) {
+        updates.leadStatusId = nextId;
+      }
     } else if (lead?.leadStatus?.id) {
-      updates.leadStatusId = null;
+      if (autoSaveBaselineReadyRef.current) {
+        updates.leadStatusId = null;
+      }
     }
 
     return updates;
@@ -1745,10 +1783,22 @@ const LeadEdit: React.FC = () => {
         includeLeadOwners: false,
         forceAllFields: options?.forceAllFields || false
       });
+      
+      // If payload is empty (no updates), skip autosave
+      if (!payload || Object.keys(payload).length === 0) {
+        if (autoSaveStatus === 'dirty') setAutoSaveStatus('idle');
+        return;
+      }
+      
       const payloadStr = JSON.stringify(payload);
 
       // No actual lead changes → do nothing (prevents flicker from unrelated inputs like task dialogs)
       if (!payloadStr || payloadStr === lastSavedPayloadRef.current) {
+        // IMPORTANT: If our computed payload matches the last saved snapshot, the UI should not remain "dirty".
+        // Clear dirty fields so downstream callers (e.g., rehab quick-save) don't keep retrying forever.
+        if (dirtyFieldsRef.current.size > 0) {
+          dirtyFieldsRef.current.clear();
+        }
         if (autoSaveStatus === 'dirty') setAutoSaveStatus('idle');
         return;
       }
@@ -1885,6 +1935,13 @@ const LeadEdit: React.FC = () => {
   );
 
   const requestImmediateRehabSave = useCallback(() => {
+    // Guard: avoid loops from child components emitting "change" callbacks during initial mount/hydration
+    // or when stage validation is running.
+    if (!id || !lead || !canEditLead) return;
+    if (!autoSaveBaselineReadyRef.current) return;
+    if (suppressNextAutoSaveRef.current) return;
+    if (popupOpenRef.current || pendingPipelineStatusRef.current || pendingLeadStatus) return;
+
     // Coalesce rapid rehab edits (toggles, sliders, calculations) into a single quick save.
     if (rehabImmediateSaveTimerRef.current) {
       clearTimeout(rehabImmediateSaveTimerRef.current);
@@ -1893,7 +1950,7 @@ const LeadEdit: React.FC = () => {
     rehabImmediateSaveTimerRef.current = setTimeout(() => {
       void flushAutoSave('manual');
     }, 250);
-  }, [flushAutoSave]);
+  }, [id, lead, canEditLead, flushAutoSave, pendingLeadStatus]);
 
   const scheduleAutoSave = useCallback(() => {
     if (!id || !lead || !canEditLead) return;
@@ -2090,7 +2147,7 @@ const LeadEdit: React.FC = () => {
       // Only add these fields if they have values
       if (pipelineStatus) updates.pipelineStageId = pipelineStatus;
       if (acquisitionsAgent && acquisitionsAgent !== 'unassigned') updates.assignedUserId = acquisitionsAgent;
-      if (dispositionsAgent && dispositionsAgent !== 'unassigned') updates.dispositionAgentId = dispositionsAgent;
+      if (dispositionsAgent && dispositionsAgent !== 'unassigned') updates.dispAgentId = dispositionsAgent;
       
       // Handle lead source
       if (leadSource) {
@@ -3714,6 +3771,10 @@ const LeadEdit: React.FC = () => {
                 appointmentDate: appointmentDate || lead.customFields?.appointmentDate,
                 rehabBudget: rehabBudget ? parseInt(rehabBudget) : lead.customFields?.rehabBudget,
               }}
+              lead={{
+                pipelineStage: lead.pipelineStage,
+                stageEnteredAt: lead.stageEnteredAt
+              }}
               onRefresh={() => {
                 loadLead();
                 loadDeal();
@@ -3961,16 +4022,72 @@ const LeadEdit: React.FC = () => {
                   initialNumberOfWindows={rehabNumberOfWindows}
                   initialCustomValues={rehabCustomValues}
                   onTotalChange={(total) => {
-                    setRehabBudget(total.toString());
+                    const next = total.toString();
+                    if (next === (rehabBudget || '')) return;
+                    setRehabBudget(next);
+                    markFieldDirty('rehabBudget');
                     requestImmediateRehabSave();
                   }}
                   onBathroomsChange={(n) => setBathrooms(String(n))}
                   onDataChange={(data) => {
-                    setRehabFinishLevel(data.finishLevel as 'low_end' | 'mid_range' | 'high_end');
-                    setRehabToggledItems(data.toggledItems);
-                    setRehabNumberOfWindows(data.numberOfWindows);
-                    setRehabCustomValues(data.customValues || {});
-                    requestImmediateRehabSave();
+                    const nextFinish = data.finishLevel as 'low_end' | 'mid_range' | 'high_end';
+                    const nextToggled =
+                      data.toggledItems && typeof data.toggledItems === 'object' ? data.toggledItems : {};
+                    const nextWindows = data.numberOfWindows;
+                    const nextCustomRaw = data.customValues || {};
+
+                    // Only persist when something actually changed (prevents infinite save loops).
+                    let changed = false;
+
+                    if (nextFinish !== rehabFinishLevel) {
+                      setRehabFinishLevel(nextFinish);
+                      markFieldDirty('rehabFinishLevel');
+                      changed = true;
+                    }
+
+                    // Compare toggled items as object map (the component uses { [key]: boolean })
+                    const currentToggled =
+                      rehabToggledItems && typeof rehabToggledItems === 'object' ? rehabToggledItems : {};
+                    const toggledSame = JSON.stringify(currentToggled) === JSON.stringify(nextToggled);
+                    if (!toggledSame) {
+                      setRehabToggledItems(nextToggled);
+                      markFieldDirty('rehabToggledItems');
+                      changed = true;
+                    }
+
+                    if ((rehabNumberOfWindows as any) !== nextWindows) {
+                      setRehabNumberOfWindows(nextWindows);
+                      markFieldDirty('rehabNumberOfWindows');
+                      changed = true;
+                    }
+
+                    // Normalize & deep-compare customValues so new object/array references don't trigger saves.
+                    // RehabBudgetCalculatorCompact always emits miscLines even when empty.
+                    const normalizeCustom = (raw: any) => {
+                      const line0 = Array.isArray(raw?.miscLines) ? raw.miscLines[0] : undefined;
+                      const miscLabel = String(line0?.label ?? raw?.miscLabel ?? '').trim();
+                      const miscValue = Number(line0?.value ?? raw?.miscValue ?? 0) || 0;
+                      // Treat fully-empty as "unset" to avoid endless churn.
+                      if (!miscLabel && miscValue === 0) return {};
+                      return {
+                        miscLabel,
+                        miscValue,
+                        miscLines: [{ label: miscLabel, value: miscValue }],
+                      };
+                    };
+
+                    const nextCustom = normalizeCustom(nextCustomRaw);
+                    const currentCustom = normalizeCustom(rehabCustomValues || {});
+                    const customSame = JSON.stringify(currentCustom) === JSON.stringify(nextCustom);
+                    if (!customSame) {
+                      setRehabCustomValues(nextCustom);
+                      markFieldDirty('rehabCustomValues');
+                      changed = true;
+                    }
+
+                    if (changed) {
+                      requestImmediateRehabSave();
+                    }
                   }}
                 />
 
@@ -3985,22 +4102,29 @@ const LeadEdit: React.FC = () => {
                     initialTaxes={underwritingTaxes}
                     initialTimeline={underwritingTimeline}
                     onValuesChange={(values) => {
-                      setUnderwritingArv(values.arv);
-                      setUnderwritingTaxes(values.taxes);
-                      setUnderwritingTimeline(values.timeline);
-                      setUnderwritingRehabCost(values.rehabCost);
-                      setFinalOffer(values.finalOffer);
-                      // Mark these fields as dirty
-                      markFieldDirty('underwritingArv');
-                      markFieldDirty('underwritingTaxes');
-                      markFieldDirty('underwritingTimeline');
-                      markFieldDirty('underwritingRehabCost');
-                      markFieldDirty('finalOffer');
-                      // Ensure underwriting inputs participate in LeadEdit autosave (debounced)
-                      scheduleAutoSave();
+                      // IMPORTANT:
+                      // UnderwritingCalculator calls onValuesChange whenever it recalculates (including on mount / prop sync).
+                      // We must NOT mark fields as dirty unless the user actually changed inputs.
+                      // Otherwise this causes endless autosave loops and can wipe stage dates (offerMadeAt/underContractAt).
+
+                      setUnderwritingArv((prev) => (prev === values.arv ? prev : values.arv));
+                      setUnderwritingRehabCost((prev) => (prev === values.rehabCost ? prev : values.rehabCost));
+                      setFinalOffer((prev) => (prev === values.finalOffer ? prev : values.finalOffer));
+
+                      // Only taxes/timeline are user-editable here → only mark dirty when they truly change.
+                      setUnderwritingTaxes((prev) => {
+                        if (prev === values.taxes) return prev;
+                        markFieldDirty('underwritingTaxes');
+                        return values.taxes;
+                      });
+
+                      setUnderwritingTimeline((prev) => {
+                        if (prev === values.timeline) return prev;
+                        markFieldDirty('underwritingTimeline');
+                        return values.timeline;
+                      });
                     }}
                     onBlurSave={() => void flushAutoSave('blur')}
-                    key={`underwriting-${rehabBudget}`}
                   />
                 )}
 
@@ -4081,6 +4205,7 @@ const LeadEdit: React.FC = () => {
                             onChange={(value) => setNewBuyerPhone(value)}
                             placeholder="Phone"
                             className="w-full"
+                            inputClassName="h-7 text-xs"
                           />
                         </div>
                         <Select value={newBuyerSegmentation} onValueChange={setNewBuyerSegmentation}>
@@ -4595,10 +4720,7 @@ const LeadEdit: React.FC = () => {
             // Reload lead to show updated data
             await loadLead();
             
-            toast({
-              title: "Success",
-              description: "Appointment date set successfully"
-            });
+            // Success toast removed - Lead Detail UX: show toasts ONLY for errors
           } catch (error: any) {
             console.error('Error setting appointment date:', error);
             toast({

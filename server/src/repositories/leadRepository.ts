@@ -228,7 +228,10 @@ export const leadRepository = {
     // Normalize common ID fields: '' -> undefined (ignore update)
     for (const key of [
       'assignedUserId',
+      // Back-compat: some clients still send dispositionAgentId (old name)
       'dispositionAgentId',
+      // Canonical field in schema
+      'dispAgentId',
       'marketId',
       'pipelineStageId',
       'leadStatusId',
@@ -238,6 +241,12 @@ export const leadRepository = {
       if (updateData[key] === '') {
         delete updateData[key];
       }
+    }
+
+    // Back-compat mapping: dispositionAgentId -> dispAgentId
+    if (updateData.dispositionAgentId !== undefined && updateData.dispAgentId === undefined) {
+      updateData.dispAgentId = updateData.dispositionAgentId;
+      delete updateData.dispositionAgentId;
     }
     // Nested relation IDs
     if (updateData.address?.countyId === '') delete updateData.address.countyId;
@@ -255,6 +264,16 @@ export const leadRepository = {
     
     if (!currentLead) {
       throw new Error('Lead not found');
+    }
+
+    // CRITICAL: Merge customFields instead of replacing them
+    // This prevents data loss when frontend sends partial updates
+    if (updateData.customFields) {
+      const existingCustomFields = (currentLead.customFields as any) || {};
+      updateData.customFields = {
+        ...existingCustomFields,
+        ...updateData.customFields
+      };
     }
 
     // BUSINESS RULE:
@@ -526,8 +545,25 @@ export const leadRepository = {
   async changeStage(leadId: string, toStageId: string, changedById?: string) {
     const lead = await prisma.lead.findUnique({ where: { id: leadId } });
     if (!lead) return null;
-    const updated = await prisma.lead.update({ where: { id: leadId }, data: { pipelineStageId: toStageId }, include: includeLead });
-    await prisma.stageHistory.create({ data: { leadId, fromStageId: lead.pipelineStageId, toStageId, changedById: changedById || null } });
+    const updated = await prisma.lead.update({
+      where: { id: leadId },
+      data: {
+        pipelineStageId: toStageId,
+        // Keep stageEnteredAt consistent across ALL stage moves (manual + automated)
+        stageEnteredAt: new Date(),
+        updatedAt: new Date(),
+      },
+      include: includeLead,
+    });
+    await prisma.stageHistory.create({
+      data: {
+        leadId,
+        fromStageId: lead.pipelineStageId,
+        toStageId,
+        changedById: changedById || null,
+        changedAt: new Date(),
+      },
+    });
     return updated;
   },
 

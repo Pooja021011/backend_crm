@@ -1,6 +1,7 @@
 import { prisma } from '../config/db.js';
 import { logger } from '../config/logger.js';
 import { stageTransitionService } from './stageTransitionService.js';
+import { leadService } from './leadService.js';
 
 export interface PipelineLeadFilters {
   needsAttention?: boolean;
@@ -954,31 +955,14 @@ export const pipelineService = {
         };
       }
 
-      // EXISTING: Update the lead's pipeline stage and stageEnteredAt
-      const updatedLead = await prisma.lead.update({
-        where: { id: leadId },
-        data: {
-          pipelineStageId: stageId,
-          stageEnteredAt: new Date(),
-          updatedAt: new Date()
-        },
-        include: {
-          pipelineStage: true
-        }
-      });
-
-      // EXISTING: Create stage history record only if we have a fromStageId (skip if lead was never in a stage)
-      if (currentLead.pipelineStageId) {
-        await prisma.stageHistory.create({
-          data: {
-            leadId: leadId,
-            fromStageId: currentLead.pipelineStageId,
-            toStageId: stageId,
-            changedById: userId,
-            changedAt: new Date()
-          }
-        });
-      }
+      // CRITICAL:
+      // Route all pipeline moves through leadService.changeStage so we consistently:
+      // - validate transition
+      // - set offerMadeAt / underContractAt (timeline dates)
+      // - merge customFields safely
+      // - update deal timestamps
+      // - set stageEnteredAt + stageHistory via leadRepository.changeStage
+      const updatedLead = await leadService.changeStage(leadId, stageId, userId);
 
       logger.info({ 
         leadId, 
@@ -986,37 +970,12 @@ export const pipelineService = {
         stageName: stage.name, 
         userId 
       }, 'Lead moved to new stage');
-      
-      // NEW: Auto-update lead status to "Closed" when moved to Closed pipeline stage
-      const stageNameLower = stage.name.toLowerCase();
-      if (stageNameLower.includes('closed')) {
-        const closedStatus = await prisma.leadStatus.findFirst({
-          where: { name: 'Closed' }
-        });
-        
-        if (closedStatus) {
-          await prisma.lead.update({
-            where: { id: leadId },
-            data: { leadStatusId: closedStatus.id }
-          });
-          
-          logger.info({ 
-            leadId, 
-            leadStatusId: closedStatus.id 
-          }, 'Lead status automatically updated to Closed');
-        }
-      }
-      
-      // NEW: Execute post-transition actions (task creation)
-      if (userId) {
-        await stageTransitionService.executePostTransitionActions(leadId, stageId, userId);
-      }
 
       return {
         leadId,
         newStageId: stageId,
         newStageName: stage.name,
-        updatedAt: updatedLead.updatedAt
+        updatedAt: (updatedLead as any)?.updatedAt || new Date()
       };
     } catch (error: any) {
       logger.error({ 

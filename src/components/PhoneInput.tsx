@@ -13,6 +13,8 @@ interface PhoneInputProps {
   required?: boolean;
   disabled?: boolean;
   className?: string;
+  inputClassName?: string;
+  labelClassName?: string;
 }
 
 export const PhoneInput: React.FC<PhoneInputProps> = ({
@@ -23,7 +25,9 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
   placeholder = 'Enter 10-digit phone number',
   required = false,
   disabled = false,
-  className = ''
+  className = '',
+  inputClassName = '',
+  labelClassName = '',
 }) => {
   const [phoneNumber, setPhoneNumber] = useState(''); // digits only (US 10-digit)
   const [internalError, setInternalError] = useState('');
@@ -66,7 +70,7 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
   return (
     <div className={className}>
       {label && (
-        <Label className="mb-1 block text-sm font-medium text-gray-700">
+        <Label className={`mb-1 block text-sm font-medium text-gray-700 ${labelClassName}`}>
           {label}
           {required && <span className="text-red-500 ml-1">*</span>}
         </Label>
@@ -80,7 +84,7 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
             onChange={(e) => handlePhoneChange(e.target.value)}
             placeholder={placeholder}
             disabled={disabled}
-            className={`h-10 border-gray-300 focus:border-blue-500 focus:ring-blue-500/20 ${displayError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
+            className={`h-10 border-gray-300 focus:border-blue-500 focus:ring-blue-500/20 ${displayError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''} ${inputClassName}`}
           />
         </div>
       </div>

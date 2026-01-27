@@ -25,6 +25,12 @@ interface LeadTimelineProps {
     offerMadeAt?: string;
     underContractAt?: string;
   };
+  lead?: {
+    pipelineStage?: {
+      name?: string;
+    };
+    stageEnteredAt?: string;
+  };
   onRefresh?: () => void;
 }
 
@@ -52,12 +58,21 @@ export const LeadTimeline: React.FC<LeadTimelineProps> = ({
   leadCreatedAt,
   deal,
   customFields,
+  lead,
   onRefresh,
 }) => {
   // Determine timeline data from props
   const offerAmount = deal?.contractPrice;
   const contractPrice = deal?.contractPrice;
   const estimatedProfit = 25000; // Hardcoded to $25,000 as per requirement
+  
+  // For backward compatibility: if offerMadeAt is not set but lead is in "Offer Made" stage,
+  // use stageEnteredAt as fallback
+  const offerMadeDate = customFields?.offerMadeAt || 
+    (lead?.pipelineStage?.name?.toLowerCase().includes('offer') && 
+     lead?.pipelineStage?.name?.toLowerCase().includes('made') ? lead?.stageEnteredAt : null);
+  
+  const underContractDate = customFields?.underContractAt || deal?.contractedAt;
 
   const timelineStages = [
     {
@@ -80,18 +95,18 @@ export const LeadTimeline: React.FC<LeadTimelineProps> = ({
       id: 'offerMade',
       label: 'Offer made',
       icon: DollarSign,
-      date: customFields?.offerMadeAt || null,
+      date: offerMadeDate,
       amount: offerAmount,
-      completed: !!customFields?.offerMadeAt,
+      completed: !!offerMadeDate,
       color: 'bg-amber-500',
     },
     {
       id: 'underContract',
       label: 'Under contract',
       icon: CheckCircle2,
-      date: customFields?.underContractAt || deal?.contractedAt,
+      date: underContractDate,
       amount: contractPrice,
-      completed: !!(customFields?.underContractAt || deal?.contractedAt),
+      completed: !!underContractDate,
       color: 'bg-emerald-500',
     },
     {

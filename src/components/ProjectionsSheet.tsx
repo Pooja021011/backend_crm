@@ -22,11 +22,6 @@ export function ProjectionsSheet({
 }: ProjectionsSheetProps) {
   const [expanded, setExpanded] = useState(false);
 
-  // Debug: Log props to see what values are being passed
-  useEffect(() => {
-    console.log('🔍 ProjectionsSheet props:', { leadId, finalOffer, rehabCost, arv, taxes, timeline });
-  }, [leadId, finalOffer, rehabCost, arv, taxes, timeline]);
-
   // FIXED SYSTEM CONSTANTS (from Google Sheet)
   const TRANSFER_TAX_RATE = 0.002; // 0.20%
   const SPLIT_TRANSFER = true;

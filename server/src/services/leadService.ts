@@ -14,7 +14,7 @@ export const leadService = {
     // NEW: Validation check before stage change
     const currentLead = await prisma.lead.findUnique({
       where: { id: leadId },
-      select: { pipelineStageId: true }
+      select: { pipelineStageId: true, customFields: true }
     });
     
     const validation = await stageTransitionService.validateStageTransition(
@@ -31,38 +31,53 @@ export const leadService = {
       throw error;
     }
     
-    // EXISTING LOGIC - UNCHANGED
+    // PRE-UPDATE: Track stage transition dates BEFORE changing stage
+    // This prevents race condition with frontend autosave
+    const toStage = await prisma.pipelineStage.findUnique({
+      where: { id: toStageId },
+      select: { name: true }
+    });
+    
+    if (toStage) {
+      const stageName = (toStage.name || '').toLowerCase();
+      // CRITICAL: Re-fetch customFields to ensure we have latest data
+      // This prevents overwriting recently saved data (e.g., from frontend autosave)
+      const freshLead = await prisma.lead.findUnique({
+        where: { id: leadId },
+        select: { customFields: true }
+      });
+      
+      const currentCustomFields = (freshLead?.customFields as any) || {};
+      const dateFieldsToAdd: any = {};
+      
+      // Track "Offer Made" stage transition
+      if (stageName.includes('offer') && stageName.includes('made') && !currentCustomFields.offerMadeAt) {
+        dateFieldsToAdd.offerMadeAt = new Date().toISOString();
+      }
+      
+      // Track "Under Contract" stage transition
+      if (stageName.includes('contract') && !stageName.includes('offer') && !currentCustomFields.underContractAt) {
+        dateFieldsToAdd.underContractAt = new Date().toISOString();
+      }
+      
+      // Update customFields BEFORE stage change to avoid race condition
+      // CRITICAL: Send ONLY the new date fields - leadRepository.update will merge with existing data
+      if (Object.keys(dateFieldsToAdd).length > 0) {
+        await leadRepository.update(leadId, { 
+          customFields: dateFieldsToAdd  // Only the new date fields - merge will preserve rest
+        });
+      }
+    }
+    
+    // EXISTING LOGIC - Change the stage
     const updated = await leadRepository.changeStage(leadId, toStageId, userId);
     
-    // EXISTING: Auto-create/update Deal timestamps based on stage names
+    // Deal timestamps based on stage names
     const stage = updated?.pipelineStage;
     const name = (stage?.name || '').toLowerCase();
     
-    // Track stage transition dates in customFields
-    const currentCustomFields = updated?.customFields || {};
-    let updatedCustomFields = { ...currentCustomFields };
-    let shouldUpdateCustomFields = false;
-    
-    // Track "Offer Made" stage transition
-    if (name.includes('offer') && name.includes('made') && !currentCustomFields.offerMadeAt) {
-      updatedCustomFields.offerMadeAt = new Date().toISOString();
-      shouldUpdateCustomFields = true;
-    }
-    
-    // Track "Under Contract" stage transition
-    if (name.includes('contract') && !name.includes('offer') && !currentCustomFields.underContractAt) {
-      updatedCustomFields.underContractAt = new Date().toISOString();
-      shouldUpdateCustomFields = true;
-      // Also set Deal contractedAt for existing logic
+    if (name.includes('contract') && !name.includes('offer')) {
       await dealRepository.upsertByLeadId(leadId, { contractedAt: new Date() });
-    }
-    
-    // Update customFields if we tracked any stage transitions
-    if (shouldUpdateCustomFields) {
-      await prisma.lead.update({
-        where: { id: leadId },
-        data: { customFields: updatedCustomFields }
-      });
     }
     
     if (name.includes('closed')) {
@@ -71,20 +86,15 @@ export const leadService = {
     
     // NEW: Auto-update lead status to "Closed" when moving to Closed stage
     if (name.includes('closed')) {
-      console.log('🔍 DEBUG: Pipeline stage contains "closed":', name);
       const closedStatus = await prisma.leadStatus.findFirst({
         where: { name: { equals: 'Closed', mode: 'insensitive' } }
       });
-      console.log('🔍 DEBUG: Found Closed LeadStatus:', closedStatus);
       
       if (closedStatus) {
-        const result = await prisma.lead.update({
+        await prisma.lead.update({
           where: { id: leadId },
           data: { leadStatusId: closedStatus.id }
         });
-        console.log('✅ DEBUG: Updated lead status to Closed for lead:', leadId);
-      } else {
-        console.log('❌ DEBUG: Closed LeadStatus not found in database!');
       }
     }
     

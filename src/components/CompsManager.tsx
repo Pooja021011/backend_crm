@@ -520,6 +520,7 @@ export const CompsManager: React.FC<CompsManagerProps> = ({
               <div>
                 <Label className="text-[10px] text-slate-500">ARV</Label>
                 <Input
+                  name="arv"
                   type="text"
                   inputMode="numeric"
                   value={arvDisplay}
