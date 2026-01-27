@@ -603,11 +603,6 @@ export const callController = {
           select: {
             assignedUserId: true,
             createdById: true,
-            pipelineStage: {
-              select: {
-                pipeline: { select: { key: true } },
-              },
-            },
           },
         },
       },
@@ -615,17 +610,20 @@ export const callController = {
 
     if (!comm) return res.status(404).json({ error: 'Recording not found' });
 
-    const leadPipelineKey = (comm as any)?.lead?.pipelineStage?.pipeline?.key as string | undefined;
-    const isAcqPrivileged =
-      (roles.includes('ADMIN') || roles.includes('MANAGER')) && leadPipelineKey === 'ACQUISITIONS';
+    // Admin and Manager can access ALL recordings
+    const isAdminOrManager = roles.includes('ADMIN') || roles.includes('MANAGER');
 
-    if (
-      !isAcqPrivileged &&
-      comm.createdById !== userId &&
-      comm.lead?.assignedUserId !== userId &&
-      comm.lead?.createdById !== userId
-    ) {
-      return res.status(403).json({ error: 'Forbidden' });
+    if (!isAdminOrManager) {
+      // For ACQ and other roles: only allow access to recordings they created
+      // OR from leads they own/created
+      const hasAccess =
+        comm.createdById === userId ||
+        comm.lead?.assignedUserId === userId ||
+        comm.lead?.createdById === userId;
+
+      if (!hasAccess) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
     }
 
     const accountSid = process.env.TWILIO_ACCOUNT_SID;
