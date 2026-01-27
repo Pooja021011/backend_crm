@@ -319,10 +319,11 @@ export const useTwilioDevice = () => {
       }
 
       // Create Twilio Device with minimal constraints
+      // Removed hardcoded edge: 'ashburn' to allow Twilio to automatically select
+      // the closest/best edge for each user's location (improves call quality globally)
       const newDevice = new Device(token, {
         logLevel: 1,
         codecPreferences: [Call.Codec.Opus, Call.Codec.PCMU],
-        edge: 'ashburn',
         sounds: {
           incoming: false,
           outgoing: false,
