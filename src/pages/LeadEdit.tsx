@@ -1907,16 +1907,13 @@ const LeadEdit: React.FC = () => {
       return;
     }
 
+    // NO DEBOUNCE - We rely on blur events to trigger saves
+    // This function now just marks that data is dirty
     const payloadStr = JSON.stringify(buildLeadPatchPayload({ includeLeadOwners: false }));
     if (!payloadStr || payloadStr === lastSavedPayloadRef.current) return;
 
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    setAutoSaveStatus((prev) => (prev === 'saving' ? prev : 'dirty'));
-
-    autoSaveTimerRef.current = setTimeout(() => {
-      void flushAutoSave('debounce');
-    }, 1000); // 1 second debounce - faster but still prevents excessive saves during typing
-  }, [id, lead, canEditLead, buildLeadPatchPayload, flushAutoSave]);
+    setAutoSaveStatus('dirty');
+  }, [id, lead, canEditLead, buildLeadPatchPayload]);
 
   // Best-effort: if user navigates away/unmounts quickly, try to persist pending edits.
   useEffect(() => {
