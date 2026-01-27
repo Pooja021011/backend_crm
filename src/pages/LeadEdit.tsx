@@ -1915,7 +1915,7 @@ const LeadEdit: React.FC = () => {
 
     autoSaveTimerRef.current = setTimeout(() => {
       void flushAutoSave('debounce');
-    }, 2000); // 2 seconds debounce to prevent data loss during active typing
+    }, 1000); // 1 second debounce - faster but still prevents excessive saves during typing
   }, [id, lead, canEditLead, buildLeadPatchPayload, flushAutoSave]);
 
   // Best-effort: if user navigates away/unmounts quickly, try to persist pending edits.
@@ -3361,7 +3361,14 @@ const LeadEdit: React.FC = () => {
           }
           scheduleAutoSave();
         }}
-        onBlurCapture={() => void flushAutoSave('blur'))}
+        onBlurCapture={(e) => {
+          // On blur, cancel any pending debounce and save immediately
+          const target = e.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+          if (target && target.name) {
+            markFieldDirty(target.name);
+          }
+          void flushAutoSave('blur');
+        }}
       >
         {/* Header with Back Button and Save */}
         <div className="flex items-center justify-between">
