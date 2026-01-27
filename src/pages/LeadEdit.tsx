@@ -143,6 +143,12 @@ const LeadEdit: React.FC = () => {
   const effectivePrevLeadId = hasPipelineNavContext ? prevLeadId : (fallbackNav?.prevLeadId ?? null);
   const effectiveNextLeadId = hasPipelineNavContext ? nextLeadId : (fallbackNav?.nextLeadId ?? null);
 
+  // Track which fields have been modified (dirty fields)
+  const dirtyFieldsRef = useRef<Set<string>>(new Set());
+  const markFieldDirty = useCallback((fieldName: string) => {
+    dirtyFieldsRef.current.add(fieldName);
+  }, []);
+
   // Fallback: if LeadEdit is opened via refresh/direct link, fetch prev/next from backend
   useEffect(() => {
     const run = async () => {
@@ -597,7 +603,8 @@ const LeadEdit: React.FC = () => {
         
         // Flush any pending autosave before validating the stage move
         // This ensures validation uses the latest data the user just entered
-        await flushAutoSave('manual');
+        // Use forceAllFields=true to save ALL fields, not just dirty ones
+        await flushAutoSave('manual', { forceAllFields: true });
         
         await requestStageMove(newStageId);
         
@@ -684,7 +691,7 @@ const LeadEdit: React.FC = () => {
           setPreviousLeadStatus(leadStatus);
           
           // Flush autosave first
-          await flushAutoSave('manual');
+          await flushAutoSave('manual', { forceAllFields: true });
           
           // Try to update the lead status
           const updateResponse = await makeApiCall(`${API_BASE}/leads/${id}`, {
@@ -880,6 +887,9 @@ const LeadEdit: React.FC = () => {
 
         // Reset autosave baseline after hydrating the page to prevent immediate autosave
         suppressNextAutoSaveRef.current = true;
+        
+        // Clear any dirty fields tracking since we just loaded fresh data
+        dirtyFieldsRef.current.clear();
         
         // Load property info from customFields
         const customFields = leadData.customFields || {};
@@ -1525,8 +1535,8 @@ const LeadEdit: React.FC = () => {
     setEditOwnerForm(ownerData);
   };
 
-  const buildPropertyDetails = useCallback(() => {
-    return {
+  const buildPropertyDetails = useCallback((onlyDirtyFields: boolean = true) => {
+    const allFields = {
       // ARV is stored separately from underwriting (but we keep underwritingArv in sync).
       // Only save ARV if it has a meaningful value (> 0), otherwise don't save it
       arv: (arvValue && arvValue > 0) ? arvValue : undefined,
@@ -1560,6 +1570,19 @@ const LeadEdit: React.FC = () => {
       underwritingRehabCost: underwritingRehabCost || null,
       finalOffer: finalOffer || null,
     };
+    
+    // If onlyDirtyFields is true, only return fields that have been modified
+    if (onlyDirtyFields && dirtyFieldsRef.current.size > 0) {
+      const dirtyFields: any = {};
+      dirtyFieldsRef.current.forEach((fieldName) => {
+        if (fieldName in allFields) {
+          dirtyFields[fieldName] = allFields[fieldName as keyof typeof allFields];
+        }
+      });
+      return dirtyFields;
+    }
+    
+    return allFields;
   }, [
     arvValue,
     propertyType,
@@ -1592,10 +1615,11 @@ const LeadEdit: React.FC = () => {
     finalOffer,
   ]);
 
-  const buildLeadPatchPayload = useCallback((options?: { includeLeadOwners?: boolean }) => {
+  const buildLeadPatchPayload = useCallback((options?: { includeLeadOwners?: boolean; forceAllFields?: boolean }) => {
     // Note: pipeline stage moves are handled separately via the pipeline move endpoint.
     const updates: any = {};
     const includeLeadOwners = options?.includeLeadOwners !== false;
+    const forceAllFields = options?.forceAllFields || false;
 
     // Contacts (primary + multi-contact support)
     const filteredContacts = (contacts || []).filter((c) => c?.name || c?.phone || c?.email);
@@ -1637,12 +1661,18 @@ const LeadEdit: React.FC = () => {
     }
 
     // Custom fields: merge to avoid wiping unknown keys
-    const propertyDetails = buildPropertyDetails();
-    updates.customFields = {
-      ...(lead?.customFields || {}),
-      ...propertyDetails,
-      ...(includeLeadOwners ? { contacts: filteredContacts } : {}),
-    };
+    // IMPORTANT: Only include dirty fields during autosave to prevent data loss
+    // BUT for stage validation (forceAllFields=true), include ALL fields to ensure backend has complete data
+    const propertyDetails = buildPropertyDetails(!forceAllFields); // false = all fields, true = only dirty
+    
+    // Only update customFields if there are actually dirty fields to save OR if forcing all fields
+    if (Object.keys(propertyDetails).length > 0 || includeLeadOwners || forceAllFields) {
+      updates.customFields = {
+        ...(lead?.customFields || {}),
+        ...propertyDetails,
+        ...(includeLeadOwners ? { contacts: filteredContacts } : {}),
+      };
+    }
 
     // Address: only send when editing address (so we don't clobber unintentionally)
     if (editingAddress) {
@@ -1698,7 +1728,7 @@ const LeadEdit: React.FC = () => {
   ]);
 
   const flushAutoSave = useCallback(
-    async (reason: 'debounce' | 'blur' | 'manual' | 'pending' = 'manual') => {
+    async (reason: 'debounce' | 'blur' | 'manual' | 'pending' = 'manual', options?: { forceAllFields?: boolean }) => {
       if (!id || !lead || !canEditLead) return;
 
       // Never autosave while stage validation is in progress (popups open / pending stage move).
@@ -1711,7 +1741,10 @@ const LeadEdit: React.FC = () => {
         return;
       }
 
-      const payload = buildLeadPatchPayload({ includeLeadOwners: false });
+      const payload = buildLeadPatchPayload({ 
+        includeLeadOwners: false,
+        forceAllFields: options?.forceAllFields || false
+      });
       const payloadStr = JSON.stringify(payload);
 
       // No actual lead changes → do nothing (prevents flicker from unrelated inputs like task dialogs)
@@ -1775,6 +1808,9 @@ const LeadEdit: React.FC = () => {
 
           lastSavedPayloadRef.current = payloadStr;
           lastSavedAtRef.current = Date.now();
+          
+          // Clear dirty fields after successful save
+          dirtyFieldsRef.current.clear();
           
           // Show "Saved" status for at least 1 second to prevent blinking
           setAutoSaveStatus('saved');
@@ -1879,7 +1915,7 @@ const LeadEdit: React.FC = () => {
 
     autoSaveTimerRef.current = setTimeout(() => {
       void flushAutoSave('debounce');
-    }, 500); // 500ms (0.5 seconds) for faster autosave to prevent data loss
+    }, 2000); // 2 seconds debounce to prevent data loss during active typing
   }, [id, lead, canEditLead, buildLeadPatchPayload, flushAutoSave]);
 
   // Best-effort: if user navigates away/unmounts quickly, try to persist pending edits.
@@ -3317,8 +3353,15 @@ const LeadEdit: React.FC = () => {
     <>
       <div
         className="space-y-2"
-        onChangeCapture={() => scheduleAutoSave()}
-        onBlurCapture={() => void flushAutoSave('blur')}
+        onChangeCapture={(e) => {
+          // Try to extract field name from the input element
+          const target = e.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+          if (target && target.name) {
+            markFieldDirty(target.name);
+          }
+          scheduleAutoSave();
+        }}
+        onBlurCapture={() => void flushAutoSave('blur'))}
       >
         {/* Header with Back Button and Save */}
         <div className="flex items-center justify-between">
@@ -3943,6 +3986,12 @@ const LeadEdit: React.FC = () => {
                       setUnderwritingTimeline(values.timeline);
                       setUnderwritingRehabCost(values.rehabCost);
                       setFinalOffer(values.finalOffer);
+                      // Mark these fields as dirty
+                      markFieldDirty('underwritingArv');
+                      markFieldDirty('underwritingTaxes');
+                      markFieldDirty('underwritingTimeline');
+                      markFieldDirty('underwritingRehabCost');
+                      markFieldDirty('finalOffer');
                       // Ensure underwriting inputs participate in LeadEdit autosave (debounced)
                       scheduleAutoSave();
                     }}
