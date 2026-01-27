@@ -387,7 +387,9 @@ export const LeadOwnerSection = forwardRef<LeadOwnerSectionRef, LeadOwnerSection
               <div className="flex-1">
                 <div className="flex items-center gap-1">
                   <span className="font-medium text-slate-800">
-                    {owner.firstName} {owner.lastName}
+                    {(owner.firstName.trim() || owner.lastName.trim()) 
+                      ? `${owner.firstName} ${owner.lastName}`.trim() 
+                      : 'Unknown Caller'}
                   </span>
                   {owner.isPrimary && (
                     <Star className="h-2.5 w-2.5 fill-yellow-400 text-yellow-400" />

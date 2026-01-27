@@ -161,10 +161,10 @@ const AddSellerLead = () => {
           notes: formData.leadSource ? `Lead Source: ${formData.leadSource}` : ''
         },
         address: {
-          address1: formData.propertyAddress.trim(),
-          city: formData.city.trim(),
-          state: formData.state.trim(),
-          zip: formData.zip.trim(),
+          address1: formData.propertyAddress.trim() || 'Unknown',
+          city: formData.city.trim() || 'Unknown',
+          state: formData.state.trim() || 'NA',
+          zip: formData.zip.trim() || '00000',
           countyId: formData.countyId || undefined,
         },
         assignedUserId: formData.acquisitionsAgentId && formData.acquisitionsAgentId !== 'no-agents' ? formData.acquisitionsAgentId : undefined,

@@ -58,7 +58,8 @@ import {
   DueDiligencePopup,
   OfferMadePopup,
   DueDiligenceCompleteRequirementsPopup,
-  FollowUpTaskRequiredPopup
+  FollowUpTaskRequiredPopup,
+  AppointmentSetPopup
 } from '@/components/StageTransitionPopups';
 import { PropertyInfoCard } from '@/components/PropertyInfoCard';
 import { RehabBudgetCalculatorCompact } from '@/components/RehabBudgetCalculatorCompact';
@@ -269,6 +270,7 @@ const LeadEdit: React.FC = () => {
   
   // Stage transition validation popups
   const [showAppointmentPopup, setShowAppointmentPopup] = useState(false);
+  const [showAppointmentSetPopup, setShowAppointmentSetPopup] = useState(false);
   const [showDueDiligencePopup, setShowDueDiligencePopup] = useState(false);
   const [showOfferMadePopup, setShowOfferMadePopup] = useState(false);
   const [showDueDiligenceCompletePopup, setShowDueDiligenceCompletePopup] = useState(false);
@@ -294,6 +296,7 @@ const LeadEdit: React.FC = () => {
   useEffect(() => {
     const nextPopupOpen =
       !!showAppointmentPopup ||
+      !!showAppointmentSetPopup ||
       !!showDueDiligencePopup ||
       !!showOfferMadePopup ||
       !!showDueDiligenceCompletePopup ||
@@ -310,6 +313,7 @@ const LeadEdit: React.FC = () => {
     }
   }, [
     showAppointmentPopup,
+    showAppointmentSetPopup,
     showDueDiligencePopup,
     showOfferMadePopup,
     showDueDiligenceCompletePopup,
@@ -576,6 +580,15 @@ const LeadEdit: React.FC = () => {
       to: newStageId, 
       stageName: newStage?.name 
     });
+
+    // Check if moving to "Appointment Set" - ask for appointment date FIRST
+    if (newStage?.name?.toLowerCase() === 'appointment set') {
+      console.log('📅 Appointment Set detected - showing date picker');
+      setPreviousPipelineStatus(pipelineStatus);
+      setPendingPipelineStatus(newStageId);
+      setShowAppointmentSetPopup(true);
+      return; // Don't proceed with the change yet
+    }
 
     void (async () => {
       try {
@@ -4477,6 +4490,67 @@ const LeadEdit: React.FC = () => {
             toast({
               title: "Error",
               description: error.message || "Failed to upload photos",
+              variant: "destructive"
+            });
+          }
+        }}
+      />
+      
+      <AppointmentSetPopup
+        open={showAppointmentSetPopup}
+        onClose={() => {
+          console.log('🚪 Appointment Set popup closed');
+          setShowAppointmentSetPopup(false);
+          // Revert to previous status since user cancelled
+          if (previousPipelineStatus) {
+            console.log('⏪ Reverting status to:', previousPipelineStatus);
+            setPipelineStatus(previousPipelineStatus);
+          }
+          setPendingPipelineStatus(null);
+          setPreviousPipelineStatus(null);
+          // Force Select component to re-render
+          setPipelineSelectKey(prev => prev + 1);
+        }}
+        onSubmit={async (appointmentDate) => {
+          try {
+            // Save the appointment date to customFields
+            const response = await makeApiCall(`${API_BASE}/leads/${id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                customFields: {
+                  ...lead?.customFields,
+                  appointmentDate
+                }
+              })
+            });
+            
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.error || 'Failed to save appointment date');
+            }
+
+            // Now proceed with the stage change
+            if (pendingPipelineStatus) {
+              await requestStageMove(pendingPipelineStatus);
+            }
+            
+            setShowAppointmentSetPopup(false);
+            setPendingPipelineStatus(null);
+            setPreviousPipelineStatus(null);
+            
+            // Reload lead to show updated data
+            await loadLead();
+            
+            toast({
+              title: "Success",
+              description: "Appointment date set successfully"
+            });
+          } catch (error: any) {
+            console.error('Error setting appointment date:', error);
+            toast({
+              title: "Error",
+              description: error.message || "Failed to set appointment date",
               variant: "destructive"
             });
           }

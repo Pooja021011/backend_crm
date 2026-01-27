@@ -84,7 +84,7 @@ export const AppointmentCompletePopup = ({
             Pictures Required
           </DialogTitle>
           <DialogDescription>
-            Please upload at least one picture before moving to this stage. Only JPEG, PNG, and HEIC images are allowed.
+            Please upload at least 3 pictures before moving to this stage. Only JPEG, PNG, and HEIC images are allowed.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -129,9 +129,9 @@ export const AppointmentCompletePopup = ({
             </Button>
             <Button 
               onClick={handleSubmit} 
-              disabled={files.length === 0 || uploading}
+              disabled={files.length < 3 || uploading}
             >
-              {uploading ? 'Uploading...' : `Upload ${files.length} Picture${files.length !== 1 ? 's' : ''}`}
+              {uploading ? 'Uploading...' : files.length < 3 ? `Upload ${files.length} Picture${files.length !== 1 ? 's' : ''} (${3 - files.length} more needed)` : `Upload ${files.length} Picture${files.length !== 1 ? 's' : ''}`}
             </Button>
           </DialogFooter>
         </div>
@@ -522,6 +522,69 @@ export const FollowUpTaskRequiredPopup = ({
           </Button>
           <Button onClick={handleSubmit} disabled={!isValid || submitting}>
             {submitting ? 'Saving...' : 'Create Task'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// Popup for Appointment Set - Ask for Appointment Date
+export const AppointmentSetPopup = ({ 
+  open, 
+  onClose, 
+  onSubmit 
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSubmit: (appointmentDate: string) => Promise<void>;
+}) => {
+  const [appointmentDate, setAppointmentDate] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!appointmentDate) return;
+    setSubmitting(true);
+    try {
+      await onSubmit(appointmentDate);
+      setAppointmentDate('');
+      onClose();
+    } catch (error) {
+      console.error('Failed to set appointment date:', error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-purple-600" />
+            Set Appointment Date
+          </DialogTitle>
+          <DialogDescription>
+            Please select the date and time for the appointment.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label className="text-[10px] text-slate-500">Appointment Date & Time *</Label>
+            <Input
+              type="datetime-local"
+              value={appointmentDate}
+              onChange={(e) => setAppointmentDate(e.target.value)}
+              className="h-7 text-xs"
+            />
+          </div>
+        </div>
+        <DialogFooter className="gap-2 sm:gap-2">
+          <Button onClick={onClose} variant="outline">
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit} disabled={!appointmentDate || submitting}>
+            {submitting ? 'Setting...' : 'Set Appointment'}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -147,6 +147,15 @@ export const compsController = {
         return;
       }
 
+      // Validate that only PDF files are allowed
+      const isPdf = file.mimetype === 'application/pdf' || 
+                    file.originalname.toLowerCase().endsWith('.pdf');
+      
+      if (!isPdf) {
+        res.status(400).json({ error: 'Only PDF files are allowed for comparable properties' });
+        return;
+      }
+
       const userId = (req as any).user?.id;
       const created = await compsService.createLeadCompPdf({
         leadId,

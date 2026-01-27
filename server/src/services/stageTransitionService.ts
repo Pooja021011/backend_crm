@@ -135,9 +135,9 @@ export const stageTransitionService = {
           },
         });
 
-        if (photoCount === 0) {
+        if (photoCount < 3) {
           allRequiredFields.push('photos');
-          allErrors.push('Property photos are required before moving to this stage');
+          allErrors.push('At least 3 property photos are required before moving to this stage');
         }
       }
 

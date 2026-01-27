@@ -495,7 +495,7 @@ export const CompsManager: React.FC<CompsManagerProps> = ({
               id={`comps-pdf-upload-${leadId}`}
               type="file"
               multiple
-              accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,image/*,application/pdf"
+              accept=".pdf,application/pdf"
               className="hidden"
               onChange={handlePdfUpload}
               disabled={uploadingPdf}

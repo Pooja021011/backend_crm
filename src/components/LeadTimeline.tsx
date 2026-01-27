@@ -55,7 +55,7 @@ export const LeadTimeline: React.FC<LeadTimelineProps> = ({
   // Determine timeline data from props
   const offerAmount = deal?.contractPrice;
   const contractPrice = deal?.contractPrice;
-  const estimatedProfit = deal?.netProfit;
+  const estimatedProfit = 25000; // Hardcoded to $25,000 as per requirement
 
   const timelineStages = [
     {
@@ -97,7 +97,7 @@ export const LeadTimeline: React.FC<LeadTimelineProps> = ({
       label: 'Expected Profit',
       icon: TrendingUp,
       amount: estimatedProfit,
-      completed: !!estimatedProfit,
+      completed: true, // Always completed since it's hardcoded
       color: 'bg-green-600',
     },
   ];
