@@ -3,6 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as UiCalendar } from "@/components/ui/calendar";
 import { useId, useState, useEffect } from "react";
 import { Upload, X, ClipboardList, AlertCircle, DollarSign, Calendar } from "lucide-react";
 
@@ -539,15 +541,44 @@ export const AppointmentSetPopup = ({
   onClose: () => void;
   onSubmit: (appointmentDate: string) => Promise<void>;
 }) => {
-  const [appointmentDate, setAppointmentDate] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [hour, setHour] = useState('12');
+  const [minute, setMinute] = useState('00');
+  const [amPm, setAmPm] = useState<'AM' | 'PM'>('PM');
+
+  // Format display for button
+  const formatDisplay = () => {
+    if (!selectedDate) return 'Select appointment date & time';
+    const dateStr = selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return `${dateStr} at ${hour}:${minute} ${amPm}`;
+  };
+
+  // Compute ISO string from date + time
+  const computeIsoString = (date: Date | null, h: string, m: string, period: 'AM' | 'PM'): string | null => {
+    if (!date) return null;
+    let hours = parseInt(h, 10);
+    if (period === 'PM' && hours !== 12) hours += 12;
+    if (period === 'AM' && hours === 12) hours = 0;
+    
+    const d = new Date(date);
+    d.setHours(hours, parseInt(m, 10), 0, 0);
+    return d.toISOString();
+  };
 
   const handleSubmit = async () => {
-    if (!appointmentDate) return;
+    const isoString = computeIsoString(selectedDate, hour, minute, amPm);
+    if (!isoString) return;
+    
     setSubmitting(true);
     try {
-      await onSubmit(appointmentDate);
-      setAppointmentDate('');
+      await onSubmit(isoString);
+      // Reset state
+      setSelectedDate(null);
+      setHour('12');
+      setMinute('00');
+      setAmPm('PM');
       onClose();
     } catch (error) {
       console.error('Failed to set appointment date:', error);
@@ -568,22 +599,95 @@ export const AppointmentSetPopup = ({
             Please select the date and time for the appointment.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3">
-          <div className="space-y-1">
-            <Label className="text-[10px] text-slate-500">Appointment Date & Time *</Label>
-            <Input
-              type="datetime-local"
-              value={appointmentDate}
-              onChange={(e) => setAppointmentDate(e.target.value)}
-              className="h-7 text-xs"
-            />
-          </div>
+        
+        <div className="space-y-2">
+          <Label className="text-xs">Appointment Date & Time *</Label>
+          <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full justify-between font-normal text-xs h-8"
+                disabled={submitting}
+              >
+                {formatDisplay()}
+                <Calendar className="w-4 h-4 opacity-60" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-3" align="start">
+              <div className="space-y-3">
+                <UiCalendar
+                  mode="single"
+                  selected={selectedDate || undefined}
+                  onSelect={(d) => {
+                    if (!d) return;
+                    setSelectedDate(d);
+                  }}
+                  initialFocus
+                />
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-slate-500">Hour</Label>
+                    <Select value={hour} onValueChange={setHour}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Hour" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 12 }).map((_, i) => {
+                          const h = String(i + 1);
+                          return (
+                            <SelectItem key={h} value={h}>
+                              {h}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-slate-500">Minute</Label>
+                    <Select value={minute} onValueChange={setMinute}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Min" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 60 }).map((_, i) => {
+                          const m = String(i).padStart(2, '0');
+                          return (
+                            <SelectItem key={m} value={m}>
+                              {m}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-slate-500">AM/PM</Label>
+                    <Select value={amPm} onValueChange={(v) => setAmPm(v as 'AM' | 'PM')}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="AM">AM</SelectItem>
+                        <SelectItem value="PM">PM</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
+
         <DialogFooter className="gap-2 sm:gap-2">
           <Button onClick={onClose} variant="outline">
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={!appointmentDate || submitting}>
+          <Button onClick={handleSubmit} disabled={!selectedDate || submitting}>
             {submitting ? 'Setting...' : 'Set Appointment'}
           </Button>
         </DialogFooter>

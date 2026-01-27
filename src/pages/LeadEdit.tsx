@@ -1555,8 +1555,8 @@ const LeadEdit: React.FC = () => {
       leadSourceData: leadSourceData || {},
       // Underwriting Calculator values
       underwritingArv: underwritingArv || null,
-      underwritingTaxes: underwritingTaxes || null,
-      underwritingTimeline: underwritingTimeline || null,
+      underwritingTaxes: underwritingTaxes !== null && underwritingTaxes !== undefined ? underwritingTaxes : null,
+      underwritingTimeline: underwritingTimeline !== null && underwritingTimeline !== undefined ? underwritingTimeline : null,
       underwritingRehabCost: underwritingRehabCost || null,
       finalOffer: finalOffer || null,
     };
