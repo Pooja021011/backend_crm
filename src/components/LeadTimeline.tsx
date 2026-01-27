@@ -22,6 +22,8 @@ interface LeadTimelineProps {
     askingPrice?: number;
     estimatedValue?: number;
     appointmentDate?: string;
+    offerMadeAt?: string;
+    underContractAt?: string;
   };
   onRefresh?: () => void;
 }
@@ -78,18 +80,18 @@ export const LeadTimeline: React.FC<LeadTimelineProps> = ({
       id: 'offerMade',
       label: 'Offer made',
       icon: DollarSign,
-      date: deal?.contractedAt || null,
+      date: customFields?.offerMadeAt || null,
       amount: offerAmount,
-      completed: !!offerAmount,
+      completed: !!customFields?.offerMadeAt,
       color: 'bg-amber-500',
     },
     {
       id: 'underContract',
       label: 'Under contract',
       icon: CheckCircle2,
-      date: deal?.contractedAt,
+      date: customFields?.underContractAt || deal?.contractedAt,
       amount: contractPrice,
-      completed: !!deal?.contractedAt,
+      completed: !!(customFields?.underContractAt || deal?.contractedAt),
       color: 'bg-emerald-500',
     },
     {

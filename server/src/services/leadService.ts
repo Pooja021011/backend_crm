@@ -37,9 +37,34 @@ export const leadService = {
     // EXISTING: Auto-create/update Deal timestamps based on stage names
     const stage = updated?.pipelineStage;
     const name = (stage?.name || '').toLowerCase();
-    if (name.includes('contract')) {
+    
+    // Track stage transition dates in customFields
+    const currentCustomFields = updated?.customFields || {};
+    let updatedCustomFields = { ...currentCustomFields };
+    let shouldUpdateCustomFields = false;
+    
+    // Track "Offer Made" stage transition
+    if (name.includes('offer') && name.includes('made') && !currentCustomFields.offerMadeAt) {
+      updatedCustomFields.offerMadeAt = new Date().toISOString();
+      shouldUpdateCustomFields = true;
+    }
+    
+    // Track "Under Contract" stage transition
+    if (name.includes('contract') && !name.includes('offer') && !currentCustomFields.underContractAt) {
+      updatedCustomFields.underContractAt = new Date().toISOString();
+      shouldUpdateCustomFields = true;
+      // Also set Deal contractedAt for existing logic
       await dealRepository.upsertByLeadId(leadId, { contractedAt: new Date() });
     }
+    
+    // Update customFields if we tracked any stage transitions
+    if (shouldUpdateCustomFields) {
+      await prisma.lead.update({
+        where: { id: leadId },
+        data: { customFields: updatedCustomFields }
+      });
+    }
+    
     if (name.includes('closed')) {
       await dealRepository.upsertByLeadId(leadId, { closedAt: new Date() });
     }
