@@ -1274,12 +1274,12 @@ const LeadEdit: React.FC = () => {
   const setTaskDueFromDateTime = (dt: Date) => {
     if (!dt || Number.isNaN(dt.getTime())) return;
 
-    // Use UTC time to match server timezone
-    const dateOnly = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate()));
-    const hours24 = dt.getUTCHours();
+    // Use local time for consistency with UI
+    const dateOnly = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+    const hours24 = dt.getHours();
     const ampm: 'AM' | 'PM' = hours24 >= 12 ? 'PM' : 'AM';
     const hour12 = hours24 % 12 || 12;
-    const minute = dt.getUTCMinutes();
+    const minute = dt.getMinutes();
 
     setTaskDueDate(dateOnly);
     setTaskDueHour(String(hour12));
@@ -1299,16 +1299,29 @@ const LeadEdit: React.FC = () => {
     if (!hour12 || Number.isNaN(minute)) return '';
 
     const hour24 = ampm === 'PM' ? ((hour12 % 12) + 12) : (hour12 % 12);
-    // Use UTC time instead of local time to match server timezone
-    const dt = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), hour24, minute, 0, 0));
+    // Use local time for consistency with UI
+    const dt = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour24, minute, 0, 0);
     if (Number.isNaN(dt.getTime())) return '';
     return dt.toISOString();
   };
 
   const openTaskDialog = (task?: any) => {
-    const nowPlusOneHour = new Date(Date.now() + 60 * 60 * 1000);
-    const baseDate = task?.dueAt ? new Date(task.dueAt) : nowPlusOneHour;
-    const initial = Number.isNaN(baseDate.getTime()) ? nowPlusOneHour : baseDate;
+    // For new tasks: default to 8 AM tomorrow
+    // For editing tasks: use existing due date or current time + 1 hour
+    let initial: Date;
+    
+    if (task) {
+      // Editing existing task
+      const nowPlusOneHour = new Date(Date.now() + 60 * 60 * 1000);
+      const baseDate = task?.dueAt ? new Date(task.dueAt) : nowPlusOneHour;
+      initial = Number.isNaN(baseDate.getTime()) ? nowPlusOneHour : baseDate;
+    } else {
+      // Creating new task: default to 8 AM tomorrow (local time)
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(8, 0, 0, 0);
+      initial = tomorrow;
+    }
 
     if (task) {
       setEditingTask(task);
@@ -1318,18 +1331,25 @@ const LeadEdit: React.FC = () => {
         dueAt: initial.toISOString(),
         assignedToId: task.assignedToId || ''
       });
+      // For editing, use the normal hydrate function
+      setTaskDueFromDateTime(initial);
     } else {
       setEditingTask(null);
+      // For new tasks, set form with 8 AM tomorrow
+      const dateOnly = new Date(initial.getFullYear(), initial.getMonth(), initial.getDate());
       setTaskForm({
         title: '',
         description: '',
         dueAt: initial.toISOString(),
         assignedToId: ''
       });
+      // Manually set the picker values for 8 AM
+      setTaskDueDate(dateOnly);
+      setTaskDueHour('8');
+      setTaskDueMinute('00');
+      setTaskDueAmPm('AM');
     }
-
-    // hydrate picker UI
-    setTaskDueFromDateTime(initial);
+    
     setTaskDuePickerOpen(false);
     setShowTaskDialog(true);
   };
@@ -1563,7 +1583,7 @@ const LeadEdit: React.FC = () => {
       sqft: sqft ? parseInt(sqft) : null,
       lotSize: lotSize || null,
       bedrooms: bedrooms ? parseInt(bedrooms) : null,
-      bathrooms: bathrooms ? parseInt(bathrooms, 10) : null,
+      bathrooms: bathrooms ? parseFloat(bathrooms) : null,
       yearBuilt: yearBuilt ? parseInt(yearBuilt) : null,
       roofType: roofType || null,
       roofAge: roofAge ? parseInt(roofAge) : null,
@@ -2080,7 +2100,7 @@ const LeadEdit: React.FC = () => {
         sqft: sqft ? parseInt(sqft) : null,
         lotSize: lotSize || null,
         bedrooms: bedrooms ? parseInt(bedrooms) : null,
-        bathrooms: bathrooms ? parseInt(bathrooms, 10) : null,
+        bathrooms: bathrooms ? parseFloat(bathrooms) : null,
         yearBuilt: yearBuilt ? parseInt(yearBuilt) : null,
         roofType: roofType || null,
         roofAge: roofAge ? parseInt(roofAge) : null,
@@ -3818,17 +3838,24 @@ const LeadEdit: React.FC = () => {
               <Label className="text-[9px] text-slate-500 h-[14px] leading-[14px] mb-0.5">Baths</Label>
               <Input
                 type="number"
-                step="1"
+                step="0.5"
                 value={bathrooms}
                 onChange={(e) => {
-                  const v = Number(e.target.value);
+                  const inputValue = e.target.value;
+                  // Allow empty string
+                  if (inputValue === '') {
+                    setBathrooms('');
+                    return;
+                  }
+                  const v = Number(inputValue);
                   if (!Number.isFinite(v)) {
                     setBathrooms('');
                     return;
                   }
-                  setBathrooms(String(Math.max(0, Math.round(v))));
+                  // Round to nearest 0.5
+                  setBathrooms(String(Math.max(0, Math.round(v * 2) / 2)));
                 }}
-                placeholder="Baths"
+                placeholder="0"
                 className="h-5 text-[10px]"
                 disabled={!canEditLead}
               />
@@ -4013,8 +4040,8 @@ const LeadEdit: React.FC = () => {
                 <RehabBudgetCalculatorCompact
                   leadId={id!}
                   sqft={parseInt(sqft) || 0}
-                  // Keep Rehab bathrooms input in sync with Property Information baths (integer-only)
-                  bathrooms={Math.max(0, parseInt(bathrooms || '0', 10) || 0)}
+                  // Keep Rehab bathrooms input in sync with Property Information baths (0.5 increments)
+                  bathrooms={bathrooms ? parseFloat(bathrooms) : undefined}
                   readOnly={false}
                   suppressSuccessToasts
                   initialFinishLevel={rehabFinishLevel}
@@ -4028,7 +4055,7 @@ const LeadEdit: React.FC = () => {
                     markFieldDirty('rehabBudget');
                     requestImmediateRehabSave();
                   }}
-                  onBathroomsChange={(n) => setBathrooms(String(n))}
+                  onBathroomsChange={(n) => setBathrooms(n !== undefined && n !== null ? String(n) : '')}
                   onDataChange={(data) => {
                     const nextFinish = data.finishLevel as 'low_end' | 'mid_range' | 'high_end';
                     const nextToggled =

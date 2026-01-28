@@ -30,7 +30,7 @@ interface ToggledItems {
 export function RehabBudgetCalculatorCompact({
   leadId,
   sqft = 0,
-  bathrooms = 0,
+  bathrooms,
   readOnly = false,
   suppressSuccessToasts = false,
   onTotalChange,
@@ -45,7 +45,7 @@ export function RehabBudgetCalculatorCompact({
   const [expanded, setExpanded] = useState(false);
   
   const [finishLevel, setFinishLevel] = useState<'low_end' | 'mid_range' | 'high_end'>(initialFinishLevel);
-  const [numberOfBathrooms, setNumberOfBathrooms] = useState(bathrooms);
+  const [numberOfBathrooms, setNumberOfBathrooms] = useState<number | undefined>(bathrooms);
   const [numberOfWindows, setNumberOfWindows] = useState(initialNumberOfWindows);
   const [propertySquareFeet, setPropertySquareFeet] = useState(sqft);
   
@@ -115,11 +115,19 @@ export function RehabBudgetCalculatorCompact({
     }
   }, [finishLevel, toggledItems, numberOfBathrooms, numberOfWindows, propertySquareFeet]);
 
-  const handleBathroomsChange = (value: number) => {
-    // Integer-only (match Property Information Baths field)
-    const next = Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
+  const handleBathroomsChange = (value: number | string) => {
+    // Handle empty string
+    if (value === '' || value === null || value === undefined) {
+      setNumberOfBathrooms(undefined);
+      onBathroomsChange?.(undefined as any);
+      return;
+    }
+    
+    const numValue = Number(value);
+    // Round to nearest 0.5 (match Property Information Baths field)
+    const next = Number.isFinite(numValue) ? Math.max(0, Math.round(numValue * 2) / 2) : undefined;
     setNumberOfBathrooms(next);
-    onBathroomsChange?.(next);
+    onBathroomsChange?.(next as any);
   };
 
   const customMiscTotal = useMemo(
@@ -367,11 +375,13 @@ export function RehabBudgetCalculatorCompact({
               <Label className="text-[10px] text-slate-500">Bathrooms</Label>
               <Input
                 type="number"
-                value={numberOfBathrooms || ''}
-                onChange={(e) => handleBathroomsChange(Number(e.target.value))}
+                step="0.5"
+                value={numberOfBathrooms ?? ''}
+                onChange={(e) => handleBathroomsChange(e.target.value)}
                 disabled={readOnly}
                 className="h-6 text-xs"
                 min={0}
+                placeholder="0"
               />
             </div>
             <div>
