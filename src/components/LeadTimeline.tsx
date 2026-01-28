@@ -89,7 +89,7 @@ export const LeadTimeline: React.FC<LeadTimelineProps> = ({
       icon: Calendar,
       date: customFields?.appointmentDate || null,
       completed: !!customFields?.appointmentDate,
-      color: 'bg-purple-500',
+      color: 'bg-blue-500',  // Changed from bg-purple-500
     },
     {
       id: 'offerMade',
@@ -98,7 +98,7 @@ export const LeadTimeline: React.FC<LeadTimelineProps> = ({
       date: offerMadeDate,
       amount: offerAmount,
       completed: !!offerMadeDate,
-      color: 'bg-amber-500',
+      color: 'bg-blue-500',  // Changed from bg-amber-500
     },
     {
       id: 'underContract',
@@ -107,15 +107,16 @@ export const LeadTimeline: React.FC<LeadTimelineProps> = ({
       date: underContractDate,
       amount: contractPrice,
       completed: !!underContractDate,
-      color: 'bg-emerald-500',
+      color: 'bg-blue-500',  // Changed from bg-emerald-500
     },
     {
       id: 'expectedProfit',
       label: 'Expected Profit',
       icon: TrendingUp,
       amount: estimatedProfit,
-      completed: true, // Always completed since it's hardcoded
+      completed: !!underContractDate,  // FIX: Only completed when under contract
       color: 'bg-green-600',
+      showAmount: !!underContractDate,  // NEW: Only show amount when under contract
     },
   ];
 
@@ -135,7 +136,12 @@ export const LeadTimeline: React.FC<LeadTimelineProps> = ({
                 <Icon className="w-2.5 h-2.5" />
               </div>
               <span className={`text-[10px] mt-0.5 ${stage.completed ? 'text-slate-700' : 'text-slate-400'}`}>{stage.label}</span>
-              <span className="text-[9px] text-slate-400">{stage.date ? formatDate(stage.date) : (stage.amount ? formatCurrency(stage.amount) : 'N/A')}</span>
+              <span className="text-[9px] text-slate-400">
+                {stage.id === 'expectedProfit' 
+                  ? ((stage as any).showAmount ? formatCurrency(stage.amount) : 'N/A')
+                  : (stage.date ? formatDate(stage.date) : (stage.amount ? formatCurrency(stage.amount) : 'N/A'))
+                }
+              </span>
             </div>
           );
         })}
