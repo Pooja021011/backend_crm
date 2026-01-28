@@ -135,6 +135,12 @@ export const metricsController = {
     const data = await metricsService.getMajorKpis(timeframe, user);
     return res.json({ data });
   },
+  pipelineTimelineMetrics: async (req: Request, res: Response) => {
+    const timeframe = (req.query.timeframe as 'This Month'|'Last Month'|'This Quarter') || 'This Month';
+    const pipeline = (req.query.pipeline as 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION') || 'ACQUISITIONS';
+    const data = await metricsService.getPipelineTimelineMetrics(timeframe, pipeline);
+    return res.json({ data });
+  },
 };
 
 

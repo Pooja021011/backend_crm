@@ -48,6 +48,8 @@ export const reminderRepository = {
                 }
               }
             },
+            // Exclude own leads if user is also an ACQ agent (to prevent duplicates)
+            ...(userRoles.includes('ACQ') ? { NOT: { assignedUserId: userId } } : {}),
             OR: [
               {
                 lastContactAt: {
@@ -144,13 +146,15 @@ export const reminderRepository = {
           });
         });
 
-        // Tasks past due at least 1 hour (Manager sees ALL tasks)
+        // Tasks past due at least 1 hour (Manager sees ALL tasks, except own if also ACQ)
         const pastDueTasks = await prisma.task.findMany({
           where: {
             status: 'OPEN',
             dueAt: {
               lte: hoursAgo(1)
             },
+            // Exclude own tasks if user is also an ACQ agent (to prevent duplicates)
+            ...(userRoles.includes('ACQ') ? { NOT: { assignedToId: userId } } : {}),
             NOT: {
               OR: [
                 { title: { startsWith: 'Review note on ' } },
@@ -196,6 +200,8 @@ export const reminderRepository = {
                 }
               }
             },
+            // Exclude own leads if user is also an ACQ agent (to prevent duplicates)
+            ...(userRoles.includes('ACQ') ? { NOT: { assignedUserId: userId } } : {}),
             createdAt: {
               lte: new Date(now.getTime() - 15 * 60 * 1000) // 15 minutes ago
             },

@@ -41,6 +41,9 @@ export const pipelineController = {
     try {
       const { pipelineKey } = req.params;
       const { needsAttention, assignedUserId } = req.query;
+      const user = (req as any).user;
+      const userRoles = user?.roles || [];
+      const userId = user?.id;
       
       if (!pipelineKey) {
         return res.status(400).json({
@@ -53,7 +56,9 @@ export const pipelineController = {
         pipelineKey.toUpperCase(),
         {
           needsAttention: needsAttention === 'true',
-          assignedUserId: assignedUserId as string
+          assignedUserId: assignedUserId as string,
+          userRole: userRoles.map((r: any) => r.role?.name || r.name || r),
+          userId: userId
         }
       );
 
@@ -379,7 +384,7 @@ export const pipelineController = {
         lastTouchedTo,
         acqAgentIds,
         dispAgentIds,
-        userRole: userRoles[0], // Primary role
+        userRole: userRoles.map((r: any) => r.role?.name || r.name || r), // Pass all roles as array
         userId: userId
       };
 

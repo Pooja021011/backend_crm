@@ -65,12 +65,14 @@ const Metrics = () => {
   const [pipelineView, setPipelineView] = useState<'funnel' | 'timeline'>('funnel');
   
   // Communications Overview Data
-  const [commViewScope, setCommViewScope] = useState<'personal' | 'team'>('personal');
-  const [selectedCommUser, setSelectedCommUser] = useState<string>('current-user');
+  const [commViewScope, setCommViewScope] = useState<'personal' | 'team'>('team');
+  const [selectedCommUser, setSelectedCommUser] = useState<string>('all-users');
+  const [commUsers, setCommUsers] = useState<{ id: string; firstName: string; lastName: string; roles: string[] }[]>([]);
   
   // Acquisitions Overview Data
   const [acqViewScope, setAcqViewScope] = useState<'personal' | 'team'>('personal');
   const [selectedAcqUser, setSelectedAcqUser] = useState<string>('current-user');
+  const [acqUsers, setAcqUsers] = useState<{ id: string; firstName: string; lastName: string; roles: string[] }[]>([]);
   const [acqLoading, setAcqLoading] = useState(false);
   const [acqError, setAcqError] = useState<string | null>(null);
   const [acquisitionsData, setAcquisitionsData] = useState<{
@@ -86,6 +88,7 @@ const Metrics = () => {
   // Dispositions Overview Data
   const [dispViewScope, setDispViewScope] = useState<'personal' | 'team'>('personal');
   const [selectedDispUser, setSelectedDispUser] = useState<string>('current-user');
+  const [dispUsers, setDispUsers] = useState<{ id: string; firstName: string; lastName: string; roles: string[] }[]>([]);
   const [dispLoading, setDispLoading] = useState(false);
   const [dispError, setDispError] = useState<string | null>(null);
   const [dispositionsData, setDispositionsData] = useState<{
@@ -102,6 +105,7 @@ const Metrics = () => {
   // Transactions Overview Data
   const [tcViewScope, setTcViewScope] = useState<'personal' | 'overview'>('personal');
   const [selectedTcUser, setSelectedTcUser] = useState<string>('current-user');
+  const [tcUsers, setTcUsers] = useState<{ id: string; firstName: string; lastName: string; roles: string[] }[]>([]);
   const [tcLoading, setTcLoading] = useState(false);
   const [tcError, setTcError] = useState<string | null>(null);
   const [transactionsData, setTransactionsData] = useState<{
@@ -118,6 +122,7 @@ const Metrics = () => {
   const [acqLeaderboardPeriod, setAcqLeaderboardPeriod] = useState('this-month');
   const [acqLeaderboardLoading, setAcqLeaderboardLoading] = useState(false);
   const [acqLeaderboardError, setAcqLeaderboardError] = useState<string | null>(null);
+  const [acqLeaderboardView, setAcqLeaderboardView] = useState<'performance' | 'communications'>('performance');
   const [acqLeaderboardData, setAcqLeaderboardData] = useState<{
     agents: Array<{
       userId: string;
@@ -125,6 +130,7 @@ const Metrics = () => {
       email: string;
       rank?: number;
       totalScore: number;
+      totalLeads: number;
       contractsSigned: number;
       projectedProfit: number;
       leadsPerContract: number;
@@ -134,6 +140,8 @@ const Metrics = () => {
         calls: number;
         sms: number;
         emails: number;
+        totalCallTime: number;
+        averageCallTime: number;
         responseRate: number;
       };
     }>;
@@ -144,6 +152,7 @@ const Metrics = () => {
   const [dispLeaderboardPeriod, setDispLeaderboardPeriod] = useState('this-month');
   const [dispLeaderboardLoading, setDispLeaderboardLoading] = useState(false);
   const [dispLeaderboardError, setDispLeaderboardError] = useState<string | null>(null);
+  const [dispLeaderboardView, setDispLeaderboardView] = useState<'performance' | 'communications'>('performance');
   const [dispLeaderboardData, setDispLeaderboardData] = useState<{
     agents: Array<{
       userId: string;
@@ -152,6 +161,7 @@ const Metrics = () => {
       rank?: number;
       totalScore: number;
       propertiesSold: number;
+      propertiesSoldPercentage: number;
       projectedProfit: number;
       buyersAdded: number;
       mishandledLeads: number;
@@ -160,6 +170,8 @@ const Metrics = () => {
         calls: number;
         sms: number;
         emails: number;
+        totalCallTime: number;
+        averageCallTime: number;
         responseRate: number;
       };
     }>;
@@ -699,7 +711,7 @@ const Metrics = () => {
   };
 
   const EnhancedPipelineTimeline: React.FC<{ selectedPeriod: string }> = ({ selectedPeriod }) => {
-    const [timelineData, setTimelineData] = useState<{ stage: string; avgDays: number; transitions: number }[]>([]);
+    const [timelineData, setTimelineData] = useState<any>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     
@@ -708,21 +720,9 @@ const Metrics = () => {
         setLoading(true);
         setError(null);
         try {
-          const res = await makeApiCall(`${API_BASE}/metrics/pipeline-overview?timeframe=${encodeURIComponent(selectedPeriod)}`);
+          const res = await makeApiCall(`${API_BASE}/metrics/pipeline-timeline-metrics?timeframe=${encodeURIComponent(selectedPeriod)}`);
           const json = await res.json();
-          
-          // Transform the timeline data from the existing API
-          const timelineRows = json?.data?.timeline || [];
-          const transformedData = [
-            { stage: 'Lead → Qualified', avgDays: 2.5, transitions: 145 },
-            { stage: 'Qualified → Appointment', avgDays: 4.2, transitions: 89 },
-            { stage: 'Appointment → Offer', avgDays: 1.8, transitions: 67 },
-            { stage: 'Offer → Contract', avgDays: 7.3, transitions: 45 },
-            { stage: 'Contract → Sold', avgDays: 28.5, transitions: 38 },
-            { stage: 'Sold → Closed', avgDays: 14.2, transitions: 32 }
-          ];
-          
-          setTimelineData(transformedData);
+          setTimelineData(json?.data || null);
         } catch (e) { 
           setError('Failed to load timeline data'); 
         } finally { 
@@ -732,7 +732,61 @@ const Metrics = () => {
       load();
     }, [selectedPeriod]);
     
-    const maxDays = Math.max(...timelineData.map(d => d.avgDays));
+    if (!timelineData) {
+      return <Card className="p-6"><CardContent><div className="text-center py-8">Loading...</div></CardContent></Card>;
+    }
+
+    // Create display rows with TWO metrics per stage
+    const displayRows = [
+      {
+        stage: 'Qualified Leads',
+        primaryLabel: 'New Lead → Qualified',
+        primaryDays: timelineData.qualifiedLeads.newToQualified,
+        secondaryLabel: null,
+        secondaryDays: null,
+        count: timelineData.qualifiedLeads.count
+      },
+      {
+        stage: 'Appointments Set',
+        primaryLabel: 'New Lead → Appointment',
+        primaryDays: timelineData.appointmentsSet.newToAppointment,
+        secondaryLabel: 'Qualified → Appointment',
+        secondaryDays: timelineData.appointmentsSet.qualifiedToAppointment,
+        count: timelineData.appointmentsSet.count
+      },
+      {
+        stage: 'Offers Made',
+        primaryLabel: 'New Lead → Offer',
+        primaryDays: timelineData.offersMade.newToOffer,
+        secondaryLabel: 'Appointment → Offer',
+        secondaryDays: timelineData.offersMade.appointmentToOffer,
+        count: timelineData.offersMade.count
+      },
+      {
+        stage: 'Under Contract',
+        primaryLabel: 'New Lead → Contract',
+        primaryDays: timelineData.underContract.newToContract,
+        secondaryLabel: 'Offer → Contract',
+        secondaryDays: timelineData.underContract.offerToContract,
+        count: timelineData.underContract.count
+      },
+      {
+        stage: 'Sold',
+        primaryLabel: 'New Lead → Sold',
+        primaryDays: timelineData.sold.newToSold,
+        secondaryLabel: 'Contract → Sold',
+        secondaryDays: timelineData.sold.contractToSold,
+        count: timelineData.sold.count
+      },
+      {
+        stage: 'Closed',
+        primaryLabel: 'New Lead → Closed',
+        primaryDays: timelineData.closed.newToClosed,
+        secondaryLabel: 'Sold → Closed',
+        secondaryDays: timelineData.closed.soldToClosed,
+        count: timelineData.closed.count
+      }
+    ];
     
     return (
       <Card className="p-6">
@@ -753,63 +807,66 @@ const Metrics = () => {
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Timeline Chart */}
-              <div className="space-y-4">
-                {timelineData.map((item, index) => (
-                  <div key={index} className="flex items-center space-x-4">
-                    {/* Stage Name */}
-                    <div className="w-48 text-sm font-medium text-gray-700">
-                      {item.stage}
-                    </div>
-                    
-                    {/* Progress Bar */}
-                    <div className="flex-1 relative">
-                      <div className="w-full bg-gray-200 rounded-full h-8 relative shadow-inner">
-                        <div 
-                          className="bg-gradient-to-r from-indigo-400 via-blue-500 to-blue-600 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium transition-all duration-700 shadow-sm"
-                          style={{ 
-                            width: `${Math.max(15, (item.avgDays / maxDays) * 100)}%`,
-                            minWidth: '60px'
-                          }}
-                        >
-                          {item.avgDays} days
-                        </div>
-                        {/* Shine effect */}
-                        <div 
-                          className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent rounded-full"
-                          style={{ width: `${Math.max(15, (item.avgDays / maxDays) * 100)}%` }}
-                        />
-                      </div>
-                    </div>
-                    
-                    {/* Transitions Count */}
-                    <div className="w-20 text-right">
-                      <div className="text-sm font-bold text-gray-900">{item.transitions}</div>
-                      <div className="text-xs text-gray-500">transitions</div>
-                    </div>
-                  </div>
-                ))}
+              {/* Timeline Metrics Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="text-left py-3 px-4 font-medium text-gray-700 border-b">Stage</th>
+                      <th className="text-center py-3 px-4 font-medium text-gray-700 border-b">From Start</th>
+                      <th className="text-center py-3 px-4 font-medium text-gray-700 border-b">Time (Days)</th>
+                      <th className="text-center py-3 px-4 font-medium text-gray-700 border-b">From Previous</th>
+                      <th className="text-center py-3 px-4 font-medium text-gray-700 border-b">Time (Days)</th>
+                      <th className="text-center py-3 px-4 font-medium text-gray-700 border-b">Count</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayRows.map((row, index) => (
+                      <tr key={index} className="hover:bg-gray-50 border-b">
+                        <td className="py-4 px-4 font-semibold text-gray-900">{row.stage}</td>
+                        <td className="text-center py-4 px-4 text-sm text-gray-600">{row.primaryLabel}</td>
+                        <td className="text-center py-4 px-4">
+                          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-blue-100 text-blue-800">
+                            {row.primaryDays}
+                          </span>
+                        </td>
+                        <td className="text-center py-4 px-4 text-sm text-gray-600">
+                          {row.secondaryLabel || '—'}
+                        </td>
+                        <td className="text-center py-4 px-4">
+                          {row.secondaryDays ? (
+                            <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-green-100 text-green-800">
+                              {row.secondaryDays}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
+                        </td>
+                        <td className="text-center py-4 px-4">
+                          <span className="text-sm font-semibold text-gray-700">{row.count}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
               
               {/* Summary Stats */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 pt-6 border-t">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-600">
-                    {timelineData.reduce((sum, item) => sum + item.avgDays, 0).toFixed(1)}
-                  </div>
-                  <div className="text-sm text-gray-600">Total Avg Days</div>
+                <div className="text-center p-4 bg-blue-50 rounded-lg">
+                  <div className="text-xs text-gray-600 mb-1">Total Qualified</div>
+                  <div className="text-2xl font-bold text-blue-600">{timelineData.qualifiedLeads.count}</div>
+                  <div className="text-xs text-gray-500 mt-1">Avg: {timelineData.qualifiedLeads.newToQualified} days</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-green-600">
-                    {Math.max(...timelineData.map(d => d.avgDays)).toFixed(1)}
-                  </div>
-                  <div className="text-sm text-gray-600">Longest Stage</div>
+                <div className="text-center p-4 bg-green-50 rounded-lg">
+                  <div className="text-xs text-gray-600 mb-1">Total Under Contract</div>
+                  <div className="text-2xl font-bold text-green-600">{timelineData.underContract.count}</div>
+                  <div className="text-xs text-gray-500 mt-1">Avg: {timelineData.underContract.newToContract} days</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-orange-600">
-                    {Math.min(...timelineData.map(d => d.avgDays)).toFixed(1)}
-                  </div>
-                  <div className="text-sm text-gray-600">Shortest Stage</div>
+                <div className="text-center p-4 bg-purple-50 rounded-lg">
+                  <div className="text-xs text-gray-600 mb-1">Total Closed</div>
+                  <div className="text-2xl font-bold text-purple-600">{timelineData.closed.count}</div>
+                  <div className="text-xs text-gray-500 mt-1">Avg: {timelineData.closed.newToClosed} days</div>
                 </div>
               </div>
             </div>
@@ -818,6 +875,24 @@ const Metrics = () => {
       </Card>
     );
   };
+
+  // Fetch users list for Communications dropdown
+  useEffect(() => {
+    if (activeTab !== 'communications') return;
+    if (commViewScope !== 'team') return;
+    
+    const fetchUsers = async () => {
+      try {
+        const res = await makeApiCall(`${API_BASE}/users?take=100`);
+        const json = await res.json();
+        setCommUsers(json?.data || []);
+      } catch (error) {
+        console.error('Failed to fetch users:', error);
+      }
+    };
+    
+    fetchUsers();
+  }, [activeTab, commViewScope]);
 
   // Fetch communications overview when tab is communications or when filters change
   useEffect(() => {
@@ -858,6 +933,27 @@ const Metrics = () => {
     };
     load();
   }, [activeTab, selectedPeriod, commViewScope, selectedCommUser, showFilters, customDateRange]);
+
+  // Fetch users list for Acquisitions dropdown
+  useEffect(() => {
+    if (activeTab !== 'acquisitions') return;
+    if (acqViewScope !== 'team') return;
+    
+    const fetchAcqUsers = async () => {
+      try {
+        const res = await makeApiCall(`${API_BASE}/users?take=100`);
+        const json = await res.json();
+        const acqOnly = (json?.data || []).filter((u: any) => 
+          u.roles?.includes('ACQ')
+        );
+        setAcqUsers(acqOnly);
+      } catch (error) {
+        console.error('Failed to fetch ACQ users:', error);
+      }
+    };
+    
+    fetchAcqUsers();
+  }, [activeTab, acqViewScope]);
 
   // Fetch acquisitions overview when tab is acquisitions or when filters change
   useEffect(() => {
@@ -917,6 +1013,27 @@ const Metrics = () => {
     load();
   }, [activeTab, selectedPeriod, acqViewScope, selectedAcqUser, showFilters, customDateRange]);
 
+  // Fetch users list for Dispositions dropdown
+  useEffect(() => {
+    if (activeTab !== 'dispositions-team') return;
+    if (dispViewScope !== 'team') return;
+    
+    const fetchDispUsers = async () => {
+      try {
+        const res = await makeApiCall(`${API_BASE}/users?take=100`);
+        const json = await res.json();
+        const dispOnly = (json?.data || []).filter((u: any) => 
+          u.roles?.includes('DISP')
+        );
+        setDispUsers(dispOnly);
+      } catch (error) {
+        console.error('Failed to fetch DISP users:', error);
+      }
+    };
+    
+    fetchDispUsers();
+  }, [activeTab, dispViewScope]);
+
   // Fetch dispositions overview when tab is dispositions-team or when filters change
   useEffect(() => {
     if (activeTab !== 'dispositions-team') return;
@@ -975,6 +1092,27 @@ const Metrics = () => {
     };
     load();
   }, [activeTab, selectedPeriod, dispViewScope, selectedDispUser, showFilters, customDateRange]);
+
+  // Fetch users list for Transactions dropdown
+  useEffect(() => {
+    if (activeTab !== 'transaction-coordinator') return;
+    if (tcViewScope !== 'overview') return;
+    
+    const fetchTcUsers = async () => {
+      try {
+        const res = await makeApiCall(`${API_BASE}/users?take=100`);
+        const json = await res.json();
+        const tcOnly = (json?.data || []).filter((u: any) => 
+          u.roles?.includes('TC')
+        );
+        setTcUsers(tcOnly);
+      } catch (error) {
+        console.error('Failed to fetch TC users:', error);
+      }
+    };
+    
+    fetchTcUsers();
+  }, [activeTab, tcViewScope]);
 
   // Fetch transactions overview when tab is transaction-coordinator or when filters change
   useEffect(() => {
@@ -2456,7 +2594,10 @@ const Metrics = () => {
               {(isAdmin || isExecutive || isManager) && (
                 <div className="flex bg-gray-100 rounded-lg p-1">
                   <button
-                    onClick={() => setCommViewScope('personal')}
+                    onClick={() => {
+                      setCommViewScope('personal');
+                      setSelectedCommUser('current-user');
+                    }}
                     className={`px-3 py-1 text-sm rounded-md transition-colors ${
                       commViewScope === 'personal'
                         ? 'bg-white text-gray-900 shadow-sm'
@@ -2466,7 +2607,10 @@ const Metrics = () => {
                     Personal
                   </button>
                   <button
-                    onClick={() => setCommViewScope('team')}
+                    onClick={() => {
+                      setCommViewScope('team');
+                      setSelectedCommUser('all-users');
+                    }}
                     className={`px-3 py-1 text-sm rounded-md transition-colors ${
                       commViewScope === 'team'
                         ? 'bg-white text-gray-900 shadow-sm'
@@ -2487,7 +2631,11 @@ const Metrics = () => {
               <SelectContent>
                     <SelectItem value="all-users">All Users</SelectItem>
                     <SelectItem value="current-user">Current User</SelectItem>
-                    {/* Dynamic user list would go here */}
+                    {commUsers.map((user) => (
+                      <SelectItem key={user.id} value={user.id}>
+                        {user.firstName} {user.lastName}
+                      </SelectItem>
+                    ))}
               </SelectContent>
             </Select>
               )}
@@ -2884,7 +3032,11 @@ const Metrics = () => {
               <SelectContent>
                         <SelectItem value="all-users">All Acquisitions Agents</SelectItem>
                         <SelectItem value="current-user">Current User</SelectItem>
-                        {/* Dynamic ACQ agent list would go here */}
+                        {acqUsers.map((acqUser) => (
+                          <SelectItem key={acqUser.id} value={acqUser.id}>
+                            {acqUser.firstName} {acqUser.lastName}
+                          </SelectItem>
+                        ))}
               </SelectContent>
             </Select>
                   )}
@@ -2964,23 +3116,23 @@ const Metrics = () => {
                       stroke="currentColor"
                       strokeWidth="8"
                       fill="transparent"
-                      strokeDasharray={`${((acquisitionsData?.clearToClosePercentage || 0) / 100) * 251.2} 251.2`}
+                      strokeDasharray={`${Math.min(((acquisitionsData?.totalClearToClose || 0) / 38) * 251.2, 251.2)} 251.2`}
                       className="text-green-500"
                       strokeLinecap="round"
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
                     <span className="text-2xl font-bold text-gray-900">
-                      {acqLoading ? '...' : (acquisitionsData?.clearToClosePercentage || 0).toFixed(0)}%
+                      {acqLoading ? '...' : (acquisitionsData?.totalClearToClose || 0)}
                     </span>
                   </div>
                 </div>
                 <div className="space-y-1">
                   <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Total Clear to Close</h3>
                   <p className="text-lg font-bold text-gray-900">
-                    {acqLoading ? '...' : (acquisitionsData?.totalClearToClose || tranClearToClose || 0)}
+                    {acqLoading ? '...' : `${acquisitionsData?.totalClearToClose || tranClearToClose || 0} of 38`}
                   </p>
-                  <p className="text-xs text-gray-500">Ready for closing</p>
+                  <p className="text-xs text-gray-500">Properties marked clear to close</p>
                 </div>
               </div>
             </Card>
@@ -3006,23 +3158,23 @@ const Metrics = () => {
                       stroke="currentColor"
                       strokeWidth="8"
                       fill="transparent"
-                      strokeDasharray={`${((acquisitionsData?.projectedProfit || 0) / 200000) * 251.2} 251.2`}
-                      className="text-orange-500"
+                      strokeDasharray={`${((acquisitionsData?.clearToClosePercentage || 0) / 95) * 251.2} 251.2`}
+                      className="text-purple-500"
                       strokeLinecap="round"
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
                     <span className="text-2xl font-bold text-gray-900">
-                      {acqLoading ? '...' : (((acquisitionsData?.projectedProfit || 0) / 200000) * 100).toFixed(0)}%
+                      {acqLoading ? '...' : (acquisitionsData?.clearToClosePercentage || 0).toFixed(0)}%
                     </span>
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Projected Profit</h3>
+                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Percentage Clear to Close</h3>
                   <p className="text-lg font-bold text-gray-900">
-                    {acqLoading ? '...' : `$${(acquisitionsData?.projectedProfit || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                    {acqLoading ? '...' : `${(acquisitionsData?.clearToClosePercentage || 0).toFixed(1)}%`}
                   </p>
-                  <p className="text-xs text-gray-500">of $200,000.00 target</p>
+                  <p className="text-xs text-gray-500">of 95% target</p>
                 </div>
               </div>
             </Card>
@@ -3031,7 +3183,49 @@ const Metrics = () => {
 
           {/* Row 2 - Performance & Risk Metrics */}
               {!acqError && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            {/* Projected Profit */}
+            <Card className="p-6 text-center bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+              <div className="space-y-4">
+                <div className="relative w-24 h-24 mx-auto">
+                  <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 100 100">
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="40"
+                      stroke="currentColor"
+                      strokeWidth="8"
+                      fill="transparent"
+                      className="text-gray-200"
+                    />
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="40"
+                      stroke="currentColor"
+                      strokeWidth="8"
+                      fill="transparent"
+                      strokeDasharray={`${((acquisitionsData?.projectedProfit || 0) / 1000000) * 251.2} 251.2`}
+                      className="text-orange-500"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-2xl font-bold text-gray-900">
+                      {acqLoading ? '...' : `$${((acquisitionsData?.projectedProfit || 0) / 1000).toFixed(0)}k`}
+                    </span>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Projected Profit</h3>
+                  <p className="text-lg font-bold text-gray-900">
+                    {acqLoading ? '...' : `$${(acquisitionsData?.projectedProfit || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  </p>
+                  <p className="text-xs text-gray-500">of $1,000,000.00 target</p>
+                </div>
+              </div>
+            </Card>
+
             {/* Total Deals Closed */}
             <Card className="p-6 text-center bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
               <div className="space-y-4">
@@ -3095,7 +3289,7 @@ const Metrics = () => {
                       stroke="currentColor"
                       strokeWidth="8"
                       fill="transparent"
-                      strokeDasharray={`${((acquisitionsData?.closedProfit || 0) / 200000) * 251.2} 251.2`}
+                      strokeDasharray={`${((acquisitionsData?.closedProfit || 0) / 800000) * 251.2} 251.2`}
                       className="text-cyan-500"
                       strokeLinecap="round"
                     />
@@ -3111,7 +3305,7 @@ const Metrics = () => {
                   <p className="text-lg font-bold text-gray-900">
                     {acqLoading ? '...' : `$${(acquisitionsData?.closedProfit || closedProfit || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                   </p>
-                  <p className="text-xs text-gray-500">of $200,000.00 target</p>
+                  <p className="text-xs text-gray-500">of $800,000.00 target</p>
                 </div>
               </div>
             </Card>
@@ -3219,7 +3413,11 @@ const Metrics = () => {
               <SelectContent>
                         <SelectItem value="all-users">All Dispositions Agents</SelectItem>
                         <SelectItem value="current-user">Current User</SelectItem>
-                        {/* Dynamic DISP agent list would go here */}
+                        {dispUsers.map((dispUser) => (
+                          <SelectItem key={dispUser.id} value={dispUser.id}>
+                            {dispUser.firstName} {dispUser.lastName}
+                          </SelectItem>
+                        ))}
               </SelectContent>
             </Select>
                   )}
@@ -3235,7 +3433,7 @@ const Metrics = () => {
               </div>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Total Properties in Pipeline */}
             <Card className="p-6 text-center bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
               <div className="space-y-4">
@@ -3299,23 +3497,65 @@ const Metrics = () => {
                       stroke="currentColor"
                       strokeWidth="8"
                       fill="transparent"
-                      strokeDasharray={`${((dispositionsData?.propertiesSoldPercentage || 0) / 100) * 251.2} 251.2`}
+                      strokeDasharray={`${Math.min(((dispositionsData?.totalPropertiesSold || 0) / 10) * 251.2, 251.2)} 251.2`}
                       className="text-green-500"
                       strokeLinecap="round"
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
                     <span className="text-2xl font-bold text-gray-900">
-                      {dispLoading ? '...' : (dispositionsData?.propertiesSoldPercentage || 0).toFixed(0)}%
+                      {dispLoading ? '...' : (dispositionsData?.totalPropertiesSold || 0)}
                     </span>
                   </div>
                 </div>
                 <div className="space-y-1">
                   <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Total Properties Sold</h3>
                   <p className="text-lg font-bold text-gray-900">
-                    {dispLoading ? '...' : (dispositionsData?.totalPropertiesSold || dispClosed || 0)}
+                    {dispLoading ? '...' : `${dispositionsData?.totalPropertiesSold || 0} of 10`}
                   </p>
-                  <p className="text-xs text-gray-500">Closed this period</p>
+                  <p className="text-xs text-gray-500">Properties sold this month</p>
+                </div>
+              </div>
+            </Card>
+
+            {/* Percentage of Properties Sold */}
+            <Card className="p-6 text-center bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+              <div className="space-y-4">
+                <div className="relative w-24 h-24 mx-auto">
+                  <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 100 100">
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="40"
+                      stroke="currentColor"
+                      strokeWidth="8"
+                      fill="transparent"
+                      className="text-gray-200"
+                    />
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="40"
+                      stroke="currentColor"
+                      strokeWidth="8"
+                      fill="transparent"
+                      strokeDasharray={`${((dispositionsData?.propertiesSoldPercentage || 0) / 25) * 251.2} 251.2`}
+                      className="text-purple-500"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-2xl font-bold text-gray-900">
+                      {dispLoading ? '...' : (dispositionsData?.propertiesSoldPercentage || 0).toFixed(1)}%
+                    </span>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Percentage Sold</h3>
+                  <p className="text-lg font-bold text-gray-900">
+                    {dispLoading ? '...' : `${(dispositionsData?.propertiesSoldPercentage || 0).toFixed(1)}%`}
+                  </p>
+                  <p className="text-xs text-gray-500">of 25% target</p>
                 </div>
               </div>
             </Card>
@@ -3387,21 +3627,21 @@ const Metrics = () => {
                       stroke="currentColor"
                       strokeWidth="8"
                       fill="transparent"
-                      strokeDasharray={`${((dispositionsData?.totalDealsClosed || 0) / Math.max((dispositionsData?.totalPropertiesInPipeline || 1), 1)) * 251.2} 251.2`}
+                      strokeDasharray={`${Math.min(((dispositionsData?.totalDealsClosed || 0) / 8) * 251.2, 251.2)} 251.2`}
                       className="text-emerald-500"
                       strokeLinecap="round"
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
                     <span className="text-2xl font-bold text-gray-900">
-                      {dispLoading ? '...' : (((dispositionsData?.totalDealsClosed || 0) / Math.max((dispositionsData?.totalPropertiesInPipeline || 1), 1)) * 100).toFixed(0)}%
+                      {dispLoading ? '...' : (dispositionsData?.totalDealsClosed || 0)}
                     </span>
                   </div>
                 </div>
                 <div className="space-y-1">
                   <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Total Deals Closed</h3>
                   <p className="text-lg font-bold text-gray-900">
-                    {dispLoading ? '...' : `${dispositionsData?.totalDealsClosed || 0} of ${dispositionsData?.totalPropertiesInPipeline || 0}`}
+                    {dispLoading ? '...' : `${dispositionsData?.totalDealsClosed || 0} of 8`}
                   </p>
                   <p className="text-xs text-gray-500">Deals closed this month</p>
                 </div>
@@ -3592,7 +3832,11 @@ const Metrics = () => {
               <SelectContent>
                         <SelectItem value="all-users">All Transaction Coordinators</SelectItem>
                         <SelectItem value="current-user">Current User</SelectItem>
-                        {/* Dynamic TC list would go here */}
+                        {tcUsers.map((tcUser) => (
+                          <SelectItem key={tcUser.id} value={tcUser.id}>
+                            {tcUser.firstName} {tcUser.lastName}
+                          </SelectItem>
+                        ))}
               </SelectContent>
             </Select>
                   )}
@@ -3623,14 +3867,14 @@ const Metrics = () => {
                             <circle cx="60" cy="60" r="50" stroke="#e5e7eb" strokeWidth="8" fill="none" />
                             <circle
                               cx="60" cy="60" r="50" stroke="#3b82f6" strokeWidth="8" fill="none" strokeLinecap="round"
-                              strokeDasharray={`${((transactionsData?.totalPropertiesInPipeline || 0)/Math.max(1, (transactionsData?.totalPropertiesInPipeline || 0) + 10)) * 314} 314`}
+                              strokeDasharray={`${Math.min(((transactionsData?.totalPropertiesInPipeline || 0) / 40) * 314, 314)} 314`}
                               className="transition-all duration-1000 ease-out"
                             />
                           </svg>
                           <div className="absolute inset-0 flex items-center justify-center">
                             <div className="text-center">
                               <div className="text-2xl font-black text-blue-600">{transactionsData?.totalPropertiesInPipeline || 0}</div>
-                              <div className="text-xs text-gray-600 font-medium">Total</div>
+                              <div className="text-xs text-gray-600 font-medium">of 40</div>
                             </div>
           </div>
                         </div>
@@ -3654,14 +3898,14 @@ const Metrics = () => {
                             <circle cx="60" cy="60" r="50" stroke="#e5e7eb" strokeWidth="8" fill="none" />
                             <circle
                               cx="60" cy="60" r="50" stroke="#10b981" strokeWidth="8" fill="none" strokeLinecap="round"
-                              strokeDasharray={`${((transactionsData?.totalClearToClose || 0)/Math.max(1, (transactionsData?.totalPropertiesInPipeline || 1))) * 314} 314`}
+                              strokeDasharray={`${Math.min(((transactionsData?.totalClearToClose || 0) / 38) * 314, 314)} 314`}
                               className="transition-all duration-1000 ease-out"
                             />
                           </svg>
                           <div className="absolute inset-0 flex items-center justify-center">
                             <div className="text-center">
                               <div className="text-2xl font-black text-green-600">{transactionsData?.totalClearToClose || 0}</div>
-                              <div className="text-xs text-gray-600 font-medium">Clear to Close</div>
+                              <div className="text-xs text-gray-600 font-medium">of 38</div>
                             </div>
                           </div>
                         </div>
@@ -3685,14 +3929,14 @@ const Metrics = () => {
                             <circle cx="60" cy="60" r="50" stroke="#e5e7eb" strokeWidth="8" fill="none" />
                             <circle
                               cx="60" cy="60" r="50" stroke="#8b5cf6" strokeWidth="8" fill="none" strokeLinecap="round"
-                              strokeDasharray={`${((transactionsData?.clearToClosePercentage || 0)/100) * 314} 314`}
+                              strokeDasharray={`${((transactionsData?.clearToClosePercentage || 0) / 95) * 314} 314`}
                               className="transition-all duration-1000 ease-out"
                             />
                           </svg>
                           <div className="absolute inset-0 flex items-center justify-center">
                             <div className="text-center">
                               <div className="text-2xl font-black text-purple-600">{(transactionsData?.clearToClosePercentage || 0).toFixed(1)}%</div>
-                              <div className="text-xs text-gray-600 font-medium">Success Rate</div>
+                              <div className="text-xs text-gray-600 font-medium">of 95%</div>
                             </div>
                           </div>
                         </div>
@@ -3752,14 +3996,14 @@ const Metrics = () => {
                             <circle cx="60" cy="60" r="50" stroke="#e5e7eb" strokeWidth="8" fill="none" />
                             <circle
                               cx="60" cy="60" r="50" stroke="#10b981" strokeWidth="8" fill="none" strokeLinecap="round"
-                              strokeDasharray={`${((transactionsData?.totalDealsClosed || 0)/Math.max(1, (transactionsData?.totalPropertiesInPipeline || 1))) * 314} 314`}
+                              strokeDasharray={`${Math.min(((transactionsData?.totalDealsClosed || 0) / 32) * 314, 314)} 314`}
                               className="transition-all duration-1000 ease-out"
                             />
                           </svg>
                           <div className="absolute inset-0 flex items-center justify-center">
                             <div className="text-center">
                               <div className="text-2xl font-black text-green-600">{transactionsData?.totalDealsClosed || 0}</div>
-                              <div className="text-xs text-gray-600 font-medium">Deals</div>
+                              <div className="text-xs text-gray-600 font-medium">of 32</div>
                             </div>
                           </div>
                         </div>
@@ -3919,6 +4163,36 @@ const Metrics = () => {
                   <SelectItem value="this-year">This Year</SelectItem>
                 </SelectContent>
               </Select>
+              
+              {/* View Toggle */}
+              <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+                <button
+                  onClick={() => setAcqLeaderboardView('performance')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    acqLeaderboardView === 'performance'
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Trophy className="w-4 h-4" />
+                    Performance
+                  </div>
+                </button>
+                <button
+                  onClick={() => setAcqLeaderboardView('communications')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    acqLeaderboardView === 'communications'
+                      ? 'bg-white text-green-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Phone className="w-4 h-4" />
+                    Communications
+                  </div>
+                </button>
+              </div>
             </div>
           </div>
           
@@ -3961,6 +4235,7 @@ const Metrics = () => {
               ) : (
                 <div className="space-y-6">
                   {/* Performance Leaderboard */}
+                  {acqLeaderboardView === 'performance' && (
                   <Card className="overflow-hidden">
                     <CardHeader className="bg-white border-b">
                       <div className="flex items-center justify-between">
@@ -3981,6 +4256,7 @@ const Metrics = () => {
                               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rank</th>
                               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Agent</th>
                               <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Score</th>
+                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Total Leads</th>
                               <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Contracts</th>
                               <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Profit</th>
                               <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Efficiency</th>
@@ -4015,6 +4291,9 @@ const Metrics = () => {
                                   <div className="text-sm font-bold text-blue-600">{agent.totalScore || 0}</div>
                                 </td>
                                 <td className="px-4 py-3 whitespace-nowrap text-center">
+                                  <div className="text-sm text-gray-700">{agent.totalLeads || 0}</div>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-center">
                                   <div className="text-sm font-semibold text-green-600">{agent.contractsSigned || 0}</div>
                                 </td>
                                 <td className="px-4 py-3 whitespace-nowrap text-center">
@@ -4041,8 +4320,10 @@ const Metrics = () => {
                       </div>
                     </CardContent>
                   </Card>
+                  )}
 
                   {/* Communications Leaderboard */}
+                  {acqLeaderboardView === 'communications' && (
                   <Card className="overflow-hidden">
                     <CardHeader className="bg-white border-b">
                       <div className="flex items-center justify-between">
@@ -4064,15 +4345,14 @@ const Metrics = () => {
                               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Agent</th>
                               <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Total</th>
                               <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Calls</th>
+                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Total Time</th>
+                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Avg Time</th>
                               <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">SMS</th>
                               <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Emails</th>
-                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Response</th>
                             </tr>
                           </thead>
                           <tbody className="bg-white divide-y divide-gray-200">
-                            {[...acqLeaderboardData.agents]
-                              .sort((a, b) => (b.communications.total || 0) - (a.communications.total || 0))
-                              .map((agent, index) => (
+                            {acqLeaderboardData.agents.map((agent, index) => (
                               <tr key={`comm-${agent.userId}`} className={`hover:bg-gray-50 transition-colors ${
                                 user?.id === agent.userId ? 'bg-green-50 border-l-2 border-green-500' : ''
                               }`}>
@@ -4101,15 +4381,20 @@ const Metrics = () => {
                                   <div className="text-sm text-gray-700">{agent.communications.calls || 0}</div>
                                 </td>
                                 <td className="px-4 py-3 whitespace-nowrap text-center">
+                                  <div className="text-sm text-gray-700">
+                                    {Math.floor((agent.communications.totalCallTime || 0) / 60)}m {((agent.communications.totalCallTime || 0) % 60)}s
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                  <div className="text-sm text-gray-700">
+                                    {Math.floor((agent.communications.averageCallTime || 0) / 60)}m {Math.round((agent.communications.averageCallTime || 0) % 60)}s
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-center">
                                   <div className="text-sm text-gray-700">{agent.communications.sms || 0}</div>
                                 </td>
                                 <td className="px-4 py-3 whitespace-nowrap text-center">
                                   <div className="text-sm text-gray-700">{agent.communications.emails || 0}</div>
-                                </td>
-                                <td className="px-4 py-3 whitespace-nowrap text-center">
-                                  <div className="text-sm font-semibold text-blue-600">
-                                    {agent.communications.responseRate || 0}%
-                                  </div>
                                 </td>
                               </tr>
                             ))}
@@ -4118,6 +4403,7 @@ const Metrics = () => {
                       </div>
                     </CardContent>
                   </Card>
+                  )}
                 </div>
               )}
             </>
@@ -4162,6 +4448,36 @@ const Metrics = () => {
                   <SelectItem value="this-year">This Year</SelectItem>
                 </SelectContent>
               </Select>
+              
+              {/* View Toggle */}
+              <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+                <button
+                  onClick={() => setDispLeaderboardView('performance')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    dispLeaderboardView === 'performance'
+                      ? 'bg-white text-purple-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Trophy className="w-4 h-4" />
+                    Performance
+                  </div>
+                </button>
+                <button
+                  onClick={() => setDispLeaderboardView('communications')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    dispLeaderboardView === 'communications'
+                      ? 'bg-white text-teal-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4" />
+                    Communications
+                  </div>
+                </button>
+              </div>
             </div>
           </div>
           
@@ -4204,6 +4520,7 @@ const Metrics = () => {
               ) : (
                 <div className="space-y-6">
                   {/* Performance Leaderboard */}
+                  {dispLeaderboardView === 'performance' && (
                   <Card className="overflow-hidden">
                     <CardHeader className="bg-white border-b">
                       <div className="flex items-center justify-between">
@@ -4225,6 +4542,7 @@ const Metrics = () => {
                               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Agent</th>
                               <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Score</th>
                               <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Sold</th>
+                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">% Sold</th>
                               <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Profit</th>
                               <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Buyers</th>
                               <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Risk</th>
@@ -4261,6 +4579,9 @@ const Metrics = () => {
                                   <div className="text-sm font-semibold text-green-600">{agent.propertiesSold || 0}</div>
                                 </td>
                                 <td className="px-4 py-3 whitespace-nowrap text-center">
+                                  <div className="text-sm font-semibold text-blue-600">{(agent.propertiesSoldPercentage || 0).toFixed(1)}%</div>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-center">
                                   <div className="text-sm font-semibold text-orange-600">
                                     ${new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(agent.projectedProfit || 0)}
                                   </div>
@@ -4284,8 +4605,10 @@ const Metrics = () => {
                       </div>
                     </CardContent>
                   </Card>
+                  )}
 
                   {/* Communications Leaderboard */}
+                  {dispLeaderboardView === 'communications' && (
                   <Card className="overflow-hidden">
                     <CardHeader className="bg-white border-b">
                       <div className="flex items-center justify-between">
@@ -4294,7 +4617,7 @@ const Metrics = () => {
                             <MessageSquare className="w-5 h-5 text-teal-500" />
                             Communications Leaderboard
                           </CardTitle>
-                          <p className="text-sm text-gray-500 mt-1">Ranked by total communications</p>
+                          <p className="text-sm text-gray-500 mt-1">Same ranking as performance leaderboard</p>
                         </div>
                       </div>
                     </CardHeader>
@@ -4305,17 +4628,15 @@ const Metrics = () => {
                             <tr>
                               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rank</th>
                               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Agent</th>
-                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Total</th>
                               <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Calls</th>
+                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Total Time</th>
+                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Avg Time</th>
                               <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">SMS</th>
                               <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Emails</th>
-                              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Response</th>
                             </tr>
                           </thead>
                           <tbody className="bg-white divide-y divide-gray-200">
-                            {[...dispLeaderboardData.agents]
-                              .sort((a, b) => (b.communications.total || 0) - (a.communications.total || 0))
-                              .map((agent, index) => (
+                            {dispLeaderboardData.agents.map((agent, index) => (
                               <tr key={`comm-${agent.userId}`} className={`hover:bg-gray-50 transition-colors ${
                                 user?.id === agent.userId ? 'bg-teal-50 border-l-2 border-teal-500' : ''
                               }`}>
@@ -4334,26 +4655,27 @@ const Metrics = () => {
                                     </div>
                                     <div>
                                       <div className="text-sm font-medium text-gray-900">{agent.name}</div>
-                                      <div className="text-xs text-gray-500">{agent.email}</div>
                                     </div>
                                   </div>
                                 </td>
                                 <td className="px-4 py-3 whitespace-nowrap text-center">
-                                  <div className="text-sm font-bold text-teal-600">{agent.communications.total || 0}</div>
+                                  <div className="text-sm font-bold text-teal-600">{agent.communications.calls || 0}</div>
                                 </td>
                                 <td className="px-4 py-3 whitespace-nowrap text-center">
-                                  <div className="text-sm text-gray-700">{agent.communications.calls || 0}</div>
+                                  <div className="text-sm text-gray-700">
+                                    {Math.floor((agent.communications.totalCallTime || 0) / 60)}m {((agent.communications.totalCallTime || 0) % 60)}s
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                  <div className="text-sm text-gray-700">
+                                    {Math.floor((agent.communications.averageCallTime || 0) / 60)}m {Math.round((agent.communications.averageCallTime || 0) % 60)}s
+                                  </div>
                                 </td>
                                 <td className="px-4 py-3 whitespace-nowrap text-center">
                                   <div className="text-sm text-gray-700">{agent.communications.sms || 0}</div>
                                 </td>
                                 <td className="px-4 py-3 whitespace-nowrap text-center">
                                   <div className="text-sm text-gray-700">{agent.communications.emails || 0}</div>
-                                </td>
-                                <td className="px-4 py-3 whitespace-nowrap text-center">
-                                  <div className="text-sm font-semibold text-blue-600">
-                                    {agent.communications.responseRate || 0}%
-                                  </div>
                                 </td>
                               </tr>
                             ))}
@@ -4362,6 +4684,7 @@ const Metrics = () => {
                       </div>
                     </CardContent>
                   </Card>
+                  )}
                 </div>
               )}
             </>

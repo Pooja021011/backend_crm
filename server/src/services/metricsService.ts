@@ -204,117 +204,157 @@ export const metricsService = {
       end = now.endOf('quarter');
     }
 
-    const isAdminLike = roles.includes('ADMIN') || roles.includes('EXECUTIVE');
+    const isAdmin = roles.includes('ADMIN') || roles.includes('EXECUTIVE');
     const isManager = roles.includes('MANAGER');
-    const isAcqAgent = roles.includes('ACQ') && !isAdminLike && !isManager;
+    const isACQ = roles.includes('ACQ');
 
-    // Admin KPIs (company-wide)
-    if (isAdminLike) {
-      // Contracts signed: ACQ properties contracted this month
-      const acqContractedDeals = await metricsRepository.getDealsContractedBetween(start.toDate(), end.toDate(), {
+    const result: any = {
+      modes: [],
+    };
+
+    // ADMIN KPIs (company-wide)
+    if (isAdmin) {
+      result.modes.push('admin');
+      
+      // FIX: Get CURRENT contracts under contract (not just new this month)
+      const contractsSigned = await metricsRepository.getCurrentContractsCount({
         pipelineKey: 'ACQUISITIONS',
         leadType: 'SELLER',
       });
-      const contractsSigned = new Set(acqContractedDeals.map((d) => d.leadId)).size;
+      result.contractsSigned = contractsSigned;
 
       // Contracts sold: DISP properties closed this month
       const dispClosedDeals = await metricsRepository.getDealsClosedBetween(start.toDate(), end.toDate(), {
         pipelineKey: 'DISPOSITIONS',
         leadType: 'SELLER',
       });
-      const contractsSold = new Set(dispClosedDeals.map((d) => d.leadId)).size;
-
-      const totalProfit = dispClosedDeals.reduce((sum, d) => sum + (d.netProfit || 0), 0);
-
-      return {
-        mode: 'admin' as const,
-        contractsSigned,
-        contractsSold,
-        totalProfit,
-      };
+      result.contractsSold = new Set(dispClosedDeals.map((d) => d.leadId)).size;
+      result.totalProfit = dispClosedDeals.reduce((sum, d) => sum + (d.netProfit || 0), 0);
     }
 
-    // ACQ Manager + ACQ Agent KPIs
-    if (isManager || isAcqAgent) {
-      const assignedUserId = isAcqAgent ? userId : undefined;
-
-      // Total contracts (this month): ACQ leads under contract this month
-      const contractedDeals = await metricsRepository.getDealsContractedBetween(start.toDate(), end.toDate(), {
-        pipelineKey: 'ACQUISITIONS',
-        leadType: 'SELLER',
-        assignedUserId,
-      });
-      const totalContracts = new Set(contractedDeals.map((d) => d.leadId)).size;
-
-      // Leads received this month
-      const leadsReceived = await metricsRepository.getLeadsCreatedBetweenScoped(start.toDate(), end.toDate(), {
-        pipelineKey: 'ACQUISITIONS',
-        leadType: 'SELLER',
-        assignedUserId,
-        onlyPipelineStatus: true,
-      });
-      const leadsReceivedCount = leadsReceived.length;
-
-      // Leads per contract ratio: how many leads needed to get one contract
-      // Example: 100 leads received, 10 contracts = 10.00 (10 leads per contract)
-      const leadsPerContract = totalContracts > 0
-        ? leadsReceivedCount / totalContracts
-        : 0;
-
-      // Mishandled = SLA breaches on new leads this month + stale 48h on all active ACQ leads
-      const activeLeads = await metricsRepository.getActiveLeadsWithActivityByPipeline({
-        pipelineKey: 'ACQUISITIONS',
-        leadType: 'SELLER',
-        assignedUserId,
-        onlyPipelineStatus: true,
-      });
-
-      const nowDt = new Date();
-
-      // SLA breaches for leads created this month (2h/16h ET) using lastActivityAt
-      const createdThisMonthIds = new Set(leadsReceived.map((l) => l.id));
-      const slaBreaches = activeLeads.filter((l) => {
-        if (!createdThisMonthIds.has(l.id)) return false;
-        const lastActivityAt = computeLastActivityAt(l);
-        const thresholdHours = getSlaThresholdHoursEt(l.createdAt);
-        const hoursToTouch = (lastActivityAt.getTime() - l.createdAt.getTime()) / (1000 * 60 * 60);
-        return hoursToTouch > thresholdHours;
-      }).length;
-
-      // 48h stale across all active leads
-      const stale48h = activeLeads.filter((l) => {
-        const lastActivityAt = computeLastActivityAt(l);
-        const hoursSince = (nowDt.getTime() - lastActivityAt.getTime()) / (1000 * 60 * 60);
-        return hoursSince >= 48;
-      }).length;
-
-      const leadsMishandled = slaBreaches + stale48h;
-
-      return {
-        mode: 'acq' as const,
-        totalContracts,
-        leadsPerContract: Number(leadsPerContract.toFixed(2)),
-        leadsReceived: leadsReceivedCount,
-        leadsMishandled,
-        slaBreaches,
-        stale48h,
-      };
+    // MANAGER KPIs (team-wide for all ACQ agents)
+    if (isManager) {
+      result.modes.push('manager');
+      
+      const managerData = await this.calculateAcqKpis(start.toDate(), end.toDate(), undefined);
+      result.totalContracts = managerData.totalContracts;
+      result.leadsPerContract = managerData.leadsPerContract;
+      result.leadsMishandled = managerData.leadsMishandled;
+      result.leadsReceived = managerData.leadsReceived;
+      result.slaBreaches = managerData.slaBreaches;
+      result.stale48h = managerData.stale48h;
+      result.mishandledColor = this.getColorForMishandled(managerData.leadsMishandled);
     }
 
-    // Default fallback: return admin-like so UI doesn't break
-    const acqContractedDeals = await metricsRepository.getDealsContractedBetween(start.toDate(), end.toDate(), {
+    // ACQ AGENT KPIs (personal stats for this agent)
+    if (isACQ) {
+      result.modes.push('acq');
+      
+      const acqData = await this.calculateAcqKpis(start.toDate(), end.toDate(), userId);
+      result.totalContractsPersonal = acqData.totalContracts;
+      result.leadsPerContractPersonal = acqData.leadsPerContract;
+      result.leadsMishandledPersonal = acqData.leadsMishandled;
+      result.leadsReceivedPersonal = acqData.leadsReceived;
+      result.slaBreachesPersonal = acqData.slaBreaches;
+      result.stale48hPersonal = acqData.stale48h;
+      result.mishandledColorPersonal = this.getColorForMishandled(acqData.leadsMishandled);
+    }
+
+    // If no roles matched, return admin-like fallback for backward compatibility
+    if (result.modes.length === 0) {
+      result.modes.push('admin');
+      const contractsSigned = await metricsRepository.getCurrentContractsCount({
+        pipelineKey: 'ACQUISITIONS',
+        leadType: 'SELLER',
+      });
+      result.contractsSigned = contractsSigned;
+      
+      const dispClosedDeals = await metricsRepository.getDealsClosedBetween(start.toDate(), end.toDate(), {
+        pipelineKey: 'DISPOSITIONS',
+        leadType: 'SELLER',
+      });
+      result.contractsSold = new Set(dispClosedDeals.map((d) => d.leadId)).size;
+      result.totalProfit = dispClosedDeals.reduce((sum, d) => sum + (d.netProfit || 0), 0);
+    }
+
+    return result;
+  },
+
+  /**
+   * Helper function to calculate ACQ KPIs (reusable for Manager and ACQ agent)
+   * @param start Start date of timeframe
+   * @param end End date of timeframe
+   * @param assignedUserId User ID for personal stats, undefined for team-wide stats
+   */
+  async calculateAcqKpis(start: Date, end: Date, assignedUserId?: string) {
+    // FIX: Get CURRENT contracts under contract (not just new this month)
+    const totalContracts = await metricsRepository.getCurrentContractsCount({
       pipelineKey: 'ACQUISITIONS',
       leadType: 'SELLER',
+      assignedUserId,
     });
-    const contractsSigned = new Set(acqContractedDeals.map((d) => d.leadId)).size;
-    const dispClosedDeals = await metricsRepository.getDealsClosedBetween(start.toDate(), end.toDate(), {
-      pipelineKey: 'DISPOSITIONS',
-      leadType: 'SELLER',
-    });
-    const contractsSold = new Set(dispClosedDeals.map((d) => d.leadId)).size;
-    const totalProfit = dispClosedDeals.reduce((sum, d) => sum + (d.netProfit || 0), 0);
 
-    return { mode: 'admin' as const, contractsSigned, contractsSold, totalProfit };
+    // Leads received this month
+    const leadsReceived = await metricsRepository.getLeadsCreatedBetweenScoped(start, end, {
+      pipelineKey: 'ACQUISITIONS',
+      leadType: 'SELLER',
+      assignedUserId,
+      onlyPipelineStatus: true,
+    });
+    const leadsReceivedCount = leadsReceived.length;
+
+    // Leads per contract ratio: how many leads needed to get one contract
+    const leadsPerContract = totalContracts > 0
+      ? leadsReceivedCount / totalContracts
+      : 0;
+
+    // Mishandled = SLA breaches on new leads this month + stale 48h on all active ACQ leads
+    const activeLeads = await metricsRepository.getActiveLeadsWithActivityByPipeline({
+      pipelineKey: 'ACQUISITIONS',
+      leadType: 'SELLER',
+      assignedUserId,
+      onlyPipelineStatus: true,
+    });
+
+    const nowDt = new Date();
+
+    // SLA breaches for leads created this month (2h/16h ET) using lastActivityAt
+    const createdThisMonthIds = new Set(leadsReceived.map((l) => l.id));
+    const slaBreaches = activeLeads.filter((l) => {
+      if (!createdThisMonthIds.has(l.id)) return false;
+      const lastActivityAt = computeLastActivityAt(l);
+      const thresholdHours = getSlaThresholdHoursEt(l.createdAt);
+      const hoursToTouch = (lastActivityAt.getTime() - l.createdAt.getTime()) / (1000 * 60 * 60);
+      return hoursToTouch > thresholdHours;
+    }).length;
+
+    // 48h stale across all active leads
+    const stale48h = activeLeads.filter((l) => {
+      const lastActivityAt = computeLastActivityAt(l);
+      const hoursSince = (nowDt.getTime() - lastActivityAt.getTime()) / (1000 * 60 * 60);
+      return hoursSince >= 48;
+    }).length;
+
+    const leadsMishandled = slaBreaches + stale48h;
+
+    return {
+      totalContracts,
+      leadsPerContract: Number(leadsPerContract.toFixed(2)),
+      leadsReceived: leadsReceivedCount,
+      leadsMishandled,
+      slaBreaches,
+      stale48h,
+    };
+  },
+
+  /**
+   * Helper function to get color coding for leads mishandled
+   */
+  getColorForMishandled(count: number): 'green' | 'yellow' | 'orange' | 'red' {
+    if (count >= 10) return 'red';
+    if (count >= 5) return 'orange';
+    if (count >= 1) return 'yellow';
+    return 'green';
   },
 
   async getPipelineOverview(timeframe: 'This Month' | 'Last Month' | 'This Quarter', pipelineKey: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION' = 'ACQUISITIONS') {
@@ -449,6 +489,207 @@ export const metricsService = {
     ];
 
     return { stages, table, timeline };
+  },
+
+  async getPipelineTimelineMetrics(timeframe: 'This Month' | 'Last Month' | 'This Quarter', pipelineKey: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION' = 'ACQUISITIONS') {
+    const now = dayjs();
+    let start: dayjs.Dayjs;
+    let end: dayjs.Dayjs;
+    if (timeframe === 'This Month') { start = now.startOf('month'); end = now.endOf('month'); }
+    else if (timeframe === 'Last Month') { start = now.subtract(1, 'month').startOf('month'); end = now.subtract(1, 'month').endOf('month'); }
+    else { start = now.startOf('quarter'); end = now.endOf('quarter'); }
+
+    // Get all leads with stage history for the timeframe
+    const leads = await prisma.lead.findMany({
+      where: {
+        createdAt: {
+          gte: start.toDate(),
+          lte: end.toDate()
+        }
+      },
+      include: {
+        pipelineStage: true,
+        customFields: true
+      }
+    });
+
+    // Get stage history for these leads
+    const leadIds = leads.map(l => l.id);
+    const stageHistory = leadIds.length ? await prisma.stageHistory.findMany({
+      where: {
+        leadId: { in: leadIds }
+      },
+      include: {
+        toStage: true
+      },
+      orderBy: {
+        changedAt: 'asc'
+      }
+    }) : [];
+
+    // Track timestamps for each lead by stage type
+    type LeadTimestamps = {
+      id: string;
+      createdAt: Date;
+      qualifiedAt?: Date;
+      appointmentSetAt?: Date;
+      appointmentCompleteAt?: Date;
+      offerMadeAt?: Date;
+      underContractAt?: Date;
+      soldAt?: Date;
+      closedAt?: Date;
+    };
+
+    const leadTimestamps: Record<string, LeadTimestamps> = {};
+
+    // Initialize with lead creation dates
+    for (const lead of leads) {
+      leadTimestamps[lead.id] = {
+        id: lead.id,
+        createdAt: lead.createdAt,
+        // Get dates from customFields if available
+        appointmentSetAt: (lead.customFields as any)?.appointmentDate ? new Date((lead.customFields as any).appointmentDate) : undefined,
+        offerMadeAt: (lead.customFields as any)?.offerMadeAt ? new Date((lead.customFields as any).offerMadeAt) : undefined,
+        underContractAt: (lead.customFields as any)?.underContractAt ? new Date((lead.customFields as any).underContractAt) : undefined
+      };
+    }
+
+    // Process stage history to find first occurrence of each stage type
+    for (const history of stageHistory) {
+      const leadId = history.leadId;
+      const stageName = (history.toStage?.name || '').toLowerCase();
+      const timestamp = history.changedAt;
+
+      if (!leadTimestamps[leadId]) continue;
+
+      // Match stage names to track key milestones
+      if (stageName.includes('qualified') && !leadTimestamps[leadId].qualifiedAt) {
+        leadTimestamps[leadId].qualifiedAt = timestamp;
+      }
+      if (stageName.includes('appointment') && stageName.includes('set') && !leadTimestamps[leadId].appointmentSetAt) {
+        leadTimestamps[leadId].appointmentSetAt = timestamp;
+      }
+      if (stageName.includes('appointment') && stageName.includes('complete') && !leadTimestamps[leadId].appointmentCompleteAt) {
+        leadTimestamps[leadId].appointmentCompleteAt = timestamp;
+      }
+      if (stageName.includes('offer') && stageName.includes('made') && !leadTimestamps[leadId].offerMadeAt) {
+        leadTimestamps[leadId].offerMadeAt = timestamp;
+      }
+      if (stageName.includes('contract') && !stageName.includes('offer') && !leadTimestamps[leadId].underContractAt) {
+        leadTimestamps[leadId].underContractAt = timestamp;
+      }
+      if (stageName.includes('sold') && !leadTimestamps[leadId].soldAt) {
+        leadTimestamps[leadId].soldAt = timestamp;
+      }
+      if (stageName.includes('closed') && !leadTimestamps[leadId].closedAt) {
+        leadTimestamps[leadId].closedAt = timestamp;
+      }
+    }
+
+    // Calculate average days between stages
+    const msToDays = (ms: number) => Math.max(0, Math.round(ms / (24 * 60 * 60 * 1000)));
+    
+    // Arrays to store day differences for averaging
+    const diffs = {
+      newToQualified: [] as number[],
+      newToAppointment: [] as number[],
+      qualifiedToAppointment: [] as number[],
+      newToOffer: [] as number[],
+      appointmentToOffer: [] as number[],
+      newToContract: [] as number[],
+      offerToContract: [] as number[],
+      newToSold: [] as number[],
+      contractToSold: [] as number[],
+      newToClosed: [] as number[],
+      soldToClosed: [] as number[]
+    };
+
+    // Calculate differences for each lead that has the required stages
+    for (const timestamps of Object.values(leadTimestamps)) {
+      const created = timestamps.createdAt.getTime();
+      
+      // Qualified metrics
+      if (timestamps.qualifiedAt) {
+        diffs.newToQualified.push(msToDays(timestamps.qualifiedAt.getTime() - created));
+      }
+      
+      // Appointment metrics
+      if (timestamps.appointmentSetAt) {
+        diffs.newToAppointment.push(msToDays(timestamps.appointmentSetAt.getTime() - created));
+        if (timestamps.qualifiedAt) {
+          diffs.qualifiedToAppointment.push(msToDays(timestamps.appointmentSetAt.getTime() - timestamps.qualifiedAt.getTime()));
+        }
+      }
+      
+      // Offer metrics
+      if (timestamps.offerMadeAt) {
+        diffs.newToOffer.push(msToDays(timestamps.offerMadeAt.getTime() - created));
+        if (timestamps.appointmentSetAt) {
+          diffs.appointmentToOffer.push(msToDays(timestamps.offerMadeAt.getTime() - timestamps.appointmentSetAt.getTime()));
+        }
+      }
+      
+      // Contract metrics
+      if (timestamps.underContractAt) {
+        diffs.newToContract.push(msToDays(timestamps.underContractAt.getTime() - created));
+        if (timestamps.offerMadeAt) {
+          diffs.offerToContract.push(msToDays(timestamps.underContractAt.getTime() - timestamps.offerMadeAt.getTime()));
+        }
+      }
+      
+      // Sold metrics
+      if (timestamps.soldAt) {
+        diffs.newToSold.push(msToDays(timestamps.soldAt.getTime() - created));
+        if (timestamps.underContractAt) {
+          diffs.contractToSold.push(msToDays(timestamps.soldAt.getTime() - timestamps.underContractAt.getTime()));
+        }
+      }
+      
+      // Closed metrics
+      if (timestamps.closedAt) {
+        diffs.newToClosed.push(msToDays(timestamps.closedAt.getTime() - created));
+        if (timestamps.soldAt) {
+          diffs.soldToClosed.push(msToDays(timestamps.closedAt.getTime() - timestamps.soldAt.getTime()));
+        }
+      }
+    }
+
+    // Calculate averages and format as "00" format
+    const avg = (arr: number[]) => arr.length ? Math.round(arr.reduce((a,b)=>a+b,0)/arr.length) : 0;
+    const fmt = (days: number) => days.toString().padStart(2, '0');
+
+    // Return structured timeline data matching client requirements
+    return {
+      qualifiedLeads: {
+        newToQualified: fmt(avg(diffs.newToQualified)),
+        count: diffs.newToQualified.length
+      },
+      appointmentsSet: {
+        newToAppointment: fmt(avg(diffs.newToAppointment)),
+        qualifiedToAppointment: fmt(avg(diffs.qualifiedToAppointment)),
+        count: diffs.newToAppointment.length
+      },
+      offersMade: {
+        newToOffer: fmt(avg(diffs.newToOffer)),
+        appointmentToOffer: fmt(avg(diffs.appointmentToOffer)),
+        count: diffs.newToOffer.length
+      },
+      underContract: {
+        newToContract: fmt(avg(diffs.newToContract)),
+        offerToContract: fmt(avg(diffs.offerToContract)),
+        count: diffs.newToContract.length
+      },
+      sold: {
+        newToSold: fmt(avg(diffs.newToSold)),
+        contractToSold: fmt(avg(diffs.contractToSold)),
+        count: diffs.newToSold.length
+      },
+      closed: {
+        newToClosed: fmt(avg(diffs.newToClosed)),
+        soldToClosed: fmt(avg(diffs.soldToClosed)),
+        count: diffs.newToClosed.length
+      }
+    };
   },
 
   async getCommunicationsOverview(filters: {
@@ -586,17 +827,14 @@ export const metricsService = {
 
     const riskMetrics = calculateRiskMetrics();
 
-    // Return data in format expected by frontend
+    // Return data in format expected by frontend (flat structure)
     return {
-      calls: { 
-        ...callStats, 
-        hourlyBreakdown: callsByHour 
-      },
-      sms: { 
-        ...smsStats, 
-        hourlyBreakdown: smsByHour 
-      },
-      riskManagement: riskMetrics,
+      callStats: callStats,
+      callsByHour: callsByHour,
+      smsStats: smsStats,
+      smsByHour: smsByHour,
+      callSuccessRate: riskMetrics.callSuccessRate,
+      smsDeliveryRate: riskMetrics.smsDeliveryRate,
       metadata: {
         dateRange: {
           from: start.format('YYYY-MM-DD'),
@@ -754,22 +992,20 @@ export const metricsService = {
     }
 
     return {
-      pipeline: {
-        totalProperties,
-        clearToClose,
-        clearToCloseRate
+      pipelineMetrics: {
+        totalInPipeline: totalProperties,
+        totalClearToClose: clearToClose,
+        clearToClosePercentage: clearToCloseRate
       },
-      financial: {
+      financialMetrics: {
         projectedProfit,
-        dealsClosed,
-        closedProfit,
-        closureRate
+        totalDealsClosed: dealsClosed,
+        closedProfit
       },
-      quality: {
-        leadsRiskCount,
-        leadsRiskLevel,
-        riskReason,
-        riskPercentage: Math.round(riskPercentage)
+      qualityMetrics: {
+        mishandledLeads: leadsRiskCount,
+        riskLevel: leadsRiskLevel,
+        riskDetails: riskReason
       },
       metadata: {
         dateRange: {
@@ -1113,22 +1349,20 @@ export const metricsService = {
     }
 
     return {
-      pipeline: {
-        totalProperties,
-        clearToClose,
-        clearToCloseRate
+      pipelineMetrics: {
+        totalInPipeline: totalProperties,
+        totalClearToClose: clearToClose,
+        clearToClosePercentage: clearToCloseRate
       },
-      financial: {
+      financialMetrics: {
         projectedProfit,
-        dealsClosed,
-        closedProfit,
-        closureRate
+        totalDealsClosed: dealsClosed,
+        closedProfit
       },
-      quality: {
-        leadsRiskCount,
-        leadsRiskLevel,
-        riskReason,
-        riskPercentage: Math.round(riskPercentage)
+      qualityMetrics: {
+        mishandledLeads: leadsRiskCount,
+        riskLevel: leadsRiskLevel,
+        riskDetails: riskReason
       },
       metadata: {
         dateRange: {
@@ -1248,44 +1482,83 @@ export const metricsService = {
       const emails = communications.filter(c => c.type === 'EMAIL').length;
       const totalComms = communications.length;
 
+      // Calculate call time metrics
+      const callDurations = communications
+        .filter(c => c.type === 'CALL' && c.duration)
+        .map(c => c.duration || 0);
+      const totalCallTime = callDurations.reduce((sum, duration) => sum + duration, 0);
+      const averageCallTime = callDurations.length > 0 ? totalCallTime / callDurations.length : 0;
+
       // Calculate response rate (simplified - percentage of outbound that got responses)
       const outboundComms = communications.filter(c => c.direction === 'OUTBOUND').length;
       const inboundComms = communications.filter(c => c.direction === 'INBOUND').length;
       const responseRate = outboundComms > 0 ? 
         Math.round((inboundComms / outboundComms) * 100) : 0;
 
-      // Calculate total score using weighted algorithm
-      // Contracts Signed (40%) + Projected Profit (30%) + Efficiency (20%) - Penalties (10%)
-      const contractsScore = contractsSigned * 100;
-      const profitScore = Math.min(projectedProfit / 1000, 500); // Cap at 500K for scoring
-      const efficiencyScore = leadsPerContract > 0 ? Math.max(50 - leadsPerContract, 0) * 5 : 0;
-      const penaltyScore = mishandledLeads * -20;
-      
-      const totalScore = Math.round(
-        (contractsScore * 0.4) + 
-        (profitScore * 0.3) + 
-        (efficiencyScore * 0.2) + 
-        (penaltyScore * 0.1)
-      );
-
       leaderboard.push({
         userId: user.id,
         name: `${user.firstName} ${user.lastName}`,
         email: user.email,
+        totalLeads: userLeads.length,
         contractsSigned,
         projectedProfit,
         leadsPerContract,
         mishandledLeads,
-        totalScore: Math.max(totalScore, 0), // Ensure non-negative
+        totalScore: 0, // Will be calculated after ranking
         communications: {
           total: totalComms,
           calls,
           sms,
           emails,
+          totalCallTime,
+          averageCallTime,
           responseRate: Math.min(responseRate, 100) // Cap at 100%
         }
       });
     }
+
+    // Now calculate scores using point-based ranking system
+    // Step 1: Rank by contracts signed (descending - most contracts = 1st place)
+    const contractsSorted = [...leaderboard].sort((a, b) => b.contractsSigned - a.contractsSigned);
+    const contractsRanks = new Map<string, number>();
+    contractsSorted.forEach((agent, index) => {
+      contractsRanks.set(agent.userId, index + 1);
+    });
+
+    // Step 2: Rank by projected profit (descending - most profit = 1st place)
+    const profitSorted = [...leaderboard].sort((a, b) => b.projectedProfit - a.projectedProfit);
+    const profitRanks = new Map<string, number>();
+    profitSorted.forEach((agent, index) => {
+      profitRanks.set(agent.userId, index + 1);
+    });
+
+    // Step 3: Rank by leads per contract (ascending - fewer leads per contract = 1st place)
+    const efficiencySorted = [...leaderboard]
+      .filter(a => a.leadsPerContract > 0) // Only rank those with contracts
+      .sort((a, b) => a.leadsPerContract - b.leadsPerContract);
+    const efficiencyRanks = new Map<string, number>();
+    efficiencySorted.forEach((agent, index) => {
+      efficiencyRanks.set(agent.userId, index + 1);
+    });
+
+    // Helper function to get points for rank
+    const getPointsForRank = (rank: number): number => {
+      if (rank === 1) return 8;
+      if (rank === 2) return 6;
+      if (rank === 3) return 4;
+      if (rank === 4) return 2;
+      return 0; // 5th place and beyond get 0 points
+    };
+
+    // Step 4: Calculate total score for each agent
+    leaderboard.forEach(agent => {
+      const contractsPoints = getPointsForRank(contractsRanks.get(agent.userId) || 999);
+      const profitPoints = getPointsForRank(profitRanks.get(agent.userId) || 999);
+      const efficiencyPoints = getPointsForRank(efficiencyRanks.get(agent.userId) || 999);
+      const penaltyPoints = -Math.floor(agent.mishandledLeads / 2); // -1 point per 2 mishandled leads
+      
+      agent.totalScore = contractsPoints + profitPoints + efficiencyPoints + penaltyPoints;
+    });
 
     // Sort by total score (descending)
     leaderboard.sort((a, b) => b.totalScore - a.totalScore);
@@ -1402,44 +1675,87 @@ export const metricsService = {
       const emails = communications.filter(c => c.type === 'EMAIL').length;
       const totalComms = communications.length;
 
+      // Calculate call time metrics
+      const callDurations = communications
+        .filter(c => c.type === 'CALL' && c.duration)
+        .map(c => c.duration || 0);
+      const totalCallTime = callDurations.reduce((sum, duration) => sum + duration, 0);
+      const averageCallTime = callDurations.length > 0 ? totalCallTime / callDurations.length : 0;
+
       // Calculate response rate
       const outboundComms = communications.filter(c => c.direction === 'OUTBOUND').length;
       const inboundComms = communications.filter(c => c.direction === 'INBOUND').length;
       const responseRate = outboundComms > 0 ? 
         Math.round((inboundComms / outboundComms) * 100) : 0;
 
-      // Calculate total score using weighted algorithm
-      // Properties Sold (35%) + Projected Profit (25%) + Buyers Added (25%) - Penalties (15%)
-      const soldScore = propertiesSold * 120;
-      const profitScore = Math.min(projectedProfit / 1000, 400); // Cap at 400K for scoring
-      const buyersScore = buyersAdded * 15;
-      const penaltyScore = mishandledLeads * -25;
-      
-      const totalScore = Math.round(
-        (soldScore * 0.35) + 
-        (profitScore * 0.25) + 
-        (buyersScore * 0.25) + 
-        (penaltyScore * 0.15)
-      );
+      // Calculate percentage of properties sold
+      const totalPropertiesInPipeline = userLeads.length;
+      const propertiesSoldPercentage = totalPropertiesInPipeline > 0 
+        ? (propertiesSold / totalPropertiesInPipeline) * 100 
+        : 0;
 
       leaderboard.push({
         userId: user.id,
         name: `${user.firstName} ${user.lastName}`,
         email: user.email,
         propertiesSold,
+        propertiesSoldPercentage,
         projectedProfit,
         buyersAdded,
         mishandledLeads,
-        totalScore: Math.max(totalScore, 0), // Ensure non-negative
+        totalScore: 0, // Will be calculated after ranking
         communications: {
           total: totalComms,
           calls,
           sms,
           emails,
+          totalCallTime,
+          averageCallTime,
           responseRate: Math.min(responseRate, 100) // Cap at 100%
         }
       });
     }
+
+    // Now calculate scores using point-based ranking system
+    // Step 1: Rank by properties sold (descending - most sold = 1st place)
+    const soldSorted = [...leaderboard].sort((a, b) => b.propertiesSold - a.propertiesSold);
+    const soldRanks = new Map<string, number>();
+    soldSorted.forEach((agent, index) => {
+      soldRanks.set(agent.userId, index + 1);
+    });
+
+    // Step 2: Rank by projected profit (descending - most profit = 1st place)
+    const profitSorted = [...leaderboard].sort((a, b) => b.projectedProfit - a.projectedProfit);
+    const profitRanks = new Map<string, number>();
+    profitSorted.forEach((agent, index) => {
+      profitRanks.set(agent.userId, index + 1);
+    });
+
+    // Step 3: Rank by buyers added (descending - most buyers = 1st place)
+    const buyersSorted = [...leaderboard].sort((a, b) => b.buyersAdded - a.buyersAdded);
+    const buyersRanks = new Map<string, number>();
+    buyersSorted.forEach((agent, index) => {
+      buyersRanks.set(agent.userId, index + 1);
+    });
+
+    // Helper function to get points for rank
+    const getPointsForRank = (rank: number): number => {
+      if (rank === 1) return 8;
+      if (rank === 2) return 6;
+      if (rank === 3) return 4;
+      if (rank === 4) return 2;
+      return 0; // 5th place and beyond get 0 points
+    };
+
+    // Step 4: Calculate total score for each agent
+    leaderboard.forEach(agent => {
+      const soldPoints = getPointsForRank(soldRanks.get(agent.userId) || 999);
+      const profitPoints = getPointsForRank(profitRanks.get(agent.userId) || 999);
+      const buyersPoints = getPointsForRank(buyersRanks.get(agent.userId) || 999);
+      const penaltyPoints = -Math.floor(agent.mishandledLeads / 2); // -1 point per 2 mishandled leads
+      
+      agent.totalScore = soldPoints + profitPoints + buyersPoints + penaltyPoints;
+    });
 
     // Sort by total score (descending)
     leaderboard.sort((a, b) => b.totalScore - a.totalScore);

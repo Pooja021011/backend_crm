@@ -11,6 +11,7 @@ router.get('/company-kpis', (req, res, next) => metricsController.companyKpis(re
 router.get('/marketing-breakdown', (req, res, next) => metricsController.marketingBreakdown(req, res).catch(next));
 router.get('/pipeline-overview', (req, res, next) => metricsController.pipelineOverview(req, res).catch(next));
 router.get('/pipeline-analysis', (req, res, next) => metricsController.pipelineAnalysis(req, res).catch(next));
+router.get('/pipeline-timeline-metrics', (req, res, next) => metricsController.pipelineTimelineMetrics(req, res).catch(next));
 router.get('/communications-overview', (req, res, next) => metricsController.communicationsOverview(req, res).catch(next));
 router.get('/acquisitions-overview', (req, res, next) => metricsController.acquisitionsOverview(req, res).catch(next));
 router.get('/dispositions-overview', (req, res, next) => metricsController.dispositionsOverview(req, res).catch(next));

@@ -185,6 +185,22 @@ export const metricsRepository = {
         },
       },
     }),
+
+  /**
+   * Get count of leads currently in contract stages (not just contracted this month)
+   */
+  getCurrentContractsCount: (filters: { pipelineKey: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION'; leadType?: any; assignedUserId?: string }) =>
+    prisma.lead.count({
+      where: {
+        pipelineStage: {
+          pipeline: { key: filters.pipelineKey as any },
+          name: { contains: 'Contract', mode: 'insensitive' }
+        },
+        leadStatus: { name: { equals: 'Pipeline', mode: 'insensitive' } },
+        ...(filters.leadType ? { leadType: filters.leadType } : {}),
+        ...(filters.assignedUserId ? { assignedUserId: filters.assignedUserId } : {}),
+      },
+    }),
 };
 
 

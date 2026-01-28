@@ -14,7 +14,7 @@ export interface PipelineLeadFilters {
   createdTo?: string;
   lastTouchedFrom?: string;
   lastTouchedTo?: string;
-  userRole?: string;
+  userRole?: string | string[];
   userId?: string;
 }
 
@@ -462,8 +462,181 @@ export const pipelineService = {
         };
       }
 
-      if (filters.needsAttention) {
-        whereClause.needsAttention = true;
+      // Apply role-based Needs Attention filter
+      if (filters.needsAttention && filters.userRole && filters.userId) {
+        const userRoles = Array.isArray(filters.userRole) 
+          ? filters.userRole 
+          : [filters.userRole];
+        
+        const isAdmin = userRoles.includes('ADMIN');
+        const isManager = userRoles.includes('MANAGER');
+        const isACQ = userRoles.includes('ACQ');
+        
+        const now = new Date();
+        const hoursAgo = (hours: number) => new Date(now.getTime() - hours * 60 * 60 * 1000);
+        const minutesAgo = (minutes: number) => new Date(now.getTime() - minutes * 60 * 1000);
+        
+        const needsAttentionConditions: any[] = [];
+        
+        // ADMIN CONDITIONS
+        if (isAdmin) {
+          console.log('🔍 Applying ADMIN needs attention criteria');
+          
+          // 1. ACQ agents with no outreach in 72h AND no upcoming task
+          needsAttentionConditions.push({
+            assignedUser: {
+              roles: { some: { role: { name: 'ACQ' } } }
+            },
+            OR: [
+              { lastContactAt: { lte: hoursAgo(72) } },
+              { lastContactAt: null, createdAt: { lte: hoursAgo(72) } }
+            ],
+            tasks: {
+              none: {
+                status: 'OPEN',
+                dueAt: { gt: now }
+              }
+            }
+          });
+          
+          // 2. Any lead with task past due for 48 hours
+          needsAttentionConditions.push({
+            tasks: {
+              some: {
+                status: 'OPEN',
+                dueAt: { lte: hoursAgo(48) }
+              }
+            }
+          });
+          
+          // 3. Lead in user's communication inbox (unread inbound)
+          needsAttentionConditions.push({
+            communications: {
+              some: {
+                direction: 'INBOUND',
+                reads: { none: { userId: filters.userId } }
+              }
+            }
+          });
+        }
+        
+        // MANAGER CONDITIONS
+        if (isManager) {
+          console.log('🔍 Applying MANAGER needs attention criteria');
+          
+          // 1. New Leads stage for all ACQ agents (excluding own if also ACQ)
+          needsAttentionConditions.push({
+            assignedUser: {
+              roles: { some: { role: { name: 'ACQ' } } }
+            },
+            ...(isACQ ? { NOT: { assignedUserId: filters.userId } } : {}),
+            pipelineStage: {
+              name: { contains: 'New Lead', mode: 'insensitive' }
+            }
+          });
+          
+          // 2. ACQ agents with no outreach in 48h AND no upcoming task (excluding own if also ACQ)
+          needsAttentionConditions.push({
+            assignedUser: {
+              roles: { some: { role: { name: 'ACQ' } } }
+            },
+            ...(isACQ ? { NOT: { assignedUserId: filters.userId } } : {}),
+            OR: [
+              { lastContactAt: { lte: hoursAgo(48) } },
+              { lastContactAt: null, createdAt: { lte: hoursAgo(48) } }
+            ],
+            tasks: {
+              none: {
+                status: 'OPEN',
+                dueAt: { gt: now }
+              }
+            }
+          });
+          
+          // 3. Past due task for at least 30 minutes (all ACQ agents, excluding own if also ACQ)
+          needsAttentionConditions.push({
+            assignedUser: {
+              roles: { some: { role: { name: 'ACQ' } } }
+            },
+            ...(isACQ ? { NOT: { assignedUserId: filters.userId } } : {}),
+            tasks: {
+              some: {
+                status: 'OPEN',
+                dueAt: { lte: minutesAgo(30) }
+              }
+            }
+          });
+          
+          // 4. Lead in user's communication inbox (Manager's own inbox)
+          if (!isAdmin) { // Don't duplicate if already added by Admin role
+            needsAttentionConditions.push({
+              communications: {
+                some: {
+                  direction: 'INBOUND',
+                  reads: { none: { userId: filters.userId } }
+                }
+              }
+            });
+          }
+        }
+        
+        // ACQ AGENT CONDITIONS
+        if (isACQ) {
+          console.log('🔍 Applying ACQ needs attention criteria');
+          
+          // 1. Own leads in New Leads stage
+          needsAttentionConditions.push({
+            assignedUserId: filters.userId,
+            pipelineStage: {
+              name: { contains: 'New Lead', mode: 'insensitive' }
+            }
+          });
+          
+          // 2. Own leads with no outreach in 36h AND no upcoming task
+          needsAttentionConditions.push({
+            assignedUserId: filters.userId,
+            OR: [
+              { lastContactAt: { lte: hoursAgo(36) } },
+              { lastContactAt: null, createdAt: { lte: hoursAgo(36) } }
+            ],
+            tasks: {
+              none: {
+                status: 'OPEN',
+                dueAt: { gt: now }
+              }
+            }
+          });
+          
+          // 3. Own leads with any past due task
+          needsAttentionConditions.push({
+            assignedUserId: filters.userId,
+            tasks: {
+              some: {
+                status: 'OPEN',
+                dueAt: { lt: now }
+              }
+            }
+          });
+          
+          // 4. Own leads in communication inbox
+          if (!isAdmin && !isManager) { // Don't duplicate if already added by Admin/Manager role
+            needsAttentionConditions.push({
+              assignedUserId: filters.userId,
+              communications: {
+                some: {
+                  direction: 'INBOUND',
+                  reads: { none: { userId: filters.userId } }
+                }
+              }
+            });
+          }
+        }
+        
+        // Apply OR conditions to whereClause
+        if (needsAttentionConditions.length > 0) {
+          whereClause.OR = needsAttentionConditions;
+          console.log(`🔍 Applied ${needsAttentionConditions.length} needs attention conditions`);
+        }
       }
 
       console.log('🔍 Final whereClause:', JSON.stringify(whereClause, null, 2));

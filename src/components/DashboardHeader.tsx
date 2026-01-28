@@ -12,15 +12,27 @@ import { API_BASE } from "@/config/api";
 import { useNavigate } from "react-router-dom";
 
 interface KPIData {
-  mode: 'admin' | 'acq';
-  // Admin
+  modes: Array<'admin' | 'manager' | 'acq'>;
+  // Admin KPIs (company-wide)
   contractsSigned?: number;
   contractsSold?: number;
   totalProfit?: number;
-  // Acquisitions (Manager/Agent)
+  // Manager KPIs (team-wide for all ACQ agents)
   totalContracts?: number;
-  leadsPerContract?: number; // percentage, 2 decimals
+  leadsPerContract?: number;
   leadsMishandled?: number;
+  leadsReceived?: number;
+  slaBreaches?: number;
+  stale48h?: number;
+  mishandledColor?: 'green' | 'yellow' | 'orange' | 'red';
+  // ACQ KPIs (personal stats)
+  totalContractsPersonal?: number;
+  leadsPerContractPersonal?: number;
+  leadsMishandledPersonal?: number;
+  leadsReceivedPersonal?: number;
+  slaBreachesPersonal?: number;
+  stale48hPersonal?: number;
+  mishandledColorPersonal?: 'green' | 'yellow' | 'orange' | 'red';
 }
 
 interface SearchResult {
@@ -35,7 +47,7 @@ interface KPICardProps {
   title: string;
   value: string;
   trend?: string;
-  color: "blue" | "green" | "purple" | "orange" | "yellow" | "red";
+  color: "blue" | "green" | "purple" | "orange" | "yellow" | "red" | "indigo";
 }
 
 const KPICard = ({ title, value, trend, color }: KPICardProps) => {
@@ -81,6 +93,13 @@ const KPICard = ({ title, value, trend, color }: KPICardProps) => {
       border: "border-red-500",
       label: "text-white",
       trend: "bg-white/20 text-white"
+    },
+    indigo: {
+      bg: "bg-indigo-500",
+      text: "text-white",
+      border: "border-indigo-500",
+      label: "text-white",
+      trend: "bg-white/20 text-white"
     }
   };
 
@@ -116,10 +135,7 @@ export const DashboardHeader = () => {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [kpiData, setKpiData] = useState<KPIData>({
-    mode: 'admin',
-    contractsSigned: 0,
-    contractsSold: 0,
-    totalProfit: 0,
+    modes: [],
   });
   const [isLoadingKpis, setIsLoadingKpis] = useState(true);
   const searchRef = useRef<HTMLDivElement>(null);
@@ -268,21 +284,30 @@ export const DashboardHeader = () => {
         if (response.ok) {
           const result = await response.json();
           const data = result.data || {};
-          if (data.mode === 'acq') {
-            setKpiData({
-              mode: 'acq',
-              totalContracts: data.totalContracts || 0,
-              leadsPerContract: typeof data.leadsPerContract === 'number' ? data.leadsPerContract : 0,
-              leadsMishandled: data.leadsMishandled || 0,
-            });
-          } else {
-            setKpiData({
-              mode: 'admin',
-              contractsSigned: data.contractsSigned || 0,
-              contractsSold: data.contractsSold || 0,
-              totalProfit: data.totalProfit || 0,
-            });
-          }
+          // New format: modes is an array, data contains all KPIs
+          setKpiData({
+            modes: data.modes || [],
+            // Admin KPIs
+            contractsSigned: data.contractsSigned,
+            contractsSold: data.contractsSold,
+            totalProfit: data.totalProfit,
+            // Manager KPIs (team-wide)
+            totalContracts: data.totalContracts,
+            leadsPerContract: data.leadsPerContract,
+            leadsMishandled: data.leadsMishandled,
+            leadsReceived: data.leadsReceived,
+            slaBreaches: data.slaBreaches,
+            stale48h: data.stale48h,
+            mishandledColor: data.mishandledColor,
+            // ACQ KPIs (personal)
+            totalContractsPersonal: data.totalContractsPersonal,
+            leadsPerContractPersonal: data.leadsPerContractPersonal,
+            leadsMishandledPersonal: data.leadsMishandledPersonal,
+            leadsReceivedPersonal: data.leadsReceivedPersonal,
+            slaBreachesPersonal: data.slaBreachesPersonal,
+            stale48hPersonal: data.stale48hPersonal,
+            mishandledColorPersonal: data.mishandledColorPersonal,
+          });
         } else {
           console.error('Failed to fetch KPI data:', response.statusText);
         }
@@ -432,26 +457,9 @@ export const DashboardHeader = () => {
           </div>
 
           {/* Compact KPIs - 30% width */}
-          <div className="flex gap-2 min-w-fit">
-            {kpiData.mode === 'acq' ? (
-              <>
-                <KPICard
-                  title="TOTAL CONTRACTS"
-                  value={isLoadingKpis ? "..." : String(kpiData.totalContracts || 0)}
-                  color="blue"
-                />
-                <KPICard
-                  title="LEADS PER CONTRACT"
-                  value={isLoadingKpis ? "..." : formatPct2(kpiData.leadsPerContract)}
-                  color="purple"
-                />
-                <KPICard
-                  title="LEADS MISHANDLED"
-                  value={isLoadingKpis ? "..." : String(kpiData.leadsMishandled || 0)}
-                  color={mishandledColor(kpiData.leadsMishandled || 0)}
-                />
-              </>
-            ) : (
+          <div className="flex gap-2 min-w-fit flex-wrap">
+            {/* ADMIN KPIs */}
+            {kpiData.modes?.includes('admin') && (
               <>
                 <KPICard
                   title="CONTRACTS SIGNED"
@@ -467,6 +475,50 @@ export const DashboardHeader = () => {
                   title="TOTAL PROFIT"
                   value={isLoadingKpis ? "..." : formatCurrency(kpiData.totalProfit)}
                   color="purple"
+                />
+              </>
+            )}
+            
+            {/* MANAGER KPIs (Team Stats) */}
+            {kpiData.modes?.includes('manager') && (
+              <>
+                <div className="h-10 w-px bg-gray-300" /> {/* Separator */}
+                <KPICard
+                  title="CONTRACTS (TEAM)"
+                  value={isLoadingKpis ? "..." : String(kpiData.totalContracts || 0)}
+                  color="orange"
+                />
+                <KPICard
+                  title="LEADS/CONTRACT (TEAM)"
+                  value={isLoadingKpis ? "..." : formatPct2(kpiData.leadsPerContract)}
+                  color="orange"
+                />
+                <KPICard
+                  title="MISHANDLED (TEAM)"
+                  value={isLoadingKpis ? "..." : String(kpiData.leadsMishandled || 0)}
+                  color={kpiData.mishandledColor || 'green'}
+                />
+              </>
+            )}
+            
+            {/* ACQ KPIs (Personal Stats) */}
+            {kpiData.modes?.includes('acq') && (
+              <>
+                <div className="h-10 w-px bg-gray-300" /> {/* Separator */}
+                <KPICard
+                  title="MY CONTRACTS"
+                  value={isLoadingKpis ? "..." : String(kpiData.totalContractsPersonal || 0)}
+                  color="indigo"
+                />
+                <KPICard
+                  title="MY LEADS/CONTRACT"
+                  value={isLoadingKpis ? "..." : formatPct2(kpiData.leadsPerContractPersonal)}
+                  color="indigo"
+                />
+                <KPICard
+                  title="MY MISHANDLED"
+                  value={isLoadingKpis ? "..." : String(kpiData.leadsMishandledPersonal || 0)}
+                  color={kpiData.mishandledColorPersonal || 'green'}
                 />
               </>
             )}
