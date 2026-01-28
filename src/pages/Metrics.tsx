@@ -1996,6 +1996,76 @@ const Metrics = () => {
                             );
                           })}
                         </tbody>
+                        <tfoot className="bg-gray-50 font-bold">
+                          <tr className="border-t-2 border-gray-300">
+                            <td className="py-3 px-4 text-gray-900">
+                              TOTAL
+                            </td>
+                            <td className="text-right py-3 px-4 text-gray-900">
+                              {marketingData.reduce((sum: number, s: any) => sum + (s.totalLeads || 0), 0)}
+                            </td>
+                            <td className="text-right py-3 px-4 text-gray-900">
+                              {viewMode === 'numbers' 
+                                ? marketingData.reduce((sum: number, s: any) => sum + (s.qualifiedLeads || 0), 0)
+                                : (() => {
+                                    const total = marketingData.reduce((sum: number, s: any) => sum + (s.totalLeads || 0), 0);
+                                    const qualified = marketingData.reduce((sum: number, s: any) => sum + (s.qualifiedLeads || 0), 0);
+                                    return total > 0 ? `${((qualified / total) * 100).toFixed(1)}%` : '0%';
+                                  })()
+                              }
+                            </td>
+                            <td className="text-right py-3 px-4 text-gray-900">
+                              {viewMode === 'numbers' 
+                                ? marketingData.reduce((sum: number, s: any) => sum + (s.appointmentsSet || 0), 0)
+                                : (() => {
+                                    const total = marketingData.reduce((sum: number, s: any) => sum + (s.totalLeads || 0), 0);
+                                    const appts = marketingData.reduce((sum: number, s: any) => sum + (s.appointmentsSet || 0), 0);
+                                    return total > 0 ? `${((appts / total) * 100).toFixed(1)}%` : '0%';
+                                  })()
+                              }
+                            </td>
+                            <td className="text-right py-3 px-4 text-gray-900">
+                              {viewMode === 'numbers' 
+                                ? marketingData.reduce((sum: number, s: any) => sum + (s.offersMade || 0), 0)
+                                : (() => {
+                                    const total = marketingData.reduce((sum: number, s: any) => sum + (s.totalLeads || 0), 0);
+                                    const offers = marketingData.reduce((sum: number, s: any) => sum + (s.offersMade || 0), 0);
+                                    return total > 0 ? `${((offers / total) * 100).toFixed(1)}%` : '0%';
+                                  })()
+                              }
+                            </td>
+                            <td className="text-right py-3 px-4 text-gray-900">
+                              {viewMode === 'numbers' 
+                                ? marketingData.reduce((sum: number, s: any) => sum + (s.underContract || 0), 0)
+                                : (() => {
+                                    const total = marketingData.reduce((sum: number, s: any) => sum + (s.totalLeads || 0), 0);
+                                    const contracts = marketingData.reduce((sum: number, s: any) => sum + (s.underContract || 0), 0);
+                                    return total > 0 ? `${((contracts / total) * 100).toFixed(1)}%` : '0%';
+                                  })()
+                              }
+                            </td>
+                            <td className="text-right py-3 px-4 text-gray-900">
+                              {viewMode === 'numbers' 
+                                ? marketingData.reduce((sum: number, s: any) => sum + (s.sold || 0), 0)
+                                : (() => {
+                                    const total = marketingData.reduce((sum: number, s: any) => sum + (s.totalLeads || 0), 0);
+                                    const soldCount = marketingData.reduce((sum: number, s: any) => sum + (s.sold || 0), 0);
+                                    return total > 0 ? `${((soldCount / total) * 100).toFixed(1)}%` : '0%';
+                                  })()
+                              }
+                            </td>
+                            <td className="text-right py-3 px-4 text-gray-900">
+                              {viewMode === 'numbers' 
+                                ? marketingData.reduce((sum: number, s: any) => sum + (s.closed || 0), 0)
+                                : (() => {
+                                    const total = marketingData.reduce((sum: number, s: any) => sum + (s.totalLeads || 0), 0);
+                                    const closedCount = marketingData.reduce((sum: number, s: any) => sum + (s.closed || 0), 0);
+                                    return total > 0 ? `${((closedCount / total) * 100).toFixed(1)}%` : '0%';
+                                  })()
+                              }
+                            </td>
+                          </tr>
+                        </tfoot>
                       </table>
               </div>
                   )}
@@ -2027,111 +2097,136 @@ const Metrics = () => {
                     <div className="space-y-6">
                       {/* Conversion Funnel */}
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {/* Lead → Qualified */}
+                        {/* Qualified Leads */}
                         <div className="bg-gradient-to-br from-blue-50 to-white p-4 rounded-lg border border-blue-200">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-semibold text-gray-700">Lead → Qualified</span>
+                            <span className="text-sm font-semibold text-gray-700">Qualified Leads</span>
                             <TrendingUp className="w-4 h-4 text-blue-600" />
                           </div>
                           <div className="text-2xl font-bold text-blue-600">
                             {(() => {
                               const totalLeads = marketingData.reduce((sum: number, s: any) => sum + (s.totalLeads || 0), 0);
-                              const qualified = marketingData.reduce((sum: number, s: any) => sum + (s.qualified || 0), 0);
+                              const qualified = marketingData.reduce((sum: number, s: any) => sum + (s.qualifiedLeads || 0), 0);
                               return totalLeads > 0 ? ((qualified / totalLeads) * 100).toFixed(1) : '0.0';
                             })()}%
                           </div>
                           <div className="text-xs text-gray-500 mt-1">
-                            {marketingData.reduce((sum: number, s: any) => sum + (s.qualified || 0), 0)} of {marketingData.reduce((sum: number, s: any) => sum + (s.totalLeads || 0), 0)} leads
+                            Per Total Leads: {marketingData.reduce((sum: number, s: any) => sum + (s.qualifiedLeads || 0), 0)} of {marketingData.reduce((sum: number, s: any) => sum + (s.totalLeads || 0), 0)}
                           </div>
                         </div>
 
-                        {/* Qualified → Appointment */}
+                        {/* Appointments Set */}
                         <div className="bg-gradient-to-br from-green-50 to-white p-4 rounded-lg border border-green-200">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-semibold text-gray-700">Qualified → Appointment</span>
+                            <span className="text-sm font-semibold text-gray-700">Appointments Set</span>
                             <TrendingUp className="w-4 h-4 text-green-600" />
                           </div>
                           <div className="text-2xl font-bold text-green-600">
                             {(() => {
-                              const qualified = marketingData.reduce((sum: number, s: any) => sum + (s.qualified || 0), 0);
-                              const appointments = marketingData.reduce((sum: number, s: any) => sum + (s.appointments || 0), 0);
-                              return qualified > 0 ? ((appointments / qualified) * 100).toFixed(1) : '0.0';
+                              const totalLeads = marketingData.reduce((sum: number, s: any) => sum + (s.totalLeads || 0), 0);
+                              const appointments = marketingData.reduce((sum: number, s: any) => sum + (s.appointmentsSet || 0), 0);
+                              return totalLeads > 0 ? ((appointments / totalLeads) * 100).toFixed(1) : '0.0';
                             })()}%
                           </div>
                           <div className="text-xs text-gray-500 mt-1">
-                            {marketingData.reduce((sum: number, s: any) => sum + (s.appointments || 0), 0)} of {marketingData.reduce((sum: number, s: any) => sum + (s.qualified || 0), 0)} qualified
+                            Per Total Leads • 
+                            {(() => {
+                              const qualified = marketingData.reduce((sum: number, s: any) => sum + (s.qualifiedLeads || 0), 0);
+                              const appointments = marketingData.reduce((sum: number, s: any) => sum + (s.appointmentsSet || 0), 0);
+                              return qualified > 0 ? ` ${((appointments / qualified) * 100).toFixed(1)}%` : ' 0.0%';
+                            })()} per Qualified
                           </div>
                         </div>
 
-                        {/* Appointment → Offer */}
+                        {/* Offers Made */}
                         <div className="bg-gradient-to-br from-purple-50 to-white p-4 rounded-lg border border-purple-200">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-semibold text-gray-700">Appointment → Offer</span>
+                            <span className="text-sm font-semibold text-gray-700">Offers Made</span>
                             <TrendingUp className="w-4 h-4 text-purple-600" />
                           </div>
                           <div className="text-2xl font-bold text-purple-600">
                             {(() => {
-                              const appointments = marketingData.reduce((sum: number, s: any) => sum + (s.appointments || 0), 0);
-                              const offers = marketingData.reduce((sum: number, s: any) => sum + (s.offers || 0), 0);
-                              return appointments > 0 ? ((offers / appointments) * 100).toFixed(1) : '0.0';
+                              const totalLeads = marketingData.reduce((sum: number, s: any) => sum + (s.totalLeads || 0), 0);
+                              const offers = marketingData.reduce((sum: number, s: any) => sum + (s.offersMade || 0), 0);
+                              return totalLeads > 0 ? ((offers / totalLeads) * 100).toFixed(1) : '0.0';
                             })()}%
                           </div>
                           <div className="text-xs text-gray-500 mt-1">
-                            {marketingData.reduce((sum: number, s: any) => sum + (s.offers || 0), 0)} of {marketingData.reduce((sum: number, s: any) => sum + (s.appointments || 0), 0)} appointments
+                            Per Total Leads • 
+                            {(() => {
+                              const appointments = marketingData.reduce((sum: number, s: any) => sum + (s.appointmentsSet || 0), 0);
+                              const offers = marketingData.reduce((sum: number, s: any) => sum + (s.offersMade || 0), 0);
+                              return appointments > 0 ? ` ${((offers / appointments) * 100).toFixed(1)}%` : ' 0.0%';
+                            })()} per Appointment
                           </div>
                         </div>
 
-                        {/* Offer → Under Contract */}
+                        {/* Under Contract */}
                         <div className="bg-gradient-to-br from-orange-50 to-white p-4 rounded-lg border border-orange-200">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-semibold text-gray-700">Offer → Under Contract</span>
+                            <span className="text-sm font-semibold text-gray-700">Under Contract</span>
                             <TrendingUp className="w-4 h-4 text-orange-600" />
                           </div>
                           <div className="text-2xl font-bold text-orange-600">
                             {(() => {
-                              const offers = marketingData.reduce((sum: number, s: any) => sum + (s.offers || 0), 0);
+                              const totalLeads = marketingData.reduce((sum: number, s: any) => sum + (s.totalLeads || 0), 0);
                               const underContract = marketingData.reduce((sum: number, s: any) => sum + (s.underContract || 0), 0);
-                              return offers > 0 ? ((underContract / offers) * 100).toFixed(1) : '0.0';
+                              return totalLeads > 0 ? ((underContract / totalLeads) * 100).toFixed(1) : '0.0';
                             })()}%
                           </div>
                           <div className="text-xs text-gray-500 mt-1">
-                            {marketingData.reduce((sum: number, s: any) => sum + (s.underContract || 0), 0)} of {marketingData.reduce((sum: number, s: any) => sum + (s.offers || 0), 0)} offers
+                            Per Total Leads • 
+                            {(() => {
+                              const offers = marketingData.reduce((sum: number, s: any) => sum + (s.offersMade || 0), 0);
+                              const underContract = marketingData.reduce((sum: number, s: any) => sum + (s.underContract || 0), 0);
+                              return offers > 0 ? ` ${((underContract / offers) * 100).toFixed(1)}%` : ' 0.0%';
+                            })()} per Offer
                           </div>
                         </div>
 
-                        {/* Under Contract → Sold */}
+                        {/* Sold */}
                         <div className="bg-gradient-to-br from-yellow-50 to-white p-4 rounded-lg border border-yellow-200">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-semibold text-gray-700">Under Contract → Sold</span>
+                            <span className="text-sm font-semibold text-gray-700">Sold</span>
                             <TrendingUp className="w-4 h-4 text-yellow-600" />
                           </div>
                           <div className="text-2xl font-bold text-yellow-600">
                             {(() => {
-                              const underContract = marketingData.reduce((sum: number, s: any) => sum + (s.underContract || 0), 0);
+                              const totalLeads = marketingData.reduce((sum: number, s: any) => sum + (s.totalLeads || 0), 0);
                               const sold = marketingData.reduce((sum: number, s: any) => sum + (s.sold || 0), 0);
-                              return underContract > 0 ? ((sold / underContract) * 100).toFixed(1) : '0.0';
+                              return totalLeads > 0 ? ((sold / totalLeads) * 100).toFixed(1) : '0.0';
                             })()}%
                           </div>
                           <div className="text-xs text-gray-500 mt-1">
-                            {marketingData.reduce((sum: number, s: any) => sum + (s.sold || 0), 0)} of {marketingData.reduce((sum: number, s: any) => sum + (s.underContract || 0), 0)} under contract
+                            Per Total Leads • 
+                            {(() => {
+                              const underContract = marketingData.reduce((sum: number, s: any) => sum + (s.underContract || 0), 0);
+                              const sold = marketingData.reduce((sum: number, s: any) => sum + (s.sold || 0), 0);
+                              return underContract > 0 ? ` ${((sold / underContract) * 100).toFixed(1)}%` : ' 0.0%';
+                            })()} per Contract
                           </div>
                         </div>
 
-                        {/* Sold → Closed */}
+                        {/* Closed */}
                         <div className="bg-gradient-to-br from-red-50 to-white p-4 rounded-lg border border-red-200">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-semibold text-gray-700">Sold → Closed</span>
+                            <span className="text-sm font-semibold text-gray-700">Closed</span>
                             <TrendingUp className="w-4 h-4 text-red-600" />
                           </div>
                           <div className="text-2xl font-bold text-red-600">
                             {(() => {
-                              const sold = marketingData.reduce((sum: number, s: any) => sum + (s.sold || 0), 0);
+                              const totalLeads = marketingData.reduce((sum: number, s: any) => sum + (s.totalLeads || 0), 0);
                               const closed = marketingData.reduce((sum: number, s: any) => sum + (s.closed || 0), 0);
-                              return sold > 0 ? ((closed / sold) * 100).toFixed(1) : '0.0';
+                              return totalLeads > 0 ? ((closed / totalLeads) * 100).toFixed(1) : '0.0';
                             })()}%
                           </div>
                           <div className="text-xs text-gray-500 mt-1">
-                            {marketingData.reduce((sum: number, s: any) => sum + (s.closed || 0), 0)} of {marketingData.reduce((sum: number, s: any) => sum + (s.sold || 0), 0)} sold
+                            Per Total Leads • 
+                            {(() => {
+                              const sold = marketingData.reduce((sum: number, s: any) => sum + (s.sold || 0), 0);
+                              const closed = marketingData.reduce((sum: number, s: any) => sum + (s.closed || 0), 0);
+                              return sold > 0 ? ` ${((closed / sold) * 100).toFixed(1)}%` : ' 0.0%';
+                            })()} per Sold
                           </div>
                         </div>
                       </div>
