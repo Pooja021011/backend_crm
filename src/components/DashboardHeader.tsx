@@ -107,21 +107,21 @@ const KPICard = ({ title, value, trend, color }: KPICardProps) => {
 
   return (
     <div className={cn(
-      "px-4 py-3 rounded-lg shadow-sm transition-all duration-300 hover:shadow-md min-w-[140px]",
+      "px-3 py-2 rounded-lg shadow-sm transition-all duration-300 hover:shadow-md min-w-[120px] flex-shrink-0",
       config.bg
     )}>
-      <div className="space-y-1">
+      <div className="space-y-0.5">
         <div className="flex items-center justify-between">
-          <p className={cn("text-xs font-semibold uppercase tracking-wide", config.label)}>
+          <p className={cn("text-[10px] font-semibold uppercase tracking-wide", config.label)}>
             {title}
           </p>
           {trend && (
-            <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full", config.trend)}>
+            <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-full", config.trend)}>
               {trend}
             </span>
           )}
         </div>
-        <p className={cn("text-lg font-bold tracking-tight", config.text)}>
+        <p className={cn("text-base font-bold tracking-tight", config.text)}>
           {value}
         </p>
       </div>
@@ -139,8 +139,14 @@ export const DashboardHeader = () => {
   });
   const [isLoadingKpis, setIsLoadingKpis] = useState(true);
   const searchRef = useRef<HTMLDivElement>(null);
+  const kpiScrollRef = useRef<HTMLDivElement>(null);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+
+  // Drag to scroll state
+  const [isDragging, setIsDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
 
   // Get user roles for filtering
   const userRoles = user?.roles || [];
@@ -155,6 +161,32 @@ export const DashboardHeader = () => {
 
   // Debounce timer ref
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Drag to scroll handlers
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!kpiScrollRef.current) return;
+    setIsDragging(true);
+    setStartX(e.pageX - kpiScrollRef.current.offsetLeft);
+    setScrollLeft(kpiScrollRef.current.scrollLeft);
+    kpiScrollRef.current.style.cursor = 'grabbing';
+    kpiScrollRef.current.style.userSelect = 'none';
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDragging || !kpiScrollRef.current) return;
+    e.preventDefault();
+    const x = e.pageX - kpiScrollRef.current.offsetLeft;
+    const walk = (x - startX) * 2; // Scroll speed multiplier
+    kpiScrollRef.current.scrollLeft = scrollLeft - walk;
+  };
+
+  const handleMouseUpOrLeave = () => {
+    setIsDragging(false);
+    if (kpiScrollRef.current) {
+      kpiScrollRef.current.style.cursor = 'grab';
+      kpiScrollRef.current.style.userSelect = 'auto';
+    }
+  };
 
   const getMinSearchLength = (value: string) => {
     const trimmed = value.trim();
@@ -379,6 +411,20 @@ export const DashboardHeader = () => {
 
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
+      <style>{`
+        .hide-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        .hide-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+          scroll-behavior: smooth;
+          -webkit-overflow-scrolling: touch;
+        }
+        .hide-scrollbar:active {
+          scroll-behavior: auto;
+        }
+      `}</style>
       <div className="py-2" style={{ paddingLeft: '32px', paddingRight: '32px' }}>
         <div className="flex items-center justify-between gap-6">
           
@@ -456,72 +502,88 @@ export const DashboardHeader = () => {
             )}
           </div>
 
-          {/* Compact KPIs - 30% width */}
-          <div className="flex gap-2 min-w-fit flex-wrap">
-            {/* ADMIN KPIs */}
-            {kpiData.modes?.includes('admin') && (
-              <>
-                <KPICard
-                  title="CONTRACTS SIGNED"
-                  value={isLoadingKpis ? "..." : String(kpiData.contractsSigned || 0)}
-                  color="blue"
-                />
-                <KPICard
-                  title="CONTRACTS SOLD"
-                  value={isLoadingKpis ? "..." : String(kpiData.contractsSold || 0)}
-                  color="green"
-                />
-                <KPICard
-                  title="TOTAL PROFIT"
-                  value={isLoadingKpis ? "..." : formatCurrency(kpiData.totalProfit)}
-                  color="purple"
-                />
-              </>
-            )}
+          {/* Compact KPIs - Horizontal Scrollable */}
+          <div className="relative w-[600px]">
+            {/* Left scroll shadow */}
+            <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-white to-transparent pointer-events-none z-10"></div>
+            {/* Right scroll shadow */}
+            <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-white to-transparent pointer-events-none z-10"></div>
             
-            {/* MANAGER KPIs (Team Stats) */}
-            {kpiData.modes?.includes('manager') && (
-              <>
-                <div className="h-10 w-px bg-gray-300" /> {/* Separator */}
-                <KPICard
-                  title="CONTRACTS (TEAM)"
-                  value={isLoadingKpis ? "..." : String(kpiData.totalContracts || 0)}
-                  color="orange"
-                />
-                <KPICard
-                  title="LEADS/CONTRACT (TEAM)"
-                  value={isLoadingKpis ? "..." : formatPct2(kpiData.leadsPerContract)}
-                  color="orange"
-                />
-                <KPICard
-                  title="MISHANDLED (TEAM)"
-                  value={isLoadingKpis ? "..." : String(kpiData.leadsMishandled || 0)}
-                  color={kpiData.mishandledColor || 'green'}
-                />
-              </>
-            )}
-            
-            {/* ACQ KPIs (Personal Stats) */}
-            {kpiData.modes?.includes('acq') && (
-              <>
-                <div className="h-10 w-px bg-gray-300" /> {/* Separator */}
-                <KPICard
-                  title="MY CONTRACTS"
-                  value={isLoadingKpis ? "..." : String(kpiData.totalContractsPersonal || 0)}
-                  color="indigo"
-                />
-                <KPICard
-                  title="MY LEADS/CONTRACT"
-                  value={isLoadingKpis ? "..." : formatPct2(kpiData.leadsPerContractPersonal)}
-                  color="indigo"
-                />
-                <KPICard
-                  title="MY MISHANDLED"
-                  value={isLoadingKpis ? "..." : String(kpiData.leadsMishandledPersonal || 0)}
-                  color={kpiData.mishandledColorPersonal || 'green'}
-                />
-              </>
-            )}
+            <div 
+              ref={kpiScrollRef}
+              className="overflow-x-auto hide-scrollbar cursor-grab active:cursor-grabbing"
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUpOrLeave}
+              onMouseLeave={handleMouseUpOrLeave}
+            >
+              <div className="flex gap-2 pb-1">
+              {/* ADMIN KPIs */}
+              {kpiData.modes?.includes('admin') && (
+                <>
+                  <KPICard
+                    title="CONTRACTS (TEAM)"
+                    value={isLoadingKpis ? "..." : String(kpiData.contractsSigned || 0)}
+                    color="blue"
+                  />
+                  <KPICard
+                    title="LEADS/CONTRACT (TEAM)"
+                    value={isLoadingKpis ? "..." : formatPct2(kpiData.leadsPerContract)}
+                    color="green"
+                  />
+                  <KPICard
+                    title="MISHANDLED (TEAM)"
+                    value={isLoadingKpis ? "..." : String(kpiData.leadsMishandled || 0)}
+                    color={kpiData.mishandledColor || 'green'}
+                  />
+                </>
+              )}
+              
+              {/* MANAGER KPIs (Team Stats) */}
+              {kpiData.modes?.includes('manager') && (
+                <>
+                  <div className="h-8 w-px bg-white/30 flex-shrink-0" /> {/* Separator */}
+                  <KPICard
+                    title="CONTRACTS (TEAM)"
+                    value={isLoadingKpis ? "..." : String(kpiData.totalContracts || 0)}
+                    color="orange"
+                  />
+                  <KPICard
+                    title="LEADS/CONTRACT (TEAM)"
+                    value={isLoadingKpis ? "..." : formatPct2(kpiData.leadsPerContract)}
+                    color="orange"
+                  />
+                  <KPICard
+                    title="MISHANDLED (TEAM)"
+                    value={isLoadingKpis ? "..." : String(kpiData.leadsMishandled || 0)}
+                    color={kpiData.mishandledColor || 'green'}
+                  />
+                </>
+              )}
+              
+              {/* ACQ KPIs (Personal Stats) */}
+              {kpiData.modes?.includes('acq') && (
+                <>
+                  <div className="h-8 w-px bg-white/30 flex-shrink-0" /> {/* Separator */}
+                  <KPICard
+                    title="MY CONTRACTS"
+                    value={isLoadingKpis ? "..." : String(kpiData.totalContractsPersonal || 0)}
+                    color="indigo"
+                  />
+                  <KPICard
+                    title="MY LEADS/CONTRACT"
+                    value={isLoadingKpis ? "..." : formatPct2(kpiData.leadsPerContractPersonal)}
+                    color="indigo"
+                  />
+                  <KPICard
+                    title="MY MISHANDLED"
+                    value={isLoadingKpis ? "..." : String(kpiData.leadsMishandledPersonal || 0)}
+                    color={kpiData.mishandledColorPersonal || 'green'}
+                  />
+                </>
+              )}
+              </div>
+            </div>
           </div>
 
           {/* User Menu */}
