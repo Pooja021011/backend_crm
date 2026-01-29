@@ -503,12 +503,7 @@ export const DashboardHeader = () => {
           </div>
 
           {/* Compact KPIs - Horizontal Scrollable */}
-          <div className="relative w-[600px]">
-            {/* Left scroll shadow */}
-            <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-white to-transparent pointer-events-none z-10"></div>
-            {/* Right scroll shadow */}
-            <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-white to-transparent pointer-events-none z-10"></div>
-            
+          <div className="relative flex-1 max-w-[700px]">
             <div 
               ref={kpiScrollRef}
               className="overflow-x-auto hide-scrollbar cursor-grab active:cursor-grabbing"
@@ -517,7 +512,7 @@ export const DashboardHeader = () => {
               onMouseUp={handleMouseUpOrLeave}
               onMouseLeave={handleMouseUpOrLeave}
             >
-              <div className="flex gap-2 pb-1">
+              <div className="flex gap-2 pb-1 justify-start items-center">
               {/* ADMIN KPIs */}
               {kpiData.modes?.includes('admin') && (
                 <>
