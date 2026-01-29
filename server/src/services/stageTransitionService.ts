@@ -94,9 +94,11 @@ export const stageTransitionService = {
         }
       }
       
-      // Rule 2A: Appointment Complete (and any stage after it) requires at least one photo in the Photos section.
-      // Rule 2B: Due Diligence (and any stage after it) requires Additional Property Info fields.
+      // Rule 2A: Appointment Complete (and any stage after it) requires Additional Property Info fields FIRST
+      // Rule 2B: Appointment Complete (and any stage after it) requires at least 3 photos AFTER property info
+      // Rule 2C: Due Diligence Complete requires ARV, comps, rehab, taxes, timeline
       // IMPORTANT: Collect ALL validation errors instead of returning early, so frontend can show all required popups.
+      // CRITICAL: Order matters! Property info must come BEFORE photos in the requiredFields array.
       
       const appointmentCompleteStage = await prisma.pipelineStage.findFirst({
         where: {
@@ -124,7 +126,20 @@ export const stageTransitionService = {
       const allRequiredFields: string[] = [];
       const allErrors: string[] = [];
 
-      // Check photos requirement (Appointment Complete+)
+      // STEP 1: Check property info requirement (Appointment Complete+ stages)
+      // This is checked FIRST so it appears before photos in the validation flow
+      if (appointmentCompleteStage && toStage.orderIndex >= appointmentCompleteStage.orderIndex) {
+        const propertyInfoRequired = ['hvacType', 'hvacAge', 'waterHeaterAge', 'roofAge', 'waterType', 'sewerType'] as const;
+        const missing = propertyInfoRequired.filter((k) => isMissing(customFields[k]));
+
+        if (missing.length > 0) {
+          allRequiredFields.push(...(missing as any));
+          allErrors.push('Additional property information is required before moving to this stage');
+        }
+      }
+
+      // STEP 2: Check photos requirement (Appointment Complete+ stages)
+      // This is checked SECOND so it appears after property info
       if (appointmentCompleteStage && toStage.orderIndex >= appointmentCompleteStage.orderIndex) {
         const photoCount = await prisma.leadFile.count({
           where: {
@@ -138,17 +153,6 @@ export const stageTransitionService = {
         if (photoCount < 3) {
           allRequiredFields.push('photos');
           allErrors.push('At least 3 property photos are required before moving to this stage');
-        }
-      }
-
-      // Check property info requirement (Due Diligence+)
-      if (dueDiligenceStage && toStage.orderIndex >= dueDiligenceStage.orderIndex) {
-        const ddRequired = ['hvacType', 'hvacAge', 'waterHeaterAge', 'roofAge', 'waterType', 'sewerType'] as const;
-        const missing = ddRequired.filter((k) => isMissing(customFields[k]));
-
-        if (missing.length > 0) {
-          allRequiredFields.push(...(missing as any));
-          allErrors.push('Additional property information is required before moving to this stage');
         }
       }
 

@@ -59,7 +59,10 @@ import {
   OfferMadePopup,
   DueDiligenceCompleteRequirementsPopup,
   FollowUpTaskRequiredPopup,
-  AppointmentSetPopup
+  AppointmentSetPopup,
+  ArvComparablesPopup,
+  RehabBudgetFullPopup,
+  TimelineTaxesPopup
 } from '@/components/StageTransitionPopups';
 import { PropertyInfoCard } from '@/components/PropertyInfoCard';
 import { RehabBudgetCalculatorCompact } from '@/components/RehabBudgetCalculatorCompact';
@@ -189,6 +192,7 @@ const LeadEdit: React.FC = () => {
   const [lead, setLead] = useState<LeadData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [changingPipelineStatus, setChangingPipelineStatus] = useState(false);
 
   // Autosave state (Lead Detail page)
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'dirty' | 'saving' | 'saved' | 'error'>('idle');
@@ -282,6 +286,9 @@ const LeadEdit: React.FC = () => {
   const [showOfferMadePopup, setShowOfferMadePopup] = useState(false);
   const [showDueDiligenceCompletePopup, setShowDueDiligenceCompletePopup] = useState(false);
   const [showFollowUpTaskPopup, setShowFollowUpTaskPopup] = useState(false);
+  const [showArvComparablesPopup, setShowArvComparablesPopup] = useState(false);
+  const [showRehabBudgetPopup, setShowRehabBudgetPopup] = useState(false);
+  const [showTimelineTaxesPopup, setShowTimelineTaxesPopup] = useState(false);
   const [pendingPipelineStatus, setPendingPipelineStatus] = useState<string | null>(null);
   const [previousPipelineStatus, setPreviousPipelineStatus] = useState<string | null>(null); // Store original status before validation
   const [pipelineSelectKey, setPipelineSelectKey] = useState(0); // Force Select re-render
@@ -308,6 +315,9 @@ const LeadEdit: React.FC = () => {
       !!showOfferMadePopup ||
       !!showDueDiligenceCompletePopup ||
       !!showFollowUpTaskPopup ||
+      !!showArvComparablesPopup ||
+      !!showRehabBudgetPopup ||
+      !!showTimelineTaxesPopup ||
       !!showTaskDialog;
 
     popupOpenRef.current = nextPopupOpen;
@@ -325,6 +335,9 @@ const LeadEdit: React.FC = () => {
     showOfferMadePopup,
     showDueDiligenceCompletePopup,
     showFollowUpTaskPopup,
+    showArvComparablesPopup,
+    showRehabBudgetPopup,
+    showTimelineTaxesPopup,
     showTaskDialog,
     pendingPipelineStatus,
     pendingLeadStatus,
@@ -599,6 +612,9 @@ const LeadEdit: React.FC = () => {
 
     void (async () => {
       try {
+        // Set loading state
+        setChangingPipelineStatus(true);
+        
         // CRITICAL: Block autosave during stage transition to prevent data loss
         popupOpenRef.current = true;
         
@@ -626,58 +642,56 @@ const LeadEdit: React.FC = () => {
         const requiredFields: string[] = Array.isArray(e?.requiredFields) ? e.requiredFields : [];
         const stageNameLower = (newStage?.name || '').toLowerCase();
 
-        console.log('❌ Pipeline status change failed:', { code, requiredFields });
+        console.log('❌ Pipeline status change failed:', { code, requiredFields, error: e });
 
         if (code === 'VALIDATION_REQUIRED') {
+          console.log('🔍 Validation required - opening popup for first missing item');
           setPendingPipelineStatus(newStageId);
 
-          if (requiredFields.includes('photos')) {
+          // Priority order: propertyInfo → photos → ARV+comps → rehab → timeline+taxes
+          const propertyInfoFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
+          
+          if (requiredFields.some((f) => propertyInfoFields.includes(f))) {
+            console.log('🏠 Opening property info popup');
+            setMissingDdFields(requiredFields.filter((f) => propertyInfoFields.includes(f)));
+            setShowDueDiligencePopup(true);
+          } else if (requiredFields.includes('photos')) {
             console.log('📸 Opening photo upload popup');
             setShowAppointmentPopup(true);
-            return;
-          }
-          if (requiredFields.includes('followUpTask')) {
+          } else if (requiredFields.includes('arv') || requiredFields.includes('comparables')) {
+            console.log('💰 Opening ARV+Comparables popup');
+            setShowArvComparablesPopup(true);
+          } else if (requiredFields.includes('rehabBudget')) {
+            console.log('🔨 Opening Rehab Budget popup');
+            setShowRehabBudgetPopup(true);
+          } else if (requiredFields.includes('underwritingTaxes') || requiredFields.includes('underwritingTimeline')) {
+            console.log('📊 Opening Timeline+Taxes popup');
+            setShowTimelineTaxesPopup(true);
+          } else if (requiredFields.includes('followUpTask')) {
             console.log('📋 Opening follow-up task popup');
             setShowFollowUpTaskPopup(true);
-            return;
-          }
-          const ddFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
-          if (requiredFields.some((f) => ddFields.includes(f))) {
-            setMissingDdFields(requiredFields.filter((f) => ddFields.includes(f)));
-            // Reload lead to get fresh customFields (user may have edited/cleared fields)
-            await loadLead();
-            setShowDueDiligencePopup(true);
-            return;
-          }
-          const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation','underwritingTaxes','underwritingTimeline'];
-          if (requiredFields.some((f) => ddCompleteFields.includes(f))) {
-            setMissingDdCompleteItems(requiredFields.filter((f) => ddCompleteFields.includes(f)));
-            // Reload lead to get fresh customFields
-            await loadLead();
-            setShowDueDiligenceCompletePopup(true);
-            return;
-          }
-          if (stageNameLower.includes('offer') && stageNameLower.includes('made')) {
+          } else if (stageNameLower.includes('offer') && stageNameLower.includes('made')) {
+            console.log('💼 Opening offer made popup');
             setShowOfferMadePopup(true);
-            return;
+          } else {
+            console.log('⚠️ No popup matched, showing error toast');
+            toast({
+              title: 'Stage Change Failed',
+              description: e?.message || 'Failed to change pipeline stage',
+              variant: 'destructive',
+            });
           }
+        } else {
+          // Non-validation error - show toast
+          toast({
+            title: 'Stage Change Failed',
+            description: e?.message || 'Failed to change pipeline stage',
+            variant: 'destructive',
+          });
         }
-
-        // If validation fails and no popup was shown, revert the status
-        if (previousPipelineStatus) {
-          console.log('⏪ Reverting pipeline status to:', previousPipelineStatus);
-          setPipelineStatus(previousPipelineStatus);
-          setPreviousPipelineStatus(null);
-        }
-
-        toast({
-          title: 'Stage Change Failed',
-          description: e?.message || 'Failed to change pipeline stage',
-          variant: 'destructive',
-        });
-
-        // Revert UI selection back to server-known stage
-        setPipelineStatus(lead?.pipelineStageId || '');
+      } finally {
+        // Always clear loading state
+        setChangingPipelineStatus(false);
       }
     })();
   };
@@ -931,10 +945,10 @@ const LeadEdit: React.FC = () => {
         // Load rehab information from customFields
         setRehabBudget(customFields.rehabBudget?.toString() || '');
         setRehabItems(customFields.rehabItems || []);
-        if (customFields.rehabFinishLevel) setRehabFinishLevel(customFields.rehabFinishLevel);
-        if (customFields.rehabToggledItems) setRehabToggledItems(customFields.rehabToggledItems);
-        if (customFields.rehabNumberOfWindows) setRehabNumberOfWindows(customFields.rehabNumberOfWindows);
-        if (customFields.rehabCustomValues) setRehabCustomValues(customFields.rehabCustomValues);
+        setRehabFinishLevel(customFields.rehabFinishLevel || 'mid_range');
+        setRehabToggledItems(customFields.rehabToggledItems || {});
+        setRehabNumberOfWindows(customFields.rehabNumberOfWindows ?? 10);
+        setRehabCustomValues(customFields.rehabCustomValues || {});
         setLeadSourceData(customFields.leadSourceData || {});
 
         // Establish baseline after state hydration completes (best-effort)
@@ -3705,10 +3719,17 @@ const LeadEdit: React.FC = () => {
                   key={pipelineSelectKey} 
                   value={pipelineStatus} 
                   onValueChange={handlePipelineStatusChange} 
-                  disabled={!canEditLead}
+                  disabled={!canEditLead || changingPipelineStatus}
                 >
                   <SelectTrigger className="h-5 px-2 py-0 text-[10px] [&>span]:w-full [&>span]:text-left">
-                    <SelectValue className="text-left" placeholder="Pipeline Status" />
+                    {changingPipelineStatus ? (
+                      <span className="flex items-center gap-1">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        <span>Updating...</span>
+                      </span>
+                    ) : (
+                      <SelectValue className="text-left" placeholder="Pipeline Status" />
+                    )}
                   </SelectTrigger>
                   <SelectContent>
                     {pipelineStages.map((stage) => (
@@ -4849,6 +4870,329 @@ const LeadEdit: React.FC = () => {
               description: error.message || "Failed to update property information",
               variant: "destructive"
             });
+          }
+        }}
+      />
+
+      <ArvComparablesPopup
+        open={showArvComparablesPopup}
+        onClose={() => {
+          console.log('🚪 ARV+Comparables popup closed');
+          setShowArvComparablesPopup(false);
+          // Revert to previous status since user cancelled
+          if (previousPipelineStatus) {
+            console.log('⏪ Reverting status to:', previousPipelineStatus);
+            setPipelineStatus(previousPipelineStatus);
+          }
+          setPendingPipelineStatus(null);
+          setPreviousPipelineStatus(null);
+          setPipelineSelectKey(prev => prev + 1);
+        }}
+        existingData={lead?.customFields}
+        onSubmit={async (data) => {
+          try {
+            // Set loading state
+            setChangingPipelineStatus(true);
+            
+            console.log('💾 Saving ARV and comparables...', data);
+            
+            // Update ARV in customFields
+            const response = await makeApiCall(`${API_BASE}/leads/${id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                customFields: {
+                  ...(lead?.customFields || {}),
+                  arv: data.arv
+                }
+              })
+            });
+
+            if (!response.ok) {
+              throw new Error('Failed to save ARV');
+            }
+
+            console.log('✅ ARV saved');
+
+            // Upload comparables PDF if provided (REQUIRED for DD Complete)
+            if (data.comparablesFile) {
+              const formData = new FormData();
+              formData.append('file', data.comparablesFile);
+              
+              const uploadResponse = await makeApiCall(`${API_BASE}/comps/leads/${id}/pdfs`, {
+                method: 'POST',
+                body: formData
+              });
+
+              if (!uploadResponse.ok) {
+                throw new Error('Failed to upload comparables PDF');
+              }
+
+              console.log('✅ Comparables PDF uploaded');
+            }
+
+            // Close this popup
+            setShowArvComparablesPopup(false);
+            
+            // Reload lead data
+            await loadLead();
+            await loadComparables(); // Refresh comparables to show uploaded PDFs
+
+            // Try stage move again to check what's still needed
+            if (pendingPipelineStatus) {
+              console.log('🔄 Checking if more fields are required...');
+              
+              try {
+                await requestStageMove(pendingPipelineStatus);
+                // Success! Stage moved
+                console.log('✅ Stage moved successfully - all requirements met!');
+                setPendingPipelineStatus(null);
+                setPreviousPipelineStatus(null);
+              } catch (validationError: any) {
+                if (validationError?.code === 'VALIDATION_REQUIRED') {
+                  // More fields needed - open next popup
+                  const stillRequired = validationError?.requiredFields || [];
+                  console.log('📋 Still required:', stillRequired);
+                  
+                  if (stillRequired.includes('rehabBudget')) {
+                    console.log('🔨 Opening Rehab Budget popup');
+                    setShowRehabBudgetPopup(true);
+                  } else if (stillRequired.includes('underwritingTaxes') || stillRequired.includes('underwritingTimeline')) {
+                    console.log('📊 Opening Timeline+Taxes popup');
+                    setShowTimelineTaxesPopup(true);
+                  } else {
+                    // Unknown requirement, show error
+                    throw validationError;
+                  }
+                } else {
+                  // Real error, not validation
+                  throw validationError;
+                }
+              }
+            }
+          } catch (error: any) {
+            console.error('❌ Error in ARV+Comparables flow:', error);
+            toast({
+              title: "Error",
+              description: error.message || "Failed to save ARV and comparables",
+              variant: "destructive"
+            });
+          } finally {
+            // Always clear loading state
+            setChangingPipelineStatus(false);
+          }
+        }}
+      />
+
+      <RehabBudgetFullPopup
+        open={showRehabBudgetPopup}
+        onClose={() => {
+          console.log('🚪 Rehab Budget popup closed');
+          setShowRehabBudgetPopup(false);
+          // Revert to previous status since user cancelled
+          if (previousPipelineStatus) {
+            console.log('⏪ Reverting status to:', previousPipelineStatus);
+            setPipelineStatus(previousPipelineStatus);
+          }
+          setPendingPipelineStatus(null);
+          setPreviousPipelineStatus(null);
+          setPipelineSelectKey(prev => prev + 1);
+        }}
+        existingData={lead?.customFields}
+        sqft={lead?.customFields?.sqft}
+        onSubmit={async (data) => {
+          try {
+            // Set loading state
+            setChangingPipelineStatus(true);
+            
+            console.log('💾 Saving rehab budget...', data);
+            
+            // Calculate custom misc total
+            const miscValueNum = data.rehabCustomValues?.miscValue || 0;
+            const subtotalWithCustom = (data.calculation?.subtotal || 0) + miscValueNum;
+            const contingencyWithCustom = subtotalWithCustom * 0.10;
+            const totalWithCustom = subtotalWithCustom + contingencyWithCustom;
+            
+            // Save to rehab-budget endpoint (matches RehabBudgetCalculatorCompact)
+            const rehabBudgetPayload = {
+              finishLevel: data.rehabFinishLevel,
+              toggledItems: data.rehabToggledItems,
+              customValues: {
+                miscLabel: data.rehabCustomValues?.miscLabel || '',
+                miscValue: miscValueNum,
+                miscLines: [{ 
+                  label: data.rehabCustomValues?.miscLabel || '', 
+                  value: miscValueNum 
+                }],
+              },
+              subtotal: subtotalWithCustom,
+              contingencyAmount: contingencyWithCustom,
+              totalCost: totalWithCustom
+            };
+            
+            console.log('📤 Saving to rehab-budget endpoint:', rehabBudgetPayload);
+            
+            const rehabResponse = await makeApiCall(`${API_BASE}/leads/${id}/rehab-budget`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(rehabBudgetPayload)
+            });
+
+            if (!rehabResponse.ok) {
+              const errorData = await rehabResponse.json();
+              console.error('❌ Rehab budget save failed:', errorData);
+              throw new Error(errorData.error || 'Failed to save rehab budget');
+            }
+            
+            // Also update customFields for bathrooms, sqft, and rehabBudget total (for validation)
+            const updatePayload = {
+              customFields: {
+                ...(lead?.customFields || {}),
+                rehabFinishLevel: data.rehabFinishLevel,
+                rehabNumberOfWindows: data.rehabNumberOfWindows,
+                rehabToggledItems: data.rehabToggledItems,
+                rehabCustomValues: data.rehabCustomValues,
+                rehabBudget: totalWithCustom, // ✅ CRITICAL: Save total for backend validation
+                // Sync bathrooms and sqft with Property Information
+                ...(data.bathrooms !== undefined ? { bathrooms: data.bathrooms } : {}),
+                ...(data.sqft !== undefined ? { sqft: data.sqft } : {})
+              }
+            };
+            
+            console.log('📤 Updating customFields:', updatePayload);
+            
+            const leadResponse = await makeApiCall(`${API_BASE}/leads/${id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(updatePayload)
+            });
+
+            if (!leadResponse.ok) {
+              throw new Error('Failed to update lead custom fields');
+            }
+
+            console.log('✅ Rehab budget and custom fields saved');
+            setShowRehabBudgetPopup(false);
+            await loadLead();
+            await loadComparables(); // Refresh comparables to show uploaded PDFs
+
+            // Try stage move again
+            if (pendingPipelineStatus) {
+              console.log('🔄 Checking if more fields are required...');
+              console.log('📌 Pending pipeline status:', pendingPipelineStatus);
+              
+              try {
+                await requestStageMove(pendingPipelineStatus);
+                console.log('✅ Stage moved successfully!');
+                setPendingPipelineStatus(null);
+                setPreviousPipelineStatus(null);
+              } catch (validationError: any) {
+                console.log('⚠️ Validation error caught:', validationError);
+                console.log('🔍 Error code:', validationError?.code);
+                console.log('📋 Required fields:', validationError?.requiredFields);
+                
+                if (validationError?.code === 'VALIDATION_REQUIRED') {
+                  const stillRequired = validationError?.requiredFields || [];
+                  console.log('📋 Still required after rehab save:', stillRequired);
+                  
+                  if (stillRequired.includes('underwritingTaxes') || stillRequired.includes('underwritingTimeline')) {
+                    console.log('📊 Opening Timeline+Taxes popup');
+                    setShowTimelineTaxesPopup(true);
+                  } else {
+                    console.log('❓ Unknown requirements, throwing error');
+                    throw validationError;
+                  }
+                } else {
+                  console.log('❌ Not a validation error, throwing');
+                  throw validationError;
+                }
+              }
+            } else {
+              console.log('⚠️ No pendingPipelineStatus, skipping stage move check');
+            }
+          } catch (error: any) {
+            console.error('❌ Error in Rehab Budget flow:', error);
+            toast({
+              title: "Error",
+              description: error.message || "Failed to save rehab budget",
+              variant: "destructive"
+            });
+          } finally {
+            // Always clear loading state
+            setChangingPipelineStatus(false);
+          }
+        }}
+      />
+
+      <TimelineTaxesPopup
+        open={showTimelineTaxesPopup}
+        onClose={() => {
+          console.log('🚪 Timeline+Taxes popup closed');
+          setShowTimelineTaxesPopup(false);
+          // Revert to previous status since user cancelled
+          if (previousPipelineStatus) {
+            console.log('⏪ Reverting status to:', previousPipelineStatus);
+            setPipelineStatus(previousPipelineStatus);
+          }
+          setPendingPipelineStatus(null);
+          setPreviousPipelineStatus(null);
+          setPipelineSelectKey(prev => prev + 1);
+        }}
+        existingData={lead?.customFields}
+        onSubmit={async (data) => {
+          try {
+            // Set loading state
+            setChangingPipelineStatus(true);
+            
+            console.log('💾 Saving timeline and taxes...', data);
+            
+            // Update timeline and taxes in customFields
+            const response = await makeApiCall(`${API_BASE}/leads/${id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                customFields: {
+                  ...(lead?.customFields || {}),
+                  underwritingTimeline: data.underwritingTimeline,
+                  underwritingTaxes: data.underwritingTaxes
+                }
+              })
+            });
+
+            if (!response.ok) {
+              throw new Error('Failed to save timeline and taxes');
+            }
+
+            console.log('✅ Timeline and taxes saved');
+            setShowTimelineTaxesPopup(false);
+            await loadLead();
+            await loadComparables(); // Refresh comparables to show uploaded PDFs
+
+            // Try stage move again - should succeed now!
+            if (pendingPipelineStatus) {
+              console.log('🔄 Final attempt to move stage...');
+              
+              try {
+                await requestStageMove(pendingPipelineStatus);
+                console.log('✅ Stage moved to Due Diligence Complete!');
+                setPendingPipelineStatus(null);
+                setPreviousPipelineStatus(null);
+              } catch (validationError: any) {
+                // If still failing, show error
+                console.error('❌ Stage move still failed:', validationError);
+                throw validationError;
+              }
+            }
+          } catch (error: any) {
+            console.error('❌ Error in Timeline+Taxes flow:', error);
+            toast({
+              title: "Error",
+              description: error.message || "Failed to save timeline and taxes",
+              variant: "destructive"
+            });
+          } finally {
+            // Always clear loading state
+            setChangingPipelineStatus(false);
           }
         }}
       />

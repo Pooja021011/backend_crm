@@ -1,27 +1,36 @@
 import { prisma } from '../config/db.js';
 
 export const metricsRepository = {
-  getLeadsCreatedBetween: (from: Date, to: Date) =>
+  getLeadsCreatedBetween: (from: Date, to: Date, filters?: { createdById?: string }) =>
     prisma.lead.findMany({
       where: {
         createdAt: { gte: from, lt: to },
+        ...(filters?.createdById ? { createdById: filters.createdById } : {}),
       },
       select: { id: true, createdAt: true },
     }),
 
-  getStageHistoryBetween: (from: Date, to: Date) =>
+  getStageHistoryBetween: (from: Date, to: Date, filters?: { createdById?: string }) =>
     prisma.stageHistory.findMany({
       where: {
         changedAt: { gte: from, lt: to },
+        ...(filters?.createdById ? {
+          lead: {
+            createdById: filters.createdById
+          }
+        } : {}),
       },
       include: { toStage: { include: { pipeline: true } }, fromStage: true },
     }),
 
   // Lead source distribution per month using Lead.createdAt and source stored on lead.customFields or related tables (if any)
   // We infer from Lead.customFields.leadSource when available
-  getLeadsWithSourceBetween: (from: Date, to: Date) =>
+  getLeadsWithSourceBetween: (from: Date, to: Date, filters?: { createdById?: string }) =>
     prisma.lead.findMany({
-      where: { createdAt: { gte: from, lt: to } },
+      where: { 
+        createdAt: { gte: from, lt: to },
+        ...(filters?.createdById ? { createdById: filters.createdById } : {}),
+      },
       select: { id: true, createdAt: true, customFields: true },
     }),
 
@@ -144,13 +153,13 @@ export const metricsRepository = {
       select: { leadId: true, closedAt: true, netProfit: true },
     }),
 
-  getLeadsCreatedBetweenScoped: (from: Date, to: Date, filters: { pipelineKey: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION'; leadType?: any; assignedUserId?: string; onlyPipelineStatus?: boolean }) =>
+  getLeadsCreatedBetweenScoped: (from: Date, to: Date, filters: { pipelineKey: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION'; leadType?: any; createdById?: string; onlyPipelineStatus?: boolean }) =>
     prisma.lead.findMany({
       where: {
         createdAt: { gte: from, lt: to },
         pipelineStage: { pipeline: { key: filters.pipelineKey as any } },
         ...(filters.leadType ? { leadType: filters.leadType } : {}),
-        ...(filters.assignedUserId ? { assignedUserId: filters.assignedUserId } : {}),
+        ...(filters.createdById ? { createdById: filters.createdById } : {}),
         ...(filters.onlyPipelineStatus
           ? { leadStatus: { name: { equals: 'Pipeline', mode: 'insensitive' } } }
           : {}),
@@ -158,12 +167,12 @@ export const metricsRepository = {
       select: { id: true, createdAt: true, updatedAt: true },
     }),
 
-  getActiveLeadsWithActivityByPipeline: (filters: { pipelineKey: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION'; leadType?: any; assignedUserId?: string; onlyPipelineStatus?: boolean }) =>
+  getActiveLeadsWithActivityByPipeline: (filters: { pipelineKey: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION'; leadType?: any; createdById?: string; onlyPipelineStatus?: boolean }) =>
     prisma.lead.findMany({
       where: {
         pipelineStage: { pipeline: { key: filters.pipelineKey as any } },
         ...(filters.leadType ? { leadType: filters.leadType } : {}),
-        ...(filters.assignedUserId ? { assignedUserId: filters.assignedUserId } : {}),
+        ...(filters.createdById ? { createdById: filters.createdById } : {}),
         ...(filters.onlyPipelineStatus
           ? { leadStatus: { name: { equals: 'Pipeline', mode: 'insensitive' } } }
           : {}),
@@ -201,6 +210,35 @@ export const metricsRepository = {
         ...(filters.assignedUserId ? { assignedUserId: filters.assignedUserId } : {}),
       },
     }),
+
+  /**
+   * Get count of leads that entered a contract stage during the specified timeframe
+   * This counts NEW contracts signed within the date range (not all current contracts)
+   */
+  getContractsSignedBetween: async (from: Date, to: Date, filters: { pipelineKey: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION'; leadType?: any; createdById?: string }) => {
+    // Get all stage history entries where a lead moved INTO a stage containing "Contract"
+    const stageHistory = await prisma.stageHistory.findMany({
+      where: {
+        changedAt: { gte: from, lte: to },
+        toStage: {
+          pipeline: { key: filters.pipelineKey as any },
+          name: { contains: 'Contract', mode: 'insensitive' }
+        },
+        ...(filters.leadType || filters.createdById ? {
+          lead: {
+            ...(filters.leadType ? { leadType: filters.leadType } : {}),
+            ...(filters.createdById ? { createdById: filters.createdById } : {}),
+          }
+        } : {}),
+      },
+      select: {
+        leadId: true,
+      },
+    });
+    
+    // Return count of unique leads (in case a lead moved to contract stage multiple times)
+    return new Set(stageHistory.map(h => h.leadId)).size;
+  },
 };
 
 

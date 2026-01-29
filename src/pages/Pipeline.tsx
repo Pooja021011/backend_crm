@@ -9,10 +9,14 @@ import { PipelineCard } from "@/components/PipelineCard";
 import { ViewLeadDialog } from "@/components/ViewLeadDialog";
 import { 
   AppointmentCompletePopup,
+  AppointmentSetPopup,
   DueDiligencePopup,
   OfferMadePopup,
   DueDiligenceCompleteRequirementsPopup,
-  FollowUpTaskRequiredPopup
+  FollowUpTaskRequiredPopup,
+  ArvComparablesPopup,
+  RehabBudgetFullPopup,
+  TimelineTaxesPopup
 } from "@/components/StageTransitionPopups";
 import { 
   Users, 
@@ -53,6 +57,8 @@ const Pipeline = () => {
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [needsAttentionCount, setNeedsAttentionCount] = useState(0);
+  const [changingPipelineStatus, setChangingPipelineStatus] = useState(false);
+  const [submittingPopup, setSubmittingPopup] = useState(false); // For popup submissions only
 
   // Admin/Manager filters (applied to pipeline)
   const isAdminOrManager = user?.roles?.includes('ADMIN') || user?.roles?.includes('MANAGER');
@@ -81,10 +87,14 @@ const Pipeline = () => {
   
   // Stage transition validation popups
   const [showAppointmentPopup, setShowAppointmentPopup] = useState(false);
+  const [showAppointmentSetPopup, setShowAppointmentSetPopup] = useState(false);
   const [showDueDiligencePopup, setShowDueDiligencePopup] = useState(false);
   const [showOfferMadePopup, setShowOfferMadePopup] = useState(false);
   const [showDueDiligenceCompletePopup, setShowDueDiligenceCompletePopup] = useState(false);
   const [showFollowUpTaskPopup, setShowFollowUpTaskPopup] = useState(false);
+  const [showArvComparablesPopup, setShowArvComparablesPopup] = useState(false);
+  const [showRehabBudgetPopup, setShowRehabBudgetPopup] = useState(false);
+  const [showTimelineTaxesPopup, setShowTimelineTaxesPopup] = useState(false);
   const [pendingStageChange, setPendingStageChange] = useState<{
     leadId: string;
     newStageId: string;
@@ -785,6 +795,19 @@ const Pipeline = () => {
     
     const stageNameLower = stageName.toLowerCase();
     
+    // Check if moving to "Appointment Set" - ask for appointment date FIRST
+    if (stageNameLower === 'appointment set') {
+      console.log('📅 Appointment Set detected - showing date picker');
+      setPendingStageChange({ 
+        leadId, 
+        newStageId, 
+        stageName, 
+        leadToMove 
+      });
+      setShowAppointmentSetPopup(true);
+      return; // Don't proceed with the change yet
+    }
+    
     // EXISTING: Update UI immediately (optimistic update)
     setLeads(prev => prev.map(lead => 
       lead.id === leadId 
@@ -798,6 +821,9 @@ const Pipeline = () => {
     ));
 
     try {
+      // Set loading state
+      setChangingPipelineStatus(true);
+      
       // EXISTING: API call to move lead
       const response = await makeApiCall(`${API_BASE}/pipeline/leads/${leadId}/move`, {
         method: 'PUT',
@@ -830,18 +856,31 @@ const Pipeline = () => {
           });
 
           // Show the FIRST required popup
-          // Priority order: photos → followUpTask → DD fields → DD Complete fields → offer
-          if (requiredFields.includes('photos')) {
-            setShowAppointmentPopup(true);
-          } else if (requiredFields.includes('followUpTask')) {
-            setShowFollowUpTaskPopup(true);
-          } else if (requiredFields.some((f) => ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'].includes(f))) {
-            setMissingDdFields(requiredFields.filter((f) => ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'].includes(f)));
+          // NEW Priority order: propertyInfo → photos → ARV+comps → rehab → timeline+taxes → offer
+          const propertyInfoFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
+          const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingTaxes','underwritingTimeline'];
+          
+          if (requiredFields.some((f) => propertyInfoFields.includes(f))) {
+            // STEP 1: Property Info (for Appointment Complete)
+            setMissingDdFields(requiredFields.filter((f) => propertyInfoFields.includes(f)));
             setShowDueDiligencePopup(true);
-          } else if (requiredFields.some((f) => ['arv','comparables','rehabBudget','underwritingCalculation','underwritingTaxes','underwritingTimeline'].includes(f))) {
-            setMissingDdCompleteItems(requiredFields.filter((f) => ['arv','comparables','rehabBudget','underwritingCalculation','underwritingTaxes','underwritingTimeline'].includes(f)));
-            setShowDueDiligenceCompletePopup(true);
+          } else if (requiredFields.includes('photos')) {
+            // STEP 2: Photos (for Appointment Complete)
+            setShowAppointmentPopup(true);
+          } else if (requiredFields.includes('arv') || requiredFields.includes('comparables')) {
+            // STEP 3: ARV + Comparables (for DD Complete)
+            setShowArvComparablesPopup(true);
+          } else if (requiredFields.includes('rehabBudget')) {
+            // STEP 4: Rehab Budget (for DD Complete)
+            setShowRehabBudgetPopup(true);
+          } else if (requiredFields.includes('underwritingTaxes') || requiredFields.includes('underwritingTimeline')) {
+            // STEP 5: Timeline + Taxes (for DD Complete)
+            setShowTimelineTaxesPopup(true);
+          } else if (requiredFields.includes('followUpTask')) {
+            // Follow-up task requirement
+            setShowFollowUpTaskPopup(true);
           } else if (stageNameLower.includes('offer') && stageNameLower.includes('made')) {
+            // STEP 6: Offer Made
             setShowOfferMadePopup(true);
           }
           return;
@@ -891,6 +930,9 @@ const Pipeline = () => {
         description: "Failed to move lead. Please try again.",
         variant: "destructive"
       });
+    } finally {
+      // Always clear loading state
+      setChangingPipelineStatus(false);
     }
   };
 
@@ -929,6 +971,9 @@ const Pipeline = () => {
     console.log('🔄 Retrying stage move:', { leadId, newStageId, stageName });
     
     try {
+      // Set loading state
+      setChangingPipelineStatus(true);
+      
       // optimistic update
       setLeads(prev => prev.map(lead =>
         lead.id === leadId
@@ -982,6 +1027,31 @@ const Pipeline = () => {
 
       console.log('✅ Stage move successful');
       
+      // Fetch updated lead data from backend to get correct leadType
+      try {
+        const updatedLeadResponse = await makeApiCall(`${API_BASE}/leads/${leadId}`);
+        if (updatedLeadResponse.ok) {
+          const updatedLeadData = await updatedLeadResponse.json();
+          const updatedLead = updatedLeadData.data || updatedLeadData;
+          
+          // Update lead with correct data from backend
+          setLeads(prev => prev.map(lead => 
+            lead.id === leadId 
+              ? { 
+                  ...lead, 
+                  stage: newStageId, 
+                  stagePipelineKey: getStagePipelineKey(newStageId),
+                  statusChangedDate: new Date().toISOString(),
+                  leadType: updatedLead.leadType, // Update leadType from backend
+                  customFields: updatedLead.customFields // Update customFields from backend
+                }
+              : lead
+          ));
+        }
+      } catch (e) {
+        console.warn('⚠️ Failed to fetch updated lead data:', e);
+      }
+      
       // Success: close all popups and clear pending
       setShowAppointmentPopup(false);
       setShowDueDiligencePopup(false);
@@ -1010,6 +1080,9 @@ const Pipeline = () => {
       
       // Clear pending state
       setPendingStageChange(null);
+    } finally {
+      // Always clear loading state
+      setChangingPipelineStatus(false);
     }
   };
 
@@ -1346,6 +1419,18 @@ const Pipeline = () => {
             </div>
           </div>
         )}
+        
+        {/* Popup Submission Loading Overlay - Only for popup submissions */}
+        {submittingPopup && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 flex flex-col items-center gap-3 shadow-xl">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+              <div className="text-sm font-medium">Saving data...</div>
+              <div className="text-xs text-gray-500">Please wait</div>
+            </div>
+          </div>
+        )}
+        
         <DndContext
           collisionDetection={closestCenter}
           sensors={sensors}
@@ -1414,12 +1499,21 @@ const Pipeline = () => {
         onClose={() => {
           console.log('🚨 AppointmentCompletePopup onClose called!');
           setShowAppointmentPopup(false);
-          // DON'T clear pendingStageChange here - the onSubmit handler manages the flow
+          // Only clear pending state if NOT transitioning between popups
+          if (!isTransitioningPopupsRef.current) {
+            console.log('✅ Clearing pendingStageChange (user cancelled)');
+            setPendingStageChange(null);
+          } else {
+            console.log('⏩ Keeping pendingStageChange (transitioning to next popup)');
+          }
         }}
         leadId={pendingStageChange?.leadId || ''}
         onSubmit={async (files) => {
           if (!pendingStageChange) return;
           try {
+                // Set loading state for popup submission
+                setSubmittingPopup(true);
+                
                 // Upload pictures/files
                 let uploadedCount = 0;
                 for (const file of files) {
@@ -1450,6 +1544,28 @@ const Pipeline = () => {
                 
                 console.log(`📸 Uploaded ${uploadedCount} of ${files.length} photos`);
                 
+                // Refresh lead data to get latest customFields for next popup
+                let updatedLeadData = null;
+                try {
+                  const freshResponse = await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`);
+                  if (freshResponse.ok) {
+                    const freshData = await freshResponse.json();
+                    updatedLeadData = freshData.data || freshData;
+                    console.log('✅ Refreshed lead data after Photos upload:', updatedLeadData);
+                    
+                    // Update pendingStageChange with fresh data for next popup
+                    setPendingStageChange(prev => prev ? {
+                      ...prev,
+                      leadToMove: {
+                        ...prev.leadToMove,
+                        customFields: updatedLeadData.customFields
+                      }
+                    } : null);
+                  }
+                } catch (e) {
+                  console.warn('⚠️ Failed to refresh lead data:', e);
+                }
+                
                 // Check if there are more requirements to fulfill (from the original validation response)
                 console.log('🔍 DEBUG: pendingStageChange =', pendingStageChange);
                 console.log('🔍 DEBUG: allRequiredFields =', pendingStageChange?.allRequiredFields);
@@ -1457,6 +1573,12 @@ const Pipeline = () => {
                 if (pendingStageChange?.allRequiredFields) {
                   const remaining = pendingStageChange.allRequiredFields.filter(f => f !== 'photos');
                   console.log('🔍 DEBUG: remaining after removing photos =', remaining);
+                  
+                  // UPDATE pendingStageChange to remove completed 'photos' field
+                  setPendingStageChange(prev => prev ? {
+                    ...prev,
+                    allRequiredFields: remaining
+                  } : null);
                   
                   if (remaining.length > 0) {
                     console.log('📋 More requirements pending:', remaining);
@@ -1478,47 +1600,46 @@ const Pipeline = () => {
                     // Small delay to ensure dialog closes before opening next one
                     await new Promise(resolve => setTimeout(resolve, 100));
                     
-                    if (remaining.some(f => ddFields.includes(f))) {
-                      const ddFieldsToShow = remaining.filter(f => ddFields.includes(f));
-                      console.log('✅ Showing DueDiligencePopup with fields:', ddFieldsToShow);
-                      setMissingDdFields(ddFieldsToShow);
+                    // Check next requirement in priority order: property info → arv+comps → rehab → timeline+taxes
+                    const propertyInfoFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
+                    
+                    if (remaining.some(f => propertyInfoFields.includes(f))) {
+                      const propertyFieldsToShow = remaining.filter(f => propertyInfoFields.includes(f));
+                      console.log('✅ Showing DueDiligencePopup (Property Info) with fields:', propertyFieldsToShow);
+                      setMissingDdFields(propertyFieldsToShow);
                       setShowDueDiligencePopup(true);
-                      
-                      // Small delay to ensure popup is rendered
-                      await new Promise(resolve => setTimeout(resolve, 50));
-                      
-                      // Now safe to clear flag
-                      isTransitioningPopupsRef.current = false;
-                    } else if (remaining.some(f => ddCompleteFields.includes(f))) {
-                      const ddCompleteFieldsToShow = remaining.filter(f => ddCompleteFields.includes(f));
-                      console.log('✅ Showing DueDiligenceCompletePopup with fields:', ddCompleteFieldsToShow);
-                      setMissingDdCompleteItems(ddCompleteFieldsToShow);
-                      setShowDueDiligenceCompletePopup(true);
-                      console.log('✅ After setState - showDueDiligenceCompletePopup should be true');
-                      console.log('✅ pendingStageChange still exists:', !!pendingStageChange);
-                      
-                      // Small delay to ensure popup is rendered
-                      await new Promise(resolve => setTimeout(resolve, 50));
-                      
-                      // Now safe to clear flag
-                      isTransitioningPopupsRef.current = false;
+                    } else if (remaining.includes('arv') || remaining.includes('comparables')) {
+                      console.log('✅ Showing ARV+Comparables popup');
+                      setShowArvComparablesPopup(true);
+                    } else if (remaining.includes('rehabBudget')) {
+                      console.log('✅ Showing Rehab Budget popup');
+                      setShowRehabBudgetPopup(true);
+                    } else if (remaining.includes('underwritingTaxes') || remaining.includes('underwritingTimeline')) {
+                      console.log('✅ Showing Timeline+Taxes popup');
+                      setShowTimelineTaxesPopup(true);
                     } else {
                       console.log('⚠️ No matching popup found, calling retryPendingStageMove');
                       isTransitioningPopupsRef.current = false;
                       // No more known requirements, try the move
                       await retryPendingStageMove();
                     }
+                    
+                    // ✅ DON'T reset flag here - let the next popup's onSubmit reset it
+                    // This prevents race condition where onClose fires after flag is cleared
+                    console.log('⏩ Flag remains TRUE - waiting for next popup action');
                   } else {
                     console.log('✅ All requirements fulfilled, calling retryPendingStageMove');
-                    setShowAppointmentPopup(false);
                     // All requirements fulfilled, try the move
                     await retryPendingStageMove();
+                    // Close popup AFTER successful move
+                    setShowAppointmentPopup(false);
                   }
                 } else {
                   console.log('⚠️ No allRequiredFields found, calling retryPendingStageMove');
-                  setShowAppointmentPopup(false);
                   // Fallback: retry stage move (will trigger validation again)
                   await retryPendingStageMove();
+                  // Close popup AFTER successful move
+                  setShowAppointmentPopup(false);
                 }
               } catch (error: any) {
                 console.error('Error in appointment complete flow:', error);
@@ -1527,6 +1648,82 @@ const Pipeline = () => {
                   description: error.message || "Failed to complete appointment",
                   variant: "destructive"
                 });
+              } finally {
+                // Always clear loading state
+                setSubmittingPopup(false);
+              }
+            }}
+          />
+          
+          <AppointmentSetPopup
+            open={showAppointmentSetPopup}
+            onClose={() => {
+              console.log('🚪 Appointment Set popup closed');
+              setShowAppointmentSetPopup(false);
+              setPendingStageChange(null);
+            }}
+            onSubmit={async (appointmentDate) => {
+              if (!pendingStageChange) return;
+              try {
+                // Set loading state for popup submission
+                setSubmittingPopup(true);
+                
+                // Save the appointment date to customFields
+                const response = await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    customFields: {
+                      ...(pendingStageChange.leadToMove.customFields || {}),
+                      appointmentDate
+                    }
+                  })
+                });
+
+                if (!response.ok) {
+                  throw new Error('Failed to save appointment date');
+                }
+
+                // Now try to move the stage
+                const moveResponse = await makeApiCall(`${API_BASE}/pipeline/leads/${pendingStageChange.leadId}/move`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ stageId: pendingStageChange.newStageId })
+                });
+
+                if (!moveResponse.ok) {
+                  const errorData = await moveResponse.json();
+                  throw new Error(errorData.error?.message || 'Failed to move lead');
+                }
+
+                // Update UI with new stage
+                setLeads(prev => prev.map(lead => 
+                  lead.id === pendingStageChange.leadId 
+                    ? { 
+                        ...lead, 
+                        stage: pendingStageChange.newStageId, 
+                        stagePipelineKey: getStagePipelineKey(pendingStageChange.newStageId),
+                        statusChangedDate: new Date().toISOString(),
+                        customFields: {
+                          ...(lead.customFields || {}),
+                          appointmentDate
+                        }
+                      }
+                    : lead
+                ));
+
+                setShowAppointmentSetPopup(false);
+                setPendingStageChange(null);
+              } catch (error: any) {
+                console.error('Error setting appointment date:', error);
+                toast({
+                  title: "Error",
+                  description: error.message || "Failed to set appointment date",
+                  variant: "destructive"
+                });
+              } finally {
+                // Always clear loading state
+                setSubmittingPopup(false);
               }
             }}
           />
@@ -1536,7 +1733,13 @@ const Pipeline = () => {
             onClose={() => {
               console.log('🚨 DueDiligencePopup onClose called!');
               setShowDueDiligencePopup(false);
-              // DON'T clear pendingStageChange here - the onSubmit handler manages the flow
+              // Only clear pending state if NOT transitioning between popups
+              if (!isTransitioningPopupsRef.current) {
+                console.log('✅ Clearing pendingStageChange (user cancelled)');
+                setPendingStageChange(null);
+              } else {
+                console.log('⏩ Keeping pendingStageChange (transitioning to next popup)');
+              }
             }}
             existingData={pendingStageChange?.leadToMove?.customFields || {}}
             missingFields={missingDdFields}
@@ -1550,6 +1753,8 @@ const Pipeline = () => {
               }
               
               try {
+              // Set loading state for popup submission
+              setSubmittingPopup(true);
               
               // Set flag FIRST to prevent onClose from clearing pendingStageChange
               isTransitioningPopupsRef.current = true;
@@ -1583,36 +1788,71 @@ const Pipeline = () => {
               setShowDueDiligencePopup(false);
               setMissingDdFields([]);
 
-              // Check if there are more requirements (DD Complete fields)
+              // Refresh lead data to get latest customFields for next popup
+              let updatedLeadData = null;
+              try {
+                const freshResponse = await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`);
+                if (freshResponse.ok) {
+                  const freshData = await freshResponse.json();
+                  updatedLeadData = freshData.data || freshData;
+                  console.log('✅ Refreshed lead data after Property Info save:', updatedLeadData);
+                  
+                  // Update pendingStageChange with fresh data for next popup
+                  setPendingStageChange(prev => prev ? {
+                    ...prev,
+                    leadToMove: {
+                      ...prev.leadToMove,
+                      customFields: updatedLeadData.customFields
+                    }
+                  } : null);
+                }
+              } catch (e) {
+                console.warn('⚠️ Failed to refresh lead data:', e);
+              }
+
+              // Check what's next in the validation chain
               if (pendingStageChange?.allRequiredFields) {
-                const ddFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
-                const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation','underwritingTaxes','underwritingTimeline'];
-                // Filter out the DD fields we just completed
+                const propertyInfoFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
+                // Filter out the property info fields we just completed
                 const remaining = pendingStageChange.allRequiredFields.filter(f => 
-                  !ddFields.includes(f) && f !== 'photos'
+                  !propertyInfoFields.includes(f)
                 );
                 
-                if (remaining.length > 0 && remaining.some(f => ddCompleteFields.includes(f))) {
-                  console.log('📋 DD Complete requirements pending:', remaining);
-                  
-                  // Small delay
-                  console.log('⏳ Waiting 100ms...');
+                console.log('📋 Remaining requirements after property info:', remaining);
+                
+                // UPDATE pendingStageChange to remove completed fields
+                setPendingStageChange(prev => prev ? {
+                  ...prev,
+                  allRequiredFields: remaining
+                } : null);
+                
+                if (remaining.length > 0) {
+                  // Small delay to ensure dialog closes before opening next one
                   await new Promise(resolve => setTimeout(resolve, 100));
                   
-                  console.log('✅ Setting DD Complete popup state...');
-                  setMissingDdCompleteItems(remaining.filter(f => ddCompleteFields.includes(f)));
-                  setShowDueDiligenceCompletePopup(true);
+                  // Check next requirement in priority order: photos → arv+comps → rehab → timeline+taxes
+                  if (remaining.includes('photos')) {
+                    console.log('✅ Showing Photos popup next');
+                    setShowAppointmentPopup(true);
+                  } else if (remaining.includes('arv') || remaining.includes('comparables')) {
+                    console.log('✅ Showing ARV+Comparables popup next');
+                    setShowArvComparablesPopup(true);
+                  } else if (remaining.includes('rehabBudget')) {
+                    console.log('✅ Showing Rehab Budget popup next');
+                    setShowRehabBudgetPopup(true);
+                  } else if (remaining.includes('underwritingTaxes') || remaining.includes('underwritingTimeline')) {
+                    console.log('✅ Showing Timeline+Taxes popup next');
+                    setShowTimelineTaxesPopup(true);
+                  } else {
+                    console.log('✅ All requirements fulfilled, retrying stage move');
+                    isTransitioningPopupsRef.current = false;
+                    await retryPendingStageMove();
+                  }
                   
-                  console.log('✅ DD Complete popup state set, waiting 50ms...');
-                  
-                  // Small delay to ensure popup is rendered
-                  await new Promise(resolve => setTimeout(resolve, 50));
-                  
-                  console.log('✅ Clearing flag');
-                  // Clear flag
-                  isTransitioningPopupsRef.current = false;
+                  // ✅ DON'T reset flag here - let the next popup's onSubmit reset it
+                  console.log('⏩ Flag remains TRUE - waiting for next popup action');
                 } else {
-                  console.log('✅ No DD Complete requirements, calling retryPendingStageMove');
+                  console.log('✅ No more requirements, calling retryPendingStageMove');
                   isTransitioningPopupsRef.current = false;
                   // All requirements fulfilled, try the move
                   await retryPendingStageMove();
@@ -1636,8 +1876,410 @@ const Pipeline = () => {
                 description: e.message || "Failed to update property information",
                 variant: "destructive"
               });
+            } finally {
+              // Always clear loading state
+              setSubmittingPopup(false);
             }
           }}
+          />
+
+          <ArvComparablesPopup
+            open={showArvComparablesPopup}
+            onClose={() => {
+              console.log('🚪 ARV+Comparables popup closed');
+              setShowArvComparablesPopup(false);
+              // Only clear pending state if NOT transitioning between popups
+              if (!isTransitioningPopupsRef.current) {
+                console.log('✅ Clearing pendingStageChange (user cancelled)');
+                setPendingStageChange(null);
+              } else {
+                console.log('⏩ Keeping pendingStageChange (transitioning to next popup)');
+              }
+            }}
+            existingData={pendingStageChange?.leadToMove?.customFields}
+            onSubmit={async (data) => {
+              console.log('🎯 ArvComparablesPopup onSubmit called');
+              console.log('🎯 pendingStageChange:', pendingStageChange);
+              
+              if (!pendingStageChange) {
+                console.error('❌ pendingStageChange is null! Cannot proceed.');
+                return;
+              }
+              
+              try {
+                // Set loading state for popup submission
+                setSubmittingPopup(true);
+                
+                // ✅ Reset flag at start of submit - this popup is now "active"
+                isTransitioningPopupsRef.current = false;
+                console.log('🔄 Reset flag to FALSE - popup is now handling submit');
+                
+                // Now set it again for next transition
+                isTransitioningPopupsRef.current = true;
+                
+                console.log('📤 Starting ARV+Comparables save...');
+                
+                // Fetch fresh customFields
+                let freshCustomFields = {};
+                try {
+                  const freshLeadResponse = await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`);
+                  if (freshLeadResponse.ok) {
+                    const freshLeadData = await freshLeadResponse.json();
+                    freshCustomFields = (freshLeadData.data || freshLeadData).customFields || {};
+                  }
+                } catch (e) {
+                  freshCustomFields = pendingStageChange.leadToMove.customFields || {};
+                }
+                
+                // Update ARV in customFields
+                await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    customFields: {
+                      ...freshCustomFields,
+                      arv: data.arv
+                    }
+                  })
+                });
+                
+                // Upload comparables PDF if provided
+                if (data.comparablesFile) {
+                  const formData = new FormData();
+                  formData.append('file', data.comparablesFile);
+                  
+                  await makeApiCall(`${API_BASE}/comps/leads/${pendingStageChange.leadId}/pdfs`, {
+                    method: 'POST',
+                    body: formData
+                  });
+                }
+                
+                setShowArvComparablesPopup(false);
+                
+                // Refresh lead data to get latest customFields for next popup
+                let updatedLeadData = null;
+                try {
+                  const freshResponse = await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`);
+                  if (freshResponse.ok) {
+                    const freshData = await freshResponse.json();
+                    updatedLeadData = freshData.data || freshData;
+                    console.log('✅ Refreshed lead data after ARV save:', updatedLeadData);
+                    
+                    // Update pendingStageChange with fresh data for next popup
+                    setPendingStageChange(prev => prev ? {
+                      ...prev,
+                      leadToMove: {
+                        ...prev.leadToMove,
+                        customFields: updatedLeadData.customFields
+                      }
+                    } : null);
+                  }
+                } catch (e) {
+                  console.warn('⚠️ Failed to refresh lead data:', e);
+                }
+                
+                // Check what's next
+                if (pendingStageChange?.allRequiredFields) {
+                  const remaining = pendingStageChange.allRequiredFields.filter(f => 
+                    f !== 'arv' && f !== 'comparables'
+                  );
+                  
+                  // UPDATE pendingStageChange to remove completed fields
+                  setPendingStageChange(prev => prev ? {
+                    ...prev,
+                    allRequiredFields: remaining
+                  } : null);
+                  
+                  if (remaining.length > 0) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    
+                    if (remaining.includes('rehabBudget')) {
+                      setShowRehabBudgetPopup(true);
+                    } else if (remaining.includes('underwritingTaxes') || remaining.includes('underwritingTimeline')) {
+                      setShowTimelineTaxesPopup(true);
+                    } else {
+                      isTransitioningPopupsRef.current = false;
+                      await retryPendingStageMove();
+                    }
+                    
+                    // ✅ DON'T reset flag here - let the next popup's onSubmit reset it
+                    console.log('⏩ Flag remains TRUE - waiting for next popup action');
+                  } else {
+                    isTransitioningPopupsRef.current = false;
+                    await retryPendingStageMove();
+                  }
+                } else {
+                  isTransitioningPopupsRef.current = false;
+                  await retryPendingStageMove();
+                }
+              } catch (error: any) {
+                console.error('Error in ARV+Comparables flow:', error);
+                toast({
+                  title: "Error",
+                  description: error.message || "Failed to save ARV and comparables",
+                  variant: "destructive"
+                });
+                isTransitioningPopupsRef.current = false;
+              } finally {
+                // Always clear loading state
+                setSubmittingPopup(false);
+              }
+            }}
+          />
+
+          <RehabBudgetFullPopup
+            open={showRehabBudgetPopup}
+            onClose={() => {
+              console.log('🚪 Rehab Budget popup closed');
+              setShowRehabBudgetPopup(false);
+              // Only clear pending state if NOT transitioning between popups
+              if (!isTransitioningPopupsRef.current) {
+                console.log('✅ Clearing pendingStageChange (user cancelled)');
+                setPendingStageChange(null);
+              } else {
+                console.log('⏩ Keeping pendingStageChange (transitioning to next popup)');
+              }
+            }}
+            existingData={pendingStageChange?.leadToMove?.customFields}
+            sqft={pendingStageChange?.leadToMove?.customFields?.sqft}
+            onSubmit={async (data) => {
+              console.log('🎯 RehabBudgetFullPopup onSubmit called');
+              console.log('🎯 pendingStageChange:', pendingStageChange);
+              
+              if (!pendingStageChange) {
+                console.error('❌ pendingStageChange is null! Cannot proceed.');
+                return;
+              }
+              
+              try {
+                // Set loading state for popup submission
+                setSubmittingPopup(true);
+                
+                // ✅ Reset flag at start of submit - this popup is now "active"
+                isTransitioningPopupsRef.current = false;
+                console.log('🔄 Reset flag to FALSE - popup is now handling submit');
+                
+                // Now set it again for next transition
+                isTransitioningPopupsRef.current = true;
+                
+                console.log('📤 Starting rehab budget save...');
+                
+                // Fetch fresh customFields
+                let freshCustomFields = {};
+                try {
+                  const freshLeadResponse = await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`);
+                  if (freshLeadResponse.ok) {
+                    const freshLeadData = await freshLeadResponse.json();
+                    freshCustomFields = (freshLeadData.data || freshLeadData).customFields || {};
+                  }
+                } catch (e) {
+                  freshCustomFields = pendingStageChange.leadToMove.customFields || {};
+                }
+                
+                // Calculate custom misc total
+                const miscValueNum = data.rehabCustomValues?.miscValue || 0;
+                const subtotalWithCustom = (data.calculation?.subtotal || 0) + miscValueNum;
+                const contingencyWithCustom = subtotalWithCustom * 0.10;
+                const totalWithCustom = subtotalWithCustom + contingencyWithCustom;
+                
+                // Save to rehab-budget endpoint (matches RehabBudgetCalculatorCompact)
+                const rehabBudgetPayload = {
+                  finishLevel: data.rehabFinishLevel,
+                  toggledItems: data.rehabToggledItems,
+                  customValues: {
+                    miscLabel: data.rehabCustomValues?.miscLabel || '',
+                    miscValue: miscValueNum,
+                    miscLines: [{ 
+                      label: data.rehabCustomValues?.miscLabel || '', 
+                      value: miscValueNum 
+                    }],
+                  },
+                  subtotal: subtotalWithCustom,
+                  contingencyAmount: contingencyWithCustom,
+                  totalCost: totalWithCustom
+                };
+                
+                const rehabResponse = await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}/rehab-budget`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(rehabBudgetPayload)
+                });
+
+                if (!rehabResponse.ok) {
+                  const errorData = await rehabResponse.json();
+                  console.error('❌ Rehab budget save failed:', errorData);
+                  throw new Error(errorData.error || 'Failed to save rehab budget');
+                }
+                
+                // Also update customFields for bathrooms, sqft, and rehabBudget total (for validation)
+                await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    customFields: {
+                      ...freshCustomFields,
+                      rehabFinishLevel: data.rehabFinishLevel,
+                      rehabNumberOfWindows: data.rehabNumberOfWindows,
+                      rehabToggledItems: data.rehabToggledItems,
+                      rehabCustomValues: data.rehabCustomValues,
+                      rehabBudget: totalWithCustom, // ✅ CRITICAL: Save total for backend validation
+                      // Sync bathrooms and sqft with Property Information
+                      ...(data.bathrooms !== undefined ? { bathrooms: data.bathrooms } : {}),
+                      ...(data.sqft !== undefined ? { sqft: data.sqft } : {})
+                    }
+                  })
+                });
+                
+                setShowRehabBudgetPopup(false);
+                
+                // Refresh lead data to get latest customFields for next popup
+                let updatedLeadData = null;
+                try {
+                  const freshResponse = await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`);
+                  if (freshResponse.ok) {
+                    const freshData = await freshResponse.json();
+                    updatedLeadData = freshData.data || freshData;
+                    console.log('✅ Refreshed lead data after Rehab Budget save:', updatedLeadData);
+                    
+                    // Update pendingStageChange with fresh data for next popup
+                    setPendingStageChange(prev => prev ? {
+                      ...prev,
+                      leadToMove: {
+                        ...prev.leadToMove,
+                        customFields: updatedLeadData.customFields
+                      }
+                    } : null);
+                  }
+                } catch (e) {
+                  console.warn('⚠️ Failed to refresh lead data:', e);
+                }
+                
+                // Check what's next
+                if (pendingStageChange?.allRequiredFields) {
+                  const remaining = pendingStageChange.allRequiredFields.filter(f => 
+                    f !== 'rehabBudget'
+                  );
+                  
+                  // UPDATE pendingStageChange to remove completed fields
+                  setPendingStageChange(prev => prev ? {
+                    ...prev,
+                    allRequiredFields: remaining
+                  } : null);
+                  
+                  if (remaining.length > 0) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    
+                    if (remaining.includes('underwritingTaxes') || remaining.includes('underwritingTimeline')) {
+                      setShowTimelineTaxesPopup(true);
+                    } else {
+                      isTransitioningPopupsRef.current = false;
+                      await retryPendingStageMove();
+                    }
+                    
+                    // ✅ DON'T reset flag here - let the next popup's onSubmit reset it
+                    console.log('⏩ Flag remains TRUE - waiting for next popup action');
+                  } else {
+                    isTransitioningPopupsRef.current = false;
+                    await retryPendingStageMove();
+                  }
+                } else {
+                  isTransitioningPopupsRef.current = false;
+                  await retryPendingStageMove();
+                }
+              } catch (error: any) {
+                console.error('Error in Rehab Budget flow:', error);
+                toast({
+                  title: "Error",
+                  description: error.message || "Failed to save rehab budget",
+                  variant: "destructive"
+                });
+                isTransitioningPopupsRef.current = false;
+              } finally {
+                // Always clear loading state
+                setSubmittingPopup(false);
+              }
+            }}
+          />
+
+          <TimelineTaxesPopup
+            open={showTimelineTaxesPopup}
+            onClose={() => {
+              console.log('🚪 Timeline+Taxes popup closed');
+              setShowTimelineTaxesPopup(false);
+              // Only clear pending state if NOT transitioning between popups
+              if (!isTransitioningPopupsRef.current) {
+                console.log('✅ Clearing pendingStageChange (user cancelled)');
+                setPendingStageChange(null);
+              } else {
+                console.log('⏩ Keeping pendingStageChange (transitioning to next popup)');
+              }
+            }}
+            existingData={pendingStageChange?.leadToMove?.customFields}
+            onSubmit={async (data) => {
+              console.log('🎯 TimelineTaxesPopup onSubmit called');
+              console.log('🎯 pendingStageChange:', pendingStageChange);
+              
+              if (!pendingStageChange) {
+                console.error('❌ pendingStageChange is null! Cannot proceed.');
+                return;
+              }
+              
+              try {
+                // Set loading state for popup submission
+                setSubmittingPopup(true);
+                
+                // ✅ Reset flag at start of submit - this popup is now "active"
+                isTransitioningPopupsRef.current = false;
+                console.log('🔄 Reset flag to FALSE - popup is now handling submit');
+                
+                // Now set it again for next transition
+                isTransitioningPopupsRef.current = true;
+                
+                console.log('📤 Starting Timeline+Taxes save...');
+                
+                // Fetch fresh customFields
+                let freshCustomFields = {};
+                try {
+                  const freshLeadResponse = await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`);
+                  if (freshLeadResponse.ok) {
+                    const freshLeadData = await freshLeadResponse.json();
+                    freshCustomFields = (freshLeadData.data || freshLeadData).customFields || {};
+                  }
+                } catch (e) {
+                  freshCustomFields = pendingStageChange.leadToMove.customFields || {};
+                }
+                
+                // Update timeline and taxes in customFields
+                await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    customFields: {
+                      ...freshCustomFields,
+                      underwritingTimeline: data.underwritingTimeline,
+                      underwritingTaxes: data.underwritingTaxes
+                    }
+                  })
+                });
+                
+                setShowTimelineTaxesPopup(false);
+                
+                // This is the last DD Complete requirement, so try the stage move
+                isTransitioningPopupsRef.current = false;
+                await retryPendingStageMove();
+              } catch (error: any) {
+                console.error('Error in Timeline+Taxes flow:', error);
+                toast({
+                  title: "Error",
+                  description: error.message || "Failed to save timeline and taxes",
+                  variant: "destructive"
+                });
+                isTransitioningPopupsRef.current = false;
+              } finally {
+                // Always clear loading state
+                setSubmittingPopup(false);
+              }
+            }}
           />
 
           <DueDiligenceCompleteRequirementsPopup
@@ -1666,21 +2308,36 @@ const Pipeline = () => {
             existingData={pendingStageChange?.leadToMove?.customFields || {}}
             onSubmit={async (data) => {
               if (!pendingStageChange) return;
-              // Update lead with offer info
-              await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  customFields: {
-                    ...pendingStageChange.leadToMove.customFields,
-                    ...data
-                  }
-                })
-              });
-              setShowOfferMadePopup(false);
+              try {
+                // Set loading state for popup submission
+                setSubmittingPopup(true);
+                
+                // Update lead with offer info
+                await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    customFields: {
+                      ...pendingStageChange.leadToMove.customFields,
+                      ...data
+                    }
+                  })
+                });
+                setShowOfferMadePopup(false);
 
-              // Retry stage move; if more is missing, open the next popup automatically
-              await retryPendingStageMove();
+                // Retry stage move; if more is missing, open the next popup automatically
+                await retryPendingStageMove();
+              } catch (error: any) {
+                console.error('Error in Offer Made flow:', error);
+                toast({
+                  title: "Error",
+                  description: error.message || "Failed to save offer",
+                  variant: "destructive"
+                });
+              } finally {
+                // Always clear loading state
+                setSubmittingPopup(false);
+              }
             }}
           />
 
@@ -1692,21 +2349,36 @@ const Pipeline = () => {
             }}
             onSubmit={async ({ title, dueAt }) => {
               if (!pendingStageChange) return;
-              // Create follow-up task (no notes)
-              await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}/tasks`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  title,
-                  dueAt: new Date(dueAt).toISOString(),
-                  assignedToId: user?.id || undefined,
-                }),
-              });
+              try {
+                // Set loading state for popup submission
+                setSubmittingPopup(true);
+                
+                // Create follow-up task (no notes)
+                await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}/tasks`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    title,
+                    dueAt: new Date(dueAt).toISOString(),
+                    assignedToId: user?.id || undefined,
+                  }),
+                });
 
-              setShowFollowUpTaskPopup(false);
+                setShowFollowUpTaskPopup(false);
 
-              // Retry stage move; if more is missing, open the next popup automatically
-              await retryPendingStageMove();
+                // Retry stage move; if more is missing, open the next popup automatically
+                await retryPendingStageMove();
+              } catch (error: any) {
+                console.error('Error creating follow-up task:', error);
+                toast({
+                  title: "Error",
+                  description: error.message || "Failed to create follow-up task",
+                  variant: "destructive"
+                });
+              } finally {
+                // Always clear loading state
+                setSubmittingPopup(false);
+              }
             }}
           />
 

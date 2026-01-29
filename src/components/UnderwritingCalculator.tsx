@@ -73,6 +73,17 @@ export function UnderwritingCalculator({
     setArv(initialArv || 0);
   }, [initialArv]);
 
+  // Sync taxes when initialTaxes prop changes
+  useEffect(() => {
+    setTaxes(initialTaxes || 0);
+    setTaxesDisplay(initialTaxes ? formatCurrency(initialTaxes) : '');
+  }, [initialTaxes]);
+
+  // Sync timeline when initialTimeline prop changes
+  useEffect(() => {
+    setTimeline(initialTimeline || 0);
+  }, [initialTimeline]);
+
   // Update rehabCostValue when rehabCost prop changes
   useEffect(() => {
     setRehabCostValue(rehabCost);

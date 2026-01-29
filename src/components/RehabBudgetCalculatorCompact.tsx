@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -83,6 +83,69 @@ export function RehabBudgetCalculatorCompact({
 
   const [loading, setLoading] = useState(false); // Changed to false since we're using props
   const [saving, setSaving] = useState(false);
+
+  // Use refs to track previous prop values to prevent unnecessary updates
+  const prevToggledItemsRef = useRef<string>('');
+  const prevFinishLevelRef = useRef<string>('');
+  const prevNumberOfWindowsRef = useRef<number>(-1);
+  const prevCustomValuesRef = useRef<string>('');
+
+  // Sync toggledItems when initialToggledItems prop changes
+  useEffect(() => {
+    const newValue = JSON.stringify(initialToggledItems || {});
+    if (prevToggledItemsRef.current !== newValue) {
+      prevToggledItemsRef.current = newValue;
+      setToggledItems(initialToggledItems || {});
+    }
+  }, [initialToggledItems]);
+
+  // Sync finishLevel when initialFinishLevel prop changes
+  useEffect(() => {
+    const newValue = initialFinishLevel || 'mid_range';
+    if (prevFinishLevelRef.current !== newValue) {
+      prevFinishLevelRef.current = newValue;
+      setFinishLevel(newValue);
+    }
+  }, [initialFinishLevel]);
+
+  // Sync numberOfWindows when initialNumberOfWindows prop changes
+  useEffect(() => {
+    const newValue = initialNumberOfWindows ?? 10;
+    if (prevNumberOfWindowsRef.current !== newValue) {
+      prevNumberOfWindowsRef.current = newValue;
+      setNumberOfWindows(newValue);
+    }
+  }, [initialNumberOfWindows]);
+
+  // Sync customMiscLine when initialCustomValues prop changes
+  useEffect(() => {
+    const newValue = JSON.stringify(initialCustomValues || {});
+    if (prevCustomValuesRef.current !== newValue) {
+      prevCustomValuesRef.current = newValue;
+      
+      const incoming = initialCustomValues?.miscLines;
+      let newLabel = '';
+      let newValue2 = '';
+      let newEnabled = false;
+      
+      if (Array.isArray(incoming) && incoming.length > 0) {
+        const label = String(incoming[0]?.label || initialCustomValues?.miscLabel || '');
+        const valueNum = Number(incoming[0]?.value) || Number(initialCustomValues?.miscValue) || 0;
+        newLabel = label;
+        newValue2 = valueNum > 0 ? String(valueNum) : '';
+        newEnabled = Number.isFinite(valueNum) && valueNum > 0;
+      } else if (initialCustomValues?.miscLabel || initialCustomValues?.miscValue) {
+        const label = String(initialCustomValues?.miscLabel || '');
+        const valueNum = Number(initialCustomValues?.miscValue) || 0;
+        newLabel = label;
+        newValue2 = valueNum > 0 ? String(valueNum) : '';
+        newEnabled = Number.isFinite(valueNum) && valueNum > 0;
+      }
+      
+      setCustomMiscLine({ label: newLabel, value: newValue2 });
+      setCustomMiscEnabled(newEnabled);
+    }
+  }, [initialCustomValues]);
 
   // Notify parent of data changes
   useEffect(() => {

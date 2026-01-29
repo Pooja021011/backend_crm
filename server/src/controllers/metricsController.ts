@@ -2,12 +2,28 @@ import type { Request, Response } from 'express';
 import { metricsService } from '../services/metricsService.js';
 
 export const metricsController = {
-  leadDealFlowLast12Months: async (_req: Request, res: Response) => {
-    const data = await metricsService.getLeadDealFlowLast12Months();
+  leadDealFlowLast12Months: async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    const userId = user?.id;
+    const roles = user?.roles || [];
+    
+    // Admin/Executive/Manager see all leads, ACQ agents see only their own
+    const isAdminOrManager = roles.includes('ADMIN') || roles.includes('EXECUTIVE') || roles.includes('MANAGER');
+    const filterUserId = isAdminOrManager ? undefined : userId;
+    
+    const data = await metricsService.getLeadDealFlowLast12Months(filterUserId);
     return res.json({ data });
   },
-  leadSourcesLast12Months: async (_req: Request, res: Response) => {
-    const data = await metricsService.getLeadSourcesLast12Months();
+  leadSourcesLast12Months: async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    const userId = user?.id;
+    const roles = user?.roles || [];
+    
+    // Admin/Executive/Manager see all leads, ACQ agents see only their own
+    const isAdminOrManager = roles.includes('ADMIN') || roles.includes('EXECUTIVE') || roles.includes('MANAGER');
+    const filterUserId = isAdminOrManager ? undefined : userId;
+    
+    const data = await metricsService.getLeadSourcesLast12Months(filterUserId);
     return res.json({ data });
   },
   companyKpis: async (req: Request, res: Response) => {

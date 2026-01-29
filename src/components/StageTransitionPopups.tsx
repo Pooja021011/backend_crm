@@ -5,8 +5,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as UiCalendar } from "@/components/ui/calendar";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useId, useState, useEffect } from "react";
 import { Upload, X, ClipboardList, AlertCircle, DollarSign, Calendar } from "lucide-react";
+import { API_BASE } from '@/config/api';
 
 // Popup for Appointment Complete - Photo Upload Required
 export const AppointmentCompletePopup = ({ 
@@ -689,6 +691,868 @@ export const AppointmentSetPopup = ({
           </Button>
           <Button onClick={handleSubmit} disabled={!selectedDate || submitting}>
             {submitting ? 'Setting...' : 'Set Appointment'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// Popup for ARV + Comparables (Due Diligence Step 1)
+export const ArvComparablesPopup = ({
+  open,
+  onClose,
+  onSubmit,
+  existingData
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSubmit: (data: { arv: number; comparablesFile: File | null }) => Promise<void>;
+  existingData?: any;
+}) => {
+  const [arvValue, setArvValue] = useState(existingData?.arv || 0);
+  const [arvDisplay, setArvDisplay] = useState(() => {
+    if (existingData?.arv) {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        maximumFractionDigits: 0,
+      }).format(existingData.arv);
+    }
+    return '';
+  });
+  const [comparablesFile, setComparablesFile] = useState<File | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const inputId = useId();
+
+  // Update ARV when popup opens with new data
+  useEffect(() => {
+    if (open && existingData?.arv) {
+      setArvValue(existingData.arv);
+      setArvDisplay(new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        maximumFractionDigits: 0,
+      }).format(existingData.arv));
+    } else if (open && !existingData?.arv) {
+      setArvValue(0);
+      setArvDisplay('');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, JSON.stringify(existingData)]);
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: 0,
+    }).format(value);
+  };
+
+  const parseCurrencyInput = (raw: string): number => {
+    const digits = raw.replace(/[^\d]/g, '');
+    return digits ? Number(digits) : 0;
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      // Only accept PDFs
+      if (file.type === 'application/pdf') {
+        setComparablesFile(file);
+      } else {
+        alert('Only PDF files are allowed for comparable properties');
+        e.target.value = '';
+      }
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!isValid) return;
+    setSubmitting(true);
+    try {
+      await onSubmit({
+        arv: arvValue,
+        comparablesFile
+      });
+      // Reset on success
+      setArvValue(0);
+      setArvDisplay('');
+      setComparablesFile(null);
+      onClose();
+    } catch (error) {
+      console.error('Submit failed:', error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const isValid = arvValue > 0 && comparablesFile;
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <DollarSign className="w-5 h-5 text-purple-600" />
+            ARV & Comparable Properties Required
+          </DialogTitle>
+          <DialogDescription>
+            Please provide the After Repair Value (ARV) and comparable properties in PDF format.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <Label className="text-sm text-slate-700">ARV *</Label>
+            <Input 
+              type="text" 
+              inputMode="numeric"
+              value={arvDisplay} 
+              onChange={(e) => {
+                setArvDisplay(e.target.value);
+                const value = parseCurrencyInput(e.target.value);
+                setArvValue(value);
+              }}
+              onBlur={() => {
+                if (arvValue > 0) {
+                  setArvDisplay(formatCurrency(arvValue));
+                }
+              }}
+              placeholder="$0"
+              className="h-9 text-sm"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-sm text-slate-700">Comparable Properties (PDF only) *</Label>
+            <div className="border-2 border-dashed border-slate-200 rounded-lg p-4 text-center">
+              <Label
+                htmlFor={inputId}
+                className="cursor-pointer text-sm text-slate-600 hover:text-slate-900 flex items-center justify-center gap-2"
+              >
+                <Upload className="w-4 h-4" />
+                {comparablesFile ? comparablesFile.name : 'Click to upload PDF'}
+              </Label>
+              <Input 
+                id={inputId}
+                type="file" 
+                accept="application/pdf"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+            </div>
+            {comparablesFile && (
+              <div className="flex items-center gap-2 text-sm text-green-600">
+                <span>✓ {comparablesFile.name} selected</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setComparablesFile(null);
+                    const input = document.getElementById(inputId) as HTMLInputElement;
+                    if (input) input.value = '';
+                  }}
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+        <DialogFooter className="gap-2 sm:gap-2">
+          <Button onClick={onClose} variant="outline">
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleSubmit} 
+            disabled={!isValid || submitting}
+          >
+            {submitting ? 'Saving...' : 'Continue'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// Popup for Full Rehab Budget (Due Diligence Step 2)
+export const RehabBudgetFullPopup = ({
+  open,
+  onClose,
+  onSubmit,
+  existingData,
+  sqft
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSubmit: (data: any) => Promise<void>;
+  existingData?: any;
+  sqft?: number;
+}) => {
+  const [finishLevel, setFinishLevel] = useState<'low_end' | 'mid_range' | 'high_end'>(
+    existingData?.rehabFinishLevel || 'mid_range'
+  );
+  const [numberOfWindows, setNumberOfWindows] = useState(existingData?.rehabNumberOfWindows || 10);
+  const [numberOfBathrooms, setNumberOfBathrooms] = useState<number | undefined>(existingData?.bathrooms);
+  const [squareFeet, setSquareFeet] = useState<number>(sqft || existingData?.sqft || 0);
+  const [miscLabel, setMiscLabel] = useState(existingData?.rehabCustomValues?.miscLabel || '');
+  const [miscValue, setMiscValue] = useState(existingData?.rehabCustomValues?.miscValue?.toString() || '');
+  const [submitting, setSubmitting] = useState(false);
+
+  // Rehab items with toggles - Match RehabBudgetCalculatorCompact exactly
+  const [items, setItems] = useState<any>({
+    // Planning
+    permits: existingData?.rehabToggledItems?.permits ?? false,
+    demolition: existingData?.rehabToggledItems?.demolition ?? false,
+    cleanup: existingData?.rehabToggledItems?.cleanup ?? false,
+    // Structure
+    foundation: existingData?.rehabToggledItems?.foundation ?? false,
+    roof: existingData?.rehabToggledItems?.roof ?? false,
+    framing: existingData?.rehabToggledItems?.framing ?? false,
+    windows: existingData?.rehabToggledItems?.windows ?? false,
+    entryDoor: existingData?.rehabToggledItems?.entryDoor ?? false,
+    // Mechanicals
+    hvac: existingData?.rehabToggledItems?.hvac ?? false,
+    electrical: existingData?.rehabToggledItems?.electrical ?? false,
+    plumbing: existingData?.rehabToggledItems?.plumbing ?? false,
+    // Interior
+    drywall: existingData?.rehabToggledItems?.drywall ?? false,
+    insulation: existingData?.rehabToggledItems?.insulation ?? false,
+    paintInterior: existingData?.rehabToggledItems?.paintInterior ?? false,
+    paintExterior: existingData?.rehabToggledItems?.paintExterior ?? false,
+    flooring: existingData?.rehabToggledItems?.flooring ?? false,
+    // Kitchen
+    kitchenCabinets: existingData?.rehabToggledItems?.kitchenCabinets ?? false,
+    kitchenCountertops: existingData?.rehabToggledItems?.kitchenCountertops ?? false,
+    kitchenAppliances: existingData?.rehabToggledItems?.kitchenAppliances ?? false,
+    kitchenSink: existingData?.rehabToggledItems?.kitchenSink ?? false,
+    // Bathrooms
+    bathroomVanity: existingData?.rehabToggledItems?.bathroomVanity ?? false,
+    bathroomShower: existingData?.rehabToggledItems?.bathroomShower ?? false,
+    bathroomToilet: existingData?.rehabToggledItems?.bathroomToilet ?? false,
+    bathroomFixtures: existingData?.rehabToggledItems?.bathroomFixtures ?? false,
+    // Miscellaneous
+    smartHome: existingData?.rehabToggledItems?.smartHome ?? false,
+    landscaping: existingData?.rehabToggledItems?.landscaping ?? false,
+  });
+
+  // Calculation state for displaying costs
+  const [calculation, setCalculation] = useState<{
+    itemizedCosts: { [key: string]: number };
+    subtotal: number;
+    contingencyAmount: number;
+    totalCost: number;
+  }>({
+    itemizedCosts: {},
+    subtotal: 0,
+    contingencyAmount: 0,
+    totalCost: 0
+  });
+
+  // Calculate costs whenever inputs change
+  useEffect(() => {
+    if (open && squareFeet > 0) {
+      calculateBudget();
+    }
+  }, [open, finishLevel, items, numberOfBathrooms, numberOfWindows, squareFeet]);
+
+  const calculateBudget = async () => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`${API_BASE}/rehab-budget/calculate`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          sqft: squareFeet,
+          finishLevel,
+          toggledItems: items,
+          numberOfBathrooms,
+          numberOfWindows
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setCalculation(data.data);
+      }
+    } catch (error) {
+      console.error('Error calculating budget:', error);
+    }
+  };
+
+  const getItemCost = (key: string): number => {
+    return (calculation.itemizedCosts && calculation.itemizedCosts[key]) ? calculation.itemizedCosts[key] : 0;
+  };
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: 0
+    }).format(value);
+  };
+
+  // Update all fields when popup opens with new data
+  useEffect(() => {
+    if (open && existingData) {
+      console.log('🔄 RehabBudgetFullPopup - Syncing data:', {
+        rehabToggledItems: existingData.rehabToggledItems,
+        bathrooms: existingData.bathrooms,
+        sqft: existingData.sqft,
+        finishLevel: existingData.rehabFinishLevel,
+      });
+      
+      setFinishLevel(existingData.rehabFinishLevel || 'mid_range');
+      setNumberOfWindows(existingData.rehabNumberOfWindows || 10);
+      setNumberOfBathrooms(existingData.bathrooms);
+      setSquareFeet(existingData.sqft || sqft || 0);
+      setMiscLabel(existingData.rehabCustomValues?.miscLabel || '');
+      setMiscValue(existingData.rehabCustomValues?.miscValue?.toString() || '');
+      
+      // Update all rehab items
+      setItems({
+        // Planning
+        permits: existingData?.rehabToggledItems?.permits ?? false,
+        demolition: existingData?.rehabToggledItems?.demolition ?? false,
+        cleanup: existingData?.rehabToggledItems?.cleanup ?? false,
+        // Structure
+        foundation: existingData?.rehabToggledItems?.foundation ?? false,
+        roof: existingData?.rehabToggledItems?.roof ?? false,
+        framing: existingData?.rehabToggledItems?.framing ?? false,
+        windows: existingData?.rehabToggledItems?.windows ?? false,
+        entryDoor: existingData?.rehabToggledItems?.entryDoor ?? false,
+        // Mechanicals
+        hvac: existingData?.rehabToggledItems?.hvac ?? false,
+        electrical: existingData?.rehabToggledItems?.electrical ?? false,
+        plumbing: existingData?.rehabToggledItems?.plumbing ?? false,
+        // Interior
+        drywall: existingData?.rehabToggledItems?.drywall ?? false,
+        insulation: existingData?.rehabToggledItems?.insulation ?? false,
+        paintInterior: existingData?.rehabToggledItems?.paintInterior ?? false,
+        paintExterior: existingData?.rehabToggledItems?.paintExterior ?? false,
+        flooring: existingData?.rehabToggledItems?.flooring ?? false,
+        // Kitchen
+        kitchenCabinets: existingData?.rehabToggledItems?.kitchenCabinets ?? false,
+        kitchenCountertops: existingData?.rehabToggledItems?.kitchenCountertops ?? false,
+        kitchenAppliances: existingData?.rehabToggledItems?.kitchenAppliances ?? false,
+        kitchenSink: existingData?.rehabToggledItems?.kitchenSink ?? false,
+        // Bathrooms
+        bathroomVanity: existingData?.rehabToggledItems?.bathroomVanity ?? false,
+        bathroomShower: existingData?.rehabToggledItems?.bathroomShower ?? false,
+        bathroomToilet: existingData?.rehabToggledItems?.bathroomToilet ?? false,
+        bathroomFixtures: existingData?.rehabToggledItems?.bathroomFixtures ?? false,
+        // Miscellaneous
+        smartHome: existingData?.rehabToggledItems?.smartHome ?? false,
+        landscaping: existingData?.rehabToggledItems?.landscaping ?? false,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, JSON.stringify(existingData)]);
+
+  const handleSubmit = async () => {
+    setSubmitting(true);
+    try {
+      const submitData = {
+        sqft: squareFeet,
+        bathrooms: numberOfBathrooms,
+        rehabFinishLevel: finishLevel,
+        rehabNumberOfWindows: numberOfWindows,
+        rehabToggledItems: items,
+        rehabCustomValues: {
+          miscLabel: miscLabel.trim(),
+          miscValue: miscValue ? parseFloat(miscValue) : 0
+        },
+        // Include calculation data for saving to backend
+        calculation: calculation
+      };
+      
+      console.log('📤 RehabBudgetFullPopup - Submitting data:', submitData);
+      console.log('📋 Rehab items being submitted:', items);
+      console.log('💰 Calculation data:', calculation);
+      
+      await onSubmit(submitData);
+      onClose();
+    } catch (error) {
+      console.error('Submit failed:', error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <ClipboardList className="w-5 h-5 text-purple-600" />
+            Rehab Budget Details
+          </DialogTitle>
+          <DialogDescription>
+            Please provide the complete rehab scope for this property.
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="flex-1 overflow-y-auto px-1">
+          <div className="space-y-4">
+            {/* Configuration Section (like RehabBudgetCalculatorCompact) */}
+            <div className="grid grid-cols-4 gap-2 p-2 bg-slate-50 rounded">
+              <div>
+                <Label className="text-[10px] text-slate-500">Finish Level</Label>
+                <Select value={finishLevel} onValueChange={(val: any) => setFinishLevel(val)}>
+                  <SelectTrigger className="h-6 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low_end">Low</SelectItem>
+                    <SelectItem value="mid_range">Mid</SelectItem>
+                    <SelectItem value="high_end">High</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-[10px] text-slate-500">SqFt</Label>
+                <Input 
+                  type="number" 
+                  value={squareFeet || ''}
+                  onChange={(e) => setSquareFeet(parseInt(e.target.value) || 0)}
+                  className="h-6 text-xs"
+                  placeholder="0"
+                  min="0"
+                />
+              </div>
+              <div>
+                <Label className="text-[10px] text-slate-500">Bathrooms</Label>
+                <Input 
+                  type="number" 
+                  step="0.5"
+                  value={numberOfBathrooms ?? ''}
+                  onChange={(e) => setNumberOfBathrooms(e.target.value ? Number(e.target.value) : undefined)}
+                  className="h-6 text-xs"
+                  min={0}
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <Label className="text-[10px] text-slate-500">Windows</Label>
+                <Input 
+                  type="number" 
+                  value={numberOfWindows} 
+                  onChange={(e) => setNumberOfWindows(parseInt(e.target.value) || 0)}
+                  min="1"
+                  className="h-6 text-xs"
+                />
+              </div>
+            </div>
+
+            {/* Rehab Items - Grouped exactly like RehabBudgetCalculatorCompact */}
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Rehab Items</Label>
+              {/* Row 1: Planning + Structure */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {/* Planning */}
+                <div className="rounded border border-slate-200 bg-white p-2">
+                  <div className="text-[10px] font-semibold text-slate-700 mb-1 uppercase tracking-wide">Planning</div>
+                  <div className="space-y-1">
+                    {[
+                      { key: 'permits', label: 'Permits' },
+                      { key: 'demolition', label: 'Demo' },
+                      { key: 'cleanup', label: 'Cleanup' },
+                    ].map(({ key, label }) => (
+                      <div key={key} className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Checkbox
+                            id={key}
+                            checked={items[key]}
+                            onCheckedChange={(checked) => setItems({ ...items, [key]: !!checked })}
+                            className="h-3 w-3"
+                          />
+                          <Label htmlFor={key} className="text-[10px] font-normal cursor-pointer truncate">
+                            {label}
+                          </Label>
+                        </div>
+                        <span className={`text-[10px] font-medium tabular-nums ${items[key] ? 'text-slate-700' : 'text-slate-400'}`}>
+                          {formatCurrency(getItemCost(key))}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Structure */}
+                <div className="rounded border border-slate-200 bg-white p-2">
+                  <div className="text-[10px] font-semibold text-slate-700 mb-1 uppercase tracking-wide">Structure</div>
+                  <div className="space-y-1">
+                    {[
+                      { key: 'foundation', label: 'Foundation' },
+                      { key: 'roof', label: 'Roof' },
+                      { key: 'framing', label: 'Framing' },
+                      { key: 'windows', label: 'Windows' },
+                      { key: 'entryDoor', label: 'Entry Door' },
+                    ].map(({ key, label }) => (
+                      <div key={key} className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Checkbox
+                            id={key}
+                            checked={items[key]}
+                            onCheckedChange={(checked) => setItems({ ...items, [key]: !!checked })}
+                            className="h-3 w-3"
+                          />
+                          <Label htmlFor={key} className="text-[10px] font-normal cursor-pointer truncate">
+                            {label}
+                          </Label>
+                        </div>
+                        <span className={`text-[10px] font-medium tabular-nums ${items[key] ? 'text-slate-700' : 'text-slate-400'}`}>
+                          {formatCurrency(getItemCost(key))}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 2: Mechanicals + Interior */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {/* Mechanicals */}
+                <div className="rounded border border-slate-200 bg-white p-2">
+                  <div className="text-[10px] font-semibold text-slate-700 mb-1 uppercase tracking-wide">Mechanicals</div>
+                  <div className="space-y-1">
+                    {[
+                      { key: 'hvac', label: 'HVAC' },
+                      { key: 'electrical', label: 'Electrical' },
+                      { key: 'plumbing', label: 'Plumbing' },
+                    ].map(({ key, label }) => (
+                      <div key={key} className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Checkbox
+                            id={key}
+                            checked={items[key]}
+                            onCheckedChange={(checked) => setItems({ ...items, [key]: !!checked })}
+                            className="h-3 w-3"
+                          />
+                          <Label htmlFor={key} className="text-[10px] font-normal cursor-pointer truncate">
+                            {label}
+                          </Label>
+                        </div>
+                        <span className={`text-[10px] font-medium tabular-nums ${items[key] ? 'text-slate-700' : 'text-slate-400'}`}>
+                          {formatCurrency(getItemCost(key))}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Interior */}
+                <div className="rounded border border-slate-200 bg-white p-2">
+                  <div className="text-[10px] font-semibold text-slate-700 mb-1 uppercase tracking-wide">Interior</div>
+                  <div className="space-y-1">
+                    {[
+                      { key: 'drywall', label: 'Drywall' },
+                      { key: 'insulation', label: 'Insulation' },
+                      { key: 'paintInterior', label: 'Paint - Interior' },
+                      { key: 'paintExterior', label: 'Paint - Exterior' },
+                      { key: 'flooring', label: 'Flooring' },
+                    ].map(({ key, label }) => (
+                      <div key={key} className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Checkbox
+                            id={key}
+                            checked={items[key]}
+                            onCheckedChange={(checked) => setItems({ ...items, [key]: !!checked })}
+                            className="h-3 w-3"
+                          />
+                          <Label htmlFor={key} className="text-[10px] font-normal cursor-pointer truncate">
+                            {label}
+                          </Label>
+                        </div>
+                        <span className={`text-[10px] font-medium tabular-nums ${items[key] ? 'text-slate-700' : 'text-slate-400'}`}>
+                          {formatCurrency(getItemCost(key))}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 3: Kitchen + Bathrooms */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {/* Kitchen */}
+                <div className="rounded border border-slate-200 bg-white p-2">
+                  <div className="text-[10px] font-semibold text-slate-700 mb-1 uppercase tracking-wide">Kitchen</div>
+                  <div className="space-y-1">
+                    {[
+                      { key: 'kitchenCabinets', label: 'Cabinets' },
+                      { key: 'kitchenCountertops', label: 'Counters' },
+                      { key: 'kitchenAppliances', label: 'Appliances' },
+                      { key: 'kitchenSink', label: 'Sink' },
+                    ].map(({ key, label }) => (
+                      <div key={key} className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Checkbox
+                            id={key}
+                            checked={items[key]}
+                            onCheckedChange={(checked) => setItems({ ...items, [key]: !!checked })}
+                            className="h-3 w-3"
+                          />
+                          <Label htmlFor={key} className="text-[10px] font-normal cursor-pointer truncate">
+                            {label}
+                          </Label>
+                        </div>
+                        <span className={`text-[10px] font-medium tabular-nums ${items[key] ? 'text-slate-700' : 'text-slate-400'}`}>
+                          {formatCurrency(getItemCost(key))}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Bathrooms */}
+                <div className="rounded border border-slate-200 bg-white p-2">
+                  <div className="text-[10px] font-semibold text-slate-700 mb-1 uppercase tracking-wide">Bathrooms</div>
+                  <div className="space-y-1">
+                    {[
+                      { key: 'bathroomVanity', label: 'Vanity' },
+                      { key: 'bathroomShower', label: 'Shower' },
+                      { key: 'bathroomToilet', label: 'Toilet' },
+                      { key: 'bathroomFixtures', label: 'Fixtures' },
+                    ].map(({ key, label }) => (
+                      <div key={key} className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Checkbox
+                            id={key}
+                            checked={items[key]}
+                            onCheckedChange={(checked) => setItems({ ...items, [key]: !!checked })}
+                            className="h-3 w-3"
+                          />
+                          <Label htmlFor={key} className="text-[10px] font-normal cursor-pointer truncate">
+                            {label}
+                          </Label>
+                        </div>
+                        <span className={`text-[10px] font-medium tabular-nums ${items[key] ? 'text-slate-700' : 'text-slate-400'}`}>
+                          {formatCurrency(getItemCost(key))}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 4: Miscellaneous */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div className="rounded border border-slate-200 bg-white p-2">
+                  <div className="text-[10px] font-semibold text-slate-700 mb-1 uppercase tracking-wide">Miscellaneous</div>
+                  <div className="space-y-1">
+                    {[
+                      { key: 'smartHome', label: 'Smart Home' },
+                      { key: 'landscaping', label: 'Landscaping' },
+                    ].map(({ key, label}) => (
+                      <div key={key} className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Checkbox
+                            id={key}
+                            checked={items[key]}
+                            onCheckedChange={(checked) => setItems({ ...items, [key]: !!checked })}
+                            className="h-3 w-3"
+                          />
+                          <Label htmlFor={key} className="text-[10px] font-normal cursor-pointer truncate">
+                            {label}
+                          </Label>
+                        </div>
+                        <span className={`text-[10px] font-medium tabular-nums ${items[key] ? 'text-slate-700' : 'text-slate-400'}`}>
+                          {formatCurrency(getItemCost(key))}
+                        </span>
+                      </div>
+                    ))}
+                    {/* Custom Miscellaneous Row - Inline like RehabBudgetCalculatorCompact */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Checkbox
+                          id="customMiscEnabled"
+                          checked={!!miscValue && parseFloat(miscValue) > 0}
+                          onCheckedChange={(checked) => !checked && setMiscValue('')}
+                          className="h-3 w-3"
+                        />
+                        <Input
+                          value={miscLabel}
+                          onChange={(e) => setMiscLabel(e.target.value)}
+                          placeholder="Miscellaneous"
+                          style={{ fontSize: '10px', fontWeight: 400 }}
+                          className="h-6 px-2 w-[16ch] sm:w-[18ch] md:w-[20ch]"
+                        />
+                      </div>
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        value={miscValue}
+                        onChange={(e) => setMiscValue(e.target.value)}
+                        placeholder="$0"
+                        style={{ fontSize: '10px', fontWeight: 400 }}
+                        className={`h-6 px-2 w-[10ch] text-right tabular-nums ${miscValue && parseFloat(miscValue) > 0 ? 'text-slate-700' : 'text-slate-400'}`}
+                      />
+                    </div>
+                  </div>
+                </div>
+                {/* Spacer for alignment */}
+                <div className="hidden md:block"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2 sm:gap-2">
+          <Button onClick={onClose} variant="outline">
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleSubmit} 
+            disabled={submitting}
+          >
+            {submitting ? 'Saving...' : 'Continue'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// Popup for Timeline + Taxes (Due Diligence Step 3)
+export const TimelineTaxesPopup = ({
+  open,
+  onClose,
+  onSubmit,
+  existingData
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSubmit: (data: { underwritingTimeline: number; underwritingTaxes: number }) => Promise<void>;
+  existingData?: any;
+}) => {
+  const [timeline, setTimeline] = useState(existingData?.underwritingTimeline?.toString() || '');
+  const [taxes, setTaxes] = useState(existingData?.underwritingTaxes || 0);
+  const [taxesDisplay, setTaxesDisplay] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  // Currency formatting helpers (matching UnderwritingCalculator)
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: 0
+    }).format(value);
+  };
+
+  const parseCurrencyInput = (raw: string): number => {
+    const digits = raw.replace(/[^\d]/g, '');
+    return digits ? Number(digits) : 0;
+  };
+
+  // Update fields when popup opens with new data
+  useEffect(() => {
+    if (open) {
+      console.log('🔄 TimelineTaxesPopup - Syncing data:', {
+        open,
+        hasExistingData: !!existingData,
+        underwritingTimeline: existingData?.underwritingTimeline,
+        underwritingTaxes: existingData?.underwritingTaxes,
+        currentTimeline: timeline,
+        currentTaxes: taxes
+      });
+      
+      if (existingData) {
+        const newTimeline = existingData.underwritingTimeline?.toString() || '';
+        const newTaxes = existingData.underwritingTaxes || 0;
+        
+        console.log('📝 Setting values:', { newTimeline, newTaxes });
+        setTimeline(newTimeline);
+        setTaxes(newTaxes);
+        setTaxesDisplay(newTaxes ? formatCurrency(newTaxes) : '');
+      } else {
+        console.log('⚠️ No existingData, clearing fields');
+        setTimeline('');
+        setTaxes(0);
+        setTaxesDisplay('');
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, JSON.stringify(existingData)]);
+
+  const handleSubmit = async () => {
+    if (!isValid) return;
+    setSubmitting(true);
+    try {
+      await onSubmit({
+        underwritingTimeline: parseInt(timeline),
+        underwritingTaxes: taxes
+      });
+      // Reset on success
+      setTimeline('');
+      setTaxes(0);
+      setTaxesDisplay('');
+      onClose();
+    } catch (error) {
+      console.error('Submit failed:', error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const isValid = timeline && parseInt(timeline) > 0 && taxes > 0;
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-purple-600" />
+            Timeline & Annual Taxes Required
+          </DialogTitle>
+          <DialogDescription>
+            Please provide the project timeline and annual property taxes.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <Label className="text-[10px] text-slate-500">Timeline (Months)</Label>
+            <Input 
+              type="number" 
+              value={timeline} 
+              onChange={(e) => setTimeline(e.target.value)}
+              placeholder="6"
+              min="1"
+              className="h-6 text-xs placeholder:text-slate-400"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-[10px] text-slate-500">Annual Taxes</Label>
+            <Input 
+              type="text"
+              inputMode="numeric"
+              value={taxesDisplay} 
+              onChange={(e) => {
+                const raw = e.target.value;
+                setTaxesDisplay(raw);
+                setTaxes(parseCurrencyInput(raw));
+              }}
+              onBlur={() => {
+                setTaxesDisplay(taxes ? formatCurrency(taxes) : '');
+              }}
+              placeholder="$1,000"
+              className="h-6 text-xs placeholder:text-slate-400"
+            />
+          </div>
+        </div>
+        <DialogFooter className="gap-2 sm:gap-2">
+          <Button onClick={onClose} variant="outline">
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleSubmit} 
+            disabled={!isValid || submitting}
+          >
+            {submitting ? 'Saving...' : 'Complete'}
           </Button>
         </DialogFooter>
       </DialogContent>

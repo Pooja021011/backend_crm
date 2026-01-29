@@ -72,7 +72,7 @@ function computeLastActivityAt(lead: {
 }
 
 export const metricsService = {
-  async getLeadDealFlowLast12Months(): Promise<MonthlyFlow[]> {
+  async getLeadDealFlowLast12Months(userId?: string): Promise<MonthlyFlow[]> {
     const end = dayjs().endOf('month');
     const start = end.subtract(11, 'month').startOf('month');
 
@@ -83,24 +83,42 @@ export const metricsService = {
       months.push({ name: m.format('MMM'), totalLeads: 0, contractedLeads: 0, soldLeads: 0, closedLeads: 0 });
     }
 
-    const leads = await metricsRepository.getLeadsCreatedBetween(start.toDate(), end.toDate());
+    // ✅ Fetch ALL leads with their CURRENT stage (JOIN with Lead table)
+    const leads = await prisma.lead.findMany({
+      where: {
+        createdAt: { gte: start.toDate(), lt: end.toDate() },
+        ...(userId ? { createdById: userId } : {}),
+      },
+      select: {
+        id: true,
+        createdAt: true,
+        pipelineStage: {
+          select: {
+            name: true,
+          }
+        }
+      }
+    });
+
+    // ✅ Count leads per month based on their CURRENT stage
     for (const lead of leads) {
       const idx = dayjs(lead.createdAt).startOf('month').diff(start, 'month');
-      if (idx >= 0 && idx < months.length) months[idx].totalLeads += 1;
-    }
-
-    // Stage mapping assumptions:
-    // contracted: when toStage.name contains 'contract' (case-insensitive)
-    // sold: when toStage.name contains 'sold'
-    // closed: when toStage.name contains 'closed'
-    const history = await metricsRepository.getStageHistoryBetween(start.toDate(), end.toDate());
-    for (const h of history) {
-      const idx = dayjs(h.changedAt).startOf('month').diff(start, 'month');
       if (idx < 0 || idx >= months.length) continue;
-      const name = (h.toStage?.name || '').toLowerCase();
-      if (name.includes('contract')) months[idx].contractedLeads += 1;
-      if (name.includes('sold')) months[idx].soldLeads += 1;
-      if (name.includes('closed')) months[idx].closedLeads += 1;
+      
+      months[idx].totalLeads += 1;
+      
+      const stageName = (lead.pipelineStage?.name || '').toLowerCase();
+      
+      // Check CURRENT stage, not history
+      if (stageName.includes('contract')) {
+        months[idx].contractedLeads += 1;
+      }
+      if (stageName.includes('sold')) {
+        months[idx].soldLeads += 1;
+      }
+      if (stageName.includes('closed')) {
+        months[idx].closedLeads += 1;
+      }
     }
 
     // Sort months in calendar order (Jan, Feb, Mar, ..., Dec)
@@ -110,7 +128,7 @@ export const metricsService = {
     return months;
   },
 
-  async getLeadSourcesLast12Months(): Promise<{ name: string; sources: Record<string, number> }[]> {
+  async getLeadSourcesLast12Months(userId?: string): Promise<{ name: string; sources: Record<string, number> }[]> {
     const end = dayjs().endOf('month');
     const start = end.subtract(11, 'month').startOf('month');
 
@@ -120,7 +138,9 @@ export const metricsService = {
       buckets.push({ name: m.format('MMM'), sources: {} });
     }
 
-    const leads = await metricsRepository.getLeadsWithSourceBetween(start.toDate(), end.toDate());
+    const leads = await metricsRepository.getLeadsWithSourceBetween(start.toDate(), end.toDate(),
+      userId ? { createdById: userId } : undefined
+    );
     for (const lead of leads) {
       const idx = dayjs(lead.createdAt).startOf('month').diff(start, 'month');
       if (idx < 0 || idx >= buckets.length) continue;
@@ -148,17 +168,32 @@ export const metricsService = {
       end = now.endOf('quarter');
     }
 
-    // Contracts Signed = count of stage changes into any stage containing 'Contract' in ACQUISITIONS pipeline
-    // Contracts Sold = count of stage changes into 'Under Contract' or 'Closed' in DISPOSITIONS pipeline
-    const history = await metricsRepository.getStageHistoryBetween(start.toDate(), end.toDate());
-    let contractsSigned = 0;
-    let contractsSold = 0;
-    for (const h of history) {
-      const stageName = (h.toStage?.name || '').toLowerCase();
-      const pipeName = h.toStage?.pipeline?.key ?? '';
-      if (stageName.includes('contract') && pipeName === 'ACQUISITIONS') contractsSigned++;
-      if ((stageName.includes('under contract') || stageName.includes('closed')) && pipeName === 'DISPOSITIONS') contractsSold++;
-    }
+    // ✅ Contracts Signed = count of leads CURRENTLY in contract stage in ACQUISITIONS pipeline
+    const contractsSigned = await prisma.lead.count({
+      where: {
+        pipelineStage: {
+          pipeline: { key: 'ACQUISITIONS' },
+          name: { contains: 'Contract', mode: 'insensitive' }
+        },
+        leadType: 'SELLER',
+        leadStatus: { name: { equals: 'Pipeline', mode: 'insensitive' } },
+      }
+    });
+
+    // ✅ Contracts Sold = count of leads CURRENTLY in 'Under Contract' or 'Closed' in DISPOSITIONS pipeline
+    const contractsSold = await prisma.lead.count({
+      where: {
+        pipelineStage: {
+          pipeline: { key: 'DISPOSITIONS' },
+          OR: [
+            { name: { contains: 'Under Contract', mode: 'insensitive' } },
+            { name: { contains: 'Closed', mode: 'insensitive' } }
+          ]
+        },
+        leadType: 'SELLER',
+        leadStatus: { name: { equals: 'Pipeline', mode: 'insensitive' } },
+      }
+    });
 
     // Averages using LeadBuyer.offerAmount as proxy for offer/contract/sold where available.
     // Note: precise contract/sold values need explicit fields; using offerAmount as approximation across statuses.
@@ -216,10 +251,16 @@ export const metricsService = {
     if (isAdmin) {
       result.modes.push('admin');
       
-      // FIX: Get CURRENT contracts under contract (not just new this month)
-      const contractsSigned = await metricsRepository.getCurrentContractsCount({
-        pipelineKey: 'ACQUISITIONS',
-        leadType: 'SELLER',
+      // ✅ Contracts signed: Count leads CURRENTLY in contract stage (company-wide)
+      const contractsSigned = await prisma.lead.count({
+        where: {
+          pipelineStage: {
+            pipeline: { key: 'ACQUISITIONS' },
+            name: { contains: 'Contract', mode: 'insensitive' }
+          },
+          leadType: 'SELLER',
+          leadStatus: { name: { equals: 'Pipeline', mode: 'insensitive' } },
+        }
       });
       result.contractsSigned = contractsSigned;
 
@@ -263,9 +304,17 @@ export const metricsService = {
     // If no roles matched, return admin-like fallback for backward compatibility
     if (result.modes.length === 0) {
       result.modes.push('admin');
-      const contractsSigned = await metricsRepository.getCurrentContractsCount({
-        pipelineKey: 'ACQUISITIONS',
-        leadType: 'SELLER',
+      
+      // ✅ Contracts signed: Count leads CURRENTLY in contract stage (company-wide)
+      const contractsSigned = await prisma.lead.count({
+        where: {
+          pipelineStage: {
+            pipeline: { key: 'ACQUISITIONS' },
+            name: { contains: 'Contract', mode: 'insensitive' }
+          },
+          leadType: 'SELLER',
+          leadStatus: { name: { equals: 'Pipeline', mode: 'insensitive' } },
+        }
       });
       result.contractsSigned = contractsSigned;
       
@@ -286,19 +335,25 @@ export const metricsService = {
    * @param end End date of timeframe
    * @param assignedUserId User ID for personal stats, undefined for team-wide stats
    */
-  async calculateAcqKpis(start: Date, end: Date, assignedUserId?: string) {
-    // FIX: Get CURRENT contracts under contract (not just new this month)
-    const totalContracts = await metricsRepository.getCurrentContractsCount({
-      pipelineKey: 'ACQUISITIONS',
-      leadType: 'SELLER',
-      assignedUserId,
+  async calculateAcqKpis(start: Date, end: Date, createdById?: string) {
+    // ✅ Total contracts: Count leads CURRENTLY in contract stage (not stage transitions this month)
+    const totalContracts = await prisma.lead.count({
+      where: {
+        pipelineStage: {
+          pipeline: { key: 'ACQUISITIONS' },
+          name: { contains: 'Contract', mode: 'insensitive' }
+        },
+        leadType: 'SELLER',
+        leadStatus: { name: { equals: 'Pipeline', mode: 'insensitive' } },
+        ...(createdById ? { createdById } : {}),
+      }
     });
 
     // Leads received this month
     const leadsReceived = await metricsRepository.getLeadsCreatedBetweenScoped(start, end, {
       pipelineKey: 'ACQUISITIONS',
       leadType: 'SELLER',
-      assignedUserId,
+      createdById,
       onlyPipelineStatus: true,
     });
     const leadsReceivedCount = leadsReceived.length;
@@ -312,7 +367,7 @@ export const metricsService = {
     const activeLeads = await metricsRepository.getActiveLeadsWithActivityByPipeline({
       pipelineKey: 'ACQUISITIONS',
       leadType: 'SELLER',
-      assignedUserId,
+      createdById,
       onlyPipelineStatus: true,
     });
 

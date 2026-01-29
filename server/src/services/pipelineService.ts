@@ -412,18 +412,28 @@ export const pipelineService = {
 
       // Apply role-based filtering
       if (filters.userRole && filters.userId) {
-        const access = this.getPipelineAccess([filters.userRole]);
+        // Handle userRole as array (passed from controller)
+        const userRoles = Array.isArray(filters.userRole) ? filters.userRole : [filters.userRole];
+        const access = this.getPipelineAccess(userRoles);
         
         if (access.canViewAssignedOnly) {
           whereClause.assignedUserId = filters.userId;
         }
         
         // Filter by lead type based on role
-        if (filters.userRole === 'ACQ') {
+        // IMPORTANT: Only apply leadType filter for specific roles, not ADMIN/EXECUTIVE/MANAGER
+        const hasACQ = userRoles.includes('ACQ');
+        const hasDISP = userRoles.includes('DISP');
+        const hasAdminRole = userRoles.some(r => ['ADMIN', 'EXECUTIVE', 'MANAGER'].includes(r));
+        
+        if (hasACQ && !hasAdminRole) {
+          // ACQ agent (without admin privileges) only sees SELLER leads
           whereClause.leadType = 'SELLER';
-        } else if (filters.userRole === 'DISP') {
-          whereClause.leadType = { in: ['BUYER', 'SELLER'] }; // DISP can see properties (seller leads) and buyers
+        } else if (hasDISP && !hasAdminRole) {
+          // DISP agent (without admin privileges) sees BUYER and SELLER leads
+          whereClause.leadType = { in: ['BUYER', 'SELLER'] };
         }
+        // ADMIN/EXECUTIVE/MANAGER see all lead types (no filter applied)
       }
 
       if (filters.assignedUserId) {
@@ -861,8 +871,22 @@ export const pipelineService = {
       if (filters && filters.needsAttention === true && filters.userRole && filters.userId) {
         const now = new Date();
         
-        if (filters.userRole === 'ADMIN') {
-          const filteredLeads = transformedLeads.filter(lead => {
+        // Convert userRole to array to handle both single role and multiple roles
+        const userRolesArray = Array.isArray(filters.userRole) ? filters.userRole : [filters.userRole];
+        const isAdmin = userRolesArray.includes('ADMIN');
+        const isManager = userRolesArray.includes('MANAGER');
+        const isACQ = userRolesArray.includes('ACQ');
+        
+        console.log('🔍 Post-fetch filter: User roles:', userRolesArray, { isAdmin, isManager, isACQ });
+        
+        // Filter leads based on ALL roles the user has (combined approach)
+        const filteredLeads = transformedLeads.filter(lead => {
+          let meetsAdminCriteria = false;
+          let meetsManagerCriteria = false;
+          let meetsAcqCriteria = false;
+          
+          // ADMIN CRITERIA
+          if (isAdmin) {
             // Criterion 1: No outreach in 72h + no open tasks (for ACQ-assigned leads)
             const hasAcqAgent = !!lead.assignedUserId;
             const lastContactDate = lead.lastContactDate ? new Date(lead.lastContactDate) : null;
@@ -876,139 +900,97 @@ export const pipelineService = {
             const tasksPastDue48h = lead.tasks?.some((t: any) => {
               if (t.status !== 'OPEN') return false;
               const dueDate = new Date(t.dueAt);
-              if (dueDate >= now) return false; // Not overdue
+              if (dueDate >= now) return false;
               const hoursPastDue = (now.getTime() - dueDate.getTime()) / (1000 * 60 * 60);
               return hoursPastDue >= 48;
             }) || false;
             
-            // Criterion 3: Unread communications for this admin
+            // Criterion 3: Unread communications
             const hasUnreadComms = lead.unreadCount > 0;
             
-            return noOutreachNoTasks || tasksPastDue48h || hasUnreadComms;
-          });
+            meetsAdminCriteria = noOutreachNoTasks || tasksPastDue48h || hasUnreadComms;
+          }
           
-          return filteredLeads.sort((a: any, b: any) => {
-            const aStageIndex = stageOrderIndexByLeadId.get(a.id) ?? 0;
-            const bStageIndex = stageOrderIndexByLeadId.get(b.id) ?? 0;
-            if (aStageIndex !== bStageIndex) return aStageIndex - bStageIndex;
-            const aAt = new Date(a.lastActivityAt).getTime();
-            const bAt = new Date(b.lastActivityAt).getTime();
-            if (aAt !== bAt) return bAt - aAt; // DESC: most recent first
-            return String(a.id).localeCompare(String(b.id));
-          });
-        }
-        
-        if (filters.userRole === 'MANAGER') {
-          const filteredLeads = transformedLeads.filter(lead => {
-            // Manager only sees ACQ agent leads (SELLER type in Acquisitions pipeline)
+          // MANAGER CRITERIA
+          if (isManager) {
+            // Manager only sees ACQ agent leads (SELLER type)
             const isAcqLead = lead.leadType === 'SELLER' && !!lead.assignedUserId;
-            if (!isAcqLead) return false;
             
-            // Criterion 1: New Leads pipeline stage
-            const stageName = (lead.stageName || '').toLowerCase();
-            const isNewLeadStage = stageName === 'new lead' || stageName === 'new leads';
-            
-            // Criterion 2: No communications in 48h + no open tasks
-            // Check ALL communications (not just lastContactAt)
-            const hasCommunications = lead.communications && lead.communications.length > 0;
-            let hoursSinceLastComm = Infinity;
-            if (hasCommunications) {
-              const lastCommDate = lead.communications[0]?.occurredAt || lead.communications[0]?.createdAt;
-              if (lastCommDate) {
-                hoursSinceLastComm = (now.getTime() - new Date(lastCommDate).getTime()) / (1000 * 60 * 60);
+            if (isAcqLead) {
+              // Criterion 1: New Leads pipeline stage (all ACQ agents per requirements)
+              const stageName = (lead.stageName || '').toLowerCase();
+              const isNewLeadStage = stageName === 'new lead' || stageName === 'new leads';
+              
+              // Criterion 2: No communications in 48h + no open tasks
+              const hasCommunications = lead.communications && lead.communications.length > 0;
+              let hoursSinceLastComm = Infinity;
+              if (hasCommunications) {
+                const lastCommDate = lead.communications[0]?.occurredAt || lead.communications[0]?.createdAt;
+                if (lastCommDate) {
+                  hoursSinceLastComm = (now.getTime() - new Date(lastCommDate).getTime()) / (1000 * 60 * 60);
+                }
               }
+              const hasNoOpenTasks = !lead.tasks || lead.tasks.filter((t: any) => t.status === 'OPEN').length === 0;
+              const noCommNoTasks = hoursSinceLastComm >= 48 && hasNoOpenTasks;
+              
+              // Criterion 3: Task past due for 30+ minutes
+              const tasksPastDue30min = lead.tasks?.some((t: any) => {
+                if (t.status !== 'OPEN') return false;
+                const dueDate = new Date(t.dueAt);
+                if (dueDate >= now) return false;
+                const minutesPastDue = (now.getTime() - dueDate.getTime()) / (1000 * 60);
+                return minutesPastDue >= 30;
+              }) || false;
+              
+              // Criterion 4: Unread communications
+              const hasUnreadComms = lead.unreadCount > 0;
+              
+              meetsManagerCriteria = isNewLeadStage || noCommNoTasks || tasksPastDue30min || hasUnreadComms;
             }
-            const hasNoOpenTasks = !lead.tasks || lead.tasks.filter((t: any) => t.status === 'OPEN').length === 0;
-            const noCommNoTasks = hoursSinceLastComm >= 48 && hasNoOpenTasks;
-            
-            // Criterion 3: Task past due for 30+ minutes
-            const tasksPastDue30min = lead.tasks?.some((t: any) => {
-              if (t.status !== 'OPEN') return false;
-              const dueDate = new Date(t.dueAt);
-              if (dueDate >= now) return false; // Not overdue
-              const minutesPastDue = (now.getTime() - dueDate.getTime()) / (1000 * 60);
-              return minutesPastDue >= 30;
-            }) || false;
-            
-            // Criterion 4: Unread communications for this manager
-            const hasUnreadComms = lead.unreadCount > 0;
-            
-            return isNewLeadStage || noCommNoTasks || tasksPastDue30min || hasUnreadComms;
-          });
+          }
           
-          return filteredLeads.sort((a: any, b: any) => {
-            const aStageIndex = stageOrderIndexByLeadId.get(a.id) ?? 0;
-            const bStageIndex = stageOrderIndexByLeadId.get(b.id) ?? 0;
-            if (aStageIndex !== bStageIndex) return aStageIndex - bStageIndex;
-            const aAt = new Date(a.lastActivityAt).getTime();
-            const bAt = new Date(b.lastActivityAt).getTime();
-            if (aAt !== bAt) return bAt - aAt; // DESC: most recent first
-            return String(a.id).localeCompare(String(b.id));
-          });
-        }
-        
-        if (filters.userRole === 'ACQ') {
-          const filteredLeads = transformedLeads.filter(lead => {
-            // ACQ agent only sees their own assigned leads (SELLER type)
+          // ACQ AGENT CRITERIA
+          if (isACQ) {
+            // ACQ only sees their own assigned leads (SELLER type)
             const isMyLead = lead.leadType === 'SELLER' && lead.assignedUserId === filters.userId;
-            if (!isMyLead) return false;
             
-            // Criterion 1: New Leads pipeline stage for this user
-            const stageName = (lead.stageName || '').toLowerCase();
-            const isNewLeadStage = stageName === 'new lead' || stageName === 'new leads';
-            
-            // Criterion 2: No communications in 36h + no open tasks for this user's leads
-            // Check ALL communications (not just lastContactAt)
-            const hasCommunications = lead.communications && lead.communications.length > 0;
-            let hoursSinceLastComm = Infinity;
-            if (hasCommunications) {
-              const lastCommDate = lead.communications[0]?.occurredAt || lead.communications[0]?.createdAt;
-              if (lastCommDate) {
-                hoursSinceLastComm = (now.getTime() - new Date(lastCommDate).getTime()) / (1000 * 60 * 60);
+            if (isMyLead) {
+              // Criterion 1: New Leads pipeline stage for this user
+              const stageName = (lead.stageName || '').toLowerCase();
+              const isNewLeadStage = stageName === 'new lead' || stageName === 'new leads';
+              
+              // Criterion 2: No communications in 36h + no open tasks
+              const hasCommunications = lead.communications && lead.communications.length > 0;
+              let hoursSinceLastComm = Infinity;
+              if (hasCommunications) {
+                const lastCommDate = lead.communications[0]?.occurredAt || lead.communications[0]?.createdAt;
+                if (lastCommDate) {
+                  hoursSinceLastComm = (now.getTime() - new Date(lastCommDate).getTime()) / (1000 * 60 * 60);
+                }
               }
+              const hasNoOpenTasks = !lead.tasks || lead.tasks.filter((t: any) => t.status === 'OPEN').length === 0;
+              const noCommNoTasks = hoursSinceLastComm >= 36 && hasNoOpenTasks;
+              
+              // Criterion 3: Any past due task for this user
+              const hasPastDueTask = lead.tasks?.some((t: any) => {
+                if (t.status !== 'OPEN') return false;
+                if (t.assignedToId !== filters.userId) return false;
+                const dueDate = new Date(t.dueAt);
+                return dueDate < now;
+              }) || false;
+              
+              // Criterion 4: Unread communications
+              const hasUnreadComms = lead.unreadCount > 0;
+              
+              meetsAcqCriteria = isNewLeadStage || noCommNoTasks || hasPastDueTask || hasUnreadComms;
             }
-            const hasNoOpenTasks = !lead.tasks || lead.tasks.filter((t: any) => t.status === 'OPEN').length === 0;
-            const noCommNoTasks = hoursSinceLastComm >= 36 && hasNoOpenTasks;
-            
-            // Criterion 3: Any past due task for this user (no minimum time threshold)
-            const hasPastDueTask = lead.tasks?.some((t: any) => {
-              if (t.status !== 'OPEN') return false;
-              if (t.assignedToId !== filters.userId) return false; // Only this user's tasks
-              const dueDate = new Date(t.dueAt);
-              return dueDate < now; // Any amount past due
-            }) || false;
-            
-            // Criterion 4: Unread communications for this ACQ agent
-            const hasUnreadComms = lead.unreadCount > 0;
-            
-            return isNewLeadStage || noCommNoTasks || hasPastDueTask || hasUnreadComms;
-          });
+          }
           
-          return filteredLeads.sort((a: any, b: any) => {
-            const aStageIndex = stageOrderIndexByLeadId.get(a.id) ?? 0;
-            const bStageIndex = stageOrderIndexByLeadId.get(b.id) ?? 0;
-            if (aStageIndex !== bStageIndex) return aStageIndex - bStageIndex;
-            const aAt = new Date(a.lastActivityAt).getTime();
-            const bAt = new Date(b.lastActivityAt).getTime();
-            if (aAt !== bAt) return bAt - aAt; // DESC: most recent first
-            return String(a.id).localeCompare(String(b.id));
-          });
-        }
-        
-        // For other roles, fall back to old logic for now (will be updated in future)
-        const filteredLeads = transformedLeads.filter(lead => {
-          // No contact in 72+ hours
-          const lastContactDate = lead.lastContactDate ? new Date(lead.lastContactDate) : null;
-          const hoursSinceLastContact = lastContactDate
-            ? Math.floor((now.getTime() - lastContactDate.getTime()) / (1000 * 60 * 60))
-            : Infinity;
-          
-          return (
-            hoursSinceLastContact >= 72 ||
-            lead.status === 'urgent' ||
-            lead.clearToClose === false
-          );
+          // Lead passes if it meets ANY role's criteria (combined approach)
+          return meetsAdminCriteria || meetsManagerCriteria || meetsAcqCriteria;
         });
+        
+        console.log(`🔍 Post-fetch filter: ${filteredLeads.length} leads match needs attention criteria`);
         
         return filteredLeads.sort((a: any, b: any) => {
           const aStageIndex = stageOrderIndexByLeadId.get(a.id) ?? 0;

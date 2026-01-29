@@ -56,7 +56,11 @@ export const leadService = {
       }
       
       // Track "Under Contract" stage transition
-      if (stageName.includes('contract') && !stageName.includes('offer') && !currentCustomFields.underContractAt) {
+      // Only set when moving to actual "Under Contract" stage, NOT "Contract Sent"
+      if (stageName.includes('contract') && 
+          !stageName.includes('offer') && 
+          !stageName.includes('sent') && 
+          !currentCustomFields.underContractAt) {
         dateFieldsToAdd.underContractAt = new Date().toISOString();
       }
       
