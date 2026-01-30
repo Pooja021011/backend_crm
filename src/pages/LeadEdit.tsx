@@ -193,6 +193,7 @@ const LeadEdit: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [changingPipelineStatus, setChangingPipelineStatus] = useState(false);
+  const [navigating, setNavigating] = useState(false);
 
   // Autosave state (Lead Detail page)
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'dirty' | 'saving' | 'saved' | 'error'>('idle');
@@ -297,6 +298,9 @@ const LeadEdit: React.FC = () => {
   const [pendingLeadStatus, setPendingLeadStatus] = useState<string | null>(null);
   const [missingDdFields, setMissingDdFields] = useState<string[]>([]);
   const [missingDdCompleteItems, setMissingDdCompleteItems] = useState<string[]>([]);
+  
+  // Ref to track when we're transitioning between validation popups (prevents premature cleanup)
+  const transitioningPopupRef = useRef(false);
 
   // Refs for polling safety (avoid overwriting user-driven stage changes / active popups)
   useEffect(() => {
@@ -408,6 +412,7 @@ const LeadEdit: React.FC = () => {
   const [rehabFinishLevel, setRehabFinishLevel] = useState<'low_end' | 'mid_range' | 'high_end'>('mid_range');
   const [rehabToggledItems, setRehabToggledItems] = useState<any>({});
   const [rehabNumberOfWindows, setRehabNumberOfWindows] = useState(10);
+  const [rehabBathrooms, setRehabBathrooms] = useState<number | undefined>(undefined);
   const [rehabCustomValues, setRehabCustomValues] = useState<{ miscLabel?: string; miscValue?: number }>({});
   
   // Comparables
@@ -580,9 +585,21 @@ const LeadEdit: React.FC = () => {
           throw err;
         }
 
-        setPipelineStatus(stageId);
+        // ✅ Parse response to get newStageId
+        const responseData = await stageResponse.json();
+        const newStageId = responseData?.data?.newStageId || stageId;
+        const newStageName = responseData?.data?.newStageName;
+        
+        console.log('✅ Stage move response:', { newStageId, newStageName });
+
+        // ✅ Update UI immediately with response data
+        setPipelineStatus(newStageId);
+        
         // Stage move is its own persisted action; mark autosave as clean
         setAutoSaveStatus('saved');
+        
+        // ✅ Return response data for caller to use
+        return { newStageId, newStageName };
       } catch (e: any) {
         // Let callers decide whether to show a validation popup (e.g., pictures required)
         throw e;
@@ -948,6 +965,7 @@ const LeadEdit: React.FC = () => {
         setRehabFinishLevel(customFields.rehabFinishLevel || 'mid_range');
         setRehabToggledItems(customFields.rehabToggledItems || {});
         setRehabNumberOfWindows(customFields.rehabNumberOfWindows ?? 10);
+        setRehabBathrooms(customFields.rehabBathrooms !== undefined && customFields.rehabBathrooms !== null ? customFields.rehabBathrooms : undefined);
         setRehabCustomValues(customFields.rehabCustomValues || {});
         setLeadSourceData(customFields.leadSourceData || {});
 
@@ -1030,6 +1048,7 @@ const LeadEdit: React.FC = () => {
       });
     } finally {
       setLoading(false);
+      setNavigating(false); // Reset navigating state when data loads
     }
   };
 
@@ -1614,6 +1633,7 @@ const LeadEdit: React.FC = () => {
       rehabFinishLevel: rehabFinishLevel || null,
       rehabToggledItems: rehabToggledItems || {},
       rehabNumberOfWindows: rehabNumberOfWindows || null,
+      rehabBathrooms: rehabBathrooms !== undefined && rehabBathrooms !== null ? rehabBathrooms : null,
       rehabCustomValues: rehabCustomValues || {},
       leadSourceData: leadSourceData || {},
       // Underwriting Calculator values
@@ -2131,6 +2151,7 @@ const LeadEdit: React.FC = () => {
         rehabFinishLevel: rehabFinishLevel || null,
         rehabToggledItems: rehabToggledItems || {},
         rehabNumberOfWindows: rehabNumberOfWindows || null,
+        rehabBathrooms: rehabBathrooms !== undefined && rehabBathrooms !== null ? rehabBathrooms : null,
         rehabCustomValues: rehabCustomValues || {},
         leadSourceData: leadSourceData || {},
       // ARV (top box) + Underwriting Calculator values
@@ -3439,6 +3460,16 @@ const LeadEdit: React.FC = () => {
 
   return (
     <>
+      {/* Navigation Loading Overlay */}
+      {navigating && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div className="bg-white rounded-lg shadow-xl p-6 flex flex-col items-center gap-3 pointer-events-auto">
+            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+            <p className="text-sm font-medium text-gray-700">Loading lead...</p>
+          </div>
+        </div>
+      )}
+      
       <div
         className="space-y-2"
         onChangeCapture={(e) => {
@@ -3492,20 +3523,44 @@ const LeadEdit: React.FC = () => {
               <Button
                 variant="outline"
                 className="h-5 w-6 p-0 rounded-md inline-flex items-center justify-center"
-                onClick={() => effectivePrevLeadId && navigate(`/leads/${effectivePrevLeadId}/edit`)}
-                disabled={!effectivePrevLeadId}
+                onClick={async () => {
+                  if (effectivePrevLeadId) {
+                    // Check for unsaved changes
+                    if (autoSaveStatus === 'dirty' || autoSaveStatus === 'saving') {
+                      const shouldNavigate = window.confirm('You have unsaved changes. Do you want to save before navigating?');
+                      if (shouldNavigate) {
+                        await flushAutoSave('manual'); // Wait for save to complete
+                      }
+                    }
+                    setNavigating(true);
+                    navigate(`/leads/${effectivePrevLeadId}/edit`);
+                  }
+                }}
+                disabled={!effectivePrevLeadId || navigating}
                 title={effectivePrevLeadId ? 'Previous lead' : 'No previous lead'}
               >
-                <ChevronLeft className="w-3 h-3" />
+                {navigating ? <Loader2 className="w-3 h-3 animate-spin" /> : <ChevronLeft className="w-3 h-3" />}
               </Button>
               <Button
                 variant="outline"
                 className="h-5 w-6 p-0 rounded-md inline-flex items-center justify-center"
-                onClick={() => effectiveNextLeadId && navigate(`/leads/${effectiveNextLeadId}/edit`)}
-                disabled={!effectiveNextLeadId}
+                onClick={async () => {
+                  if (effectiveNextLeadId) {
+                    // Check for unsaved changes
+                    if (autoSaveStatus === 'dirty' || autoSaveStatus === 'saving') {
+                      const shouldNavigate = window.confirm('You have unsaved changes. Do you want to save before navigating?');
+                      if (shouldNavigate) {
+                        await flushAutoSave('manual'); // Wait for save to complete
+                      }
+                    }
+                    setNavigating(true);
+                    navigate(`/leads/${effectiveNextLeadId}/edit`);
+                  }
+                }}
+                disabled={!effectiveNextLeadId || navigating}
                 title={effectiveNextLeadId ? 'Next lead' : 'No next lead'}
               >
-                <ChevronRight className="w-3 h-3" />
+                {navigating ? <Loader2 className="w-3 h-3 animate-spin" /> : <ChevronRight className="w-3 h-3" />}
               </Button>
             </div>
           </div>
@@ -4061,8 +4116,8 @@ const LeadEdit: React.FC = () => {
                 <RehabBudgetCalculatorCompact
                   leadId={id!}
                   sqft={parseInt(sqft) || 0}
-                  // Keep Rehab bathrooms input in sync with Property Information baths (0.5 increments)
-                  bathrooms={bathrooms ? parseFloat(bathrooms) : undefined}
+                  // Rehab bathrooms is now independent from Property Information bathrooms
+                  bathrooms={rehabBathrooms}
                   readOnly={false}
                   suppressSuccessToasts
                   initialFinishLevel={rehabFinishLevel}
@@ -4076,7 +4131,7 @@ const LeadEdit: React.FC = () => {
                     markFieldDirty('rehabBudget');
                     requestImmediateRehabSave();
                   }}
-                  onBathroomsChange={(n) => setBathrooms(n !== undefined && n !== null ? String(n) : '')}
+                  onBathroomsChange={(n) => setRehabBathrooms(n !== undefined && n !== null ? n : undefined)}
                   onDataChange={(data) => {
                     const nextFinish = data.finishLevel as 'low_end' | 'mid_range' | 'high_end';
                     const nextToggled =
@@ -4625,6 +4680,14 @@ const LeadEdit: React.FC = () => {
       <AppointmentCompletePopup
         open={showAppointmentPopup}
         onClose={() => {
+          console.log('🚪 Appointment popup onClose called, transitioningPopupRef.current =', transitioningPopupRef.current);
+          // Don't clear state if we're transitioning to another validation popup
+          if (transitioningPopupRef.current) {
+            console.log('⚠️ Skipping cleanup - transitioning to next popup');
+            setShowAppointmentPopup(false);
+            return;
+          }
+          
           console.log('🚪 Appointment popup closed');
           setShowAppointmentPopup(false);
           // Revert to previous status since user cancelled
@@ -4680,7 +4743,6 @@ const LeadEdit: React.FC = () => {
                 if (e?.code === 'VALIDATION_REQUIRED') {
                   const requiredFields: string[] = Array.isArray(e?.requiredFields) ? e.requiredFields : [];
                   const ddFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
-                  const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation','underwritingTaxes','underwritingTimeline'];
 
                   if (requiredFields.some((f) => ddFields.includes(f))) {
                     setMissingDdFields(requiredFields.filter((f) => ddFields.includes(f)));
@@ -4688,12 +4750,47 @@ const LeadEdit: React.FC = () => {
                     setShowDueDiligencePopup(true);
                     return;
                   }
+                  
+                  // Progressive DD Complete popups - show interactive popups one by one
+                  if (requiredFields.includes('arv') || requiredFields.includes('comparables')) {
+                    console.log('🔀 Transitioning from Appointment → ARV popup');
+                    transitioningPopupRef.current = true; // ✅ Mark as transitioning
+                    console.log('📍 Set transitioningPopupRef.current =', transitioningPopupRef.current);
+                    setShowAppointmentPopup(false);
+                    setShowArvComparablesPopup(true);
+                    setTimeout(() => { 
+                      transitioningPopupRef.current = false;
+                      console.log('✅ Reset transitioningPopupRef.current =', transitioningPopupRef.current);
+                    }, 100); // Reset after state updates
+                    // DON'T clear pendingPipelineStatus here - ARV popup needs it!
+                    return;
+                  }
+                  if (requiredFields.includes('rehabBudget')) {
+                    transitioningPopupRef.current = true; // ✅ Mark as transitioning
+                    setShowAppointmentPopup(false);
+                    setShowRehabBudgetPopup(true);
+                    setTimeout(() => { transitioningPopupRef.current = false; }, 100); // Reset after state updates
+                    // DON'T clear pendingPipelineStatus here - Rehab popup needs it!
+                    return;
+                  }
+                  if (requiredFields.includes('underwritingTaxes') || requiredFields.includes('underwritingTimeline')) {
+                    transitioningPopupRef.current = true; // ✅ Mark as transitioning
+                    setShowAppointmentPopup(false);
+                    setShowTimelineTaxesPopup(true);
+                    setTimeout(() => { transitioningPopupRef.current = false; }, 100); // Reset after state updates
+                    // DON'T clear pendingPipelineStatus here - Timeline popup needs it!
+                    return;
+                  }
+                  
+                  // If any other DD Complete field is missing, show list popup as fallback
+                  const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation','underwritingTaxes','underwritingTimeline'];
                   if (requiredFields.some((f) => ddCompleteFields.includes(f))) {
                     setMissingDdCompleteItems(requiredFields.filter((f) => ddCompleteFields.includes(f)));
                     setShowAppointmentPopup(false);
                     setShowDueDiligenceCompletePopup(true);
                     return;
                   }
+                  
                   const stageNameLower = (pipelineStages.find((s) => s.id === pendingPipelineStatus)?.name || '').toLowerCase();
                   if (stageNameLower.includes('offer') && stageNameLower.includes('made')) {
                     setShowAppointmentPopup(false);
@@ -4783,6 +4880,14 @@ const LeadEdit: React.FC = () => {
       <DueDiligencePopup
         open={showDueDiligencePopup}
         onClose={() => {
+          // Don't clear state if we're transitioning to another validation popup
+          if (transitioningPopupRef.current) {
+            console.log('⚠️ Skipping cleanup - transitioning to next popup');
+            setShowDueDiligencePopup(false);
+            setMissingDdFields([]);
+            return;
+          }
+          
           console.log('🚪 Due Diligence popup closed');
           setShowDueDiligencePopup(false);
           setMissingDdFields([]);
@@ -4800,6 +4905,8 @@ const LeadEdit: React.FC = () => {
         missingFields={missingDdFields}
         onSubmit={async (data) => {
           try {
+            console.log('📝 DueDiligencePopup - Submitting data:', data);
+            
             // Update lead with property info first
             const response = await makeApiCall(`${API_BASE}/leads/${id}`, {
               method: 'PATCH',
@@ -4814,37 +4921,76 @@ const LeadEdit: React.FC = () => {
             
             if (!response.ok) {
               const errorData = await response.json();
+              console.error('❌ Failed to update property info:', errorData);
               throw new Error(errorData.error || 'Failed to update property information');
             }
 
+            console.log('✅ Property info updated successfully');
+
             // Reload lead so "Additional Property Info" section shows persisted values before stage move
             await loadLead();
+            console.log('✅ Lead reloaded');
             
             // Retry stage move; if more is missing, open the next popup automatically
             if (pendingPipelineStatus) {
               try {
+                console.log('🔄 Attempting stage move to:', pendingPipelineStatus);
                 await requestStageMove(pendingPipelineStatus);
+                console.log('✅ Stage move successful!');
               } catch (e: any) {
+                console.log('⚠️ Stage move validation error:', e);
+                
                 if (e?.code === 'VALIDATION_REQUIRED') {
                   const requiredFields: string[] = Array.isArray(e?.requiredFields) ? e.requiredFields : [];
-                  const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation','underwritingTaxes','underwritingTimeline'];
+                  console.log('📋 Still missing fields:', requiredFields);
 
                   if (requiredFields.includes('photos')) {
+                    transitioningPopupRef.current = true; // ✅ Mark as transitioning
                     setShowDueDiligencePopup(false);
                     setShowAppointmentPopup(true);
+                    setTimeout(() => { transitioningPopupRef.current = false; }, 100);
                     return;
                   }
                   if (requiredFields.includes('followUpTask')) {
+                    transitioningPopupRef.current = true; // ✅ Mark as transitioning
                     setShowDueDiligencePopup(false);
                     setShowFollowUpTaskPopup(true);
+                    setTimeout(() => { transitioningPopupRef.current = false; }, 100);
                     return;
                   }
+                  
+                  // Progressive DD Complete popups - show interactive popups one by one
+                  if (requiredFields.includes('arv') || requiredFields.includes('comparables')) {
+                    transitioningPopupRef.current = true; // ✅ Mark as transitioning
+                    setShowDueDiligencePopup(false);
+                    setShowArvComparablesPopup(true);
+                    setTimeout(() => { transitioningPopupRef.current = false; }, 100);
+                    return;
+                  }
+                  if (requiredFields.includes('rehabBudget')) {
+                    transitioningPopupRef.current = true; // ✅ Mark as transitioning
+                    setShowDueDiligencePopup(false);
+                    setShowRehabBudgetPopup(true);
+                    setTimeout(() => { transitioningPopupRef.current = false; }, 100);
+                    return;
+                  }
+                  if (requiredFields.includes('underwritingTaxes') || requiredFields.includes('underwritingTimeline')) {
+                    transitioningPopupRef.current = true; // ✅ Mark as transitioning
+                    setShowDueDiligencePopup(false);
+                    setShowTimelineTaxesPopup(true);
+                    setTimeout(() => { transitioningPopupRef.current = false; }, 100);
+                    return;
+                  }
+                  
+                  // If any other DD Complete field is missing, show list popup as fallback
+                  const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation','underwritingTaxes','underwritingTimeline'];
                   if (requiredFields.some((f) => ddCompleteFields.includes(f))) {
                     setMissingDdCompleteItems(requiredFields.filter((f) => ddCompleteFields.includes(f)));
                     setShowDueDiligencePopup(false);
                     setShowDueDiligenceCompletePopup(true);
                     return;
                   }
+                  
                   const stageNameLower = (pipelineStages.find((s) => s.id === pendingPipelineStatus)?.name || '').toLowerCase();
                   if (stageNameLower.includes('offer') && stageNameLower.includes('made')) {
                     setShowDueDiligencePopup(false);
@@ -4852,10 +4998,19 @@ const LeadEdit: React.FC = () => {
                     return;
                   }
                 }
-                throw e;
+                
+                // If error is not recognized, show error toast but don't break flow
+                console.error('⚠️ Unrecognized validation error:', e);
+                toast({
+                  title: "Validation Error",
+                  description: e?.message || "Please check all required fields and try again",
+                  variant: "destructive"
+                });
+                return;
               }
             }
             
+            console.log('✅ All done, closing popup');
             setShowDueDiligencePopup(false);
             setMissingDdFields([]);
             setPendingPipelineStatus(null);
@@ -4864,7 +5019,7 @@ const LeadEdit: React.FC = () => {
             // Reload lead to show updated data
             await loadLead();
           } catch (error: any) {
-            console.error('Error updating property info:', error);
+            console.error('❌ DueDiligencePopup submit error:', error);
             toast({
               title: "Error",
               description: error.message || "Failed to update property information",
@@ -4877,6 +5032,19 @@ const LeadEdit: React.FC = () => {
       <ArvComparablesPopup
         open={showArvComparablesPopup}
         onClose={() => {
+          console.log('🚪 ARV popup onClose called, transitioningPopupRef.current =', transitioningPopupRef.current);
+          // Don't clear state if we're transitioning to another validation popup
+          if (transitioningPopupRef.current) {
+            console.log('⚠️ Skipping cleanup - transitioning to next popup');
+            setShowArvComparablesPopup(false);
+            return;
+          }
+          
+          // Prevent closing if we're in the middle of a stage change
+          if (changingPipelineStatus) {
+            console.log('⛔ Ignoring close request - stage change in progress');
+            return;
+          }
           console.log('🚪 ARV+Comparables popup closed');
           setShowArvComparablesPopup(false);
           // Revert to previous status since user cancelled
@@ -4890,6 +5058,10 @@ const LeadEdit: React.FC = () => {
         }}
         existingData={lead?.customFields}
         onSubmit={async (data) => {
+          // ✅ CRITICAL: Capture pending status BEFORE any async operations
+          const targetStageId = pendingPipelineStatus;
+          console.log('🎯 Captured target stage ID at start:', targetStageId);
+          
           try {
             // Set loading state
             setChangingPipelineStatus(true);
@@ -4931,44 +5103,83 @@ const LeadEdit: React.FC = () => {
               console.log('✅ Comparables PDF uploaded');
             }
 
-            // Close this popup
-            setShowArvComparablesPopup(false);
-            
             // Reload lead data
+            console.log('🔄 Reloading lead data...');
             await loadLead();
             await loadComparables(); // Refresh comparables to show uploaded PDFs
+            console.log('✅ Lead data reloaded');
 
             // Try stage move again to check what's still needed
-            if (pendingPipelineStatus) {
-              console.log('🔄 Checking if more fields are required...');
+            console.log('📌 Using captured target stage ID:', targetStageId);
+            
+            if (targetStageId) {
+              console.log('🔄 Attempting stage move to:', targetStageId);
               
               try {
-                await requestStageMove(pendingPipelineStatus);
-                // Success! Stage moved
-                console.log('✅ Stage moved successfully - all requirements met!');
+                const moveResult = await requestStageMove(targetStageId);
+                // Success! Stage moved - UI already updated by requestStageMove
+                console.log('✅ Stage moved successfully:', moveResult?.newStageName);
                 setPendingPipelineStatus(null);
                 setPreviousPipelineStatus(null);
+                setShowArvComparablesPopup(false);
               } catch (validationError: any) {
+                console.log('⚠️ Validation error after ARV+Comparables:', validationError);
+                console.log('🔍 Error code:', validationError?.code);
+                console.log('🔍 Error message:', validationError?.message);
+                console.log('📋 Required fields:', validationError?.requiredFields);
+                
                 if (validationError?.code === 'VALIDATION_REQUIRED') {
                   // More fields needed - open next popup
                   const stillRequired = validationError?.requiredFields || [];
-                  console.log('📋 Still required:', stillRequired);
+                  console.log('📋 Still required after ARV+Comparables:', stillRequired);
                   
                   if (stillRequired.includes('rehabBudget')) {
                     console.log('🔨 Opening Rehab Budget popup');
+                    transitioningPopupRef.current = true; // ✅ Mark as transitioning
+                    setShowArvComparablesPopup(false); // Close current popup
                     setShowRehabBudgetPopup(true);
-                  } else if (stillRequired.includes('underwritingTaxes') || stillRequired.includes('underwritingTimeline')) {
-                    console.log('📊 Opening Timeline+Taxes popup');
-                    setShowTimelineTaxesPopup(true);
-                  } else {
-                    // Unknown requirement, show error
-                    throw validationError;
+                    setTimeout(() => { transitioningPopupRef.current = false; }, 100);
+                    return;
                   }
+                  
+                  if (stillRequired.includes('underwritingTaxes') || stillRequired.includes('underwritingTimeline')) {
+                    console.log('📊 Opening Timeline+Taxes popup');
+                    transitioningPopupRef.current = true; // ✅ Mark as transitioning
+                    setShowArvComparablesPopup(false); // Close current popup
+                    setShowTimelineTaxesPopup(true);
+                    setTimeout(() => { transitioningPopupRef.current = false; }, 100);
+                    return;
+                  }
+                  
+                  // If any other DD Complete field is missing, show list popup as fallback
+                  const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation','underwritingTaxes','underwritingTimeline'];
+                  if (stillRequired.some((f: string) => ddCompleteFields.includes(f))) {
+                    console.log('📋 Other DD Complete fields missing, showing list popup');
+                    setMissingDdCompleteItems(stillRequired.filter((f: string) => ddCompleteFields.includes(f)));
+                    setShowArvComparablesPopup(false); // Close current popup
+                    setShowDueDiligenceCompletePopup(true);
+                    return;
+                  }
+                  
+                  // Unknown requirement
+                  console.error('⚠️ Unrecognized validation fields:', stillRequired);
+                  toast({
+                    title: "Validation Error",
+                    description: `Additional fields required: ${stillRequired.join(', ')}`,
+                    variant: "destructive"
+                  });
+                  setShowArvComparablesPopup(false); // Close current popup
+                  return;
                 } else {
-                  // Real error, not validation
+                  // Real error, not validation - re-throw to outer catch
+                  console.error('❌ Non-validation error:', validationError);
                   throw validationError;
                 }
               }
+            } else {
+              // No pending status - this shouldn't happen but close popup
+              console.warn('⚠️ No pendingPipelineStatus found, closing popup');
+              setShowArvComparablesPopup(false);
             }
           } catch (error: any) {
             console.error('❌ Error in ARV+Comparables flow:', error);
@@ -4977,6 +5188,7 @@ const LeadEdit: React.FC = () => {
               description: error.message || "Failed to save ARV and comparables",
               variant: "destructive"
             });
+            // Don't close popup on error so user can retry
           } finally {
             // Always clear loading state
             setChangingPipelineStatus(false);
@@ -4987,6 +5199,19 @@ const LeadEdit: React.FC = () => {
       <RehabBudgetFullPopup
         open={showRehabBudgetPopup}
         onClose={() => {
+          console.log('🚪 Rehab Budget popup onClose called, transitioningPopupRef.current =', transitioningPopupRef.current);
+          // Don't clear state if we're transitioning to another validation popup
+          if (transitioningPopupRef.current) {
+            console.log('⚠️ Skipping cleanup - transitioning to next popup');
+            setShowRehabBudgetPopup(false);
+            return;
+          }
+          
+          // Prevent closing if we're in the middle of a stage change
+          if (changingPipelineStatus) {
+            console.log('⛔ Ignoring close request - stage change in progress');
+            return;
+          }
           console.log('🚪 Rehab Budget popup closed');
           setShowRehabBudgetPopup(false);
           // Revert to previous status since user cancelled
@@ -5044,7 +5269,7 @@ const LeadEdit: React.FC = () => {
               throw new Error(errorData.error || 'Failed to save rehab budget');
             }
             
-            // Also update customFields for bathrooms, sqft, and rehabBudget total (for validation)
+            // Also update customFields for rehabBathrooms, sqft and rehabBudget total (for validation)
             const updatePayload = {
               customFields: {
                 ...(lead?.customFields || {}),
@@ -5053,9 +5278,10 @@ const LeadEdit: React.FC = () => {
                 rehabToggledItems: data.rehabToggledItems,
                 rehabCustomValues: data.rehabCustomValues,
                 rehabBudget: totalWithCustom, // ✅ CRITICAL: Save total for backend validation
-                // Sync bathrooms and sqft with Property Information
-                ...(data.bathrooms !== undefined ? { bathrooms: data.bathrooms } : {}),
-                ...(data.sqft !== undefined ? { sqft: data.sqft } : {})
+                // Save rehab bathrooms independently (NOT synced with Property Information)
+                rehabBathrooms: data.bathrooms !== undefined && data.bathrooms !== null ? data.bathrooms : null,
+                // Save SqFt from rehab popup
+                sqft: data.sqft !== undefined && data.sqft !== null ? data.sqft : lead?.customFields?.sqft
               }
             };
             
@@ -5082,8 +5308,9 @@ const LeadEdit: React.FC = () => {
               console.log('📌 Pending pipeline status:', pendingPipelineStatus);
               
               try {
-                await requestStageMove(pendingPipelineStatus);
-                console.log('✅ Stage moved successfully!');
+                const moveResult = await requestStageMove(pendingPipelineStatus);
+                // Success! Stage moved - UI already updated by requestStageMove
+                console.log('✅ Stage moved successfully:', moveResult?.newStageName);
                 setPendingPipelineStatus(null);
                 setPreviousPipelineStatus(null);
               } catch (validationError: any) {
@@ -5097,7 +5324,10 @@ const LeadEdit: React.FC = () => {
                   
                   if (stillRequired.includes('underwritingTaxes') || stillRequired.includes('underwritingTimeline')) {
                     console.log('📊 Opening Timeline+Taxes popup');
+                    transitioningPopupRef.current = true; // ✅ Mark as transitioning
+                    setShowRehabBudgetPopup(false); // Close current popup
                     setShowTimelineTaxesPopup(true);
+                    setTimeout(() => { transitioningPopupRef.current = false; }, 100);
                   } else {
                     console.log('❓ Unknown requirements, throwing error');
                     throw validationError;
@@ -5127,6 +5357,11 @@ const LeadEdit: React.FC = () => {
       <TimelineTaxesPopup
         open={showTimelineTaxesPopup}
         onClose={() => {
+          // Prevent closing if we're in the middle of a stage change
+          if (changingPipelineStatus) {
+            console.log('⛔ Ignoring close request - stage change in progress');
+            return;
+          }
           console.log('🚪 Timeline+Taxes popup closed');
           setShowTimelineTaxesPopup(false);
           // Revert to previous status since user cancelled
@@ -5145,43 +5380,71 @@ const LeadEdit: React.FC = () => {
             setChangingPipelineStatus(true);
             
             console.log('💾 Saving timeline and taxes...', data);
+            console.log('📋 Current customFields:', lead?.customFields);
+            
+            const updatePayload = {
+              customFields: {
+                ...(lead?.customFields || {}),
+                underwritingTimeline: data.underwritingTimeline,
+                underwritingTaxes: data.underwritingTaxes
+              }
+            };
+            
+            console.log('📤 Update payload:', updatePayload);
             
             // Update timeline and taxes in customFields
             const response = await makeApiCall(`${API_BASE}/leads/${id}`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                customFields: {
-                  ...(lead?.customFields || {}),
-                  underwritingTimeline: data.underwritingTimeline,
-                  underwritingTaxes: data.underwritingTaxes
-                }
-              })
+              body: JSON.stringify(updatePayload)
             });
 
             if (!response.ok) {
               throw new Error('Failed to save timeline and taxes');
             }
 
-            console.log('✅ Timeline and taxes saved');
-            setShowTimelineTaxesPopup(false);
-            await loadLead();
-            await loadComparables(); // Refresh comparables to show uploaded PDFs
-
+            console.log('✅ Timeline and taxes saved successfully');
+            
+            // ✅ Update local state immediately to reflect in UI
+            setUnderwritingTimeline(data.underwritingTimeline);
+            setUnderwritingTaxes(data.underwritingTaxes);
+            console.log('📊 State updated:', { timeline: data.underwritingTimeline, taxes: data.underwritingTaxes });
+            
+            // ✅ Also update the lead object's customFields to ensure all components see the new data
+            setLead((prevLead) => {
+              if (!prevLead) return prevLead;
+              return {
+                ...prevLead,
+                customFields: {
+                  ...(prevLead.customFields || {}),
+                  underwritingTimeline: data.underwritingTimeline,
+                  underwritingTaxes: data.underwritingTaxes
+                }
+              };
+            });
+            console.log('💾 Lead object updated with new timeline and taxes');
+            
             // Try stage move again - should succeed now!
             if (pendingPipelineStatus) {
               console.log('🔄 Final attempt to move stage...');
               
               try {
-                await requestStageMove(pendingPipelineStatus);
-                console.log('✅ Stage moved to Due Diligence Complete!');
+                const moveResult = await requestStageMove(pendingPipelineStatus);
+                // Success! Stage moved - UI already updated by requestStageMove
+                console.log('✅ Stage moved to Due Diligence Complete:', moveResult?.newStageName);
                 setPendingPipelineStatus(null);
                 setPreviousPipelineStatus(null);
+                
+                // ✅ Close popup AFTER successful stage move
+                setShowTimelineTaxesPopup(false);
               } catch (validationError: any) {
                 // If still failing, show error
                 console.error('❌ Stage move still failed:', validationError);
                 throw validationError;
               }
+            } else {
+              // No pending status - just close popup
+              setShowTimelineTaxesPopup(false);
             }
           } catch (error: any) {
             console.error('❌ Error in Timeline+Taxes flow:', error);
@@ -5263,39 +5526,58 @@ const LeadEdit: React.FC = () => {
             
             // Retry stage move; if more is missing, open the next popup automatically
             if (pendingPipelineStatus) {
-              try {
-                await requestStageMove(pendingPipelineStatus);
-              } catch (e: any) {
-                if (e?.code === 'VALIDATION_REQUIRED') {
-                  const requiredFields: string[] = Array.isArray(e?.requiredFields) ? e.requiredFields : [];
-                  const ddFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
-                  const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation','underwritingTaxes','underwritingTimeline'];
+                try {
+                  await requestStageMove(pendingPipelineStatus);
+                } catch (e: any) {
+                  if (e?.code === 'VALIDATION_REQUIRED') {
+                    const requiredFields: string[] = Array.isArray(e?.requiredFields) ? e.requiredFields : [];
+                    const ddFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
 
-                  if (requiredFields.includes('photos')) {
-                    setShowOfferMadePopup(false);
-                    setShowAppointmentPopup(true);
-                    return;
+                    if (requiredFields.includes('photos')) {
+                      setShowOfferMadePopup(false);
+                      setShowAppointmentPopup(true);
+                      return;
+                    }
+                    if (requiredFields.includes('followUpTask')) {
+                      setShowOfferMadePopup(false);
+                      setShowFollowUpTaskPopup(true);
+                      return;
+                    }
+                    if (requiredFields.some((f) => ddFields.includes(f))) {
+                      setMissingDdFields(requiredFields.filter((f) => ddFields.includes(f)));
+                      setShowOfferMadePopup(false);
+                      setShowDueDiligencePopup(true);
+                      return;
+                    }
+                    
+                    // Progressive DD Complete popups - show interactive popups one by one
+                    if (requiredFields.includes('arv') || requiredFields.includes('comparables')) {
+                      setShowOfferMadePopup(false);
+                      setShowArvComparablesPopup(true);
+                      return;
+                    }
+                    if (requiredFields.includes('rehabBudget')) {
+                      setShowOfferMadePopup(false);
+                      setShowRehabBudgetPopup(true);
+                      return;
+                    }
+                    if (requiredFields.includes('underwritingTaxes') || requiredFields.includes('underwritingTimeline')) {
+                      setShowOfferMadePopup(false);
+                      setShowTimelineTaxesPopup(true);
+                      return;
+                    }
+                    
+                    // If any other DD Complete field is missing, show list popup as fallback
+                    const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation','underwritingTaxes','underwritingTimeline'];
+                    if (requiredFields.some((f) => ddCompleteFields.includes(f))) {
+                      setMissingDdCompleteItems(requiredFields.filter((f) => ddCompleteFields.includes(f)));
+                      setShowOfferMadePopup(false);
+                      setShowDueDiligenceCompletePopup(true);
+                      return;
+                    }
                   }
-                  if (requiredFields.includes('followUpTask')) {
-                    setShowOfferMadePopup(false);
-                    setShowFollowUpTaskPopup(true);
-                    return;
-                  }
-                  if (requiredFields.some((f) => ddFields.includes(f))) {
-                    setMissingDdFields(requiredFields.filter((f) => ddFields.includes(f)));
-                    setShowOfferMadePopup(false);
-                    setShowDueDiligencePopup(true);
-                    return;
-                  }
-                  if (requiredFields.some((f) => ddCompleteFields.includes(f))) {
-                    setMissingDdCompleteItems(requiredFields.filter((f) => ddCompleteFields.includes(f)));
-                    setShowOfferMadePopup(false);
-                    setShowDueDiligenceCompletePopup(true);
-                    return;
-                  }
+                  throw e;
                 }
-                throw e;
-              }
             }
             
             setShowOfferMadePopup(false);
@@ -5457,6 +5739,16 @@ const LeadEdit: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+      {/* Stage Change Loading Overlay */}
+      {changingPipelineStatus && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div className="bg-white rounded-lg shadow-xl p-6 flex flex-col items-center gap-3">
+            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+            <p className="text-sm font-medium text-slate-700">Updating pipeline status...</p>
+          </div>
+        </div>
+      )}
     </>
   );
 };

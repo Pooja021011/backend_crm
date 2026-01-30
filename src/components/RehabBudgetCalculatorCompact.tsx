@@ -164,7 +164,7 @@ export function RehabBudgetCalculatorCompact({
         }
       });
     }
-  }, [finishLevel, toggledItems, numberOfWindows, customMiscLine, customMiscEnabled, onDataChange]);
+  }, [finishLevel, toggledItems, numberOfWindows, customMiscLine, customMiscEnabled]); // Removed onDataChange to prevent infinite loop
 
   // Update property values when props change
   useEffect(() => {
@@ -206,7 +206,7 @@ export function RehabBudgetCalculatorCompact({
     if (onTotalChange) {
       onTotalChange(totalWithCustom);
     }
-  }, [totalWithCustom, onTotalChange]);
+  }, [totalWithCustom]); // Only trigger when total changes, not when callback reference changes
 
   const calculateBudget = async () => {
     try {

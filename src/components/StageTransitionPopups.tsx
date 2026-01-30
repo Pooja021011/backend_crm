@@ -7,7 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar as UiCalendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useId, useState, useEffect } from "react";
-import { Upload, X, ClipboardList, AlertCircle, DollarSign, Calendar } from "lucide-react";
+import { Upload, X, ClipboardList, AlertCircle, DollarSign, Calendar, Loader2 } from "lucide-react";
 import { API_BASE } from '@/config/api';
 
 // Popup for Appointment Complete - Photo Upload Required
@@ -158,13 +158,26 @@ export const DueDiligencePopup = ({
   existingData?: any;
   missingFields?: string[];
 }) => {
-  const [hvacType, setHvacType] = useState(existingData?.hvacType || '');
-  const [hvacAge, setHvacAge] = useState(existingData?.hvacAge?.toString() || '');
-  const [waterHeaterAge, setWaterHeaterAge] = useState(existingData?.waterHeaterAge?.toString() || '');
-  const [roofAge, setRoofAge] = useState(existingData?.roofAge?.toString() || '');
-  const [waterType, setWaterType] = useState(existingData?.waterType || '');
-  const [sewerType, setSewerType] = useState(existingData?.sewerType || '');
+  const [hvacType, setHvacType] = useState('');
+  const [hvacAge, setHvacAge] = useState('');
+  const [waterHeaterAge, setWaterHeaterAge] = useState('');
+  const [roofAge, setRoofAge] = useState('');
+  const [waterType, setWaterType] = useState('');
+  const [sewerType, setSewerType] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Sync with existingData whenever popup opens or existingData changes
+  useEffect(() => {
+    if (open) {
+      console.log('🔄 DueDiligencePopup - Syncing with existingData:', existingData);
+      setHvacType(existingData?.hvacType || '');
+      setHvacAge(existingData?.hvacAge?.toString() || '');
+      setWaterHeaterAge(existingData?.waterHeaterAge?.toString() || '');
+      setRoofAge(existingData?.roofAge?.toString() || '');
+      setWaterType(existingData?.waterType || '');
+      setSewerType(existingData?.sewerType || '');
+    }
+  }, [open, JSON.stringify(existingData)]);
 
   const want = (key: string) => !missingFields || missingFields.length === 0 || missingFields.includes(key);
   
@@ -286,14 +299,19 @@ export const DueDiligencePopup = ({
           </div>
         </div>
         <DialogFooter className="gap-2 sm:gap-2">
-          <Button onClick={onClose} variant="outline">
+          <Button onClick={onClose} variant="outline" disabled={submitting}>
             Cancel
           </Button>
           <Button 
             onClick={handleSubmit} 
             disabled={!isValid || submitting}
           >
-            {submitting ? 'Saving...' : 'Submit'}
+            {submitting ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : 'Submit'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -437,14 +455,19 @@ export const OfferMadePopup = ({
           )}
         </div>
         <DialogFooter className="gap-2 sm:gap-2">
-          <Button onClick={onClose} variant="outline">
+          <Button onClick={onClose} variant="outline" disabled={submitting}>
             Cancel
           </Button>
           <Button 
             onClick={handleSubmit} 
             disabled={!isValid || submitting}
           >
-            {submitting ? 'Saving...' : 'Submit'}
+            {submitting ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : 'Submit'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -521,11 +544,16 @@ export const FollowUpTaskRequiredPopup = ({
         </div>
 
         <DialogFooter className="gap-2 sm:gap-2">
-          <Button onClick={onClose} variant="outline">
+          <Button onClick={onClose} variant="outline" disabled={submitting}>
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={!isValid || submitting}>
-            {submitting ? 'Saving...' : 'Create Task'}
+            {submitting ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : 'Create Task'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -779,7 +807,8 @@ export const ArvComparablesPopup = ({
       setArvValue(0);
       setArvDisplay('');
       setComparablesFile(null);
-      onClose();
+      // DON'T call onClose here - let parent decide when to close after checking validation
+      // onClose();
     } catch (error) {
       console.error('Submit failed:', error);
     } finally {
@@ -860,14 +889,19 @@ export const ArvComparablesPopup = ({
           </div>
         </div>
         <DialogFooter className="gap-2 sm:gap-2">
-          <Button onClick={onClose} variant="outline">
+          <Button onClick={onClose} variant="outline" disabled={submitting}>
             Cancel
           </Button>
           <Button 
             onClick={handleSubmit} 
             disabled={!isValid || submitting}
           >
-            {submitting ? 'Saving...' : 'Continue'}
+            {submitting ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : 'Continue'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1402,14 +1436,19 @@ export const RehabBudgetFullPopup = ({
         </div>
 
         <DialogFooter className="gap-2 sm:gap-2">
-          <Button onClick={onClose} variant="outline">
+          <Button onClick={onClose} variant="outline" disabled={submitting}>
             Cancel
           </Button>
           <Button 
             onClick={handleSubmit} 
             disabled={submitting}
           >
-            {submitting ? 'Saving...' : 'Continue'}
+            {submitting ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : 'Continue'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1490,7 +1529,8 @@ export const TimelineTaxesPopup = ({
       setTimeline('');
       setTaxes(0);
       setTaxesDisplay('');
-      onClose();
+      // DON'T call onClose here - let parent decide when to close after stage move
+      // onClose();
     } catch (error) {
       console.error('Submit failed:', error);
     } finally {
@@ -1545,14 +1585,19 @@ export const TimelineTaxesPopup = ({
           </div>
         </div>
         <DialogFooter className="gap-2 sm:gap-2">
-          <Button onClick={onClose} variant="outline">
+          <Button onClick={onClose} variant="outline" disabled={submitting}>
             Cancel
           </Button>
           <Button 
             onClick={handleSubmit} 
             disabled={!isValid || submitting}
           >
-            {submitting ? 'Saving...' : 'Complete'}
+            {submitting ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : 'Complete'}
           </Button>
         </DialogFooter>
       </DialogContent>

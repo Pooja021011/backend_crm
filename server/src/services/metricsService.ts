@@ -168,17 +168,18 @@ export const metricsService = {
       end = now.endOf('quarter');
     }
 
-    // ✅ Contracts Signed = count of leads CURRENTLY in contract stage in ACQUISITIONS pipeline
-    const contractsSigned = await prisma.lead.count({
+    // ✅ Contracts Signed = count of deals where contractedAt is within timeframe
+    const contractsSignedDeals = await prisma.deal.findMany({
       where: {
-        pipelineStage: {
-          pipeline: { key: 'ACQUISITIONS' },
-          name: { contains: 'Contract', mode: 'insensitive' }
-        },
-        leadType: 'SELLER',
-        leadStatus: { name: { equals: 'Pipeline', mode: 'insensitive' } },
-      }
+        contractedAt: { gte: start.toDate(), lt: end.toDate() },
+        lead: {
+          pipelineStage: { pipeline: { key: 'ACQUISITIONS' } },
+          leadType: 'SELLER'
+        }
+      },
+      select: { leadId: true }
     });
+    const contractsSigned = new Set(contractsSignedDeals.map(d => d.leadId)).size;
 
     // ✅ Contracts Sold = count of leads CURRENTLY in 'Under Contract' or 'Closed' in DISPOSITIONS pipeline
     const contractsSold = await prisma.lead.count({
@@ -251,18 +252,18 @@ export const metricsService = {
     if (isAdmin) {
       result.modes.push('admin');
       
-      // ✅ Contracts signed: Count leads CURRENTLY in contract stage (company-wide)
-      const contractsSigned = await prisma.lead.count({
+      // ✅ Contracts signed: Count deals where contractedAt is within timeframe (company-wide)
+      const contractsSignedDeals = await prisma.deal.findMany({
         where: {
-          pipelineStage: {
-            pipeline: { key: 'ACQUISITIONS' },
-            name: { contains: 'Contract', mode: 'insensitive' }
-          },
-          leadType: 'SELLER',
-          leadStatus: { name: { equals: 'Pipeline', mode: 'insensitive' } },
-        }
+          contractedAt: { gte: start.toDate(), lt: end.toDate() },
+          lead: {
+            pipelineStage: { pipeline: { key: 'ACQUISITIONS' } },
+            leadType: 'SELLER'
+          }
+        },
+        select: { leadId: true }
       });
-      result.contractsSigned = contractsSigned;
+      result.contractsSigned = new Set(contractsSignedDeals.map(d => d.leadId)).size;
 
       // Contracts sold: DISP properties closed this month
       const dispClosedDeals = await metricsRepository.getDealsClosedBetween(start.toDate(), end.toDate(), {
@@ -336,18 +337,19 @@ export const metricsService = {
    * @param assignedUserId User ID for personal stats, undefined for team-wide stats
    */
   async calculateAcqKpis(start: Date, end: Date, createdById?: string) {
-    // ✅ Total contracts: Count leads CURRENTLY in contract stage (not stage transitions this month)
-    const totalContracts = await prisma.lead.count({
+    // ✅ Total contracts: Count deals where contractedAt is within timeframe (team or personal)
+    const contractDeals = await prisma.deal.findMany({
       where: {
-        pipelineStage: {
-          pipeline: { key: 'ACQUISITIONS' },
-          name: { contains: 'Contract', mode: 'insensitive' }
-        },
-        leadType: 'SELLER',
-        leadStatus: { name: { equals: 'Pipeline', mode: 'insensitive' } },
-        ...(createdById ? { createdById } : {}),
-      }
+        contractedAt: { gte: start, lt: end },
+        lead: {
+          pipelineStage: { pipeline: { key: 'ACQUISITIONS' } },
+          leadType: 'SELLER',
+          ...(createdById ? { createdById } : {})
+        }
+      },
+      select: { leadId: true }
     });
+    const totalContracts = new Set(contractDeals.map(d => d.leadId)).size;
 
     // Leads received this month
     const leadsReceived = await metricsRepository.getLeadsCreatedBetweenScoped(start, end, {

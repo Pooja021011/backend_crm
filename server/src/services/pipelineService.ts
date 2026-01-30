@@ -133,19 +133,41 @@ export const pipelineService = {
 
   /**
    * Check if lead needs attention based on role and criteria
+   * Rules match exact business requirements for ADMIN, MANAGER, and ACQ roles
+   * Prevents duplicates by evaluating ALL roles and returning single highest priority reason
    */
-  async checkNeedsAttention(leadId: string, userRoles: string[]): Promise<{ needsAttention: boolean; reason?: string }> {
+  async checkNeedsAttention(leadId: string, userRoles: string[], userId?: string): Promise<{ needsAttention: boolean; reason?: string }> {
     const lead = await prisma.lead.findUnique({
       where: { id: leadId },
       include: {
         pipelineStage: true,
+        assignedUser: {
+          include: {
+            roles: {
+              include: {
+                role: true
+              }
+            }
+          }
+        },
         tasks: {
           where: { status: 'OPEN' },
           orderBy: { dueAt: 'asc' }
         },
         communications: {
-          orderBy: { createdAt: 'desc' },
-          take: 1
+          where: {
+            OR: [
+              { direction: 'INBOUND' },
+              { type: 'NOTE' }
+            ]
+          },
+          orderBy: { occurredAt: 'desc' },
+          take: 10,
+          include: {
+            reads: userId ? {
+              where: { userId: userId }
+            } : false
+          }
         },
         deal: true
       }
@@ -154,93 +176,166 @@ export const pipelineService = {
     if (!lead) return { needsAttention: false };
 
     const now = new Date();
-    const hoursInCurrentStage = lead.stageEnteredAt ? 
-      (now.getTime() - lead.stageEnteredAt.getTime()) / (1000 * 60 * 60) : 0;
-    const hoursSinceLastUpdate = (now.getTime() - lead.updatedAt.getTime()) / (1000 * 60 * 60);
     const hoursSinceLastContact = lead.lastContactAt ? 
       (now.getTime() - lead.lastContactAt.getTime()) / (1000 * 60 * 60) : Infinity;
+    
+    // Check if lead is in 'New Leads' pipeline status
+    const isNewLeadStage = lead.pipelineStage?.name?.toLowerCase().includes('new lead');
+    
+    // Check if lead has upcoming (future) tasks - ALL tasks (for ADMIN/MANAGER team monitoring)
+    const upcomingTasks = lead.tasks.filter(task => new Date(task.dueAt) > now);
+    const hasUpcomingTask = upcomingTasks.length > 0;
+    
+    // Check if lead has past due tasks - ALL tasks (for ADMIN/MANAGER team monitoring)
+    const pastDueTasks = lead.tasks.filter(task => new Date(task.dueAt) < now);
+    const hasPastDueTask = pastDueTasks.length > 0;
+    
+    // Check user-specific tasks (for ACQ agent - only tasks assigned to login user)
+    const upcomingTasksForUser = lead.tasks.filter(task => 
+      new Date(task.dueAt) > now && task.assignedToId === userId
+    );
+    const hasUpcomingTaskForUser = upcomingTasksForUser.length > 0;
+    
+    const pastDueTasksForUser = lead.tasks.filter(task => 
+      new Date(task.dueAt) < now && task.assignedToId === userId
+    );
+    const hasPastDueTaskForUser = pastDueTasksForUser.length > 0;
+    
+    // Check if lead is actively in user's communication inbox (has unread communications)
+    const hasUnreadComms = userId ? lead.communications.some(comm => 
+      comm.reads && comm.reads.length === 0
+    ) : false;
+    
+    // Check if assigned user is an ACQ agent
+    const assignedUserRoles = lead.assignedUser?.roles?.map(ur => ur.role.name) || [];
+    const isAssignedToACQ = assignedUserRoles.includes('ACQ');
 
-    // Role-specific attention logic
-    if (userRoles.includes('ACQ')) {
-      // Acquisitions Agent logic
-      if (lead.leadType === 'SELLER') {
-        // New lead without contact
-        if (!lead.lastContactAt && hoursInCurrentStage > 2) {
-          return { needsAttention: true, reason: 'New lead - no contact made' };
+    // Collect reasons from ALL applicable roles - prevents duplicates
+    const allReasons: Array<{ priority: number; reason: string; role: string }> = [];
+
+    // ADMIN Role Logic
+    if (userRoles.includes('ADMIN')) {
+      // Priority 1 (LOWEST TIME): Task past due 48 hours
+      if (hasPastDueTask) {
+        const oldestPastDueTask = pastDueTasks[0];
+        const hoursPastDue = (now.getTime() - new Date(oldestPastDueTask.dueAt).getTime()) / (1000 * 60 * 60);
+        if (hoursPastDue >= 48) {
+          allReasons.push({ priority: 1, reason: `Task past due ${Math.floor(hoursPastDue)}h`, role: 'ADMIN' });
         }
-        
-        // Not updated in 48h without task
-        if (hoursSinceLastUpdate > 48 && lead.tasks.length === 0) {
-          return { needsAttention: true, reason: 'No update in 48h without active task' };
-        }
-        
-        // Past due tasks
-        const pastDueTasks = lead.tasks.filter(task => new Date(task.dueAt) < now);
-        if (pastDueTasks.length > 0) {
-          return { needsAttention: true, reason: `${pastDueTasks.length} past due task(s)` };
-        }
-        
-        // Unanswered communications (last comm was inbound and > 4h ago)
-        const lastComm = lead.communications[0];
-        if (lastComm && lastComm.direction === 'INBOUND' && 
-            (now.getTime() - lastComm.createdAt.getTime()) / (1000 * 60 * 60) > 4) {
-          return { needsAttention: true, reason: 'Unanswered inbound communication' };
-        }
+      }
+      
+      // Priority 7: No outreach in 72 hours without upcoming task
+      if (isAssignedToACQ && hoursSinceLastContact >= 72 && !hasUpcomingTask) {
+        allReasons.push({ priority: 7, reason: `No outreach in ${Math.floor(hoursSinceLastContact)}h without upcoming task`, role: 'ADMIN' });
+      }
+      
+      // Priority 10: Unread communications
+      if (hasUnreadComms) {
+        allReasons.push({ priority: 10, reason: 'Unread communications in inbox', role: 'ADMIN' });
       }
     }
 
-    if (userRoles.includes('DISP')) {
-      // Dispositions Agent logic
-      if (lead.leadType === 'BUYER' || lead.leadType === 'SELLER') {
-        // New deal assignment
-        if (lead.deal && !lead.deal.contractedAt && hoursInCurrentStage < 2) {
-          return { needsAttention: true, reason: 'New deal assigned' };
-        }
-        
-        // Due diligence deadline approaching
-        if (lead.deal?.contractedAt) {
-          const daysSinceContract = (now.getTime() - lead.deal.contractedAt.getTime()) / (1000 * 60 * 60 * 24);
-          if (daysSinceContract > 2 && !lead.deal.closedAt) { // Assuming 5-day due diligence period
-            return { needsAttention: true, reason: 'Due diligence period ending soon' };
+    // MANAGER (Acquisitions Manager) Role Logic
+    if (userRoles.includes('MANAGER')) {
+      // Skip own leads if user is also ACQ (to prevent duplicates)
+      const skipAsManager = userRoles.includes('ACQ') && lead.assignedUserId === userId;
+      
+      if (!skipAsManager && isAssignedToACQ) {
+        // Priority 2 (LOWEST TIME for MANAGER): Task past due 30+ minutes
+        if (hasPastDueTask) {
+          const oldestPastDueTask = pastDueTasks[0];
+          const minutesPastDue = (now.getTime() - new Date(oldestPastDueTask.dueAt).getTime()) / (1000 * 60);
+          if (minutesPastDue >= 30) {
+            allReasons.push({ priority: 2, reason: `Task past due ${Math.floor(minutesPastDue)}min (team)`, role: 'MANAGER' });
           }
         }
         
-        // Similar 48h and task logic as ACQ
-        if (hoursSinceLastUpdate > 48 && lead.tasks.length === 0) {
-          return { needsAttention: true, reason: 'No update in 48h without active task' };
+        // Priority 5: No outreach in 48 hours without upcoming task
+        if (hoursSinceLastContact >= 48 && !hasUpcomingTask) {
+          allReasons.push({ priority: 5, reason: `No outreach in ${Math.floor(hoursSinceLastContact)}h without upcoming task (team)`, role: 'MANAGER' });
+        }
+        
+        // Priority 8: New Leads status
+        if (isNewLeadStage) {
+          allReasons.push({ priority: 8, reason: 'New lead status (team)', role: 'MANAGER' });
+        }
+        
+        // Priority 10: Unread communications
+        if (hasUnreadComms) {
+          allReasons.push({ priority: 10, reason: 'Unread communications in inbox', role: 'MANAGER' });
         }
       }
     }
 
-    if (userRoles.includes('TC')) {
-      // Transaction Coordinator logic
-      if (!lead.lastContactAt && lead.pipelineStage?.name === 'New Lead') {
-        return { needsAttention: true, reason: 'Uncontacted new lead' };
+    // ACQ (Acquisitions Agent) Role Logic - Only own leads
+    if (userRoles.includes('ACQ') && lead.assignedUserId === userId) {
+      // Priority 3 (LOWEST TIME for ACQ): Any past due task assigned to user
+      if (hasPastDueTaskForUser) {
+        const oldestPastDueTask = pastDueTasksForUser[0];
+        const minutesPastDue = (now.getTime() - new Date(oldestPastDueTask.dueAt).getTime()) / (1000 * 60);
+        allReasons.push({ priority: 3, reason: `Task past due ${Math.floor(minutesPastDue)}min`, role: 'ACQ' });
       }
       
-      // Closing in 2 days
+      // Priority 4: No outreach in 36 hours without upcoming task assigned to user
+      if (hoursSinceLastContact >= 36 && !hasUpcomingTaskForUser) {
+        allReasons.push({ priority: 4, reason: `No outreach in ${Math.floor(hoursSinceLastContact)}h without upcoming task`, role: 'ACQ' });
+      }
+      
+      // Priority 8: New Leads status
+      if (isNewLeadStage) {
+        allReasons.push({ priority: 8, reason: 'New lead status', role: 'ACQ' });
+      }
+      
+      // Priority 10: Unread communications
+      if (hasUnreadComms) {
+        allReasons.push({ priority: 10, reason: 'Unread communications in inbox', role: 'ACQ' });
+      }
+    }
+
+    // DISP (Dispositions) Role Logic
+    if (userRoles.includes('DISP')) {
+      if (lead.leadType === 'BUYER' || lead.leadType === 'SELLER') {
+        // Priority 6: New deal assignment (< 2 hours)
+        if (lead.deal && !lead.deal.contractedAt) {
+          const hoursInCurrentStage = lead.stageEnteredAt ? 
+            (now.getTime() - lead.stageEnteredAt.getTime()) / (1000 * 60 * 60) : 0;
+          if (hoursInCurrentStage < 2) {
+            allReasons.push({ priority: 6, reason: 'New deal assigned', role: 'DISP' });
+          }
+        }
+        
+        // Priority 9: Due diligence deadline approaching (> 2 days since contract)
+        if (lead.deal?.contractedAt) {
+          const daysSinceContract = (now.getTime() - lead.deal.contractedAt.getTime()) / (1000 * 60 * 60 * 24);
+          if (daysSinceContract > 2 && !lead.deal.closedAt) {
+            allReasons.push({ priority: 9, reason: `Due diligence period ending soon (${Math.floor(daysSinceContract)} days)`, role: 'DISP' });
+          }
+        }
+      }
+    }
+
+    // TC (Transaction Coordinator) Role Logic
+    if (userRoles.includes('TC')) {
+      // Priority 6: Closing in 2 days or less
       if (lead.deal?.contractedAt) {
         const daysToClosing = lead.deal.closedAt ? 
           (lead.deal.closedAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24) : null;
         if (daysToClosing !== null && daysToClosing <= 2 && daysToClosing > 0) {
-          return { needsAttention: true, reason: 'Closing in 2 days' };
+          allReasons.push({ priority: 6, reason: `Closing in ${Math.floor(daysToClosing * 24)} hours`, role: 'TC' });
         }
+      }
+      
+      // Priority 9: Uncontacted new lead
+      if (!lead.lastContactAt && lead.pipelineStage?.name === 'New Lead') {
+        allReasons.push({ priority: 9, reason: 'Uncontacted new lead', role: 'TC' });
       }
     }
 
-    if (userRoles.includes('MANAGER')) {
-      // Manager logic - team leads needing attention
-      const teamThresholds = {
-        'ACQ': 54, // 54h for acquisitions
-        'DISP': 42, // 42h for dispositions
-        'TC': 42 // 42h for TC
-      };
-      
-      // Check if assigned user's role matches thresholds
-      // This would require additional user role lookup
-      if (hoursSinceLastUpdate > 48) {
-        return { needsAttention: true, reason: 'Team lead needs attention' };
-      }
+    // Return SINGLE highest priority (lowest number) reason across ALL roles
+    // This prevents duplicate leads when user has multiple roles
+    if (allReasons.length > 0) {
+      allReasons.sort((a, b) => a.priority - b.priority);
+      return { needsAttention: true, reason: allReasons[0].reason };
     }
 
     return { needsAttention: false };
@@ -266,7 +361,7 @@ export const pipelineService = {
 
       // Check each lead and update status
       for (const lead of leads) {
-        const { needsAttention, reason } = await this.checkNeedsAttention(lead.id, userRoles);
+        const { needsAttention, reason } = await this.checkNeedsAttention(lead.id, userRoles, userId);
         
         await prisma.lead.update({
           where: { id: lead.id },

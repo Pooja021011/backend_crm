@@ -28,16 +28,17 @@ export const reminderRepository = {
     const daysFromNow = (days: number) => new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
 
     try {
-      // ADMIN / EXECUTIVE - Generic reminders (TBD for now)
-      if (userRoles.includes('ADMIN') || userRoles.includes('EXECUTIVE')) {
-        // Placeholder for generic reminders
-        // Could add system-wide alerts, overdue reports, etc.
-      }
-
-      // MANAGER / ADMIN - Leads untouched 48h+, due diligence < 3 days, new contracts
+      // MANAGER / ADMIN - ACQ agents' leads with tasks overdue 1h+ OR untouched 48h+
+      // Priority: Task overdue (1h) checked first, then untouched (48h)
       if (userRoles.includes('MANAGER') || userRoles.includes('ADMIN')) {
-        // Leads untouched by ACQ agents for 48+ hours
-        const untouchedLeads = await prisma.lead.findMany({
+        // Collect lead IDs that will be shown in ACQ reminders (to avoid duplicates)
+        const acqLeadIds = new Set<string>();
+        
+        // First, collect all ACQ lead IDs from the ACQ block if user is also ACQ
+        // This will be populated after ACQ block runs, so we'll filter at the end
+        
+        // Get all ACQ agents' leads that match EITHER condition
+        const managerLeads = await prisma.lead.findMany({
           where: {
             assignedUser: {
               roles: {
@@ -48,9 +49,8 @@ export const reminderRepository = {
                 }
               }
             },
-            // Exclude own leads if user is also an ACQ agent (to prevent duplicates)
-            ...(userRoles.includes('ACQ') ? { NOT: { assignedUserId: userId } } : {}),
             OR: [
+              // Condition 1: Lead untouched 48h+
               {
                 lastContactAt: {
                   lte: hoursAgo(48)
@@ -61,183 +61,106 @@ export const reminderRepository = {
                 createdAt: {
                   lte: hoursAgo(48)
                 }
+              },
+              // Condition 2: Lead has task overdue 1h+
+              {
+                tasks: {
+                  some: {
+                    status: 'OPEN',
+                    dueAt: {
+                      lte: hoursAgo(1)
+                    },
+                    NOT: {
+                      OR: [
+                        { title: { startsWith: 'Review note on ' } },
+                        { title: { startsWith: 'Underwrite ' } },
+                        { title: { startsWith: 'Make Offer on ' } }
+                      ]
+                    }
+                  }
+                }
               }
             ]
           },
           include: {
             address: true,
             assignedUser: true,
-            pipelineStage: true
+            pipelineStage: true,
+            tasks: {
+              where: {
+                status: 'OPEN',
+                dueAt: {
+                  lte: hoursAgo(1)
+                },
+                NOT: {
+                  OR: [
+                    { title: { startsWith: 'Review note on ' } },
+                    { title: { startsWith: 'Underwrite ' } },
+                    { title: { startsWith: 'Make Offer on ' } }
+                  ]
+                }
+              },
+              orderBy: { dueAt: 'asc' },
+              include: {
+                assignedTo: true
+              }
+            }
           }
         });
 
-        untouchedLeads.forEach(lead => {
+        managerLeads.forEach(lead => {
+          // Skip if this is user's own lead and user is also ACQ (will be handled in ACQ block)
+          if (userRoles.includes('ACQ') && lead.assignedUserId === userId) {
+            return;
+          }
+
           const lastContact = lead.lastContactAt || lead.createdAt;
           const hoursUntouched = Math.floor((now.getTime() - new Date(lastContact).getTime()) / (1000 * 60 * 60));
-          reminders.push({
-            id: `untouched-${lead.id}`,
-            type: 'LEAD_UNTOUCHED',
-            priority: 'HIGH',
-            title: 'Lead Untouched 48h+',
-            description: `Lead at ${lead.address?.address1 || 'Unknown address'} hasn't been contacted by Acquisitions Agent in ${hoursUntouched} hours`,
-            leadId: lead.id,
-            createdAt: now,
-            lead: lead
-          });
-        });
+          const isUntouched = hoursUntouched >= 48;
+          const hasOverdueTask = lead.tasks && lead.tasks.length > 0;
 
-        // Due diligence < 3 days
-        const dueDiligenceLeads = await prisma.lead.findMany({
-          where: {
-            pipelineStage: {
-              name: { contains: 'Due Diligence', mode: 'insensitive' }
-            },
-            stageEnteredAt: {
-              lte: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000) // 3 days ago
-            }
-          },
-          include: {
-            address: true,
-            assignedUser: true,
-            pipelineStage: true
+          // Priority: Task overdue (lowest time: 1h) comes BEFORE untouched (48h)
+          if (hasOverdueTask) {
+            // Primary: Task overdue
+            const task = lead.tasks[0]; // Most overdue task
+            const hoursOverdue = Math.floor((now.getTime() - new Date(task.dueAt).getTime()) / (1000 * 60 * 60));
+            
+            reminders.push({
+              id: `manager-lead-${lead.id}`,
+              type: 'TASK_OVERDUE',
+              priority: hoursOverdue >= 24 ? 'URGENT' : 'HIGH',
+              title: 'Task Overdue',
+              description: `"${task.title}" for ${lead.address?.address1 || 'lead'} is ${hoursOverdue}h overdue (assigned to ${task.assignedTo?.firstName} ${task.assignedTo?.lastName})` +
+                           (isUntouched ? ` (lead also untouched ${hoursUntouched}h)` : ''),
+              leadId: lead.id,
+              createdAt: now,
+              lead: lead
+            });
+          } else if (isUntouched) {
+            // Only untouched (no overdue task)
+            reminders.push({
+              id: `manager-lead-${lead.id}`,
+              type: 'LEAD_UNTOUCHED',
+              priority: 'HIGH',
+              title: 'Lead Untouched 48h+',
+              description: `Lead at ${lead.address?.address1 || 'Unknown address'} hasn't been contacted by ${lead.assignedUser?.firstName} ${lead.assignedUser?.lastName} in ${hoursUntouched} hours`,
+              leadId: lead.id,
+              createdAt: now,
+              lead: lead
+            });
           }
-        });
-
-        dueDiligenceLeads.forEach(lead => {
-          reminders.push({
-            id: `due-diligence-${lead.id}`,
-            type: 'DUE_DILIGENCE',
-            priority: 'URGENT',
-            title: 'Due Diligence Overdue',
-            description: `Lead at ${lead.address?.address1 || 'Unknown address'} has been in due diligence for ${Math.floor((now.getTime() - new Date(lead.stageEnteredAt || lead.createdAt).getTime()) / (1000 * 60 * 60 * 24))} days`,
-            leadId: lead.id,
-            createdAt: now,
-            lead: lead
-          });
-        });
-
-        // New contracts (last 24h)
-        const newContracts = await prisma.lead.findMany({
-          where: {
-            pipelineStage: {
-              name: { contains: 'Contract', mode: 'insensitive' }
-            },
-            stageEnteredAt: {
-              gte: hoursAgo(24)
-            }
-          },
-          include: {
-            address: true,
-            assignedUser: true,
-            pipelineStage: true
-          }
-        });
-
-        newContracts.forEach(lead => {
-          reminders.push({
-            id: `new-contract-${lead.id}`,
-            type: 'NEW_CONTRACT',
-            priority: 'MEDIUM',
-            title: 'New Contract',
-            description: `New contract for ${lead.address?.address1 || 'Unknown address'} entered ${Math.floor((now.getTime() - new Date(lead.stageEnteredAt || lead.createdAt).getTime()) / (1000 * 60 * 60))} hours ago`,
-            leadId: lead.id,
-            createdAt: now,
-            lead: lead
-          });
-        });
-
-        // Tasks past due at least 1 hour (Manager sees ALL tasks, except own if also ACQ)
-        const pastDueTasks = await prisma.task.findMany({
-          where: {
-            status: 'OPEN',
-            dueAt: {
-              lte: hoursAgo(1)
-            },
-            // Exclude own tasks if user is also an ACQ agent (to prevent duplicates)
-            ...(userRoles.includes('ACQ') ? { NOT: { assignedToId: userId } } : {}),
-            NOT: {
-              OR: [
-                { title: { startsWith: 'Review note on ' } },
-                { title: { startsWith: 'Underwrite ' } },
-                { title: { startsWith: 'Make Offer on ' } }
-              ]
-            }
-          },
-          include: {
-            lead: {
-              include: {
-                address: true,
-                assignedUser: true
-              }
-            },
-            assignedTo: true
-          },
-          orderBy: { dueAt: 'asc' },
-          take: 50 // Limit to avoid overwhelming managers
-        });
-
-        pastDueTasks.forEach(task => {
-          const hoursOverdue = Math.floor((now.getTime() - new Date(task.dueAt).getTime()) / (1000 * 60 * 60));
-          reminders.push({
-            id: `task-overdue-${task.id}`,
-            type: 'TASK_OVERDUE',
-            priority: hoursOverdue >= 24 ? 'URGENT' : 'HIGH',
-            title: 'Task Overdue',
-            description: `"${task.title}" for ${task.lead?.address?.address1 || 'lead'} is ${hoursOverdue}h overdue (assigned to ${task.assignedTo?.firstName} ${task.assignedTo?.lastName})`,
-            leadId: task.leadId,
-            createdAt: now,
-            lead: task.lead
-          });
-        });
-
-        // New leads for Acquisitions Agents not reached out to in 15 minutes
-        const newLeadsNoContact = await prisma.lead.findMany({
-          where: {
-            assignedUser: {
-              roles: {
-                some: {
-                  role: { name: 'ACQ' }
-                }
-              }
-            },
-            // Exclude own leads if user is also an ACQ agent (to prevent duplicates)
-            ...(userRoles.includes('ACQ') ? { NOT: { assignedUserId: userId } } : {}),
-            createdAt: {
-              lte: new Date(now.getTime() - 15 * 60 * 1000) // 15 minutes ago
-            },
-            communications: {
-              none: {} // No communications at all
-            }
-          },
-          include: {
-            address: true,
-            assignedUser: true,
-            pipelineStage: true
-          },
-          take: 50
-        });
-
-        newLeadsNoContact.forEach(lead => {
-          const minutesSinceCreation = Math.floor((now.getTime() - new Date(lead.createdAt).getTime()) / (1000 * 60));
-          reminders.push({
-            id: `new-no-contact-${lead.id}`,
-            type: 'LEAD_UNTOUCHED',
-            priority: minutesSinceCreation >= 30 ? 'URGENT' : 'HIGH',
-            title: 'New Lead - No Contact',
-            description: `New lead at ${lead.address?.address1 || 'Unknown address'} created ${minutesSinceCreation} minutes ago with no outreach by ${lead.assignedUser?.firstName} ${lead.assignedUser?.lastName}`,
-            leadId: lead.id,
-            createdAt: now,
-            lead: lead
-          });
         });
       }
 
-      // ACQUISITIONS AGENT - Leads not touched in 36h
+      // ACQUISITIONS AGENT - Own leads with tasks overdue 30min+ OR untouched 36h+
+      // Priority: Task overdue (30min) checked first, then untouched (36h)
       if (userRoles.includes('ACQ')) {
-        const untouchedLeads = await prisma.lead.findMany({
+        // Get own leads that match EITHER condition
+        const acqLeads = await prisma.lead.findMany({
           where: {
             assignedUserId: userId,
             OR: [
+              // Condition 1: Lead untouched 36h+
               {
                 lastContactAt: {
                   lte: hoursAgo(36)
@@ -248,97 +171,87 @@ export const reminderRepository = {
                 createdAt: {
                   lte: hoursAgo(36)
                 }
+              },
+              // Condition 2: Lead has task overdue 30min+
+              {
+                tasks: {
+                  some: {
+                    assignedToId: userId,
+                    status: 'OPEN',
+                    dueAt: {
+                      lte: new Date(now.getTime() - 30 * 60 * 1000)
+                    },
+                    NOT: {
+                      OR: [
+                        { title: { startsWith: 'Review note on ' } },
+                        { title: { startsWith: 'Underwrite ' } },
+                        { title: { startsWith: 'Make Offer on ' } }
+                      ]
+                    }
+                  }
+                }
               }
             ]
           },
           include: {
             address: true,
-            pipelineStage: true
+            pipelineStage: true,
+            tasks: {
+              where: {
+                assignedToId: userId,
+                status: 'OPEN',
+                dueAt: {
+                  lte: new Date(now.getTime() - 30 * 60 * 1000)
+                },
+                NOT: {
+                  OR: [
+                    { title: { startsWith: 'Review note on ' } },
+                    { title: { startsWith: 'Underwrite ' } },
+                    { title: { startsWith: 'Make Offer on ' } }
+                  ]
+                }
+              },
+              orderBy: { dueAt: 'asc' }
+            }
           }
         });
 
-        untouchedLeads.forEach(lead => {
+        acqLeads.forEach(lead => {
           const lastContact = lead.lastContactAt || lead.createdAt;
           const hoursUntouched = Math.floor((now.getTime() - new Date(lastContact).getTime()) / (1000 * 60 * 60));
-          reminders.push({
-            id: `acq-untouched-${lead.id}`,
-            type: 'LEAD_UNTOUCHED',
-            priority: 'HIGH',
-            title: 'Lead Untouched 36h+',
-            description: `Your lead at ${lead.address?.address1 || 'Unknown address'} needs follow-up (last contact ${hoursUntouched}h ago)`,
-            leadId: lead.id,
-            createdAt: now,
-            lead: lead
-          });
-        });
+          const isUntouched = hoursUntouched >= 36;
+          const hasOverdueTask = lead.tasks && lead.tasks.length > 0;
 
-        // Tasks past due at least 30 minutes (only assigned to this user)
-        const pastDueTasks = await prisma.task.findMany({
-          where: {
-            assignedToId: userId,
-            status: 'OPEN',
-            dueAt: {
-              lte: new Date(now.getTime() - 30 * 60 * 1000) // 30 minutes ago
-            },
-            NOT: {
-              OR: [
-                { title: { startsWith: 'Review note on ' } },
-                { title: { startsWith: 'Underwrite ' } },
-                { title: { startsWith: 'Make Offer on ' } }
-              ]
-            }
-          },
-          include: {
-            lead: {
-              include: { address: true }
-            }
-          },
-          orderBy: { dueAt: 'asc' }
-        });
-
-        pastDueTasks.forEach(task => {
-          const minutesOverdue = Math.floor((now.getTime() - new Date(task.dueAt).getTime()) / (1000 * 60));
-          reminders.push({
-            id: `acq-task-overdue-${task.id}`,
-            type: 'TASK_OVERDUE',
-            priority: minutesOverdue >= 120 ? 'URGENT' : 'HIGH',
-            title: 'Task Past Due',
-            description: `"${task.title}" for ${task.lead?.address?.address1 || 'lead'} is ${minutesOverdue} minutes overdue`,
-            leadId: task.leadId,
-            createdAt: now,
-            lead: task.lead
-          });
-        });
-
-        // New leads assigned to this user not reached out to in 10 minutes
-        const newLeadsNoContact = await prisma.lead.findMany({
-          where: {
-            assignedUserId: userId,
-            createdAt: {
-              lte: new Date(now.getTime() - 10 * 60 * 1000) // 10 minutes ago
-            },
-            communications: {
-              none: {} // No communications at all
-            }
-          },
-          include: {
-            address: true,
-            pipelineStage: true
+          // Priority: Task overdue (lowest time: 30min) comes BEFORE untouched (36h)
+          if (hasOverdueTask) {
+            // Primary: Task overdue
+            const task = lead.tasks[0]; // Most overdue task
+            const minutesOverdue = Math.floor((now.getTime() - new Date(task.dueAt).getTime()) / (1000 * 60));
+            
+            reminders.push({
+              id: `acq-lead-${lead.id}`,
+              type: 'TASK_OVERDUE',
+              priority: minutesOverdue >= 120 ? 'URGENT' : 'HIGH',
+              title: 'Task Past Due',
+              description: `"${task.title}" for ${lead.address?.address1 || 'lead'} is ${minutesOverdue} minutes overdue` +
+                           (isUntouched ? ` (lead also untouched ${hoursUntouched}h)` : ''),
+              leadId: lead.id,
+              createdAt: now,
+              lead: lead
+            });
+          } else if (isUntouched) {
+            // Only untouched (no overdue task)
+            reminders.push({
+              id: `acq-lead-${lead.id}`,
+              type: 'LEAD_UNTOUCHED',
+              priority: 'HIGH',
+              title: 'Lead Untouched 36h+',
+              description: `Your lead at ${lead.address?.address1 || 'Unknown address'} needs follow-up (last contact ${hoursUntouched}h ago)`,
+              leadId: lead.id,
+              createdAt: now,
+              lead: lead
+            });
           }
-        });
-
-        newLeadsNoContact.forEach(lead => {
-          const minutesSinceCreation = Math.floor((now.getTime() - new Date(lead.createdAt).getTime()) / (1000 * 60));
-          reminders.push({
-            id: `acq-new-no-contact-${lead.id}`,
-            type: 'LEAD_UNTOUCHED',
-            priority: minutesSinceCreation >= 20 ? 'URGENT' : 'HIGH',
-            title: 'New Lead - No Outreach',
-            description: `Your new lead at ${lead.address?.address1 || 'Unknown address'} created ${minutesSinceCreation} minutes ago needs immediate contact`,
-            leadId: lead.id,
-            createdAt: now,
-            lead: lead
-          });
         });
       }
 
