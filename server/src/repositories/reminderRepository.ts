@@ -55,6 +55,15 @@ export const reminderRepository = {
                 }
               }
             },
+            // Exclude leads with "dead" status (ONLY for reminders tab)
+            leadStatus: {
+              NOT: {
+                name: {
+                  equals: 'dead',
+                  mode: 'insensitive'
+                }
+              }
+            },
             OR: [
               // Condition 1: Lead untouched 48h+ (use updatedAt - any update resets the timer)
               {
@@ -79,6 +88,7 @@ export const reminderRepository = {
             address: true,
             assignedUser: true,
             pipelineStage: true,
+            leadStatus: true,
             tasks: {
               where: {
                 status: TaskStatus.OPEN,
@@ -163,13 +173,25 @@ export const reminderRepository = {
             status: TaskStatus.OPEN,
             dueAt: {
               lte: hoursAgo(4)
+            },
+            // Exclude tasks for leads with "dead" status (ONLY for reminders tab)
+            lead: {
+              leadStatus: {
+                NOT: {
+                  name: {
+                    equals: 'dead',
+                    mode: 'insensitive'
+                  }
+                }
+              }
             }
           },
           include: {
             lead: {
               include: {
                 address: true,
-                pipelineStage: true
+                pipelineStage: true,
+                leadStatus: true
               }
             }
           },
@@ -219,12 +241,24 @@ export const reminderRepository = {
                 updatedAt: {
                   lte: hoursAgo(36)
                 }
+              },
+              // Exclude leads with "dead" status (ONLY for reminders tab)
+              {
+                leadStatus: {
+                  NOT: {
+                    name: {
+                      equals: 'dead',
+                      mode: 'insensitive'
+                    }
+                  }
+                }
               }
             ]
           },
           include: {
             address: true,
-            pipelineStage: true
+            pipelineStage: true,
+            leadStatus: true
           }
         });
         
@@ -261,11 +295,21 @@ export const reminderRepository = {
             assignedUserId: userId,
             lastContactAt: {
               lte: hoursAgo(36)
+            },
+            // Exclude leads with "dead" status (ONLY for reminders tab)
+            leadStatus: {
+              NOT: {
+                name: {
+                  equals: 'dead',
+                  mode: 'insensitive'
+                }
+              }
             }
           },
           include: {
             address: true,
-            pipelineStage: true
+            pipelineStage: true,
+            leadStatus: true
           }
         });
 
@@ -293,11 +337,21 @@ export const reminderRepository = {
             stageEnteredAt: {
               gte: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
               lte: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)  // 3 days ago
+            },
+            // Exclude leads with "dead" status (ONLY for reminders tab)
+            leadStatus: {
+              NOT: {
+                name: {
+                  equals: 'dead',
+                  mode: 'insensitive'
+                }
+              }
             }
           },
           include: {
             address: true,
-            pipelineStage: true
+            pipelineStage: true,
+            leadStatus: true
           }
         });
 
@@ -326,12 +380,22 @@ export const reminderRepository = {
                 gte: now,
                 lte: daysFromNow(2)
               }
+            },
+            // Exclude leads with "dead" status (ONLY for reminders tab)
+            leadStatus: {
+              NOT: {
+                name: {
+                  equals: 'dead',
+                  mode: 'insensitive'
+                }
+              }
             }
           },
           include: {
             address: true,
             deal: true,
-            pipelineStage: true
+            pipelineStage: true,
+            leadStatus: true
           }
         });
 
@@ -360,6 +424,15 @@ export const reminderRepository = {
             },
             // Assuming we have a responded field or can check for outbound response
             lead: {
+              // Exclude communications for leads with "dead" status (ONLY for reminders tab)
+              leadStatus: {
+                NOT: {
+                  name: {
+                    equals: 'dead',
+                    mode: 'insensitive'
+                  }
+                }
+              },
               communications: {
                 none: {
                   direction: 'OUTBOUND',
@@ -373,7 +446,8 @@ export const reminderRepository = {
           include: {
             lead: {
               include: {
-                address: true
+                address: true,
+                leadStatus: true
               }
             }
           },

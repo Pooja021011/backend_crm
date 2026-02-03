@@ -1439,23 +1439,31 @@ const Inbox = () => {
       console.log('Reminders response:', json);
       
       if (json.success) {
-        const items = (json?.data || []).map((r: any) => ({
-          id: r.id,
-          from: r.lead ? createLeadTitle(r.lead) : r.title,
-          subject: r.title,
-          preview: r.message || r.description || '',
-          time: new Date(r.scheduledFor || r.createdAt).toLocaleString(),
-          type: 'reminder',
-          source: 'reminders',
-          unread: r.status === 'PENDING',
-          starred: false,
-          priority: (r.priority || 'medium').toLowerCase(),
-          reminderType: r.type,
-          leadId: r.leadId,
-          leadAddress: r.lead?.address ? `${r.lead.address.address1}, ${r.lead.address.city}, ${r.lead.address.state}` : '',
-          dueDate: r.scheduledFor || r.dueDate,
-          status: r.status
-        }));
+        const items = (json?.data || [])
+          .filter((r: any) => {
+            // Skip reminders for leads with "dead" status (ONLY for reminders tab)
+            if (r.lead?.leadStatus?.name?.toLowerCase() === 'dead') {
+              return false;
+            }
+            return true;
+          })
+          .map((r: any) => ({
+            id: r.id,
+            from: r.lead ? createLeadTitle(r.lead) : r.title,
+            subject: r.title,
+            preview: r.message || r.description || '',
+            time: new Date(r.scheduledFor || r.createdAt).toLocaleString(),
+            type: 'reminder',
+            source: 'reminders',
+            unread: r.status === 'PENDING',
+            starred: false,
+            priority: (r.priority || 'medium').toLowerCase(),
+            reminderType: r.type,
+            leadId: r.leadId,
+            leadAddress: r.lead?.address ? `${r.lead.address.address1}, ${r.lead.address.city}, ${r.lead.address.state}` : '',
+            dueDate: r.scheduledFor || r.dueDate,
+            status: r.status
+          }));
         setReminders(items);
         console.log('Processed reminders:', items.length);
         console.log('Unread reminders count:', items.filter(r => r.unread).length);
