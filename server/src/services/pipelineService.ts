@@ -658,7 +658,7 @@ export const pipelineService = {
             }
           });
           
-          // 3. Past due task for at least 30 minutes (all ACQ agents, excluding own if also ACQ)
+          // 3. Past due task for at least 6 hours (all ACQ agents, excluding own if also ACQ)
           needsAttentionConditions.push({
             assignedUser: {
               roles: { some: { role: { name: 'ACQ' } } }
@@ -667,7 +667,7 @@ export const pipelineService = {
             tasks: {
               some: {
                 status: 'OPEN',
-                dueAt: { lte: minutesAgo(30) }
+                dueAt: { lte: hoursAgo(6) }  // Changed from 30 minutes to 6 hours
               }
             }
           });
@@ -712,13 +712,14 @@ export const pipelineService = {
             }
           });
           
-          // 3. Own leads with any past due task
+          // 3. Own leads with any past due task assigned to the user
           needsAttentionConditions.push({
             assignedUserId: filters.userId,
             tasks: {
               some: {
                 status: 'OPEN',
-                dueAt: { lt: now }
+                dueAt: { lt: now },
+                assignedToId: filters.userId  // Task must be assigned to the user
               }
             }
           });
@@ -766,7 +767,16 @@ export const pipelineService = {
             select: {
               id: true,
               firstName: true,
-              lastName: true
+              lastName: true,
+              roles: {
+                include: {
+                  role: {
+                    select: {
+                      name: true
+                    }
+                  }
+                }
+              }
             }
           },
           dispAgent: {
@@ -859,7 +869,7 @@ export const pipelineService = {
           return true;
         });
         const lastTouchedCommAt = contactComms[0]?.occurredAt || contactComms[0]?.createdAt;
-        const lastTouchedAt = lead.lastContactAt || lastTouchedCommAt || lead.createdAt;
+        const lastTouchedAt = lead.lastContactAt || lastTouchedCommAt || null;
 
         const lastContact = lastTouchedAt;
         const now = new Date();
@@ -922,6 +932,7 @@ export const pipelineService = {
           // Assignment
           assignedAgent: lead.assignedUser ? `${lead.assignedUser.firstName} ${lead.assignedUser.lastName}` : 'Unassigned',
           assignedUserId: lead.assignedUserId,
+          assignedUserRoles: lead.assignedUser?.roles?.map((ur: any) => ur.role.name) || [],
           
           // Basic info
           leadType: lead.leadType,
@@ -982,14 +993,18 @@ export const pipelineService = {
           
           // ADMIN CRITERIA
           if (isAdmin) {
-            // Criterion 1: No outreach in 72h + no open tasks (for ACQ-assigned leads)
-            const hasAcqAgent = !!lead.assignedUserId;
+            // Criterion 1: No outreach in 72h + no upcoming tasks (for ACQ-assigned leads)
+            const assignedUserRoles = lead.assignedUserRoles || [];
+            const isAssignedToACQ = assignedUserRoles.includes('ACQ');
             const lastContactDate = lead.lastContactDate ? new Date(lead.lastContactDate) : null;
             const hoursSinceLastContact = lastContactDate 
               ? (now.getTime() - lastContactDate.getTime()) / (1000 * 60 * 60)
               : Infinity;
-            const hasNoOpenTasks = !lead.tasks || lead.tasks.filter((t: any) => t.status === 'OPEN').length === 0;
-            const noOutreachNoTasks = hasAcqAgent && hoursSinceLastContact >= 72 && hasNoOpenTasks;
+            // Check for no upcoming tasks (past due tasks are allowed)
+            const hasNoUpcomingTasks = !lead.tasks || !lead.tasks.some((t: any) => 
+              t.status === 'OPEN' && new Date(t.dueAt) > now
+            );
+            const noOutreachNoTasks = isAssignedToACQ && hoursSinceLastContact >= 72 && hasNoUpcomingTasks;
             
             // Criterion 2: Task past due for 48+ hours
             const tasksPastDue48h = lead.tasks?.some((t: any) => {
@@ -1016,31 +1031,30 @@ export const pipelineService = {
               const stageName = (lead.stageName || '').toLowerCase();
               const isNewLeadStage = stageName === 'new lead' || stageName === 'new leads';
               
-              // Criterion 2: No communications in 48h + no open tasks
-              const hasCommunications = lead.communications && lead.communications.length > 0;
-              let hoursSinceLastComm = Infinity;
-              if (hasCommunications) {
-                const lastCommDate = lead.communications[0]?.occurredAt || lead.communications[0]?.createdAt;
-                if (lastCommDate) {
-                  hoursSinceLastComm = (now.getTime() - new Date(lastCommDate).getTime()) / (1000 * 60 * 60);
-                }
-              }
-              const hasNoOpenTasks = !lead.tasks || lead.tasks.filter((t: any) => t.status === 'OPEN').length === 0;
-              const noCommNoTasks = hoursSinceLastComm >= 48 && hasNoOpenTasks;
+              // Criterion 2: No outreach in 48h + no upcoming tasks (past due tasks are allowed)
+              const lastContactDate = lead.lastContactDate ? new Date(lead.lastContactDate) : null;
+              const hoursSinceLastContact = lastContactDate 
+                ? (now.getTime() - lastContactDate.getTime()) / (1000 * 60 * 60)
+                : Infinity;
+              // Check for no upcoming tasks (past due tasks are allowed)
+              const hasNoUpcomingTasks = !lead.tasks || !lead.tasks.some((t: any) => 
+                t.status === 'OPEN' && new Date(t.dueAt) > now
+              );
+              const noCommNoTasks = hoursSinceLastContact >= 48 && hasNoUpcomingTasks;
               
-              // Criterion 3: Task past due for 30+ minutes
-              const tasksPastDue30min = lead.tasks?.some((t: any) => {
+              // Criterion 3: Task past due for at least 6 hours (assigned to ACQ agent)
+              const tasksPastDue6h = lead.tasks?.some((t: any) => {
                 if (t.status !== 'OPEN') return false;
                 const dueDate = new Date(t.dueAt);
                 if (dueDate >= now) return false;
-                const minutesPastDue = (now.getTime() - dueDate.getTime()) / (1000 * 60);
-                return minutesPastDue >= 30;
+                const hoursPastDue = (now.getTime() - dueDate.getTime()) / (1000 * 60 * 60);
+                return hoursPastDue >= 6;  // Changed from 30 minutes to 6 hours
               }) || false;
               
               // Criterion 4: Unread communications
               const hasUnreadComms = lead.unreadCount > 0;
               
-              meetsManagerCriteria = isNewLeadStage || noCommNoTasks || tasksPastDue30min || hasUnreadComms;
+              meetsManagerCriteria = isNewLeadStage || noCommNoTasks || tasksPastDue6h || hasUnreadComms;
             }
           }
           
@@ -1054,17 +1068,16 @@ export const pipelineService = {
               const stageName = (lead.stageName || '').toLowerCase();
               const isNewLeadStage = stageName === 'new lead' || stageName === 'new leads';
               
-              // Criterion 2: No communications in 36h + no open tasks
-              const hasCommunications = lead.communications && lead.communications.length > 0;
-              let hoursSinceLastComm = Infinity;
-              if (hasCommunications) {
-                const lastCommDate = lead.communications[0]?.occurredAt || lead.communications[0]?.createdAt;
-                if (lastCommDate) {
-                  hoursSinceLastComm = (now.getTime() - new Date(lastCommDate).getTime()) / (1000 * 60 * 60);
-                }
-              }
-              const hasNoOpenTasks = !lead.tasks || lead.tasks.filter((t: any) => t.status === 'OPEN').length === 0;
-              const noCommNoTasks = hoursSinceLastComm >= 36 && hasNoOpenTasks;
+              // Criterion 2: No outreach in 36h + no upcoming tasks (past due tasks are allowed)
+              const lastContactDate = lead.lastContactDate ? new Date(lead.lastContactDate) : null;
+              const hoursSinceLastContact = lastContactDate 
+                ? (now.getTime() - lastContactDate.getTime()) / (1000 * 60 * 60)
+                : Infinity;
+              // Check for no upcoming tasks (past due tasks are allowed)
+              const hasNoUpcomingTasks = !lead.tasks || !lead.tasks.some((t: any) => 
+                t.status === 'OPEN' && new Date(t.dueAt) > now
+              );
+              const noCommNoTasks = hoursSinceLastContact >= 36 && hasNoUpcomingTasks;
               
               // Criterion 3: Any past due task for this user
               const hasPastDueTask = lead.tasks?.some((t: any) => {
@@ -1312,7 +1325,10 @@ export const pipelineService = {
     const now = new Date();
     
     return leads.filter(lead => {
-      const hoursSinceLastContact = Math.floor((now.getTime() - new Date(lead.lastContactDate).getTime()) / (1000 * 60 * 60));
+      const lastContactDate = lead.lastContactDate ? new Date(lead.lastContactDate) : null;
+      const hoursSinceLastContact = lastContactDate 
+        ? Math.floor((now.getTime() - lastContactDate.getTime()) / (1000 * 60 * 60))
+        : Infinity;
       
       return (
         hoursSinceLastContact >= 72 ||
