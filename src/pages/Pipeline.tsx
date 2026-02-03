@@ -420,6 +420,111 @@ const Pipeline = () => {
     }
   };
 
+  // Helper function to format a single lead (same logic as in loadPipelineData)
+  const formatLeadForDisplay = (lead: any, stageId?: string, stagePipelineKey?: string) => {
+    // Handle address - backend returns string, but we need to handle both formats
+    // Use same simple logic as initial loadPipelineData - use whatever API returns
+    let addressDisplay = 'No address';
+    console.log('📍 Formatting address for lead:', lead.id, 'address type:', typeof lead.address, 'address value:', lead.address);
+    
+    if (typeof lead.address === 'string') {
+      // Backend returns concatenated string
+      addressDisplay = lead.address;
+    } else if (lead.address?.address1) {
+      // Handle object format - use address1 like initial load does
+      addressDisplay = lead.address.address1;
+    }
+    
+    console.log('📍 Final addressDisplay:', addressDisplay);
+    
+    // Handle seller/buyer/vendor name - same logic as Leads page
+    let ownerName = 'Unknown Caller';
+    
+    // Priority 1: Check lead owners first (primary source of truth)
+    if (lead.owners && lead.owners.length > 0) {
+      const primaryOwner = lead.owners.find((o: any) => o.isPrimary);
+      const primaryFn = (primaryOwner?.firstName || '').trim();
+      const primaryLn = (primaryOwner?.lastName || '').trim();
+      
+      if (primaryFn || primaryLn) {
+        ownerName = `${primaryFn} ${primaryLn}`.trim();
+      } else {
+        const ownerWithName = lead.owners.find((o: any) => 
+          (o.firstName && String(o.firstName).trim()) || 
+          (o.lastName && String(o.lastName).trim())
+        );
+        if (ownerWithName) {
+          const fn = (ownerWithName.firstName || '').trim();
+          const ln = (ownerWithName.lastName || '').trim();
+          ownerName = `${fn} ${ln}`.trim();
+        }
+      }
+    }
+    
+    // Priority 2: Fallback to existing seller/buyer/vendor logic
+    if (ownerName === 'Unknown Caller') {
+      if (lead.sellerName && lead.sellerName.trim()) {
+        ownerName = lead.sellerName.trim();
+      } else if (lead.seller) {
+        const sellerFn = (lead.seller.firstName || '').trim();
+        const sellerLn = (lead.seller.lastName || '').trim();
+        if (sellerFn || sellerLn) {
+          ownerName = `${sellerFn} ${sellerLn}`.trim();
+        }
+      } else if (lead.buyerName && lead.buyerName.trim()) {
+        ownerName = lead.buyerName.trim();
+      } else if (lead.buyer) {
+        const buyerFn = (lead.buyer.firstName || '').trim();
+        const buyerLn = (lead.buyer.lastName || '').trim();
+        if (buyerFn || buyerLn) {
+          ownerName = `${buyerFn} ${buyerLn}`.trim();
+        }
+      } else if (lead.vendor) {
+        const vendorFn = (lead.vendor.firstName || '').trim();
+        const vendorLn = (lead.vendor.lastName || '').trim();
+        if (vendorFn || vendorLn) {
+          ownerName = `${vendorFn} ${vendorLn}`.trim();
+        }
+      }
+    }
+    
+    if (!ownerName || ownerName.trim() === '') {
+      ownerName = 'Unknown Caller';
+    }
+    
+    const finalStageId = stageId || lead.pipelineStageId || lead.stage || 'unknown-stage';
+    const finalStagePipelineKey = stagePipelineKey || getStagePipelineKey(finalStageId);
+    
+    return {
+      id: lead.id,
+      address: addressDisplay,
+      sellerName: ownerName,
+      buyerName: lead.buyer ? `${lead.buyer.firstName} ${lead.buyer.lastName}` : undefined,
+      dateCreated: lead.createdAt,
+      statusChangedDate: lead.stageEnteredAt || lead.updatedAt,
+      lastContactDate: lead.lastContactAt || lead.updatedAt,
+      lastAttemptedContactAt: lead.lastAttemptedContactAt ?? lead.lastContactAt ?? null,
+      lastTouchedAt: lead.lastTouchedAt || lead.lastContactAt || lead.updatedAt,
+      lastActivityAt: lead.lastActivityAt || lead.updatedAt,
+      priceReduction: lead.priceReduction || false,
+      clearToClose: lead.clearToClose || false,
+      openTasks: lead.openTasks ?? 0,
+      openTasksMine: lead.openTasksMine ?? 0,
+      originalPrice: lead.deal?.contractPrice || 0,
+      currentPrice: lead.deal?.soldPrice || 0,
+      stage: finalStageId,
+      stageName: lead.pipelineStage?.name || lead.stageName || 'Unknown Stage',
+      stagePipelineKey: finalStagePipelineKey,
+      assignedAgent: lead.assignedUser ? `${lead.assignedUser.firstName} ${lead.assignedUser.lastName}` : undefined,
+      leadType: lead.leadType,
+      status: lead.needsAttention ? 'urgent' : 'active',
+      customFields: lead.customFields,
+      owners: lead.owners,
+      seller: lead.seller,
+      buyer: lead.buyer
+    };
+  };
+
   const loadPipelineData = async (overridePipeline?: string) => {
     try {
       setLoading(true);
@@ -857,35 +962,51 @@ const Pipeline = () => {
 
           // Show the FIRST required popup
           // NEW Priority order: appointmentDate → propertyInfo → photos → ARV+comps → rehab → timeline+taxes → offer
-          const propertyInfoFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
-          const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingTaxes','underwritingTimeline'];
-          
+          // Priority order: appointmentDate → propertyInfo → photos → ARV+comps → rehab → timeline+taxes → followUpTask → offerMade
           // STEP 0: Check for appointmentDate FIRST (before all other popups)
           if (requiredFields.includes('appointmentDate')) {
             console.log('📅 Opening Appointment Set popup');
             setShowAppointmentSetPopup(true);
-          } else if (requiredFields.some((f) => propertyInfoFields.includes(f))) {
-            // STEP 1: Property Info (for Appointment Complete)
-            setMissingDdFields(requiredFields.filter((f) => propertyInfoFields.includes(f)));
-            setShowDueDiligencePopup(true);
-          } else if (requiredFields.includes('photos')) {
-            // STEP 2: Photos (for Appointment Complete)
-            setShowAppointmentPopup(true);
-          } else if (requiredFields.includes('arv') || requiredFields.includes('comparables')) {
-            // STEP 3: ARV + Comparables (for DD Complete)
-            setShowArvComparablesPopup(true);
-          } else if (requiredFields.includes('rehabBudget')) {
-            // STEP 4: Rehab Budget (for DD Complete)
-            setShowRehabBudgetPopup(true);
-          } else if (requiredFields.includes('underwritingTaxes') || requiredFields.includes('underwritingTimeline')) {
-            // STEP 5: Timeline + Taxes (for DD Complete)
-            setShowTimelineTaxesPopup(true);
-          } else if (requiredFields.includes('followUpTask')) {
-            // Follow-up task requirement
-            setShowFollowUpTaskPopup(true);
-          } else if (stageNameLower.includes('offer') && stageNameLower.includes('made')) {
-            // STEP 6: Offer Made
-            setShowOfferMadePopup(true);
+          } else {
+            const propertyInfoFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
+            
+            // STEP 1: Property Info (hvacType, hvacAge, waterHeaterAge, roofAge, waterType, sewerType)
+            if (requiredFields.some((f) => propertyInfoFields.includes(f))) {
+              console.log('🏠 Opening property info popup');
+              setMissingDdFields(requiredFields.filter((f) => propertyInfoFields.includes(f)));
+              setShowDueDiligencePopup(true);
+            } 
+            // STEP 2: Photos
+            else if (requiredFields.includes('photos')) {
+              console.log('📸 Opening photo upload popup');
+              setShowAppointmentPopup(true);
+            } 
+            // STEP 3: ARV + Comparables
+            else if (requiredFields.includes('arv') || requiredFields.includes('comparables')) {
+              console.log('💰 Opening ARV+Comparables popup');
+              setShowArvComparablesPopup(true);
+            } 
+            // STEP 4: Rehab Budget
+            else if (requiredFields.includes('rehabBudget')) {
+              console.log('🔨 Opening Rehab Budget popup');
+              setShowRehabBudgetPopup(true);
+            } 
+            // STEP 5: Timeline + Taxes
+            else if (requiredFields.includes('underwritingTaxes') || requiredFields.includes('underwritingTimeline')) {
+              console.log('📊 Opening Timeline+Taxes popup');
+              setShowTimelineTaxesPopup(true);
+            } 
+            // STEP 6: Follow-up Task
+            else if (requiredFields.includes('followUpTask')) {
+              console.log('📋 Opening follow-up task popup');
+              setShowFollowUpTaskPopup(true);
+            } 
+            // STEP 7: Offer Made
+            else if (requiredFields.includes('offerMadePrice') || requiredFields.includes('offerMadeResponse') || 
+                     (stageNameLower.includes('offer') && stageNameLower.includes('made'))) {
+              console.log('💼 Opening Offer Made popup');
+              setShowOfferMadePopup(true);
+            }
           }
           return;
         }
@@ -941,54 +1062,93 @@ const Pipeline = () => {
   };
 
   const handleValidationRequired = (requiredFields: string[], stageNameLower: string) => {
+    // Set flag when transitioning to next popup
+    isTransitioningPopupsRef.current = true;
+    console.log('🔄 handleValidationRequired called with fields:', requiredFields);
+    
+    // Priority order: appointmentDate → propertyInfo → photos → ARV+comps → rehab → timeline+taxes → followUpTask → offerMade
     // STEP 0: Check for appointmentDate FIRST (before all other popups)
     if (requiredFields.includes('appointmentDate')) {
       console.log('📅 Opening Appointment Set popup');
       setShowAppointmentSetPopup(true);
+      setTimeout(() => { isTransitioningPopupsRef.current = false; }, 300);
       return;
     }
-    if (requiredFields.includes('photos')) {
-      setShowAppointmentPopup(true);
-      return;
-    }
-    if (requiredFields.includes('followUpTask')) {
-      setShowFollowUpTaskPopup(true);
-      return;
-    }
-    const ddFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
-    if (requiredFields.some((f) => ddFields.includes(f))) {
-      setMissingDdFields(requiredFields.filter((f) => ddFields.includes(f)));
+    
+    // STEP 1: Property Info (hvacType, hvacAge, waterHeaterAge, roofAge, waterType, sewerType)
+    const propertyInfoFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
+    const hasPropertyInfo = requiredFields.some((f) => propertyInfoFields.includes(f));
+    console.log('🔍 Checking property info fields:', { hasPropertyInfo, propertyInfoFields, requiredFields });
+    
+    if (hasPropertyInfo) {
+      console.log('🏠 Opening property info popup');
+      setMissingDdFields(requiredFields.filter((f) => propertyInfoFields.includes(f)));
       setShowDueDiligencePopup(true);
+      setTimeout(() => { isTransitioningPopupsRef.current = false; }, 300);
       return;
     }
-    // Check for ARV/Comparables first (before other DD Complete fields)
+    
+    // STEP 2: Photos
+    if (requiredFields.includes('photos')) {
+      console.log('📸 Opening photo upload popup');
+      setShowAppointmentPopup(true);
+      setTimeout(() => { isTransitioningPopupsRef.current = false; }, 300);
+      return;
+    }
+    
+    // STEP 3: ARV+Comparables
     if (requiredFields.includes('arv') || requiredFields.includes('comparables')) {
+      console.log('💰 Opening ARV+Comparables popup');
       setShowArvComparablesPopup(true);
+      setTimeout(() => { isTransitioningPopupsRef.current = false; }, 300);
       return;
     }
-    // Check for Rehab Budget
+    
+    // STEP 4: Rehab Budget
     if (requiredFields.includes('rehabBudget')) {
+      console.log('🔨 Opening Rehab Budget popup');
       setShowRehabBudgetPopup(true);
+      setTimeout(() => { isTransitioningPopupsRef.current = false; }, 300);
       return;
     }
-    // Check for Timeline/Taxes - use interactive popup instead of requirements popup
+    
+    // STEP 5: Timeline+Taxes
     if (requiredFields.includes('underwritingTaxes') || requiredFields.includes('underwritingTimeline')) {
+      console.log('📊 Opening Timeline+Taxes popup');
       setShowTimelineTaxesPopup(true);
+      setTimeout(() => { isTransitioningPopupsRef.current = false; }, 300);
       return;
     }
-    // Check for Offer Made fields
+    
+    // STEP 6: Follow-up Task
+    if (requiredFields.includes('followUpTask')) {
+      console.log('📋 Opening follow-up task popup');
+      setShowFollowUpTaskPopup(true);
+      setTimeout(() => { isTransitioningPopupsRef.current = false; }, 300);
+      return;
+    }
+    
+    // STEP 7: Offer Made
     if (requiredFields.includes('offerMadePrice') || requiredFields.includes('offerMadeResponse') || 
         (stageNameLower.includes('offer') && stageNameLower.includes('made'))) {
+      console.log('💼 Opening Offer Made popup');
       setShowOfferMadePopup(true);
+      setTimeout(() => { isTransitioningPopupsRef.current = false; }, 300);
       return;
     }
+    
     // Fallback: Show requirements popup only for other DD Complete fields
     const ddCompleteFields = ['underwritingCalculation'];
     if (requiredFields.some((f) => ddCompleteFields.includes(f))) {
       setMissingDdCompleteItems(requiredFields.filter((f) => ddCompleteFields.includes(f)));
       setShowDueDiligenceCompletePopup(true);
+      setTimeout(() => { isTransitioningPopupsRef.current = false; }, 300);
       return;
     }
+    
+    // If no popup was opened, reset flag
+    console.log('⚠️ No popup matched in handleValidationRequired');
+    isTransitioningPopupsRef.current = false;
   };
 
   const retryPendingStageMove = async () => {
@@ -1037,6 +1197,13 @@ const Pipeline = () => {
           setLeads(prev => prev.map(lead => (lead.id === leadId ? leadToMove : lead)));
           const requiredFields: string[] = Array.isArray(errorData.requiredFields) ? errorData.requiredFields : [];
           console.log('📋 Additional validation required:', requiredFields, 'stageName:', stageNameLower);
+          console.log('🔍 Required fields breakdown:', {
+            hasAppointmentDate: requiredFields.includes('appointmentDate'),
+            hasPropertyInfo: requiredFields.some(f => ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'].includes(f)),
+            hasPhotos: requiredFields.includes('photos'),
+            hasArv: requiredFields.includes('arv') || requiredFields.includes('comparables'),
+            allFields: requiredFields
+          });
           
           // ✅ Refresh lead data from backend before updating pendingStageChange
           let refreshedLead = leadToMove;
@@ -1585,6 +1752,90 @@ const Pipeline = () => {
                 
                 console.log(`📸 Uploaded ${uploadedCount} of ${files.length} photos`);
                 
+                // ✅ STEP 3: After photos uploaded, move to Appointment Complete stage
+                const appointmentCompleteStage = pipelineStages.find((s) => 
+                  s.name?.toLowerCase().includes('appointment') && 
+                  s.name?.toLowerCase().includes('complete')
+                );
+                
+                if (appointmentCompleteStage && uploadedCount >= 3) {
+                  try {
+                    console.log('📸 Moving to Appointment Complete stage...');
+                    const moveResponse = await makeApiCall(`${API_BASE}/pipeline/leads/${pendingStageChange.leadId}/move`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ stageId: appointmentCompleteStage.id })
+                    });
+                    
+                    if (moveResponse.ok) {
+                      console.log('✅ Successfully moved to Appointment Complete stage');
+                      
+                      // Update lead in state
+                      setLeads(prev => prev.map(lead => 
+                        lead.id === pendingStageChange.leadId 
+                          ? { 
+                              ...lead, 
+                              stage: appointmentCompleteStage.id, 
+                              stagePipelineKey: getStagePipelineKey(appointmentCompleteStage.id),
+                              statusChangedDate: new Date().toISOString()
+                            }
+                          : lead
+                      ));
+                      
+                      // Refresh lead data and update leads state
+                      try {
+                        const refreshResponse = await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`);
+                        if (refreshResponse.ok) {
+                          const refreshData = await refreshResponse.json();
+                          const refreshedLead = refreshData.data || refreshData;
+                          
+                          // Get existing lead to preserve any fields not in refreshed data
+                          const existingLead = leads.find(l => l.id === pendingStageChange.leadId);
+                          
+                          // Merge refreshed data with existing lead data
+                          // Use whatever address comes from API - no preservation, use actual data
+                          const mergedLead = {
+                            ...refreshedLead,
+                            // Preserve existing formatted fields if refreshed data doesn't have them
+                            openTasks: refreshedLead.openTasks ?? existingLead?.openTasks ?? 0,
+                            openTasksMine: refreshedLead.openTasksMine ?? existingLead?.openTasksMine ?? 0,
+                            priceReduction: refreshedLead.priceReduction ?? existingLead?.priceReduction ?? false,
+                            clearToClose: refreshedLead.clearToClose ?? existingLead?.clearToClose ?? false,
+                            originalPrice: refreshedLead.deal?.contractPrice ?? existingLead?.originalPrice ?? 0,
+                            currentPrice: refreshedLead.deal?.soldPrice ?? existingLead?.currentPrice ?? 0,
+                            needsAttention: refreshedLead.needsAttention ?? existingLead?.status === 'urgent',
+                            lastAttemptedContactAt: refreshedLead.lastAttemptedContactAt ?? existingLead?.lastAttemptedContactAt ?? null
+                          };
+                          
+                          // Format and update leads state with refreshed data
+                          // Pass the refreshed lead data directly - formatLeadForDisplay will handle address formatting
+                          const formattedLead = formatLeadForDisplay(
+                            mergedLead, 
+                            appointmentCompleteStage.id, 
+                            getStagePipelineKey(appointmentCompleteStage.id)
+                          );
+                          formattedLead.statusChangedDate = new Date().toISOString();
+                          
+                          setLeads(prev => prev.map(lead => 
+                            lead.id === pendingStageChange.leadId ? formattedLead : lead
+                          ));
+                          
+                          setPendingStageChange(prev => prev ? {
+                            ...prev,
+                            leadToMove: refreshedLead
+                          } : null);
+                        }
+                      } catch (e) {
+                        console.warn('⚠️ Failed to refresh lead data after Appointment Complete move:', e);
+                      }
+                    } else {
+                      console.warn('⚠️ Failed to move to Appointment Complete stage, continuing...');
+                    }
+                  } catch (e) {
+                    console.warn('⚠️ Error moving to Appointment Complete stage:', e);
+                  }
+                }
+                
                 // Refresh lead data to get latest customFields for next popup
                 let updatedLeadData = null;
                 try {
@@ -1608,12 +1859,9 @@ const Pipeline = () => {
                 }
                 
                 // Check if there are more requirements to fulfill (from the original validation response)
-                console.log('🔍 DEBUG: pendingStageChange =', pendingStageChange);
-                console.log('🔍 DEBUG: allRequiredFields =', pendingStageChange?.allRequiredFields);
-
                 if (pendingStageChange?.allRequiredFields) {
                   const remaining = pendingStageChange.allRequiredFields.filter(f => f !== 'photos');
-                  console.log('🔍 DEBUG: remaining after removing photos =', remaining);
+                  console.log('📋 Remaining requirements after photos:', remaining);
                   
                   // UPDATE pendingStageChange to remove completed 'photos' field
                   setPendingStageChange(prev => prev ? {
@@ -1626,14 +1874,6 @@ const Pipeline = () => {
                     
                     // SET FLAG FIRST before any state changes!
                     isTransitioningPopupsRef.current = true;
-                    console.log('🔍 DEBUG: Flag set to TRUE before closing popup');
-                    
-                    // Show the next required popup without making another API call
-                    const ddFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
-                    const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation','underwritingTaxes','underwritingTimeline'];
-                    
-                    console.log('🔍 DEBUG: Checking DD fields...', remaining.some(f => ddFields.includes(f)));
-                    console.log('🔍 DEBUG: Checking DD Complete fields...', remaining.some(f => ddCompleteFields.includes(f)));
                     
                     // Close current popup
                     setShowAppointmentPopup(false);
@@ -1641,45 +1881,37 @@ const Pipeline = () => {
                     // Small delay to ensure dialog closes before opening next one
                     await new Promise(resolve => setTimeout(resolve, 100));
                     
-                    // Check next requirement in priority order: property info → arv+comps → rehab → timeline+taxes
-                    const propertyInfoFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
-                    
-                    if (remaining.some(f => propertyInfoFields.includes(f))) {
-                      const propertyFieldsToShow = remaining.filter(f => propertyInfoFields.includes(f));
-                      console.log('✅ Showing DueDiligencePopup (Property Info) with fields:', propertyFieldsToShow);
-                      setMissingDdFields(propertyFieldsToShow);
-                      setShowDueDiligencePopup(true);
-                    } else if (remaining.includes('arv') || remaining.includes('comparables')) {
-                      console.log('✅ Showing ARV+Comparables popup');
+                    // Check next requirement in priority order: arv+comps → rehab → timeline+taxes → offerMade
+                    if (remaining.includes('arv') || remaining.includes('comparables')) {
+                      console.log('💰 Opening ARV+Comparables popup');
                       setShowArvComparablesPopup(true);
                     } else if (remaining.includes('rehabBudget')) {
-                      console.log('✅ Showing Rehab Budget popup');
+                      console.log('🔨 Opening Rehab Budget popup');
                       setShowRehabBudgetPopup(true);
                     } else if (remaining.includes('underwritingTaxes') || remaining.includes('underwritingTimeline')) {
-                      console.log('✅ Showing Timeline+Taxes popup');
+                      console.log('📊 Opening Timeline+Taxes popup');
                       setShowTimelineTaxesPopup(true);
+                    } else if (remaining.includes('offerMadePrice') || remaining.includes('offerMadeResponse')) {
+                      console.log('💼 Opening Offer Made popup');
+                      setShowOfferMadePopup(true);
                     } else {
                       console.log('⚠️ No matching popup found, calling retryPendingStageMove');
                       isTransitioningPopupsRef.current = false;
-                      // No more known requirements, try the move
                       await retryPendingStageMove();
                     }
                     
                     // ✅ DON'T reset flag here - let the next popup's onSubmit reset it
-                    // This prevents race condition where onClose fires after flag is cleared
                     console.log('⏩ Flag remains TRUE - waiting for next popup action');
                   } else {
                     console.log('✅ All requirements fulfilled, calling retryPendingStageMove');
-                    // All requirements fulfilled, try the move
+                    isTransitioningPopupsRef.current = false;
                     await retryPendingStageMove();
-                    // Close popup AFTER successful move
                     setShowAppointmentPopup(false);
                   }
                 } else {
                   console.log('⚠️ No allRequiredFields found, calling retryPendingStageMove');
-                  // Fallback: retry stage move (will trigger validation again)
+                  isTransitioningPopupsRef.current = false;
                   await retryPendingStageMove();
-                  // Close popup AFTER successful move
                   setShowAppointmentPopup(false);
                 }
               } catch (error: any) {
@@ -1699,6 +1931,13 @@ const Pipeline = () => {
           <AppointmentSetPopup
             open={showAppointmentSetPopup}
             onClose={() => {
+              // Don't clear state if we're transitioning to another validation popup
+              if (isTransitioningPopupsRef.current) {
+                console.log('⚠️ Skipping cleanup - transitioning to next popup');
+                setShowAppointmentSetPopup(false);
+                return;
+              }
+              
               console.log('🚪 Appointment Set popup closed');
               setShowAppointmentSetPopup(false);
               setPendingStageChange(null);
@@ -1821,6 +2060,8 @@ const Pipeline = () => {
                 // Now proceed with the target stage change (if different from Appointment Set)
                 if (pendingStageChange && pendingStageChange.newStageId !== appointmentSetStage?.id) {
                   console.log('🔄 Proceeding with target stage move:', pendingStageChange.newStageId);
+                  // Set flag BEFORE closing popup to prevent onClose from clearing pendingStageChange
+                  isTransitioningPopupsRef.current = true;
                   // Close Appointment Set popup before retrying (retryPendingStageMove will open next popup if needed)
                   setShowAppointmentSetPopup(false);
                   // Retry stage move; if more is missing, open the next popup automatically
@@ -1949,19 +2190,25 @@ const Pipeline = () => {
                   // Small delay to ensure dialog closes before opening next one
                   await new Promise(resolve => setTimeout(resolve, 100));
                   
-                  // Check next requirement in priority order: photos → arv+comps → rehab → timeline+taxes
+                  // Check next requirement in priority order: photos → arv+comps → rehab → timeline+taxes → followUpTask → offerMade
                   if (remaining.includes('photos')) {
-                    console.log('✅ Showing Photos popup next');
+                    console.log('📸 Opening photo upload popup');
                     setShowAppointmentPopup(true);
                   } else if (remaining.includes('arv') || remaining.includes('comparables')) {
-                    console.log('✅ Showing ARV+Comparables popup next');
+                    console.log('💰 Opening ARV+Comparables popup');
                     setShowArvComparablesPopup(true);
                   } else if (remaining.includes('rehabBudget')) {
-                    console.log('✅ Showing Rehab Budget popup next');
+                    console.log('🔨 Opening Rehab Budget popup');
                     setShowRehabBudgetPopup(true);
                   } else if (remaining.includes('underwritingTaxes') || remaining.includes('underwritingTimeline')) {
-                    console.log('✅ Showing Timeline+Taxes popup next');
+                    console.log('📊 Opening Timeline+Taxes popup');
                     setShowTimelineTaxesPopup(true);
+                  } else if (remaining.includes('followUpTask')) {
+                    console.log('📋 Opening follow-up task popup');
+                    setShowFollowUpTaskPopup(true);
+                  } else if (remaining.includes('offerMadePrice') || remaining.includes('offerMadeResponse')) {
+                    console.log('💼 Opening Offer Made popup');
+                    setShowOfferMadePopup(true);
                   } else {
                     console.log('✅ All requirements fulfilled, retrying stage move');
                     isTransitioningPopupsRef.current = false;
@@ -1971,7 +2218,47 @@ const Pipeline = () => {
                   // ✅ DON'T reset flag here - let the next popup's onSubmit reset it
                   console.log('⏩ Flag remains TRUE - waiting for next popup action');
                 } else {
-                  console.log('✅ No more requirements, calling retryPendingStageMove');
+                  console.log('✅ No more requirements, checking photos before stage move...');
+                  
+                  // Check if target stage requires photos (similar to LeadEdit)
+                  if (pendingStageChange?.newStageId) {
+                    const targetStage = pipelineStages.find(s => s.id === pendingStageChange.newStageId);
+                    const appointmentCompleteStage = pipelineStages.find(s => 
+                      s.name?.toLowerCase() === 'appointment complete'
+                    );
+                    
+                    if (targetStage && appointmentCompleteStage && targetStage.id === appointmentCompleteStage.id) {
+                      console.log('🔍 Target stage: Appointment Complete - checking photos...');
+                      try {
+                        const photosResponse = await makeApiCall(`${API_BASE}/files/lead/${pendingStageChange.leadId}`);
+                        if (photosResponse.ok) {
+                          const photosData = await photosResponse.json();
+                          const photoFiles = (photosData.data || []).filter((file: any) => {
+                            const category = (file?.category || '').toString().toLowerCase();
+                            return category === 'photos' || category === 'photo';
+                          });
+                          const photoCount = photoFiles.length;
+                          
+                          console.log(`📸 Current photo count: ${photoCount}`);
+                          
+                          if (photoCount < 3) {
+                            console.log(`📸 Only ${photoCount} photos found, need 3. Opening photos popup BEFORE stage move.`);
+                            isTransitioningPopupsRef.current = true;
+                            setShowDueDiligencePopup(false);
+                            setShowAppointmentPopup(true);
+                            setTimeout(() => { isTransitioningPopupsRef.current = false; }, 100);
+                            return;
+                          } else {
+                            console.log(`✅ Photo count is sufficient (${photoCount} >= 3). Proceeding with stage move.`);
+                          }
+                        }
+                      } catch (photoError) {
+                        console.warn('⚠️ Failed to check photos count:', photoError);
+                        // Continue with stage move attempt if photo check fails
+                      }
+                    }
+                  }
+                  
                   isTransitioningPopupsRef.current = false;
                   // All requirements fulfilled, try the move
                   await retryPendingStageMove();
@@ -1979,7 +2266,47 @@ const Pipeline = () => {
                   setPendingStageChange(null);
                 }
               } else {
-                console.log('⚠️ No allRequiredFields, calling retryPendingStageMove');
+                console.log('⚠️ No allRequiredFields, checking photos before retry...');
+                
+                // Check if target stage requires photos (similar to LeadEdit)
+                if (pendingStageChange?.newStageId) {
+                  const targetStage = pipelineStages.find(s => s.id === pendingStageChange.newStageId);
+                  const appointmentCompleteStage = pipelineStages.find(s => 
+                    s.name?.toLowerCase() === 'appointment complete'
+                  );
+                  
+                  if (targetStage && appointmentCompleteStage && targetStage.id === appointmentCompleteStage.id) {
+                    console.log('🔍 Target stage: Appointment Complete - checking photos...');
+                    try {
+                      const photosResponse = await makeApiCall(`${API_BASE}/files/lead/${pendingStageChange.leadId}`);
+                      if (photosResponse.ok) {
+                        const photosData = await photosResponse.json();
+                        const photoFiles = (photosData.data || []).filter((file: any) => {
+                          const category = (file?.category || '').toString().toLowerCase();
+                          return category === 'photos' || category === 'photo';
+                        });
+                        const photoCount = photoFiles.length;
+                        
+                        console.log(`📸 Current photo count: ${photoCount}`);
+                        
+                        if (photoCount < 3) {
+                          console.log(`📸 Only ${photoCount} photos found, need 3. Opening photos popup BEFORE stage move.`);
+                          isTransitioningPopupsRef.current = true;
+                          setShowDueDiligencePopup(false);
+                          setShowAppointmentPopup(true);
+                          setTimeout(() => { isTransitioningPopupsRef.current = false; }, 100);
+                          return;
+                        } else {
+                          console.log(`✅ Photo count is sufficient (${photoCount} >= 3). Proceeding with stage move.`);
+                        }
+                      }
+                    } catch (photoError) {
+                      console.warn('⚠️ Failed to check photos count:', photoError);
+                      // Continue with stage move attempt if photo check fails
+                    }
+                  }
+                }
+                
                 isTransitioningPopupsRef.current = false;
                 // Fallback: retry stage move
                 await retryPendingStageMove();
@@ -2423,7 +2750,87 @@ const Pipeline = () => {
                 
                 setShowTimelineTaxesPopup(false);
                 
-                // ✅ Refresh lead data before retrying stage move
+                // ✅ STEP 6: After Timeline+Taxes saved, move to Due Diligence Complete stage
+                const dueDiligenceCompleteStage = pipelineStages.find((s) => 
+                  s.name?.toLowerCase().includes('due diligence') && 
+                  s.name?.toLowerCase().includes('complete')
+                );
+                
+                if (dueDiligenceCompleteStage) {
+                  try {
+                    console.log('📊 Moving to Due Diligence Complete stage...');
+                    const moveResponse = await makeApiCall(`${API_BASE}/pipeline/leads/${pendingStageChange.leadId}/move`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ stageId: dueDiligenceCompleteStage.id })
+                    });
+                    
+                    if (moveResponse.ok) {
+                      console.log('✅ Successfully moved to Due Diligence Complete stage');
+                      
+                      // Refresh lead data and update leads state
+                      try {
+                        const refreshResponse = await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`);
+                        if (refreshResponse.ok) {
+                          const refreshData = await refreshResponse.json();
+                          const refreshedLead = refreshData.data || refreshData;
+                          console.log('🔄 Refreshed lead data after Due Diligence Complete:', {
+                            id: refreshedLead.id,
+                            address: refreshedLead.address,
+                            addressType: typeof refreshedLead.address
+                          });
+                          
+                          // Get existing lead to preserve any fields not in refreshed data
+                          const existingLead = leads.find(l => l.id === pendingStageChange.leadId);
+                          
+                          // Merge refreshed data with existing lead data
+                          // Use whatever address comes from API - no preservation, use actual data
+                          const mergedLead = {
+                            ...refreshedLead,
+                            // Preserve existing formatted fields if refreshed data doesn't have them
+                            openTasks: refreshedLead.openTasks ?? existingLead?.openTasks ?? 0,
+                            openTasksMine: refreshedLead.openTasksMine ?? existingLead?.openTasksMine ?? 0,
+                            priceReduction: refreshedLead.priceReduction ?? existingLead?.priceReduction ?? false,
+                            clearToClose: refreshedLead.clearToClose ?? existingLead?.clearToClose ?? false,
+                            originalPrice: refreshedLead.deal?.contractPrice ?? existingLead?.originalPrice ?? 0,
+                            currentPrice: refreshedLead.deal?.soldPrice ?? existingLead?.currentPrice ?? 0,
+                            needsAttention: refreshedLead.needsAttention ?? existingLead?.status === 'urgent',
+                            lastAttemptedContactAt: refreshedLead.lastAttemptedContactAt ?? existingLead?.lastAttemptedContactAt ?? null
+                          };
+                          
+                          // Format and update leads state with refreshed data
+                          const formattedLead = formatLeadForDisplay(
+                            mergedLead, 
+                            dueDiligenceCompleteStage.id, 
+                            getStagePipelineKey(dueDiligenceCompleteStage.id)
+                          );
+                          formattedLead.statusChangedDate = new Date().toISOString();
+                          console.log('✅ Formatted lead after Due Diligence Complete:', {
+                            id: formattedLead.id,
+                            address: formattedLead.address
+                          });
+                          
+                          setLeads(prev => prev.map(lead => 
+                            lead.id === pendingStageChange.leadId ? formattedLead : lead
+                          ));
+                          
+                          setPendingStageChange(prev => prev ? {
+                            ...prev,
+                            leadToMove: refreshedLead
+                          } : null);
+                        }
+                      } catch (e) {
+                        console.warn('⚠️ Failed to refresh lead data after Due Diligence Complete move:', e);
+                      }
+                    } else {
+                      console.warn('⚠️ Failed to move to Due Diligence Complete stage, continuing...');
+                    }
+                  } catch (e) {
+                    console.warn('⚠️ Error moving to Due Diligence Complete stage:', e);
+                  }
+                }
+                
+                // ✅ Refresh lead data before checking next requirements
                 let updatedLeadData = null;
                 try {
                   const refreshResponse = await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`);
@@ -2445,9 +2852,50 @@ const Pipeline = () => {
                   console.warn('⚠️ Failed to refresh lead data:', e);
                 }
                 
-                // This is the last DD Complete requirement, so try the stage move
+                // ✅ STEP 7: After Due Diligence Complete, try to move to target stage (Offer Made)
+                // This will trigger validation and show Offer Made popup if needed
+                console.log('🔍 Checking if we need to move to target stage after Due Diligence Complete');
+                console.log('🔍 pendingStageChange:', pendingStageChange);
+                console.log('🔍 newStageId:', pendingStageChange?.newStageId);
+                
+                if (pendingStageChange?.newStageId) {
+                  const targetStage = pipelineStages.find(s => s.id === pendingStageChange.newStageId);
+                  const dueDiligenceCompleteStage = pipelineStages.find(s => 
+                    s.name?.toLowerCase().includes('due diligence') && 
+                    s.name?.toLowerCase().includes('complete')
+                  );
+                  
+                  console.log('🔍 targetStage:', targetStage?.name);
+                  console.log('🔍 dueDiligenceCompleteStage:', dueDiligenceCompleteStage?.name);
+                  console.log('🔍 Are they different?', targetStage?.id !== dueDiligenceCompleteStage?.id);
+                  
+                  // Only try to move to target if it's different from Due Diligence Complete
+                  if (targetStage && dueDiligenceCompleteStage && targetStage.id !== dueDiligenceCompleteStage.id) {
+                    console.log('🔄 Attempting to move to target stage after Due Diligence Complete:', targetStage.name);
+                    isTransitioningPopupsRef.current = true;
+                    setShowTimelineTaxesPopup(false);
+                    
+                    // Small delay to ensure popup closes
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    
+                    // Try to move to target stage - this will trigger validation and show Offer Made popup
+                    await retryPendingStageMove();
+                    return;
+                  } else {
+                    console.log('⚠️ Cannot move to target stage - conditions not met');
+                    console.log('⚠️ targetStage exists:', !!targetStage);
+                    console.log('⚠️ dueDiligenceCompleteStage exists:', !!dueDiligenceCompleteStage);
+                    console.log('⚠️ IDs are different:', targetStage?.id !== dueDiligenceCompleteStage?.id);
+                  }
+                } else {
+                  console.log('⚠️ No pendingStageChange or newStageId');
+                }
+                
+                // No more requirements, clear pending state
+                console.log('✅ Clearing pending state - no more requirements');
                 isTransitioningPopupsRef.current = false;
-                await retryPendingStageMove();
+                setPendingStageChange(null);
+                setShowTimelineTaxesPopup(false);
               } catch (error: any) {
                 console.error('Error in Timeline+Taxes flow:', error);
                 toast({
@@ -2580,12 +3028,53 @@ const Pipeline = () => {
                           : lead
                       ));
                       
-                      // Refresh lead data
+                      // Refresh lead data and update leads state
                       try {
                         const refreshResponse = await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`);
                         if (refreshResponse.ok) {
                           const refreshData = await refreshResponse.json();
                           const refreshedLead = refreshData.data || refreshData;
+                          console.log('🔄 Refreshed lead data after Offer Made:', {
+                            id: refreshedLead.id,
+                            address: refreshedLead.address,
+                            addressType: typeof refreshedLead.address
+                          });
+                          
+                          // Update leads state with refreshed data
+                          // Get existing lead to preserve any fields not in refreshed data
+                          const existingLead = leads.find(l => l.id === pendingStageChange.leadId);
+                          
+                          // Merge refreshed data with existing lead data
+                          // Use whatever address comes from API - no preservation, use actual data
+                          const mergedLead = {
+                            ...refreshedLead,
+                            // Preserve existing formatted fields if refreshed data doesn't have them
+                            openTasks: refreshedLead.openTasks ?? existingLead?.openTasks ?? 0,
+                            openTasksMine: refreshedLead.openTasksMine ?? existingLead?.openTasksMine ?? 0,
+                            priceReduction: refreshedLead.priceReduction ?? existingLead?.priceReduction ?? false,
+                            clearToClose: refreshedLead.clearToClose ?? existingLead?.clearToClose ?? false,
+                            originalPrice: refreshedLead.deal?.contractPrice ?? existingLead?.originalPrice ?? 0,
+                            currentPrice: refreshedLead.deal?.soldPrice ?? existingLead?.currentPrice ?? 0,
+                            needsAttention: refreshedLead.needsAttention ?? existingLead?.status === 'urgent',
+                            lastAttemptedContactAt: refreshedLead.lastAttemptedContactAt ?? existingLead?.lastAttemptedContactAt ?? null
+                          };
+                          
+                          // Format and update leads state with refreshed data
+                          const formattedLead = formatLeadForDisplay(
+                            mergedLead, 
+                            offerMadeStage.id, 
+                            getStagePipelineKey(offerMadeStage.id)
+                          );
+                          formattedLead.statusChangedDate = new Date().toISOString();
+                          console.log('✅ Formatted lead after Offer Made:', {
+                            id: formattedLead.id,
+                            address: formattedLead.address
+                          });
+                          
+                          setLeads(prev => prev.map(lead => 
+                            lead.id === pendingStageChange.leadId ? formattedLead : lead
+                          ));
+                          
                           setPendingStageChange(prev => prev ? {
                             ...prev,
                             leadToMove: refreshedLead

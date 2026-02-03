@@ -4889,6 +4889,13 @@ const LeadEdit: React.FC = () => {
       <AppointmentSetPopup
         open={showAppointmentSetPopup}
         onClose={() => {
+          // Don't clear state if we're transitioning to another validation popup
+          if (transitioningPopupRef.current) {
+            console.log('⚠️ Skipping cleanup - transitioning to next popup');
+            setShowAppointmentSetPopup(false);
+            return;
+          }
+          
           console.log('🚪 Appointment Set popup closed');
           setShowAppointmentSetPopup(false);
           // Revert to previous status since user cancelled
@@ -4967,31 +4974,46 @@ const LeadEdit: React.FC = () => {
                   const requiredFields: string[] = Array.isArray(e?.requiredFields) ? e.requiredFields : [];
                   console.log('📋 Still required after Appointment Set:', requiredFields);
                   
-                  // Close Appointment Set popup
-                  setShowAppointmentSetPopup(false);
-                  
                   // Transition to next popup based on requiredFields
                   const propertyInfoFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
                   
                   if (requiredFields.some((f) => propertyInfoFields.includes(f))) {
                     console.log('🏠 Opening property info popup');
+                    transitioningPopupRef.current = true; // ✅ Mark as transitioning
                     setMissingDdFields(requiredFields.filter((f) => propertyInfoFields.includes(f)));
+                    setShowAppointmentSetPopup(false);
                     setShowDueDiligencePopup(true);
+                    setTimeout(() => { transitioningPopupRef.current = false; }, 100);
                   } else if (requiredFields.includes('photos')) {
                     console.log('📸 Opening photo upload popup');
+                    transitioningPopupRef.current = true; // ✅ Mark as transitioning
+                    setShowAppointmentSetPopup(false);
                     setShowAppointmentPopup(true);
+                    setTimeout(() => { transitioningPopupRef.current = false; }, 100);
                   } else if (requiredFields.includes('arv') || requiredFields.includes('comparables')) {
                     console.log('💰 Opening ARV+Comparables popup');
+                    transitioningPopupRef.current = true; // ✅ Mark as transitioning
+                    setShowAppointmentSetPopup(false);
                     setShowArvComparablesPopup(true);
+                    setTimeout(() => { transitioningPopupRef.current = false; }, 100);
                   } else if (requiredFields.includes('rehabBudget')) {
                     console.log('🔨 Opening Rehab Budget popup');
+                    transitioningPopupRef.current = true; // ✅ Mark as transitioning
+                    setShowAppointmentSetPopup(false);
                     setShowRehabBudgetPopup(true);
+                    setTimeout(() => { transitioningPopupRef.current = false; }, 100);
                   } else if (requiredFields.includes('underwritingTaxes') || requiredFields.includes('underwritingTimeline')) {
                     console.log('📊 Opening Timeline+Taxes popup');
+                    transitioningPopupRef.current = true; // ✅ Mark as transitioning
+                    setShowAppointmentSetPopup(false);
                     setShowTimelineTaxesPopup(true);
+                    setTimeout(() => { transitioningPopupRef.current = false; }, 100);
                   } else if (requiredFields.includes('followUpTask')) {
                     console.log('📋 Opening follow-up task popup');
+                    transitioningPopupRef.current = true; // ✅ Mark as transitioning
+                    setShowAppointmentSetPopup(false);
                     setShowFollowUpTaskPopup(true);
+                    setTimeout(() => { transitioningPopupRef.current = false; }, 100);
                   } else {
                     // Unknown validation error
                     toast({
@@ -5075,88 +5097,151 @@ const LeadEdit: React.FC = () => {
             }
 
             console.log('✅ Property info updated successfully');
+            console.log('🔍 Current pendingPipelineStatus:', pendingPipelineStatus);
 
             // Reload lead so "Additional Property Info" section shows persisted values before stage move
             await loadLead();
             console.log('✅ Lead reloaded');
             
-            // Retry stage move; if more is missing, open the next popup automatically
-            if (pendingPipelineStatus) {
+            // ✅ CRITICAL: If pendingPipelineStatus is null, we can't proceed - this shouldn't happen
+            if (!pendingPipelineStatus) {
+              console.error('❌ pendingPipelineStatus is null after property info save! Cannot proceed with stage move.');
+              toast({
+                title: "Error",
+                description: "Unable to proceed with stage change. Please try again.",
+                variant: "destructive"
+              });
+              setShowDueDiligencePopup(false);
+              return;
+            }
+            
+            // ✅ CRITICAL FIX: Check photos count directly from API BEFORE attempting stage move
+            // This ensures we show photos popup even if backend validation doesn't catch it
+            const targetStage = pipelineStages.find(s => s.id === pendingPipelineStatus);
+            const appointmentCompleteStage = pipelineStages.find(s => 
+              s.name?.toLowerCase().includes('appointment') && 
+              s.name?.toLowerCase().includes('complete')
+            );
+            
+            console.log('🔍 Target stage:', targetStage?.name, 'Appointment Complete stage:', appointmentCompleteStage?.name);
+            
+            // Check if target stage requires photos (Appointment Complete+ stages)
+            if (appointmentCompleteStage && targetStage && 
+                targetStage.orderIndex >= appointmentCompleteStage.orderIndex) {
+              console.log('📸 Target stage requires photos. Checking photo count...');
+              // Get photos count directly from API to ensure we have latest data (don't rely on state)
               try {
-                console.log('🔄 Attempting stage move to:', pendingPipelineStatus);
-                await requestStageMove(pendingPipelineStatus);
-                console.log('✅ Stage move successful!');
-              } catch (e: any) {
-                console.log('⚠️ Stage move validation error:', e);
-                
-                if (e?.code === 'VALIDATION_REQUIRED') {
-                  const requiredFields: string[] = Array.isArray(e?.requiredFields) ? e.requiredFields : [];
-                  console.log('📋 Still missing fields:', requiredFields);
-
-                  if (requiredFields.includes('photos')) {
-                    transitioningPopupRef.current = true; // ✅ Mark as transitioning
+                const photosResponse = await makeApiCall(`${API_BASE}/files/lead/${id}`);
+                if (photosResponse.ok) {
+                  const photosData = await photosResponse.json();
+                  const photoFiles = (photosData.data || []).filter((file: any) => {
+                    const category = (file?.category || '').toString().toLowerCase();
+                    return category === 'photos' || category === 'photo';
+                  });
+                  const photoCount = photoFiles.length;
+                  
+                  console.log(`📸 Current photo count: ${photoCount}`);
+                  
+                  if (photoCount < 3) {
+                    console.log(`📸 Only ${photoCount} photos found, need 3. Opening photos popup BEFORE stage move.`);
+                    transitioningPopupRef.current = true;
                     setShowDueDiligencePopup(false);
                     setShowAppointmentPopup(true);
                     setTimeout(() => { transitioningPopupRef.current = false; }, 100);
                     return;
-                  }
-                  if (requiredFields.includes('followUpTask')) {
-                    transitioningPopupRef.current = true; // ✅ Mark as transitioning
-                    setShowDueDiligencePopup(false);
-                    setShowFollowUpTaskPopup(true);
-                    setTimeout(() => { transitioningPopupRef.current = false; }, 100);
-                    return;
-                  }
-                  
-                  // Progressive DD Complete popups - show interactive popups one by one
-                  if (requiredFields.includes('arv') || requiredFields.includes('comparables')) {
-                    transitioningPopupRef.current = true; // ✅ Mark as transitioning
-                    setShowDueDiligencePopup(false);
-                    setShowArvComparablesPopup(true);
-                    setTimeout(() => { transitioningPopupRef.current = false; }, 100);
-                    return;
-                  }
-                  if (requiredFields.includes('rehabBudget')) {
-                    transitioningPopupRef.current = true; // ✅ Mark as transitioning
-                    setShowDueDiligencePopup(false);
-                    setShowRehabBudgetPopup(true);
-                    setTimeout(() => { transitioningPopupRef.current = false; }, 100);
-                    return;
-                  }
-                  if (requiredFields.includes('underwritingTaxes') || requiredFields.includes('underwritingTimeline')) {
-                    transitioningPopupRef.current = true; // ✅ Mark as transitioning
-                    setShowDueDiligencePopup(false);
-                    setShowTimelineTaxesPopup(true);
-                    setTimeout(() => { transitioningPopupRef.current = false; }, 100);
-                    return;
-                  }
-                  
-                  // If any other DD Complete field is missing, show list popup as fallback
-                  const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation','underwritingTaxes','underwritingTimeline'];
-                  if (requiredFields.some((f) => ddCompleteFields.includes(f))) {
-                    setMissingDdCompleteItems(requiredFields.filter((f) => ddCompleteFields.includes(f)));
-                    setShowDueDiligencePopup(false);
-                    setShowDueDiligenceCompletePopup(true);
-                    return;
-                  }
-                  
-                  const stageNameLower = (pipelineStages.find((s) => s.id === pendingPipelineStatus)?.name || '').toLowerCase();
-                  if (stageNameLower.includes('offer') && stageNameLower.includes('made')) {
-                    setShowDueDiligencePopup(false);
-                    setShowOfferMadePopup(true);
-                    return;
+                  } else {
+                    console.log(`✅ Photo count is sufficient (${photoCount} >= 3). Proceeding with stage move.`);
                   }
                 }
-                
-                // If error is not recognized, show error toast but don't break flow
-                console.error('⚠️ Unrecognized validation error:', e);
-                toast({
-                  title: "Validation Error",
-                  description: e?.message || "Please check all required fields and try again",
-                  variant: "destructive"
-                });
-                return;
+              } catch (photoError) {
+                console.warn('⚠️ Failed to check photos count:', photoError);
+                // Continue with stage move attempt if photo check fails
               }
+            } else {
+              console.log('📸 Target stage does not require photos, or stages not found.');
+            }
+            
+            // Retry stage move; if more is missing, open the next popup automatically
+            console.log('🔄 Proceeding with stage move attempt to:', pendingPipelineStatus);
+            try {
+              console.log('🔄 Attempting stage move to:', pendingPipelineStatus);
+              await requestStageMove(pendingPipelineStatus);
+              console.log('✅ Stage move successful!');
+              
+              // All validations passed - close popup
+              setShowDueDiligencePopup(false);
+              setPendingPipelineStatus(null);
+              setPreviousPipelineStatus(null);
+            } catch (e: any) {
+              console.log('⚠️ Stage move validation error:', e);
+              
+              if (e?.code === 'VALIDATION_REQUIRED') {
+                const requiredFields: string[] = Array.isArray(e?.requiredFields) ? e.requiredFields : [];
+                console.log('📋 Still missing fields:', requiredFields);
+
+                if (requiredFields.includes('photos')) {
+                  transitioningPopupRef.current = true; // ✅ Mark as transitioning
+                  setShowDueDiligencePopup(false);
+                  setShowAppointmentPopup(true);
+                  setTimeout(() => { transitioningPopupRef.current = false; }, 100);
+                  return;
+                }
+                if (requiredFields.includes('followUpTask')) {
+                  transitioningPopupRef.current = true; // ✅ Mark as transitioning
+                  setShowDueDiligencePopup(false);
+                  setShowFollowUpTaskPopup(true);
+                  setTimeout(() => { transitioningPopupRef.current = false; }, 100);
+                  return;
+                }
+                
+                // Progressive DD Complete popups - show interactive popups one by one
+                if (requiredFields.includes('arv') || requiredFields.includes('comparables')) {
+                  transitioningPopupRef.current = true; // ✅ Mark as transitioning
+                  setShowDueDiligencePopup(false);
+                  setShowArvComparablesPopup(true);
+                  setTimeout(() => { transitioningPopupRef.current = false; }, 100);
+                  return;
+                }
+                if (requiredFields.includes('rehabBudget')) {
+                  transitioningPopupRef.current = true; // ✅ Mark as transitioning
+                  setShowDueDiligencePopup(false);
+                  setShowRehabBudgetPopup(true);
+                  setTimeout(() => { transitioningPopupRef.current = false; }, 100);
+                  return;
+                }
+                if (requiredFields.includes('underwritingTaxes') || requiredFields.includes('underwritingTimeline')) {
+                  transitioningPopupRef.current = true; // ✅ Mark as transitioning
+                  setShowDueDiligencePopup(false);
+                  setShowTimelineTaxesPopup(true);
+                  setTimeout(() => { transitioningPopupRef.current = false; }, 100);
+                  return;
+                }
+                
+                // If any other DD Complete field is missing, show list popup as fallback
+                const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation','underwritingTaxes','underwritingTimeline'];
+                if (requiredFields.some((f) => ddCompleteFields.includes(f))) {
+                  setMissingDdCompleteItems(requiredFields.filter((f) => ddCompleteFields.includes(f)));
+                  setShowDueDiligencePopup(false);
+                  setShowDueDiligenceCompletePopup(true);
+                  return;
+                }
+                
+                const stageNameLower = (pipelineStages.find((s) => s.id === pendingPipelineStatus)?.name || '').toLowerCase();
+                if (stageNameLower.includes('offer') && stageNameLower.includes('made')) {
+                  setShowDueDiligencePopup(false);
+                  setShowOfferMadePopup(true);
+                  return;
+                }
+              }
+              
+              // If error is not recognized, show error toast but don't break flow
+              console.error('⚠️ Unrecognized validation error:', e);
+              toast({
+                title: "Validation Error",
+                description: e?.message || "Please check all required fields and try again",
+                variant: "destructive"
+              });
+              return;
             }
             
             console.log('✅ All done, closing popup');

@@ -151,7 +151,9 @@ export const PipelineCard = ({ lead, isDragging, onViewDetails, currentPipeline 
         <div className="flex items-start gap-1">
           <MapPin className="w-3 h-3 text-blue-500 mt-0.5 flex-shrink-0" />
           <h3 className="font-medium text-[13px] text-gray-900 leading-tight flex-1 line-clamp-1">
-            {lead.address}
+            {typeof lead.address === 'string' 
+              ? lead.address 
+              : lead.address?.address1 || 'No Address'}
           </h3>
         </div>
 
