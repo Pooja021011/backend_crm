@@ -441,6 +441,11 @@ export function RehabBudgetCalculatorCompact({
                 step="0.5"
                 value={numberOfBathrooms ?? ''}
                 onChange={(e) => handleBathroomsChange(e.target.value)}
+                onBlur={(e) => {
+                  // Ensure value is normalized and saved on blur/exit
+                  const value = e.target.value;
+                  handleBathroomsChange(value);
+                }}
                 disabled={readOnly}
                 className="h-6 text-xs"
                 min={0}

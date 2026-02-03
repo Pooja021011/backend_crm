@@ -665,7 +665,15 @@ const LeadEdit: React.FC = () => {
           console.log('🔍 Validation required - opening popup for first missing item');
           setPendingPipelineStatus(newStageId);
 
-          // Priority order: propertyInfo → photos → ARV+comps → rehab → timeline+taxes
+          // Priority order: appointmentDate → propertyInfo → photos → ARV+comps → rehab → timeline+taxes
+          
+          // STEP 0: Check for appointmentDate FIRST (before all other popups)
+          if (requiredFields.includes('appointmentDate')) {
+            console.log('📅 Opening Appointment Set popup');
+            setShowAppointmentSetPopup(true);
+            return;
+          }
+          
           const propertyInfoFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
           
           if (requiredFields.some((f) => propertyInfoFields.includes(f))) {
@@ -1649,9 +1657,19 @@ const LeadEdit: React.FC = () => {
       const dirtyFields: any = {};
       dirtyFieldsRef.current.forEach((fieldName) => {
         if (fieldName in allFields) {
-          dirtyFields[fieldName] = allFields[fieldName as keyof typeof allFields];
+          // IMPORTANT: When saving rehabBathrooms, explicitly exclude bathrooms to prevent sync
+          if (fieldName === 'rehabBathrooms' && dirtyFieldsRef.current.has('bathrooms')) {
+            // Don't include bathrooms if we're saving rehabBathrooms
+            // This prevents Property Information bathrooms from being overwritten
+          } else {
+            dirtyFields[fieldName] = allFields[fieldName as keyof typeof allFields];
+          }
         }
       });
+      // If rehabBathrooms is dirty but bathrooms is also dirty, exclude bathrooms
+      if (dirtyFieldsRef.current.has('rehabBathrooms') && dirtyFieldsRef.current.has('bathrooms')) {
+        delete dirtyFields.bathrooms;
+      }
       return dirtyFields;
     }
     
@@ -1679,6 +1697,7 @@ const LeadEdit: React.FC = () => {
     rehabFinishLevel,
     rehabToggledItems,
     rehabNumberOfWindows,
+    rehabBathrooms,
     rehabCustomValues,
     leadSourceData,
     underwritingArv,
@@ -1983,6 +2002,7 @@ const LeadEdit: React.FC = () => {
       estimatedValue,
       askingPrice,
       rehabBudget,
+      rehabBathrooms,
       trackPriceChanges,
       autoSaveDraftKey,
     ]
@@ -4114,6 +4134,7 @@ const LeadEdit: React.FC = () => {
 
                 {/* 4. Rehab Budget Calculator */}
                 <RehabBudgetCalculatorCompact
+                  key={`rehab-${id}-${rehabBathrooms}`}
                   leadId={id!}
                   sqft={parseInt(sqft) || 0}
                   // Rehab bathrooms is now independent from Property Information bathrooms
@@ -4131,7 +4152,14 @@ const LeadEdit: React.FC = () => {
                     markFieldDirty('rehabBudget');
                     requestImmediateRehabSave();
                   }}
-                  onBathroomsChange={(n) => setRehabBathrooms(n !== undefined && n !== null ? n : undefined)}
+                  onBathroomsChange={(n) => {
+                    const newValue = n !== undefined && n !== null ? n : undefined;
+                    if (newValue !== rehabBathrooms) {
+                      setRehabBathrooms(newValue);
+                      markFieldDirty('rehabBathrooms');
+                      requestImmediateRehabSave();
+                    }
+                  }}
                   onDataChange={(data) => {
                     const nextFinish = data.finishLevel as 'low_end' | 'mid_range' | 'high_end';
                     const nextToggled =
@@ -4735,10 +4763,45 @@ const LeadEdit: React.FC = () => {
             // Reload photos so the Photos section updates immediately (persisted first)
             await loadPhotos();
             
-            // Retry stage move; if more is missing, open the next popup automatically
-            if (pendingPipelineStatus) {
+            // First, move to "Appointment Complete" stage (if not already there)
+            const appointmentCompleteStage = pipelineStages.find((s) => 
+              s.name?.toLowerCase().includes('appointment') && 
+              s.name?.toLowerCase().includes('complete')
+            );
+            
+            if (appointmentCompleteStage && pipelineStatus !== appointmentCompleteStage.id) {
               try {
+                console.log('📸 Moving to Appointment Complete stage...');
+                await requestStageMove(appointmentCompleteStage.id);
+                console.log('✅ Successfully moved to Appointment Complete stage');
+                // Update previousPipelineStatus to Appointment Complete so if user cancels next popup, it reverts to Appointment Complete
+                setPreviousPipelineStatus(appointmentCompleteStage.id);
+                await loadLead();
+              } catch (e: any) {
+                console.error('❌ Failed to move to Appointment Complete:', e);
+                // If moving to Appointment Complete fails, show error
+                toast({
+                  title: "Error",
+                  description: e?.message || "Failed to move to Appointment Complete stage",
+                  variant: "destructive"
+                });
+                return;
+              }
+            } else if (appointmentCompleteStage && pipelineStatus === appointmentCompleteStage.id) {
+              // Already at Appointment Complete, update previousPipelineStatus
+              setPreviousPipelineStatus(appointmentCompleteStage.id);
+            }
+            
+            // Now proceed with the target stage change (if different from Appointment Complete)
+            if (pendingPipelineStatus && pendingPipelineStatus !== appointmentCompleteStage?.id) {
+              try {
+                console.log('🔄 Attempting to move to target stage:', pendingPipelineStatus);
                 await requestStageMove(pendingPipelineStatus);
+                // Success! Stage moved to target
+                setShowAppointmentPopup(false);
+                setPendingPipelineStatus(null);
+                setPreviousPipelineStatus(null);
+                await loadLead();
               } catch (e: any) {
                 if (e?.code === 'VALIDATION_REQUIRED') {
                   const requiredFields: string[] = Array.isArray(e?.requiredFields) ? e.requiredFields : [];
@@ -4797,17 +4860,21 @@ const LeadEdit: React.FC = () => {
                     setShowOfferMadePopup(true);
                     return;
                   }
+                } else {
+                  throw e;
                 }
-                throw e;
               }
+            } else {
+              // No pending status or already at Appointment Complete - just close popup
+              setShowAppointmentPopup(false);
+              if (pendingPipelineStatus === appointmentCompleteStage?.id) {
+                // We just moved to Appointment Complete, clear pending status
+                setPendingPipelineStatus(null);
+                setPreviousPipelineStatus(null);
+              }
+              // Reload lead to show updated stage
+              await loadLead();
             }
-            
-            setShowAppointmentPopup(false);
-            setPendingPipelineStatus(null);
-            setPreviousPipelineStatus(null);
-            
-            // Reload lead to show updated stage
-            await loadLead();
           } catch (error: any) {
             console.error('Error uploading photos:', error);
             toast({
@@ -4853,17 +4920,99 @@ const LeadEdit: React.FC = () => {
               throw new Error(errorData.error || 'Failed to save appointment date');
             }
 
-            // Now proceed with the stage change
-            if (pendingPipelineStatus) {
-              await requestStageMove(pendingPipelineStatus);
-            }
-            
-            setShowAppointmentSetPopup(false);
-            setPendingPipelineStatus(null);
-            setPreviousPipelineStatus(null);
-            
-            // Reload lead to show updated data
+            // Reload lead to get updated data
             await loadLead();
+
+            // First, move to "Appointment Set" stage (if not already there)
+            const appointmentSetStage = pipelineStages.find((s) => 
+              s.name?.toLowerCase() === 'appointment set'
+            );
+            
+            if (appointmentSetStage && pipelineStatus !== appointmentSetStage.id) {
+              try {
+                console.log('📅 Moving to Appointment Set stage first...');
+                await requestStageMove(appointmentSetStage.id);
+                console.log('✅ Successfully moved to Appointment Set stage');
+                // Update previousPipelineStatus to Appointment Set so if user cancels next popup, it reverts to Appointment Set (not original stage)
+                setPreviousPipelineStatus(appointmentSetStage.id);
+                await loadLead();
+              } catch (e: any) {
+                console.error('❌ Failed to move to Appointment Set:', e);
+                // If moving to Appointment Set fails, show error
+                toast({
+                  title: "Error",
+                  description: e?.message || "Failed to move to Appointment Set stage",
+                  variant: "destructive"
+                });
+                return;
+              }
+            } else if (appointmentSetStage && pipelineStatus === appointmentSetStage.id) {
+              // Already at Appointment Set, update previousPipelineStatus
+              setPreviousPipelineStatus(appointmentSetStage.id);
+            }
+
+            // Now proceed with the target stage change (if different from Appointment Set)
+            if (pendingPipelineStatus && pendingPipelineStatus !== appointmentSetStage?.id) {
+              try {
+                console.log('🔄 Attempting to move to target stage:', pendingPipelineStatus);
+                await requestStageMove(pendingPipelineStatus);
+                // Success! Stage moved to target
+                setShowAppointmentSetPopup(false);
+                setPendingPipelineStatus(null);
+                setPreviousPipelineStatus(null);
+                await loadLead();
+              } catch (e: any) {
+                // If validation still fails, show next required popup
+                if (e?.code === 'VALIDATION_REQUIRED') {
+                  const requiredFields: string[] = Array.isArray(e?.requiredFields) ? e.requiredFields : [];
+                  console.log('📋 Still required after Appointment Set:', requiredFields);
+                  
+                  // Close Appointment Set popup
+                  setShowAppointmentSetPopup(false);
+                  
+                  // Transition to next popup based on requiredFields
+                  const propertyInfoFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
+                  
+                  if (requiredFields.some((f) => propertyInfoFields.includes(f))) {
+                    console.log('🏠 Opening property info popup');
+                    setMissingDdFields(requiredFields.filter((f) => propertyInfoFields.includes(f)));
+                    setShowDueDiligencePopup(true);
+                  } else if (requiredFields.includes('photos')) {
+                    console.log('📸 Opening photo upload popup');
+                    setShowAppointmentPopup(true);
+                  } else if (requiredFields.includes('arv') || requiredFields.includes('comparables')) {
+                    console.log('💰 Opening ARV+Comparables popup');
+                    setShowArvComparablesPopup(true);
+                  } else if (requiredFields.includes('rehabBudget')) {
+                    console.log('🔨 Opening Rehab Budget popup');
+                    setShowRehabBudgetPopup(true);
+                  } else if (requiredFields.includes('underwritingTaxes') || requiredFields.includes('underwritingTimeline')) {
+                    console.log('📊 Opening Timeline+Taxes popup');
+                    setShowTimelineTaxesPopup(true);
+                  } else if (requiredFields.includes('followUpTask')) {
+                    console.log('📋 Opening follow-up task popup');
+                    setShowFollowUpTaskPopup(true);
+                  } else {
+                    // Unknown validation error
+                    toast({
+                      title: 'Stage Change Failed',
+                      description: e?.message || 'Failed to change pipeline stage',
+                      variant: 'destructive',
+                    });
+                  }
+                } else {
+                  throw e;
+                }
+              }
+            } else {
+              // No pending status or already at Appointment Set - just close popup
+              setShowAppointmentSetPopup(false);
+              if (pendingPipelineStatus === appointmentSetStage?.id) {
+                // We just moved to Appointment Set, clear pending status
+                setPendingPipelineStatus(null);
+                setPreviousPipelineStatus(null);
+              }
+            }
             
             // Success toast removed - Lead Detail UX: show toasts ONLY for errors
           } catch (error: any) {
@@ -5457,27 +5606,122 @@ const LeadEdit: React.FC = () => {
             });
             console.log('💾 Lead object updated with new timeline and taxes');
             
-            // Try stage move again - should succeed now!
-            if (pendingPipelineStatus) {
-              console.log('🔄 Final attempt to move stage...');
+            // Reload lead first to ensure data is saved and reflected
+            await loadLead();
+            console.log('✅ Lead reloaded with updated timeline and taxes');
+            
+            // First, move to "Due Diligence Complete" stage (if not already there)
+            const dueDiligenceCompleteStage = pipelineStages.find((s) => 
+              s.name?.toLowerCase().includes('due diligence') && 
+              s.name?.toLowerCase().includes('complete')
+            );
+            
+            if (dueDiligenceCompleteStage && pipelineStatus !== dueDiligenceCompleteStage.id) {
+              try {
+                console.log('📊 Moving to Due Diligence Complete stage...');
+                await requestStageMove(dueDiligenceCompleteStage.id);
+                console.log('✅ Successfully moved to Due Diligence Complete stage');
+                // Update previousPipelineStatus to Due Diligence Complete so if user cancels next popup, it reverts to Due Diligence Complete
+                setPreviousPipelineStatus(dueDiligenceCompleteStage.id);
+                await loadLead();
+              } catch (e: any) {
+                console.error('❌ Failed to move to Due Diligence Complete:', e);
+                // If moving to Due Diligence Complete fails, show error
+                toast({
+                  title: "Error",
+                  description: e?.message || "Failed to move to Due Diligence Complete stage",
+                  variant: "destructive"
+                });
+                return;
+              }
+            } else if (dueDiligenceCompleteStage && pipelineStatus === dueDiligenceCompleteStage.id) {
+              // Already at Due Diligence Complete, update previousPipelineStatus
+              setPreviousPipelineStatus(dueDiligenceCompleteStage.id);
+            }
+            
+            // Now proceed with the target stage change (if different from Due Diligence Complete)
+            if (pendingPipelineStatus && pendingPipelineStatus !== dueDiligenceCompleteStage?.id) {
+              console.log('🔄 Attempting to move to target stage:', pendingPipelineStatus);
               
               try {
                 const moveResult = await requestStageMove(pendingPipelineStatus);
-                // Success! Stage moved - UI already updated by requestStageMove
-                console.log('✅ Stage moved to Due Diligence Complete:', moveResult?.newStageName);
+                // Success! Stage moved to target
+                console.log('✅ Stage moved to target:', moveResult?.newStageName);
                 setPendingPipelineStatus(null);
                 setPreviousPipelineStatus(null);
+                
+                // Reload lead again to show updated stage
+                await loadLead();
                 
                 // ✅ Close popup AFTER successful stage move
                 setShowTimelineTaxesPopup(false);
               } catch (validationError: any) {
-                // If still failing, show error
-                console.error('❌ Stage move still failed:', validationError);
+                console.log('⚠️ Stage move validation error:', validationError);
+                console.log('🔍 Error details:', {
+                  code: validationError?.code,
+                  message: validationError?.message,
+                  requiredFields: validationError?.requiredFields,
+                  hasCode: !!validationError?.code,
+                  codeValue: validationError?.code
+                });
+                
+                // Check for validation error - try multiple ways to detect it
+                const isValidationError = 
+                  validationError?.code === 'VALIDATION_REQUIRED' ||
+                  validationError?.message?.includes('required') ||
+                  validationError?.message?.includes('Offer details');
+                
+                if (isValidationError) {
+                  const requiredFields: string[] = Array.isArray(validationError?.requiredFields) 
+                    ? validationError.requiredFields 
+                    : [];
+                  
+                  // Also try to extract from error message if requiredFields is empty
+                  if (requiredFields.length === 0 && validationError?.message) {
+                    const message = validationError.message;
+                    if (message.includes('offerMadePrice')) requiredFields.push('offerMadePrice');
+                    if (message.includes('offerMadeResponse')) requiredFields.push('offerMadeResponse');
+                  }
+                  
+                  console.log('📋 Still required after Timeline+Taxes:', requiredFields);
+                  
+                  // Check if Offer Made popup is needed - multiple checks
+                  const stageNameLower = (pipelineStages.find((s) => s.id === pendingPipelineStatus)?.name || '').toLowerCase();
+                  const isOfferMadeStage = stageNameLower.includes('offer') && stageNameLower.includes('made');
+                  const hasOfferFields = requiredFields.includes('offerMadePrice') || requiredFields.includes('offerMadeResponse');
+                  const messageHasOffer = validationError?.message?.includes('Offer details') || validationError?.message?.includes('offer');
+                  
+                  if (isOfferMadeStage || hasOfferFields || messageHasOffer) {
+                    console.log('💼 Opening Offer Made popup', { isOfferMadeStage, hasOfferFields, messageHasOffer });
+                    transitioningPopupRef.current = true;
+                    setShowTimelineTaxesPopup(false);
+                    setShowOfferMadePopup(true);
+                    setTimeout(() => { transitioningPopupRef.current = false; }, 100);
+                    return;
+                  }
+                  
+                  // If other validation errors, show error toast
+                  console.error('❌ Unrecognized validation fields:', requiredFields);
+                  toast({
+                    title: "Validation Error",
+                    description: validationError?.message || `Additional fields required: ${requiredFields.join(', ')}`,
+                    variant: "destructive"
+                  });
+                  return;
+                }
+                
+                // Non-validation error - re-throw
                 throw validationError;
               }
             } else {
-              // No pending status - just close popup
+              // No pending status or already at Due Diligence Complete - just close popup
               setShowTimelineTaxesPopup(false);
+              if (pendingPipelineStatus === dueDiligenceCompleteStage?.id) {
+                // We just moved to Due Diligence Complete, clear pending status
+                setPendingPipelineStatus(null);
+                setPreviousPipelineStatus(null);
+              }
+              await loadLead();
             }
           } catch (error: any) {
             console.error('❌ Error in Timeline+Taxes flow:', error);
@@ -5557,10 +5801,55 @@ const LeadEdit: React.FC = () => {
             
             console.log('✅ Offer data saved successfully');
             
-            // Retry stage move; if more is missing, open the next popup automatically
-            if (pendingPipelineStatus) {
-                try {
-                  await requestStageMove(pendingPipelineStatus);
+            // Reload lead first to ensure data is saved and reflected
+            await loadLead();
+            console.log('✅ Lead reloaded with updated offer data');
+            
+            // First, move to "Offer Made" stage (if not already there)
+            const offerMadeStage = pipelineStages.find((s) => 
+              s.name?.toLowerCase().includes('offer') && 
+              s.name?.toLowerCase().includes('made')
+            );
+            
+            if (offerMadeStage && pipelineStatus !== offerMadeStage.id) {
+              try {
+                console.log('💰 Moving to Offer Made stage...');
+                await requestStageMove(offerMadeStage.id);
+                console.log('✅ Successfully moved to Offer Made stage');
+                // Update previousPipelineStatus to Offer Made so if user cancels next popup, it reverts to Offer Made
+                setPreviousPipelineStatus(offerMadeStage.id);
+                await loadLead();
+              } catch (e: any) {
+                console.error('❌ Failed to move to Offer Made:', e);
+                // If moving to Offer Made fails, show error
+                toast({
+                  title: "Error",
+                  description: e?.message || "Failed to move to Offer Made stage",
+                  variant: "destructive"
+                });
+                return;
+              }
+            } else if (offerMadeStage && pipelineStatus === offerMadeStage.id) {
+              // Already at Offer Made, update previousPipelineStatus
+              setPreviousPipelineStatus(offerMadeStage.id);
+            }
+            
+            // Now proceed with the target stage change (if different from Offer Made)
+            if (pendingPipelineStatus && pendingPipelineStatus !== offerMadeStage?.id) {
+              console.log('🔄 Attempting to move to target stage:', pendingPipelineStatus);
+              
+              try {
+                const moveResult = await requestStageMove(pendingPipelineStatus);
+                // Success! Stage moved to target
+                console.log('✅ Stage moved to target:', moveResult?.newStageName);
+                setPendingPipelineStatus(null);
+                setPreviousPipelineStatus(null);
+                
+                // Reload lead again to show updated stage
+                await loadLead();
+                
+                // ✅ Close popup AFTER successful stage move
+                setShowOfferMadePopup(false);
                 } catch (e: any) {
                   if (e?.code === 'VALIDATION_REQUIRED') {
                     const requiredFields: string[] = Array.isArray(e?.requiredFields) ? e.requiredFields : [];
@@ -5611,14 +5900,16 @@ const LeadEdit: React.FC = () => {
                   }
                   throw e;
                 }
+            } else {
+              // No pending status or already at Offer Made - just close popup
+              setShowOfferMadePopup(false);
+              if (pendingPipelineStatus === offerMadeStage?.id) {
+                // We just moved to Offer Made, clear pending status
+                setPendingPipelineStatus(null);
+                setPreviousPipelineStatus(null);
+              }
+              await loadLead();
             }
-            
-            setShowOfferMadePopup(false);
-            setPendingPipelineStatus(null);
-            setPreviousPipelineStatus(null);
-            
-            // Reload lead to show updated data
-            await loadLead();
             
             // Success toast removed - only show errors
           } catch (error: any) {

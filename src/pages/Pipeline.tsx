@@ -856,11 +856,15 @@ const Pipeline = () => {
           });
 
           // Show the FIRST required popup
-          // NEW Priority order: propertyInfo → photos → ARV+comps → rehab → timeline+taxes → offer
+          // NEW Priority order: appointmentDate → propertyInfo → photos → ARV+comps → rehab → timeline+taxes → offer
           const propertyInfoFields = ['hvacType','hvacAge','waterHeaterAge','roofAge','waterType','sewerType'];
           const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingTaxes','underwritingTimeline'];
           
-          if (requiredFields.some((f) => propertyInfoFields.includes(f))) {
+          // STEP 0: Check for appointmentDate FIRST (before all other popups)
+          if (requiredFields.includes('appointmentDate')) {
+            console.log('📅 Opening Appointment Set popup');
+            setShowAppointmentSetPopup(true);
+          } else if (requiredFields.some((f) => propertyInfoFields.includes(f))) {
             // STEP 1: Property Info (for Appointment Complete)
             setMissingDdFields(requiredFields.filter((f) => propertyInfoFields.includes(f)));
             setShowDueDiligencePopup(true);
@@ -937,6 +941,12 @@ const Pipeline = () => {
   };
 
   const handleValidationRequired = (requiredFields: string[], stageNameLower: string) => {
+    // STEP 0: Check for appointmentDate FIRST (before all other popups)
+    if (requiredFields.includes('appointmentDate')) {
+      console.log('📅 Opening Appointment Set popup');
+      setShowAppointmentSetPopup(true);
+      return;
+    }
     if (requiredFields.includes('photos')) {
       setShowAppointmentPopup(true);
       return;
@@ -951,14 +961,32 @@ const Pipeline = () => {
       setShowDueDiligencePopup(true);
       return;
     }
-    const ddCompleteFields = ['arv','comparables','rehabBudget','underwritingCalculation','underwritingTaxes','underwritingTimeline'];
+    // Check for ARV/Comparables first (before other DD Complete fields)
+    if (requiredFields.includes('arv') || requiredFields.includes('comparables')) {
+      setShowArvComparablesPopup(true);
+      return;
+    }
+    // Check for Rehab Budget
+    if (requiredFields.includes('rehabBudget')) {
+      setShowRehabBudgetPopup(true);
+      return;
+    }
+    // Check for Timeline/Taxes - use interactive popup instead of requirements popup
+    if (requiredFields.includes('underwritingTaxes') || requiredFields.includes('underwritingTimeline')) {
+      setShowTimelineTaxesPopup(true);
+      return;
+    }
+    // Check for Offer Made fields
+    if (requiredFields.includes('offerMadePrice') || requiredFields.includes('offerMadeResponse') || 
+        (stageNameLower.includes('offer') && stageNameLower.includes('made'))) {
+      setShowOfferMadePopup(true);
+      return;
+    }
+    // Fallback: Show requirements popup only for other DD Complete fields
+    const ddCompleteFields = ['underwritingCalculation'];
     if (requiredFields.some((f) => ddCompleteFields.includes(f))) {
       setMissingDdCompleteItems(requiredFields.filter((f) => ddCompleteFields.includes(f)));
       setShowDueDiligenceCompletePopup(true);
-      return;
-    }
-    if (stageNameLower.includes('offer') && stageNameLower.includes('made')) {
-      setShowOfferMadePopup(true);
       return;
     }
   };
@@ -1010,12 +1038,25 @@ const Pipeline = () => {
           const requiredFields: string[] = Array.isArray(errorData.requiredFields) ? errorData.requiredFields : [];
           console.log('📋 Additional validation required:', requiredFields, 'stageName:', stageNameLower);
           
-          // Update pendingStageChange with the NEW required fields (backend re-validated)
+          // ✅ Refresh lead data from backend before updating pendingStageChange
+          let refreshedLead = leadToMove;
+          try {
+            const refreshResponse = await makeApiCall(`${API_BASE}/leads/${leadId}`);
+            if (refreshResponse.ok) {
+              const refreshData = await refreshResponse.json();
+              refreshedLead = refreshData.data || refreshData;
+              console.log('✅ Refreshed lead data before showing next popup:', refreshedLead);
+            }
+          } catch (e) {
+            console.warn('⚠️ Failed to refresh lead data:', e);
+          }
+          
+          // Update pendingStageChange with the NEW required fields (backend re-validated) and fresh lead data
           setPendingStageChange({ 
             leadId, 
             newStageId, 
             stageName, 
-            leadToMove,
+            leadToMove: refreshedLead,
             allRequiredFields: requiredFields 
           });
           
@@ -1684,36 +1725,114 @@ const Pipeline = () => {
                   throw new Error('Failed to save appointment date');
                 }
 
-                // Now try to move the stage
-                const moveResponse = await makeApiCall(`${API_BASE}/pipeline/leads/${pendingStageChange.leadId}/move`, {
-                  method: 'PUT',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ stageId: pendingStageChange.newStageId })
-                });
-
-                if (!moveResponse.ok) {
-                  const errorData = await moveResponse.json();
-                  throw new Error(errorData.error?.message || 'Failed to move lead');
+                console.log('✅ Appointment date saved successfully');
+                
+                // ✅ Refresh lead data before moving to Appointment Set stage
+                let updatedLeadData = null;
+                try {
+                  const refreshResponse = await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`);
+                  if (refreshResponse.ok) {
+                    const refreshData = await refreshResponse.json();
+                    updatedLeadData = refreshData.data || refreshData;
+                    console.log('✅ Refreshed lead data after Appointment date save:', updatedLeadData);
+                    
+                    // Update pendingStageChange with fresh data
+                    setPendingStageChange(prev => prev ? {
+                      ...prev,
+                      leadToMove: {
+                        ...prev.leadToMove,
+                        customFields: updatedLeadData.customFields
+                      }
+                    } : null);
+                  }
+                } catch (e) {
+                  console.warn('⚠️ Failed to refresh lead data:', e);
                 }
 
-                // Update UI with new stage
-                setLeads(prev => prev.map(lead => 
-                  lead.id === pendingStageChange.leadId 
-                    ? { 
-                        ...lead, 
-                        stage: pendingStageChange.newStageId, 
-                        stagePipelineKey: getStagePipelineKey(pendingStageChange.newStageId),
-                        statusChangedDate: new Date().toISOString(),
-                        customFields: {
-                          ...(lead.customFields || {}),
-                          appointmentDate
-                        }
+                // First, move to "Appointment Set" stage (if not already there)
+                const appointmentSetStage = pipelineStages.find((s) => 
+                  s.name?.toLowerCase() === 'appointment set'
+                );
+                
+                const currentLead = leads.find(l => l.id === pendingStageChange.leadId);
+                const currentStageId = currentLead?.stage;
+                
+                if (appointmentSetStage && currentStageId !== appointmentSetStage.id) {
+                  try {
+                    console.log('📅 Moving to Appointment Set stage first...');
+                    const moveResponse = await makeApiCall(`${API_BASE}/pipeline/leads/${pendingStageChange.leadId}/move`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ stageId: appointmentSetStage.id })
+                    });
+                    
+                    if (!moveResponse.ok) {
+                      const errorData = await moveResponse.json().catch(() => ({}));
+                      if (errorData?.error?.code !== 'VALIDATION_REQUIRED' && errorData?.code !== 'VALIDATION_REQUIRED') {
+                        throw new Error(errorData?.error?.message || errorData?.error || errorData?.message || 'Failed to move to Appointment Set stage');
                       }
-                    : lead
-                ));
-
-                setShowAppointmentSetPopup(false);
-                setPendingStageChange(null);
+                      // If validation required, continue to retryPendingStageMove which will handle it
+                    } else {
+                      console.log('✅ Successfully moved to Appointment Set stage');
+                      
+                      // Update lead in state
+                      setLeads(prev => prev.map(lead => 
+                        lead.id === pendingStageChange.leadId 
+                          ? { 
+                              ...lead, 
+                              stage: appointmentSetStage.id, 
+                              stagePipelineKey: getStagePipelineKey(appointmentSetStage.id),
+                              statusChangedDate: new Date().toISOString(),
+                              customFields: {
+                                ...(lead.customFields || {}),
+                                appointmentDate
+                              }
+                            }
+                          : lead
+                      ));
+                      
+                      // Refresh lead data
+                      try {
+                        const refreshResponse = await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`);
+                        if (refreshResponse.ok) {
+                          const refreshData = await refreshResponse.json();
+                          const refreshedLead = refreshData.data || refreshData;
+                          setPendingStageChange(prev => prev ? {
+                            ...prev,
+                            leadToMove: refreshedLead
+                          } : null);
+                        }
+                      } catch (e) {
+                        console.warn('⚠️ Failed to refresh lead data after Appointment Set move:', e);
+                      }
+                    }
+                  } catch (e: any) {
+                    console.error('❌ Failed to move to Appointment Set:', e);
+                    // If moving to Appointment Set fails, show error
+                    toast({
+                      title: "Error",
+                      description: e?.message || "Failed to move to Appointment Set stage",
+                      variant: "destructive"
+                    });
+                    return;
+                  }
+                }
+                
+                // Now proceed with the target stage change (if different from Appointment Set)
+                if (pendingStageChange && pendingStageChange.newStageId !== appointmentSetStage?.id) {
+                  console.log('🔄 Proceeding with target stage move:', pendingStageChange.newStageId);
+                  // Close Appointment Set popup before retrying (retryPendingStageMove will open next popup if needed)
+                  setShowAppointmentSetPopup(false);
+                  // Retry stage move; if more is missing, open the next popup automatically
+                  await retryPendingStageMove();
+                } else {
+                  // Already at Appointment Set or target is Appointment Set - just close popup
+                  setShowAppointmentSetPopup(false);
+                  if (pendingStageChange && pendingStageChange.newStageId === appointmentSetStage?.id) {
+                    // We just moved to Appointment Set, clear pending status
+                    setPendingStageChange(null);
+                  }
+                }
               } catch (error: any) {
                 console.error('Error setting appointment date:', error);
                 toast({
@@ -2162,8 +2281,9 @@ const Pipeline = () => {
                       rehabToggledItems: data.rehabToggledItems,
                       rehabCustomValues: data.rehabCustomValues,
                       rehabBudget: totalWithCustom, // ✅ CRITICAL: Save total for backend validation
-                      // Sync bathrooms and sqft with Property Information
-                      ...(data.bathrooms !== undefined ? { bathrooms: data.bathrooms } : {}),
+                      // Save rehab bathrooms independently (NOT synced with Property Information)
+                      ...(data.bathrooms !== undefined && data.bathrooms !== null ? { rehabBathrooms: data.bathrooms } : {}),
+                      // Sync sqft with Property Information
                       ...(data.sqft !== undefined ? { sqft: data.sqft } : {})
                     }
                   })
@@ -2303,6 +2423,28 @@ const Pipeline = () => {
                 
                 setShowTimelineTaxesPopup(false);
                 
+                // ✅ Refresh lead data before retrying stage move
+                let updatedLeadData = null;
+                try {
+                  const refreshResponse = await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`);
+                  if (refreshResponse.ok) {
+                    const refreshData = await refreshResponse.json();
+                    updatedLeadData = refreshData.data || refreshData;
+                    console.log('✅ Refreshed lead data after Timeline+Taxes save:', updatedLeadData);
+                    
+                    // Update pendingStageChange with fresh data
+                    setPendingStageChange(prev => prev ? {
+                      ...prev,
+                      leadToMove: {
+                        ...prev.leadToMove,
+                        customFields: updatedLeadData.customFields
+                      }
+                    } : null);
+                  }
+                } catch (e) {
+                  console.warn('⚠️ Failed to refresh lead data:', e);
+                }
+                
                 // This is the last DD Complete requirement, so try the stage move
                 isTransitioningPopupsRef.current = false;
                 await retryPendingStageMove();
@@ -2351,21 +2493,135 @@ const Pipeline = () => {
                 // Set loading state for popup submission
                 setSubmittingPopup(true);
                 
-                // Update lead with offer info
+                // ✅ Fetch fresh customFields first
+                let freshCustomFields = {};
+                try {
+                  const freshLeadResponse = await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`);
+                  if (freshLeadResponse.ok) {
+                    const freshLeadData = await freshLeadResponse.json();
+                    freshCustomFields = (freshLeadData.data || freshLeadData).customFields || {};
+                  }
+                } catch (e) {
+                  freshCustomFields = pendingStageChange.leadToMove.customFields || {};
+                }
+                
+                // Update lead with offer info (merge with fresh data)
                 await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`, {
                   method: 'PATCH',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
                     customFields: {
-                      ...pendingStageChange.leadToMove.customFields,
+                      ...freshCustomFields,
                       ...data
                     }
                   })
                 });
-                setShowOfferMadePopup(false);
+                
+                console.log('✅ Offer data saved successfully');
+                
+                // ✅ Refresh lead data before moving to Offer Made stage
+                let updatedLeadData = null;
+                try {
+                  const refreshResponse = await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`);
+                  if (refreshResponse.ok) {
+                    const refreshData = await refreshResponse.json();
+                    updatedLeadData = refreshData.data || refreshData;
+                    console.log('✅ Refreshed lead data after Offer save:', updatedLeadData);
+                    
+                    // Update pendingStageChange with fresh data
+                    setPendingStageChange(prev => prev ? {
+                      ...prev,
+                      leadToMove: {
+                        ...prev.leadToMove,
+                        customFields: updatedLeadData.customFields
+                      }
+                    } : null);
+                  }
+                } catch (e) {
+                  console.warn('⚠️ Failed to refresh lead data:', e);
+                }
 
-                // Retry stage move; if more is missing, open the next popup automatically
-                await retryPendingStageMove();
+                // First, move to "Offer Made" stage (if not already there)
+                const offerMadeStage = pipelineStages.find((s) => 
+                  s.name?.toLowerCase().includes('offer') && 
+                  s.name?.toLowerCase().includes('made')
+                );
+                
+                const currentLead = leads.find(l => l.id === pendingStageChange.leadId);
+                const currentStageId = currentLead?.stage;
+                
+                if (offerMadeStage && currentStageId !== offerMadeStage.id) {
+                  try {
+                    console.log('💰 Moving to Offer Made stage...');
+                    const moveResponse = await makeApiCall(`${API_BASE}/pipeline/leads/${pendingStageChange.leadId}/move`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ stageId: offerMadeStage.id })
+                    });
+                    
+                    if (!moveResponse.ok) {
+                      const errorData = await moveResponse.json().catch(() => ({}));
+                      if (errorData?.error?.code !== 'VALIDATION_REQUIRED' && errorData?.code !== 'VALIDATION_REQUIRED') {
+                        throw new Error(errorData?.error?.message || errorData?.error || errorData?.message || 'Failed to move to Offer Made stage');
+                      }
+                      // If validation required, continue to retryPendingStageMove which will handle it
+                    } else {
+                      console.log('✅ Successfully moved to Offer Made stage');
+                      
+                      // Update lead in state
+                      setLeads(prev => prev.map(lead => 
+                        lead.id === pendingStageChange.leadId 
+                          ? { 
+                              ...lead, 
+                              stage: offerMadeStage.id, 
+                              stagePipelineKey: getStagePipelineKey(offerMadeStage.id),
+                              statusChangedDate: new Date().toISOString()
+                            }
+                          : lead
+                      ));
+                      
+                      // Refresh lead data
+                      try {
+                        const refreshResponse = await makeApiCall(`${API_BASE}/leads/${pendingStageChange.leadId}`);
+                        if (refreshResponse.ok) {
+                          const refreshData = await refreshResponse.json();
+                          const refreshedLead = refreshData.data || refreshData;
+                          setPendingStageChange(prev => prev ? {
+                            ...prev,
+                            leadToMove: refreshedLead
+                          } : null);
+                        }
+                      } catch (e) {
+                        console.warn('⚠️ Failed to refresh lead data after Offer Made move:', e);
+                      }
+                    }
+                  } catch (e: any) {
+                    console.error('❌ Failed to move to Offer Made:', e);
+                    // If moving to Offer Made fails, show error
+                    toast({
+                      title: "Error",
+                      description: e?.message || "Failed to move to Offer Made stage",
+                      variant: "destructive"
+                    });
+                    return;
+                  }
+                }
+                
+                // Now proceed with the target stage change (if different from Offer Made)
+                if (pendingStageChange && pendingStageChange.newStageId !== offerMadeStage?.id) {
+                  console.log('🔄 Proceeding with target stage move:', pendingStageChange.newStageId);
+                  // Close Offer Made popup before retrying (retryPendingStageMove will open next popup if needed)
+                  setShowOfferMadePopup(false);
+                  // Retry stage move; if more is missing, open the next popup automatically
+                  await retryPendingStageMove();
+                } else {
+                  // Already at Offer Made or target is Offer Made - just close popup
+                  setShowOfferMadePopup(false);
+                  if (pendingStageChange && pendingStageChange.newStageId === offerMadeStage?.id) {
+                    // We just moved to Offer Made, clear pending status
+                    setPendingStageChange(null);
+                  }
+                }
               } catch (error: any) {
                 console.error('Error in Offer Made flow:', error);
                 toast({

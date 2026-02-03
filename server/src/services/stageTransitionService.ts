@@ -111,6 +111,18 @@ export const stageTransitionService = {
         select: { id: true, name: true, orderIndex: true },
       });
 
+      // NEW: Find Appointment Set stage to check appointmentDate requirement
+      const appointmentSetStage = await prisma.pipelineStage.findFirst({
+        where: {
+          pipelineId: toStage.pipelineId,
+          AND: [
+            { name: { contains: 'appointment', mode: 'insensitive' } },
+            { name: { contains: 'set', mode: 'insensitive' } },
+          ],
+        },
+        select: { id: true, name: true, orderIndex: true },
+      });
+
       const dueDiligenceStage = await prisma.pipelineStage.findFirst({
         where: {
           pipelineId: toStage.pipelineId,
@@ -125,6 +137,15 @@ export const stageTransitionService = {
       // Collect validation errors instead of returning early
       const allRequiredFields: string[] = [];
       const allErrors: string[] = [];
+
+      // STEP 0: Check appointmentDate requirement (Appointment Set+ stages)
+      // This must be checked FIRST before all other requirements
+      if (appointmentSetStage && toStage.orderIndex >= appointmentSetStage.orderIndex) {
+        if (isMissing(customFields.appointmentDate)) {
+          allRequiredFields.push('appointmentDate');
+          allErrors.push('Appointment date and time are required before moving to this stage');
+        }
+      }
 
       // STEP 1: Check property info requirement (Appointment Complete+ stages)
       // This is checked FIRST so it appears before photos in the validation flow

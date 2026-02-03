@@ -947,7 +947,7 @@ export const RehabBudgetFullPopup = ({
     existingData?.rehabFinishLevel || 'mid_range'
   );
   const [numberOfWindows, setNumberOfWindows] = useState(existingData?.rehabNumberOfWindows || 10);
-  const [numberOfBathrooms, setNumberOfBathrooms] = useState<number | undefined>(existingData?.bathrooms);
+  const [numberOfBathrooms, setNumberOfBathrooms] = useState<number | undefined>(existingData?.rehabBathrooms ?? existingData?.bathrooms);
   const [squareFeet, setSquareFeet] = useState<number>(sqft || existingData?.sqft || 0);
   const [miscLabel, setMiscLabel] = useState(existingData?.rehabCustomValues?.miscLabel || '');
   const [miscValue, setMiscValue] = useState(existingData?.rehabCustomValues?.miscValue?.toString() || '');
@@ -1061,7 +1061,7 @@ export const RehabBudgetFullPopup = ({
       
       setFinishLevel(existingData.rehabFinishLevel || 'mid_range');
       setNumberOfWindows(existingData.rehabNumberOfWindows || 10);
-      setNumberOfBathrooms(existingData.bathrooms);
+      setNumberOfBathrooms(existingData.rehabBathrooms ?? existingData.bathrooms);
       setSquareFeet(existingData.sqft || sqft || 0);
       setMiscLabel(existingData.rehabCustomValues?.miscLabel || '');
       setMiscValue(existingData.rehabCustomValues?.miscValue?.toString() || '');
