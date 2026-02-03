@@ -735,7 +735,7 @@ export const ArvComparablesPopup = ({
 }: {
   open: boolean;
   onClose: () => void;
-  onSubmit: (data: { arv: number; comparablesFile: File | null }) => Promise<void>;
+  onSubmit: (data: { arv: number; comparablesFiles: File[] }) => Promise<void>;
   existingData?: any;
 }) => {
   const [arvValue, setArvValue] = useState(existingData?.arv || 0);
@@ -749,7 +749,7 @@ export const ArvComparablesPopup = ({
     }
     return '';
   });
-  const [comparablesFile, setComparablesFile] = useState<File | null>(null);
+  const [comparablesFiles, setComparablesFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const inputId = useId();
 
@@ -783,13 +783,19 @@ export const ArvComparablesPopup = ({
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
+    if (e.target.files && e.target.files.length > 0) {
+      const files = Array.from(e.target.files);
       // Only accept PDFs
-      if (file.type === 'application/pdf') {
-        setComparablesFile(file);
-      } else {
+      const pdfFiles = files.filter(file => file.type === 'application/pdf');
+      const nonPdfFiles = files.filter(file => file.type !== 'application/pdf');
+      
+      if (nonPdfFiles.length > 0) {
         alert('Only PDF files are allowed for comparable properties');
+      }
+      
+      if (pdfFiles.length > 0) {
+        setComparablesFiles(pdfFiles);
+      } else {
         e.target.value = '';
       }
     }
@@ -801,12 +807,12 @@ export const ArvComparablesPopup = ({
     try {
       await onSubmit({
         arv: arvValue,
-        comparablesFile
+        comparablesFiles
       });
       // Reset on success
       setArvValue(0);
       setArvDisplay('');
-      setComparablesFile(null);
+      setComparablesFiles([]);
       // DON'T call onClose here - let parent decide when to close after checking validation
       // onClose();
     } catch (error) {
@@ -816,7 +822,7 @@ export const ArvComparablesPopup = ({
     }
   };
 
-  const isValid = arvValue > 0 && comparablesFile;
+  const isValid = arvValue > 0 && comparablesFiles.length > 0;
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -860,30 +866,44 @@ export const ArvComparablesPopup = ({
                 className="cursor-pointer text-sm text-slate-600 hover:text-slate-900 flex items-center justify-center gap-2"
               >
                 <Upload className="w-4 h-4" />
-                {comparablesFile ? comparablesFile.name : 'Click to upload PDF'}
+                {comparablesFiles.length > 0 
+                  ? `${comparablesFiles.length} file${comparablesFiles.length !== 1 ? 's' : ''} selected`
+                  : 'Click to upload PDF(s)'}
               </Label>
               <Input 
                 id={inputId}
                 type="file" 
+                multiple
                 accept="application/pdf"
                 onChange={handleFileChange}
                 className="hidden"
               />
             </div>
-            {comparablesFile && (
-              <div className="flex items-center gap-2 text-sm text-green-600">
-                <span>✓ {comparablesFile.name} selected</span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setComparablesFile(null);
-                    const input = document.getElementById(inputId) as HTMLInputElement;
-                    if (input) input.value = '';
-                  }}
-                >
-                  <X className="w-4 h-4" />
-                </Button>
+            {comparablesFiles.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-xs text-slate-600 font-medium">
+                  Selected files ({comparablesFiles.length}):
+                </div>
+                <div className="space-y-1 max-h-32 overflow-y-auto">
+                  {comparablesFiles.map((file, index) => (
+                    <div key={index} className="flex items-center gap-2 text-sm text-green-600 bg-green-50 p-2 rounded">
+                      <span className="flex-1">✓ {file.name}</span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 w-6 p-0"
+                        onClick={() => {
+                          const newFiles = comparablesFiles.filter((_, i) => i !== index);
+                          setComparablesFiles(newFiles);
+                          const input = document.getElementById(inputId) as HTMLInputElement;
+                          if (input) input.value = '';
+                        }}
+                      >
+                        <X className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

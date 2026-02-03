@@ -3931,7 +3931,7 @@ const LeadEdit: React.FC = () => {
                   // Round to nearest 0.5
                   setBathrooms(String(Math.max(0, Math.round(v * 2) / 2)));
                 }}
-                placeholder="0"
+                placeholder="Baths"
                 className="h-5 text-[10px]"
                 disabled={!canEditLead}
               />
@@ -5086,21 +5086,54 @@ const LeadEdit: React.FC = () => {
 
             console.log('✅ ARV saved');
 
-            // Upload comparables PDF if provided (REQUIRED for DD Complete)
-            if (data.comparablesFile) {
-              const formData = new FormData();
-              formData.append('file', data.comparablesFile);
+            // Upload comparables PDFs if provided (REQUIRED for DD Complete)
+            if (data.comparablesFiles && data.comparablesFiles.length > 0) {
+              let uploadedCount = 0;
+              let failedCount = 0;
               
-              const uploadResponse = await makeApiCall(`${API_BASE}/comps/leads/${id}/pdfs`, {
-                method: 'POST',
-                body: formData
-              });
+              for (const file of data.comparablesFiles) {
+                try {
+                  const formData = new FormData();
+                  formData.append('file', file);
+                  
+                  const uploadResponse = await makeApiCall(`${API_BASE}/comps/leads/${id}/pdfs`, {
+                    method: 'POST',
+                    body: formData
+                  });
 
-              if (!uploadResponse.ok) {
-                throw new Error('Failed to upload comparables PDF');
+                  if (uploadResponse.ok) {
+                    uploadedCount++;
+                    console.log('✅ Comparables PDF uploaded:', file.name);
+                  } else {
+                    failedCount++;
+                    console.error('❌ Failed to upload comparables PDF:', file.name);
+                    toast({
+                      title: "Upload Error",
+                      description: `Failed to upload ${file.name}`,
+                      variant: "destructive"
+                    });
+                  }
+                } catch (error) {
+                  failedCount++;
+                  console.error('❌ Error uploading comparables PDF:', file.name, error);
+                  toast({
+                    title: "Upload Error",
+                    description: `Failed to upload ${file.name}`,
+                    variant: "destructive"
+                  });
+                }
               }
-
-              console.log('✅ Comparables PDF uploaded');
+              
+              console.log(`📄 Uploaded ${uploadedCount} of ${data.comparablesFiles.length} comparables PDFs`);
+              if (failedCount > 0 && uploadedCount > 0) {
+                toast({
+                  title: "Partial Upload",
+                  description: `Uploaded ${uploadedCount} of ${data.comparablesFiles.length} files. ${failedCount} failed.`,
+                  variant: "destructive"
+                });
+              } else if (failedCount === data.comparablesFiles.length) {
+                throw new Error('Failed to upload all comparables PDFs');
+              }
             }
 
             // Reload lead data

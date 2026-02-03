@@ -1943,15 +1943,54 @@ const Pipeline = () => {
                   })
                 });
                 
-                // Upload comparables PDF if provided
-                if (data.comparablesFile) {
-                  const formData = new FormData();
-                  formData.append('file', data.comparablesFile);
+                // Upload comparables PDFs if provided
+                if (data.comparablesFiles && data.comparablesFiles.length > 0) {
+                  let uploadedCount = 0;
+                  let failedCount = 0;
                   
-                  await makeApiCall(`${API_BASE}/comps/leads/${pendingStageChange.leadId}/pdfs`, {
-                    method: 'POST',
-                    body: formData
-                  });
+                  for (const file of data.comparablesFiles) {
+                    try {
+                      const formData = new FormData();
+                      formData.append('file', file);
+                      
+                      const uploadResponse = await makeApiCall(`${API_BASE}/comps/leads/${pendingStageChange.leadId}/pdfs`, {
+                        method: 'POST',
+                        body: formData
+                      });
+
+                      if (uploadResponse.ok) {
+                        uploadedCount++;
+                        console.log('✅ Comparables PDF uploaded:', file.name);
+                      } else {
+                        failedCount++;
+                        console.error('❌ Failed to upload comparables PDF:', file.name);
+                        toast({
+                          title: "Upload Error",
+                          description: `Failed to upload ${file.name}`,
+                          variant: "destructive"
+                        });
+                      }
+                    } catch (error) {
+                      failedCount++;
+                      console.error('❌ Error uploading comparables PDF:', file.name, error);
+                      toast({
+                        title: "Upload Error",
+                        description: `Failed to upload ${file.name}`,
+                        variant: "destructive"
+                      });
+                    }
+                  }
+                  
+                  console.log(`📄 Uploaded ${uploadedCount} of ${data.comparablesFiles.length} comparables PDFs`);
+                  if (failedCount > 0 && uploadedCount > 0) {
+                    toast({
+                      title: "Partial Upload",
+                      description: `Uploaded ${uploadedCount} of ${data.comparablesFiles.length} files. ${failedCount} failed.`,
+                      variant: "destructive"
+                    });
+                  } else if (failedCount === data.comparablesFiles.length) {
+                    throw new Error('Failed to upload all comparables PDFs');
+                  }
                 }
                 
                 setShowArvComparablesPopup(false);
