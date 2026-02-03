@@ -1648,8 +1648,8 @@ const Inbox = () => {
       );
       return unreadComms;
     } else if (source === 'reminders') {
-      // Combine reminders and notifications for the reminders tab
-      return [...reminders, ...notifications];
+      // Show only reminders (notifications removed)
+      return [...reminders];
     } else {
       // For other tabs, show dummy data + Gmail emails
       const combinedMessages = [...staticOther, ...gmailEmails];
