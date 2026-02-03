@@ -271,7 +271,15 @@ export const metricsService = {
         leadType: 'SELLER',
       });
       result.contractsSold = new Set(dispClosedDeals.map((d) => d.leadId)).size;
-      result.totalProfit = dispClosedDeals.reduce((sum, d) => sum + (d.netProfit || 0), 0);
+      
+      // Total profit: Sum of profit from ALL closed deals (ACQ + DISP) this month
+      // Only count deals with actual netProfit value (no fallback)
+      const allClosedDeals = await metricsRepository.getDealsClosedBetween(start.toDate(), end.toDate(), {
+        leadType: 'SELLER',
+      });
+      result.totalProfit = allClosedDeals
+        .filter(d => d.netProfit != null) // Only include deals with netProfit
+        .reduce((sum, d) => sum + d.netProfit, 0);
     }
 
     // MANAGER KPIs (team-wide for all ACQ agents)
@@ -336,26 +344,39 @@ export const metricsService = {
    * @param end End date of timeframe
    * @param assignedUserId User ID for personal stats, undefined for team-wide stats
    */
-  async calculateAcqKpis(start: Date, end: Date, createdById?: string) {
+  async calculateAcqKpis(start: Date, end: Date, assignedUserId?: string) {
     // ✅ Total contracts: Count deals where contractedAt is within timeframe (team or personal)
+    // For ACQ agent: Count leads assigned to them that are under contract
+    // For Manager: Count leads assigned to ALL ACQ agents that are under contract
     const contractDeals = await prisma.deal.findMany({
       where: {
         contractedAt: { gte: start, lt: end },
         lead: {
           pipelineStage: { pipeline: { key: 'ACQUISITIONS' } },
           leadType: 'SELLER',
-          ...(createdById ? { createdById } : {})
+          ...(assignedUserId 
+            ? { assignedUserId } 
+            : {
+                // When assignedUserId is undefined (Manager view), filter by ACQ role
+                assignedUser: {
+                  roles: {
+                    some: {
+                      role: { name: 'ACQ' }
+                    }
+                  }
+                }
+              })
         }
       },
       select: { leadId: true }
     });
     const totalContracts = new Set(contractDeals.map(d => d.leadId)).size;
 
-    // Leads received this month
+    // Leads received this month (assigned to ACQ agent)
     const leadsReceived = await metricsRepository.getLeadsCreatedBetweenScoped(start, end, {
       pipelineKey: 'ACQUISITIONS',
       leadType: 'SELLER',
-      createdById,
+      assignedUserId,
       onlyPipelineStatus: true,
     });
     const leadsReceivedCount = leadsReceived.length;
@@ -369,26 +390,39 @@ export const metricsService = {
     const activeLeads = await metricsRepository.getActiveLeadsWithActivityByPipeline({
       pipelineKey: 'ACQUISITIONS',
       leadType: 'SELLER',
-      createdById,
+      assignedUserId,
       onlyPipelineStatus: true,
     });
 
     const nowDt = new Date();
 
-    // SLA breaches for leads created this month (2h/16h ET) using lastActivityAt
+    // SLA breaches for leads created this month (2h/16h ET) using lastContactAt (no fallback)
     const createdThisMonthIds = new Set(leadsReceived.map((l) => l.id));
     const slaBreaches = activeLeads.filter((l) => {
       if (!createdThisMonthIds.has(l.id)) return false;
-      const lastActivityAt = computeLastActivityAt(l);
+      // Use lastContactAt only (no fallback to updatedAt or other fields)
+      if (!l.lastContactAt) {
+        // If never contacted, check if threshold exceeded
+        const thresholdHours = getSlaThresholdHoursEt(l.createdAt);
+        const hoursSinceCreation = (nowDt.getTime() - l.createdAt.getTime()) / (1000 * 60 * 60);
+        return hoursSinceCreation > thresholdHours;
+      }
+      // If contacted, check if contact happened within threshold
       const thresholdHours = getSlaThresholdHoursEt(l.createdAt);
-      const hoursToTouch = (lastActivityAt.getTime() - l.createdAt.getTime()) / (1000 * 60 * 60);
+      const hoursToTouch = (l.lastContactAt.getTime() - l.createdAt.getTime()) / (1000 * 60 * 60);
       return hoursToTouch > thresholdHours;
     }).length;
 
-    // 48h stale across all active leads
+    // 48h stale across all active leads using lastContactAt (no fallback)
     const stale48h = activeLeads.filter((l) => {
-      const lastActivityAt = computeLastActivityAt(l);
-      const hoursSince = (nowDt.getTime() - lastActivityAt.getTime()) / (1000 * 60 * 60);
+      // Use lastContactAt only (no fallback)
+      if (!l.lastContactAt) {
+        // If never contacted, check if 48h passed since creation
+        const hoursSinceCreation = (nowDt.getTime() - l.createdAt.getTime()) / (1000 * 60 * 60);
+        return hoursSinceCreation >= 48;
+      }
+      // If contacted, check if 48h passed since last contact
+      const hoursSince = (nowDt.getTime() - l.lastContactAt.getTime()) / (1000 * 60 * 60);
       return hoursSince >= 48;
     }).length;
 

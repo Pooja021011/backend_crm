@@ -153,13 +153,27 @@ export const metricsRepository = {
       select: { leadId: true, closedAt: true, netProfit: true },
     }),
 
-  getLeadsCreatedBetweenScoped: (from: Date, to: Date, filters: { pipelineKey: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION'; leadType?: any; createdById?: string; onlyPipelineStatus?: boolean }) =>
+  getLeadsCreatedBetweenScoped: (from: Date, to: Date, filters: { pipelineKey: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION'; leadType?: any; createdById?: string; assignedUserId?: string; onlyPipelineStatus?: boolean }) =>
     prisma.lead.findMany({
       where: {
         createdAt: { gte: from, lt: to },
         pipelineStage: { pipeline: { key: filters.pipelineKey as any } },
         ...(filters.leadType ? { leadType: filters.leadType } : {}),
         ...(filters.createdById ? { createdById: filters.createdById } : {}),
+        ...(filters.assignedUserId 
+          ? { assignedUserId: filters.assignedUserId } 
+          : filters.pipelineKey === 'ACQUISITIONS' && !filters.assignedUserId
+            ? {
+                // When assignedUserId is undefined and pipeline is ACQUISITIONS (Manager view), filter by ACQ role
+                assignedUser: {
+                  roles: {
+                    some: {
+                      role: { name: 'ACQ' }
+                    }
+                  }
+                }
+              }
+            : {}),
         ...(filters.onlyPipelineStatus
           ? { leadStatus: { name: { equals: 'Pipeline', mode: 'insensitive' } } }
           : {}),
@@ -167,12 +181,26 @@ export const metricsRepository = {
       select: { id: true, createdAt: true, updatedAt: true },
     }),
 
-  getActiveLeadsWithActivityByPipeline: (filters: { pipelineKey: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION'; leadType?: any; createdById?: string; onlyPipelineStatus?: boolean }) =>
+  getActiveLeadsWithActivityByPipeline: (filters: { pipelineKey: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION'; leadType?: any; createdById?: string; assignedUserId?: string; onlyPipelineStatus?: boolean }) =>
     prisma.lead.findMany({
       where: {
         pipelineStage: { pipeline: { key: filters.pipelineKey as any } },
         ...(filters.leadType ? { leadType: filters.leadType } : {}),
         ...(filters.createdById ? { createdById: filters.createdById } : {}),
+        ...(filters.assignedUserId 
+          ? { assignedUserId: filters.assignedUserId } 
+          : filters.pipelineKey === 'ACQUISITIONS' && !filters.assignedUserId
+            ? {
+                // When assignedUserId is undefined and pipeline is ACQUISITIONS (Manager view), filter by ACQ role
+                assignedUser: {
+                  roles: {
+                    some: {
+                      role: { name: 'ACQ' }
+                    }
+                  }
+                }
+              }
+            : {}),
         ...(filters.onlyPipelineStatus
           ? { leadStatus: { name: { equals: 'Pipeline', mode: 'insensitive' } } }
           : {}),
@@ -182,16 +210,6 @@ export const metricsRepository = {
         createdAt: true,
         updatedAt: true,
         lastContactAt: true,
-        communications: {
-          orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }],
-          take: 1,
-          select: { occurredAt: true, createdAt: true },
-        },
-        tasks: {
-          orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
-          take: 1,
-          select: { updatedAt: true, createdAt: true },
-        },
       },
     }),
 
