@@ -1458,6 +1458,8 @@ const Inbox = () => {
         }));
         setReminders(items);
         console.log('Processed reminders:', items.length);
+        console.log('Unread reminders count:', items.filter(r => r.unread).length);
+        console.log('Total reminders from API:', json.meta?.total || json.data?.length || 0);
       } else {
         console.error('Reminders API returned success: false', json);
         setReminders([]);
@@ -1662,10 +1664,16 @@ const Inbox = () => {
     if (source === 'calls' || source === 'sms') {
       return messages.length;
     }
+    // For reminders, count all reminders (they're all unread by default)
+    if (source === 'reminders') {
+      const unreadCount = messages.filter(m => m.unread).length;
+      console.log(`[Badge Count] Reminders: total=${messages.length}, unread=${unreadCount}, reminders=${reminders.length}, notifications=${notifications.length}`);
+      return unreadCount;
+    }
     return messages.filter(m => m.unread).length;
   };
 
-  const getMessageIcon = (type: string, notificationType?: string) => {
+  const getMessageIcon = (type: string, notificationType?: string, reminderType?: string) => {
     // For notifications, use the notificationType to determine the icon
     if (type === 'notification' && notificationType) {
       switch (notificationType) {
@@ -1686,7 +1694,7 @@ const Inbox = () => {
       case 'task': return <CheckSquare className="w-3 h-3" />;
       case 'communication': return <MessageCircle className="w-3 h-3" />;
       case 'reminder': 
-        return message.reminderType === 'TASK_OVERDUE' ? 
+        return reminderType === 'TASK_OVERDUE' ? 
           <CheckSquare className="w-3 h-3" /> : 
           <Bell className="w-3 h-3" />;
       case 'notification': return <Bell className="w-3 h-3" />;
@@ -2230,7 +2238,7 @@ const Inbox = () => {
                               ) :
                               'bg-gray-100 text-gray-600'
                             }`}>
-                              {getMessageIcon(message.type, message.notificationType)}
+                              {getMessageIcon(message.type, message.notificationType, message.reminderType)}
                             </div>
                           </div>
                           
@@ -2247,14 +2255,14 @@ const Inbox = () => {
                                   : extractNameFromEmail(message.from)}
                               </span>
                               
-                              {/* Read/Unread Badge */}
+                              {/* Read/Unread Badge - Hide for reminders */}
                               {message.type === 'task' ? (
                                 <>
                                   <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
                                     Due
                                   </Badge>
                                 </>
-                              ) : (
+                              ) : message.type === 'reminder' ? null : (
                                 <Badge 
                                   variant={message.unread ? "default" : "secondary"} 
                                   className={`text-xs px-1.5 py-0.5 ${
@@ -2284,8 +2292,8 @@ const Inbox = () => {
                                 ) : null
                               )}
                               
-                              {/* Priority Badge for Reminders and Notifications */}
-                              {(message.type === 'reminder' || message.type === 'notification') && (
+                              {/* Priority Badge for Notifications only (not reminders) */}
+                              {message.type === 'notification' && (
                                 <Badge 
                                   variant="outline"
                                   className={`text-xs px-1.5 py-0.5 ${

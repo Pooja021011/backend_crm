@@ -9,16 +9,28 @@ export const reminderController = {
   async getUserReminders(req: Request, res: Response) {
     try {
       const userId = req.user?.id;
-      const userRoles = req.user?.roles?.map((r: any) => r.role?.name || r.name) as RoleName[] || [];
+      // Roles from JWT are already strings, not objects
+      // Handle both cases: string array or object array
+      const userRoles = (req.user?.roles || []).map((r: any) => 
+        typeof r === 'string' ? r : (r.role?.name || r.name)
+      ).filter(Boolean) as RoleName[];
+
+      console.log('[Reminder Controller] getUserReminders called');
+      console.log('[Reminder Controller] User ID:', userId);
+      console.log('[Reminder Controller] User Roles:', userRoles);
+      console.log('[Reminder Controller] Raw roles from req.user:', req.user?.roles);
 
       if (!userId) {
+        console.log('[Reminder Controller] No userId found, returning 401');
         return res.status(401).json({
           success: false,
           error: 'User not authenticated'
         });
       }
 
+      console.log('[Reminder Controller] Calling reminderService.getUserReminders...');
       const reminders = await reminderService.getUserReminders(userId, userRoles);
+      console.log('[Reminder Controller] Reminders received:', reminders.length);
 
       res.json({
         success: true,
@@ -30,7 +42,8 @@ export const reminderController = {
         }
       });
     } catch (error: any) {
-      console.error('Error in reminderController.getUserReminders:', error);
+      console.error('[Reminder Controller] Error in getUserReminders:', error);
+      console.error('[Reminder Controller] Error stack:', error.stack);
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to fetch reminders'
@@ -44,7 +57,11 @@ export const reminderController = {
   async getReminderCounts(req: Request, res: Response) {
     try {
       const userId = req.user?.id;
-      const userRoles = req.user?.roles?.map((r: any) => r.role?.name || r.name) as RoleName[] || [];
+      // Roles from JWT are already strings, not objects
+      // Handle both cases: string array or object array
+      const userRoles = (req.user?.roles || []).map((r: any) => 
+        typeof r === 'string' ? r : (r.role?.name || r.name)
+      ).filter(Boolean) as RoleName[];
 
       if (!userId) {
         return res.status(401).json({
@@ -74,7 +91,11 @@ export const reminderController = {
   async getRemindersByType(req: Request, res: Response) {
     try {
       const userId = req.user?.id;
-      const userRoles = req.user?.roles?.map((r: any) => r.role?.name || r.name) as RoleName[] || [];
+      // Roles from JWT are already strings, not objects
+      // Handle both cases: string array or object array
+      const userRoles = (req.user?.roles || []).map((r: any) => 
+        typeof r === 'string' ? r : (r.role?.name || r.name)
+      ).filter(Boolean) as RoleName[];
       const { type } = req.params;
 
       if (!userId) {
@@ -116,7 +137,11 @@ export const reminderController = {
   async getRemindersByPriority(req: Request, res: Response) {
     try {
       const userId = req.user?.id;
-      const userRoles = req.user?.roles?.map((r: any) => r.role?.name || r.name) as RoleName[] || [];
+      // Roles from JWT are already strings, not objects
+      // Handle both cases: string array or object array
+      const userRoles = (req.user?.roles || []).map((r: any) => 
+        typeof r === 'string' ? r : (r.role?.name || r.name)
+      ).filter(Boolean) as RoleName[];
       const { priority } = req.params;
 
       if (!userId) {
@@ -196,7 +221,11 @@ export const reminderController = {
   async getSLAStatus(req: Request, res: Response) {
     try {
       const userId = req.user?.id;
-      const userRoles = req.user?.roles?.map((r: any) => r.role?.name || r.name) as RoleName[] || [];
+      // Roles from JWT are already strings, not objects
+      // Handle both cases: string array or object array
+      const userRoles = (req.user?.roles || []).map((r: any) => 
+        typeof r === 'string' ? r : (r.role?.name || r.name)
+      ).filter(Boolean) as RoleName[];
 
       if (!userId) {
         return res.status(401).json({

@@ -1,5 +1,5 @@
 import { prisma } from '../config/db.js';
-import { RoleName } from '@prisma/client';
+import { RoleName, TaskStatus } from '@prisma/client';
 
 export interface ReminderAlert {
   id: string;
@@ -11,6 +11,7 @@ export interface ReminderAlert {
   communicationId?: string;
   dueDate?: Date;
   createdAt: Date;
+  status?: 'PENDING' | 'COMPLETED';
   lead?: any;
   communication?: any;
 }
@@ -20,6 +21,11 @@ export const reminderRepository = {
    * Get role-specific reminders for a user
    */
   async getRoleBasedReminders(userId: string, userRoles: RoleName[]): Promise<ReminderAlert[]> {
+    console.log('[Reminder Repository] getRoleBasedReminders called');
+    console.log('[Reminder Repository] userId:', userId);
+    console.log('[Reminder Repository] userRoles:', userRoles);
+    console.log('[Reminder Repository] userRoles.includes("ACQ"):', userRoles.includes('ACQ'));
+    
     const reminders: ReminderAlert[] = [];
     const now = new Date();
 
@@ -28,8 +34,8 @@ export const reminderRepository = {
     const daysFromNow = (days: number) => new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
 
     try {
-      // MANAGER / ADMIN - ACQ agents' leads with tasks overdue 1h+ OR untouched 48h+
-      // Priority: Task overdue (1h) checked first, then untouched (48h)
+      // MANAGER / ADMIN - ACQ agents' leads with tasks overdue 6h+ OR untouched 48h+
+      // Priority: Task overdue (6h) checked first, then untouched (48h)
       if (userRoles.includes('MANAGER') || userRoles.includes('ADMIN')) {
         // Collect lead IDs that will be shown in ACQ reminders (to avoid duplicates)
         const acqLeadIds = new Set<string>();
@@ -50,32 +56,19 @@ export const reminderRepository = {
               }
             },
             OR: [
-              // Condition 1: Lead untouched 48h+
+              // Condition 1: Lead untouched 48h+ (use updatedAt - any update resets the timer)
               {
-                lastContactAt: {
+                updatedAt: {
                   lte: hoursAgo(48)
                 }
               },
-              {
-                lastContactAt: null,
-                createdAt: {
-                  lte: hoursAgo(48)
-                }
-              },
-              // Condition 2: Lead has task overdue 1h+
+              // Condition 2: Lead has task overdue 6h+
               {
                 tasks: {
                   some: {
-                    status: 'OPEN',
+                    status: TaskStatus.OPEN,
                     dueAt: {
-                      lte: hoursAgo(1)
-                    },
-                    NOT: {
-                      OR: [
-                        { title: { startsWith: 'Review note on ' } },
-                        { title: { startsWith: 'Underwrite ' } },
-                        { title: { startsWith: 'Make Offer on ' } }
-                      ]
+                      lte: hoursAgo(6)
                     }
                   }
                 }
@@ -88,16 +81,9 @@ export const reminderRepository = {
             pipelineStage: true,
             tasks: {
               where: {
-                status: 'OPEN',
+                status: TaskStatus.OPEN,
                 dueAt: {
-                  lte: hoursAgo(1)
-                },
-                NOT: {
-                  OR: [
-                    { title: { startsWith: 'Review note on ' } },
-                    { title: { startsWith: 'Underwrite ' } },
-                    { title: { startsWith: 'Make Offer on ' } }
-                  ]
+                  lte: hoursAgo(6)
                 }
               },
               orderBy: { dueAt: 'asc' },
@@ -114,26 +100,33 @@ export const reminderRepository = {
             return;
           }
 
-          const lastContact = lead.lastContactAt || lead.createdAt;
-          const hoursUntouched = Math.floor((now.getTime() - new Date(lastContact).getTime()) / (1000 * 60 * 60));
+          // Use updatedAt - any update to the lead (like source change) resets the timer
+          const lastUpdate = lead.updatedAt;
+          const hoursUntouched = Math.floor((now.getTime() - new Date(lastUpdate).getTime()) / (1000 * 60 * 60));
           const isUntouched = hoursUntouched >= 48;
-          const hasOverdueTask = lead.tasks && lead.tasks.length > 0;
+          
+          // Filter tasks to only those assigned to the ACQ agent (lead owner)
+          const acqAgentTasks = lead.tasks?.filter(task => task.assignedToId === lead.assignedUserId) || [];
+          const hasOverdueTask = acqAgentTasks.length > 0;
+          
+          console.log(`[Manager/Admin Reminders] Lead ${lead.id}: ACQ agent tasks overdue 6h+ = ${acqAgentTasks.length}, untouched 48h+ = ${isUntouched}`);
 
-          // Priority: Task overdue (lowest time: 1h) comes BEFORE untouched (48h)
+          // Priority: Task overdue (6h) comes BEFORE untouched (48h)
           if (hasOverdueTask) {
-            // Primary: Task overdue
-            const task = lead.tasks[0]; // Most overdue task
+            // Primary: Task overdue - task assigned to ACQ agent
+            const task = acqAgentTasks[0]; // Most overdue task assigned to ACQ agent
             const hoursOverdue = Math.floor((now.getTime() - new Date(task.dueAt).getTime()) / (1000 * 60 * 60));
             
             reminders.push({
               id: `manager-lead-${lead.id}`,
               type: 'TASK_OVERDUE',
               priority: hoursOverdue >= 24 ? 'URGENT' : 'HIGH',
-              title: 'Task Overdue',
-              description: `"${task.title}" for ${lead.address?.address1 || 'lead'} is ${hoursOverdue}h overdue (assigned to ${task.assignedTo?.firstName} ${task.assignedTo?.lastName})` +
+              title: 'Task overdue 6h+',
+              description: 'Task overdue 6h+' +
                            (isUntouched ? ` (lead also untouched ${hoursUntouched}h)` : ''),
               leadId: lead.id,
               createdAt: now,
+              status: 'PENDING',
               lead: lead
             });
           } else if (isUntouched) {
@@ -143,116 +136,121 @@ export const reminderRepository = {
               type: 'LEAD_UNTOUCHED',
               priority: 'HIGH',
               title: 'Lead Untouched 48h+',
-              description: `Lead at ${lead.address?.address1 || 'Unknown address'} hasn't been contacted by ${lead.assignedUser?.firstName} ${lead.assignedUser?.lastName} in ${hoursUntouched} hours`,
+              description: `Lead at ${lead.address?.address1 || 'Unknown address'} hasn't been updated in ${hoursUntouched} hours (assigned to ${lead.assignedUser?.firstName} ${lead.assignedUser?.lastName})`,
               leadId: lead.id,
               createdAt: now,
+              status: 'PENDING',
               lead: lead
             });
           }
         });
       }
 
-      // ACQUISITIONS AGENT - Own leads with tasks overdue 30min+ OR untouched 36h+
-      // Priority: Task overdue (30min) checked first, then untouched (36h)
+      // ACQUISITIONS AGENT - Own leads with tasks overdue 4h+ OR untouched 36h+
+      // Priority: Task overdue (4h) checked first, then untouched (36h)
+      console.log(`[ACQ Reminders] Checking ACQ role. userRoles:`, userRoles);
+      console.log(`[ACQ Reminders] userRoles.includes('ACQ'):`, userRoles.includes('ACQ'));
+      console.log(`[ACQ Reminders] userRoles type:`, typeof userRoles, 'isArray:', Array.isArray(userRoles));
+      console.log(`[ACQ Reminders] userRoles values:`, userRoles.map(r => `"${r}"`).join(', '));
+      
       if (userRoles.includes('ACQ')) {
-        // Get own leads that match EITHER condition
-        const acqLeads = await prisma.lead.findMany({
+        console.log(`[ACQ Reminders] ACQ role found! User ID: ${userId}, Roles:`, userRoles);
+        
+        // Step 1: Get ALL overdue tasks for user (4h+)
+        const overdueTasks = await prisma.task.findMany({
           where: {
-            assignedUserId: userId,
-            OR: [
-              // Condition 1: Lead untouched 36h+
+            assignedToId: userId,
+            status: TaskStatus.OPEN,
+            dueAt: {
+              lte: hoursAgo(4)
+            }
+          },
+          include: {
+            lead: {
+              include: {
+                address: true,
+                pipelineStage: true
+              }
+            }
+          },
+          orderBy: { dueAt: 'asc' }
+        });
+        
+        console.log(`[ACQ Reminders] Found ${overdueTasks.length} overdue tasks (4h+)`);
+        
+        // Create reminders for overdue tasks
+        const taskLeadIds = new Set<string>();
+        overdueTasks.forEach(task => {
+          taskLeadIds.add(task.leadId);
+          const hoursOverdue = Math.floor((now.getTime() - new Date(task.dueAt).getTime()) / (1000 * 60 * 60));
+          
+          reminders.push({
+            id: `acq-task-${task.id}`,
+            type: 'TASK_OVERDUE',
+            priority: hoursOverdue >= 24 ? 'URGENT' : 'HIGH',
+            title: 'Task overdue 4h+',
+            description: 'Task overdue 4h+',
+            leadId: task.leadId,
+            createdAt: now,
+            status: 'PENDING',
+            lead: task.lead
+          });
+        });
+        
+        console.log(`[ACQ Reminders] Created ${overdueTasks.length} TASK_OVERDUE reminders`);
+        
+        // Step 2: Get assigned/created leads that are untouched 36h+ (excluding leads with overdue tasks)
+        const untouchedLeads = await prisma.lead.findMany({
+          where: {
+            AND: [
               {
-                lastContactAt: {
-                  lte: hoursAgo(36)
+                OR: [
+                  { assignedUserId: userId },
+                  { createdById: userId }
+                ]
+              },
+              {
+                NOT: {
+                  id: { in: Array.from(taskLeadIds) } // Exclude leads that already have overdue task reminders
                 }
               },
               {
-                lastContactAt: null,
-                createdAt: {
+                // Use updatedAt - any update to the lead (like source change) resets the timer
+                updatedAt: {
                   lte: hoursAgo(36)
-                }
-              },
-              // Condition 2: Lead has task overdue 30min+
-              {
-                tasks: {
-                  some: {
-                    assignedToId: userId,
-                    status: 'OPEN',
-                    dueAt: {
-                      lte: new Date(now.getTime() - 30 * 60 * 1000)
-                    },
-                    NOT: {
-                      OR: [
-                        { title: { startsWith: 'Review note on ' } },
-                        { title: { startsWith: 'Underwrite ' } },
-                        { title: { startsWith: 'Make Offer on ' } }
-                      ]
-                    }
-                  }
                 }
               }
             ]
           },
           include: {
             address: true,
-            pipelineStage: true,
-            tasks: {
-              where: {
-                assignedToId: userId,
-                status: 'OPEN',
-                dueAt: {
-                  lte: new Date(now.getTime() - 30 * 60 * 1000)
-                },
-                NOT: {
-                  OR: [
-                    { title: { startsWith: 'Review note on ' } },
-                    { title: { startsWith: 'Underwrite ' } },
-                    { title: { startsWith: 'Make Offer on ' } }
-                  ]
-                }
-              },
-              orderBy: { dueAt: 'asc' }
-            }
+            pipelineStage: true
           }
         });
-
-        acqLeads.forEach(lead => {
-          const lastContact = lead.lastContactAt || lead.createdAt;
-          const hoursUntouched = Math.floor((now.getTime() - new Date(lastContact).getTime()) / (1000 * 60 * 60));
-          const isUntouched = hoursUntouched >= 36;
-          const hasOverdueTask = lead.tasks && lead.tasks.length > 0;
-
-          // Priority: Task overdue (lowest time: 30min) comes BEFORE untouched (36h)
-          if (hasOverdueTask) {
-            // Primary: Task overdue
-            const task = lead.tasks[0]; // Most overdue task
-            const minutesOverdue = Math.floor((now.getTime() - new Date(task.dueAt).getTime()) / (1000 * 60));
-            
-            reminders.push({
-              id: `acq-lead-${lead.id}`,
-              type: 'TASK_OVERDUE',
-              priority: minutesOverdue >= 120 ? 'URGENT' : 'HIGH',
-              title: 'Task Past Due',
-              description: `"${task.title}" for ${lead.address?.address1 || 'lead'} is ${minutesOverdue} minutes overdue` +
-                           (isUntouched ? ` (lead also untouched ${hoursUntouched}h)` : ''),
-              leadId: lead.id,
-              createdAt: now,
-              lead: lead
-            });
-          } else if (isUntouched) {
-            // Only untouched (no overdue task)
-            reminders.push({
-              id: `acq-lead-${lead.id}`,
-              type: 'LEAD_UNTOUCHED',
-              priority: 'HIGH',
-              title: 'Lead Untouched 36h+',
-              description: `Your lead at ${lead.address?.address1 || 'Unknown address'} needs follow-up (last contact ${hoursUntouched}h ago)`,
-              leadId: lead.id,
-              createdAt: now,
-              lead: lead
-            });
-          }
+        
+        console.log(`[ACQ Reminders] Found ${untouchedLeads.length} untouched leads (36h+)`);
+        
+        // Create reminders for untouched leads
+        untouchedLeads.forEach(lead => {
+          // Use updatedAt - any update to the lead (like source change) resets the timer
+          const lastUpdate = lead.updatedAt;
+          const hoursUntouched = Math.floor((now.getTime() - new Date(lastUpdate).getTime()) / (1000 * 60 * 60));
+          
+          reminders.push({
+            id: `acq-untouched-${lead.id}`,
+            type: 'LEAD_UNTOUCHED',
+            priority: 'HIGH',
+            title: 'Lead Untouched 36h+',
+            description: `Your lead at ${lead.address?.address1 || 'Unknown address'} needs follow-up (last updated ${hoursUntouched}h ago)`,
+            leadId: lead.id,
+            createdAt: now,
+            status: 'PENDING',
+            lead: lead
+          });
         });
+        
+        console.log(`[ACQ Reminders] Created ${untouchedLeads.length} LEAD_UNTOUCHED reminders`);
+        console.log(`[ACQ Reminders] Total reminders: ${reminders.length}`);
       }
 
       // DISPOSITIONS AGENT - Leads untouched 36h, due diligence < 3-5 days
@@ -280,6 +278,7 @@ export const reminderRepository = {
             description: `Your lead at ${lead.address?.address1 || 'Unknown address'} needs attention (${Math.floor((now.getTime() - new Date(lead.lastContactAt || lead.createdAt).getTime()) / (1000 * 60 * 60))}h ago)`,
             leadId: lead.id,
             createdAt: now,
+            status: 'PENDING',
             lead: lead
           });
         });
@@ -311,6 +310,7 @@ export const reminderRepository = {
             description: `Due diligence for ${lead.address?.address1 || 'Unknown address'} is ${Math.floor((now.getTime() - new Date(lead.stageEnteredAt || lead.createdAt).getTime()) / (1000 * 60 * 60 * 24))} days old`,
             leadId: lead.id,
             createdAt: now,
+            status: 'PENDING',
             lead: lead
           });
         });
@@ -346,6 +346,7 @@ export const reminderRepository = {
             leadId: lead.id,
             dueDate: new Date(lead.deal?.closedAt || now),
             createdAt: now,
+            status: 'PENDING',
             lead: lead
           });
         });
@@ -389,17 +390,23 @@ export const reminderRepository = {
             leadId: comm.leadId,
             communicationId: comm.id,
             createdAt: now,
+            status: 'PENDING',
             lead: comm.lead,
             communication: comm
           });
         });
       }
 
-      return reminders.sort((a, b) => {
+      const sortedReminders = reminders.sort((a, b) => {
         // Sort by priority: URGENT > HIGH > MEDIUM > LOW
         const priorityOrder = { 'URGENT': 4, 'HIGH': 3, 'MEDIUM': 2, 'LOW': 1 };
         return priorityOrder[b.priority] - priorityOrder[a.priority];
       });
+      
+      console.log(`[Reminder Repository] FINAL: Returning ${sortedReminders.length} total reminders`);
+      console.log(`[Reminder Repository] Breakdown: TASK_OVERDUE=${sortedReminders.filter(r => r.type === 'TASK_OVERDUE').length}, LEAD_UNTOUCHED=${sortedReminders.filter(r => r.type === 'LEAD_UNTOUCHED').length}, Others=${sortedReminders.filter(r => !['TASK_OVERDUE', 'LEAD_UNTOUCHED'].includes(r.type)).length}`);
+      
+      return sortedReminders;
 
     } catch (error) {
       console.error('Error fetching role-based reminders:', error);

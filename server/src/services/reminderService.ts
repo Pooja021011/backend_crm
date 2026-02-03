@@ -7,14 +7,17 @@ export const reminderService = {
    */
   async getUserReminders(userId: string, userRoles: RoleName[]): Promise<ReminderAlert[]> {
     try {
+      console.log('[Reminder Service] getUserReminders called with userId:', userId, 'roles:', userRoles);
       const reminders = await reminderRepository.getRoleBasedReminders(userId, userRoles);
+      console.log('[Reminder Service] Got', reminders.length, 'reminders from repository');
       
       // Add any additional business logic here
       // e.g., filtering, additional sorting, etc.
       
       return reminders;
     } catch (error) {
-      console.error('Error in reminderService.getUserReminders:', error);
+      console.error('[Reminder Service] Error in getUserReminders:', error);
+      console.error('[Reminder Service] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
       throw new Error('Failed to fetch user reminders');
     }
   },
