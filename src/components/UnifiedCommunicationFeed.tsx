@@ -175,6 +175,7 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
   // Dialog states
   const [showSMSDialog, setShowSMSDialog] = useState(false);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
+  const [selectedMMSImage, setSelectedMMSImage] = useState<{ url: string; contentType: string } | null>(null);
 
   // Edit dialogs
   const [editingNote, setEditingNote] = useState<any | null>(null);
@@ -891,7 +892,7 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
                 {item.type === 'SMS' && (item as any)?.metadata?.mediaUrls && 
                  Array.isArray((item as any).metadata.mediaUrls) && 
                  (item as any).metadata.mediaUrls.length > 0 && (
-                  <div className="mt-2 space-y-2">
+                  <div className="mt-2 flex flex-wrap gap-2">
                     {(item as any).metadata.mediaUrls.map((media: any, idx: number) => {
                       const isImage = media.contentType?.startsWith('image/');
                       // Use proxy endpoint to avoid authentication issues
@@ -902,8 +903,8 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
                             <img
                               src={proxyUrl}
                               alt={`SMS attachment ${idx + 1}`}
-                              className="max-w-[200px] h-auto rounded-lg cursor-pointer hover:opacity-90 transition-opacity object-contain"
-                              onClick={() => window.open(proxyUrl, '_blank')}
+                              className="w-20 h-20 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
+                              onClick={() => setSelectedMMSImage(media)}
                               onError={(e) => {
                                 (e.target as HTMLImageElement).src = '/placeholder.svg';
                               }}
@@ -1481,6 +1482,27 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
               Save
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* MMS Image Popup */}
+      <Dialog open={!!selectedMMSImage} onOpenChange={(open) => !open && setSelectedMMSImage(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle>MMS Image</DialogTitle>
+          </DialogHeader>
+          {selectedMMSImage && (
+            <div className="flex items-center justify-center">
+              <img
+                src={`${API_BASE}/sms/media?mediaUrl=${encodeURIComponent(selectedMMSImage.url)}`}
+                alt="MMS Image"
+                className="max-w-full h-auto rounded-lg"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = '/placeholder.svg';
+                }}
+              />
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
