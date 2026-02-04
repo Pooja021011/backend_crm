@@ -430,20 +430,23 @@ export const useTwilioDevice = () => {
             customParameters: params
           });
           
-          // Play ringtone
-          if (ringtoneRef.current) {
-            ringtoneRef.current.play().catch(err => {
-              console.error('Failed to play ringtone:', err);
-            });
-          }
+          // DON'T play ringtone when user is already on a call
+          // This prevents the loud ringing that both the user and lead can hear
+          // The call waiting popup will still show silently
+          // if (ringtoneRef.current) {
+          //   ringtoneRef.current.play().catch(err => {
+          //     console.error('Failed to play ringtone:', err);
+          //   });
+          // }
           
           // Handle call cancellation
           call.on('cancel', () => {
             console.log('📞 Call waiting was cancelled (caller hung up)');
-            if (ringtoneRef.current) {
-              ringtoneRef.current.pause();
-              ringtoneRef.current.currentTime = 0;
-            }
+            // No need to stop ringtone since we're not playing it
+            // if (ringtoneRef.current) {
+            //   ringtoneRef.current.pause();
+            //   ringtoneRef.current.currentTime = 0;
+            // }
             setIncomingCall(null);
           });
           
@@ -451,11 +454,11 @@ export const useTwilioDevice = () => {
           call.on('disconnect', () => {
             console.log('📞 Call waiting disconnected');
             
-            // Stop ringtone
-            if (ringtoneRef.current) {
-              ringtoneRef.current.pause();
-              ringtoneRef.current.currentTime = 0;
-            }
+            // No need to stop ringtone since we're not playing it
+            // if (ringtoneRef.current) {
+            //   ringtoneRef.current.pause();
+            //   ringtoneRef.current.currentTime = 0;
+            // }
             
             // Clear incoming call popup if still showing
             setIncomingCall(null);
@@ -465,11 +468,11 @@ export const useTwilioDevice = () => {
           const missedCallTimeout = setTimeout(() => {
             console.log('📞 Call waiting timed out (20 seconds)');
             
-            // Stop ringtone
-            if (ringtoneRef.current) {
-              ringtoneRef.current.pause();
-              ringtoneRef.current.currentTime = 0;
-            }
+            // No need to stop ringtone since we're not playing it
+            // if (ringtoneRef.current) {
+            //   ringtoneRef.current.pause();
+            //   ringtoneRef.current.currentTime = 0;
+            // }
             
             // Reject the call - this will trigger voicemail routing on server
             try {
@@ -489,7 +492,7 @@ export const useTwilioDevice = () => {
           (call as any).missedCallTimeout = missedCallTimeout;
           
           // No toast notification - only log
-          console.log(`📞 Call Waiting: Incoming call from ${from} while on active call`);
+          console.log(`📞 Call Waiting: Incoming call from ${from} while on active call (silent)`);
           
           return; // Don't auto-answer - show waiting popup
         }

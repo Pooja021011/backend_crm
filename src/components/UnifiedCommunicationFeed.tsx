@@ -887,6 +887,42 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
                   </p>
                 )}
 
+                {/* MMS Images for SMS messages */}
+                {item.type === 'SMS' && (item as any)?.metadata?.mediaUrls && 
+                 Array.isArray((item as any).metadata.mediaUrls) && 
+                 (item as any).metadata.mediaUrls.length > 0 && (
+                  <div className="mt-2 space-y-2">
+                    {(item as any).metadata.mediaUrls.map((media: any, idx: number) => {
+                      const isImage = media.contentType?.startsWith('image/');
+                      return (
+                        <div key={idx} className="rounded-lg overflow-hidden border border-slate-200 bg-white">
+                          {isImage ? (
+                            <img
+                              src={media.url}
+                              alt={`SMS attachment ${idx + 1}`}
+                              className="max-w-full h-auto rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                              onClick={() => window.open(media.url, '_blank')}
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = '/placeholder.svg';
+                              }}
+                            />
+                          ) : (
+                            <a
+                              href={media.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2 p-2 bg-slate-50 rounded text-xs text-slate-700 hover:bg-slate-100"
+                            >
+                              <FileText className="w-4 h-4" />
+                              <span>View attachment</span>
+                            </a>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
                 {/* Voicemail / Call recording playback (CALL only) */}
                 {item.type === 'CALL' && (item as any)?.metadata?.recordingSid && (
                   <div className="mt-1 rounded border border-slate-200 bg-white px-2 py-1">

@@ -172,13 +172,41 @@ export const smsService = {
       logger.info('Processing incoming SMS webhook', { webhookData });
 
       // Twilio webhook format
-      const { From: from, To: to, Body: text, MessageSid: messageId, SmsStatus: smsStatus } = webhookData;
+      const { 
+        From: from, 
+        To: to, 
+        Body: text, 
+        MessageSid: messageId, 
+        SmsStatus: smsStatus,
+        NumMedia: numMedia,  // Number of media attachments (MMS)
+      } = webhookData;
+      
+      // Extract all media URLs if present (MMS message)
+      const mediaUrls: Array<{ url: string; contentType: string }> = [];
+      if (numMedia && parseInt(numMedia) > 0) {
+        const mediaCount = parseInt(numMedia);
+        for (let i = 0; i < mediaCount; i++) {
+          const mediaUrl = webhookData[`MediaUrl${i}`];
+          const contentType = webhookData[`MediaContentType${i}`] || 'image/jpeg';
+          if (mediaUrl) {
+            mediaUrls.push({ url: mediaUrl, contentType });
+          }
+        }
+        logger.info('MMS message detected', { 
+          from, 
+          to, 
+          messageId, 
+          numMedia: mediaCount, 
+          mediaUrls: mediaUrls.map(m => m.url) 
+        });
+      }
+      
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/06111847-3345-4786-9a5d-89cc38601516',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'smsService.ts:105',message:'Webhook parsed',data:{from,to,hasText:!!text,messageId,smsStatus},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H4'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/06111847-3345-4786-9a5d-89cc38601516',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'smsService.ts:105',message:'Webhook parsed',data:{from,to,hasText:!!text,messageId,smsStatus,hasMedia:mediaUrls.length>0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H4'})}).catch(()=>{});
       // #endregion
 
-      // Handle incoming message
-      if (text && from && to) {
+      // Handle incoming message (text or media)
+      if ((text || mediaUrls.length > 0) && from && to) {
         logger.info('Received SMS', { from, to, text, messageId });
 
         // Find user by phone number to associate the SMS
@@ -244,8 +272,8 @@ export const smsService = {
           await communicationRepository.create(lead.id, {
             type: 'SMS',
             direction: 'INBOUND',
-            subject: `SMS from ${from}`,
-            body: text,
+            subject: `SMS from ${from}${mediaUrls.length > 0 ? ' (with media)' : ''}`,
+            body: text || (mediaUrls.length > 0 ? '[Media message]' : ''),
             occurredAt: new Date(),
             createdById: userSmsSettings.userId,
             metadata: {
@@ -253,6 +281,9 @@ export const smsService = {
               to,
               messageSid: messageId,
               status: smsStatus,
+              // Store MMS media info
+              numMedia: numMedia ? parseInt(numMedia) : 0,
+              mediaUrls: mediaUrls, // Array of { url, contentType }
             },
           });
 
