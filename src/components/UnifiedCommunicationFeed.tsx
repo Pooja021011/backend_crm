@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from './ui/dialog';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
@@ -27,7 +27,10 @@ import {
   Calendar,
   Plus,
   Edit2,
-  Save
+  Save,
+  ChevronLeft,
+  ChevronRight,
+  X
 } from 'lucide-react';
 
 interface Communication {
@@ -175,7 +178,24 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
   // Dialog states
   const [showSMSDialog, setShowSMSDialog] = useState(false);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
-  const [selectedMMSImage, setSelectedMMSImage] = useState<{ url: string; contentType: string } | null>(null);
+  const [selectedMMSMedia, setSelectedMMSMedia] = useState<Array<{ url: string; contentType: string }> | null>(null);
+  const [activeMMSMediaIndex, setActiveMMSMediaIndex] = useState(0);
+
+  // Keyboard navigation for MMS media popup
+  useEffect(() => {
+    if (!selectedMMSMedia || selectedMMSMedia.length <= 1) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') {
+        setActiveMMSMediaIndex((idx) => Math.max(0, idx - 1));
+      } else if (e.key === 'ArrowRight') {
+        setActiveMMSMediaIndex((idx) => Math.min(selectedMMSMedia.length - 1, idx + 1));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedMMSMedia]);
 
   // Edit dialogs
   const [editingNote, setEditingNote] = useState<any | null>(null);
@@ -904,21 +924,25 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
                               src={proxyUrl}
                               alt={`SMS attachment ${idx + 1}`}
                               className="w-20 h-20 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
-                              onClick={() => setSelectedMMSImage(media)}
+                              onClick={() => {
+                                setSelectedMMSMedia((item as any).metadata.mediaUrls);
+                                setActiveMMSMediaIndex(idx);
+                              }}
                               onError={(e) => {
                                 (e.target as HTMLImageElement).src = '/placeholder.svg';
                               }}
                             />
                           ) : (
-                            <a
-                              href={proxyUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-2 p-2 bg-slate-50 rounded text-xs text-slate-700 hover:bg-slate-100"
+                            <div
+                              onClick={() => {
+                                setSelectedMMSMedia((item as any).metadata.mediaUrls);
+                                setActiveMMSMediaIndex(idx);
+                              }}
+                              className="flex items-center gap-2 p-2 bg-slate-50 rounded text-xs text-slate-700 hover:bg-slate-100 cursor-pointer"
                             >
                               <FileText className="w-4 h-4" />
                               <span>View attachment</span>
-                            </a>
+                            </div>
                           )}
                         </div>
                       );
@@ -1485,22 +1509,109 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
         </DialogContent>
       </Dialog>
 
-      {/* MMS Image Popup */}
-      <Dialog open={!!selectedMMSImage} onOpenChange={(open) => !open && setSelectedMMSImage(null)}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-auto">
-          <DialogHeader>
-            <DialogTitle>MMS Image</DialogTitle>
-          </DialogHeader>
-          {selectedMMSImage && (
-            <div className="flex items-center justify-center">
-              <img
-                src={`${API_BASE}/sms/media?mediaUrl=${encodeURIComponent(selectedMMSImage.url)}`}
-                alt="MMS Image"
-                className="max-w-full h-auto rounded-lg"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = '/placeholder.svg';
-                }}
-              />
+      {/* MMS Media Popup - All media (images + PDFs) */}
+      <Dialog open={!!selectedMMSMedia} onOpenChange={(open) => {
+        if (!open) {
+          setSelectedMMSMedia(null);
+          setActiveMMSMediaIndex(0);
+        }
+      }}>
+        <DialogContent className="max-w-5xl p-0 overflow-hidden [&>button.absolute]:hidden">
+          <div className="relative bg-black">
+            <DialogClose asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-3 top-3 z-10 text-white hover:text-white bg-black/40 hover:bg-black/60"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </DialogClose>
+
+            {selectedMMSMedia && selectedMMSMedia[activeMMSMediaIndex] && (() => {
+              const activeMedia = selectedMMSMedia[activeMMSMediaIndex];
+              const proxyUrl = `${API_BASE}/sms/media?mediaUrl=${encodeURIComponent(activeMedia.url)}`;
+              const isImage = activeMedia.contentType?.startsWith('image/');
+              const isPDF = activeMedia.contentType === 'application/pdf';
+
+              if (isPDF) {
+                return (
+                  <iframe
+                    src={proxyUrl}
+                    className="w-full h-[80vh]"
+                    title="MMS PDF"
+                  />
+                );
+              } else if (isImage) {
+                return (
+                  <img
+                    src={proxyUrl}
+                    alt="MMS Image"
+                    className="w-full max-h-[80vh] object-contain"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = '/placeholder.svg';
+                    }}
+                  />
+                );
+              } else {
+                return (
+                  <div className="flex flex-col items-center justify-center h-[60vh] text-white">
+                    <FileText className="w-24 h-24 mb-4" />
+                    <p className="text-lg mb-2">Attachment</p>
+                    <p className="text-sm text-gray-400 mb-4">{activeMedia.contentType}</p>
+                    <Button
+                      onClick={() => window.open(proxyUrl, '_blank')}
+                      className="bg-white text-black hover:bg-gray-200"
+                    >
+                      <FileText className="w-4 h-4 mr-2" />
+                      Open Preview
+                    </Button>
+                  </div>
+                );
+              }
+            })()}
+
+            {selectedMMSMedia && selectedMMSMedia.length > 1 && (
+              <>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-white bg-black/40 hover:bg-black/60 disabled:opacity-40"
+                  onClick={() => setActiveMMSMediaIndex((idx) => Math.max(0, idx - 1))}
+                  disabled={activeMMSMediaIndex === 0}
+                  aria-label="Previous media"
+                >
+                  <ChevronLeft className="h-6 w-6" />
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white bg-black/40 hover:bg-black/60 disabled:opacity-40"
+                  onClick={() => setActiveMMSMediaIndex((idx) => Math.min(selectedMMSMedia.length - 1, idx + 1))}
+                  disabled={activeMMSMediaIndex === selectedMMSMedia.length - 1}
+                  aria-label="Next media"
+                >
+                  <ChevronRight className="h-6 w-6" />
+                </Button>
+              </>
+            )}
+          </div>
+
+          {selectedMMSMedia && selectedMMSMedia[activeMMSMediaIndex] && (
+            <div className="flex items-center justify-between px-4 py-3 border-t bg-background">
+              <div className="text-sm text-muted-foreground truncate flex-1">
+                Attachment {activeMMSMediaIndex + 1} ({selectedMMSMedia[activeMMSMediaIndex].contentType})
+              </div>
+              {selectedMMSMedia.length > 1 && (
+                <div className="text-xs text-muted-foreground">
+                  {activeMMSMediaIndex + 1} / {selectedMMSMedia.length}
+                </div>
+              )}
             </div>
           )}
         </DialogContent>

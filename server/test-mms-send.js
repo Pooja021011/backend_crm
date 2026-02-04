@@ -12,13 +12,13 @@ const twilioClient = twilio(
 console.log('=== Twilio MMS Test ===\n');
 
 // Get numbers from command line or fetch from Twilio
-// Usage: node test-mms-send.js <to_number> [image_url]
-// Or:    node test-mms-send.js <from_number> <to_number> [image_url]
+// Usage: node test-mms-send.js <to_number> [media_url1] [media_url2] ...
+// Or:    node test-mms-send.js <from_number> <to_number> [media_url1] [media_url2] ...
 let fromNumber = null;
 let toNumber = '+19107485320';
-let imageUrl = 'https://picsum.photos/400/300';
+let mediaUrls = [];
 
-// Parse arguments
+// Parse arguments - collect all media URLs
 if (process.argv[2]) {
   // If first arg looks like a phone number (starts with +)
   if (process.argv[2].startsWith('+')) {
@@ -26,17 +26,25 @@ if (process.argv[2]) {
     if (process.argv[3] && process.argv[3].startsWith('+')) {
       fromNumber = process.argv[2];
       toNumber = process.argv[3];
-      imageUrl = process.argv[4] || imageUrl;
+      // Collect all remaining args as media URLs
+      mediaUrls = process.argv.slice(4);
     } else {
       // Only one phone number provided, it's the toNumber
       toNumber = process.argv[2];
-      imageUrl = process.argv[3] || imageUrl;
+      // Collect all remaining args as media URLs
+      mediaUrls = process.argv.slice(3);
     }
   } else {
     // First arg is not a phone number, treat as toNumber anyway
     toNumber = process.argv[2];
-    imageUrl = process.argv[3] || imageUrl;
+    // Collect all remaining args as media URLs
+    mediaUrls = process.argv.slice(3);
   }
+}
+
+// Default media if none provided
+if (mediaUrls.length === 0) {
+  mediaUrls = ['https://picsum.photos/400/300'];
 }
 
 // If fromNumber not provided, fetch from Twilio
@@ -68,15 +76,18 @@ if (!fromNumber) {
 
 console.log(`FROM: ${fromNumber}`);
 console.log(`TO: ${toNumber}`);
-console.log(`IMAGE URL: ${imageUrl}`);
+console.log(`MEDIA URLs (${mediaUrls.length}):`);
+mediaUrls.forEach((url, idx) => {
+  console.log(`  ${idx + 1}. ${url}`);
+});
 console.log('\nSending MMS...\n');
 
 try {
   const message = await twilioClient.messages.create({
     from: fromNumber,
     to: toNumber,
-    body: 'Test MMS from Real Estate CRM 🏠📸',
-    mediaUrl: [imageUrl] // Twilio accepts array of media URLs
+    body: `Test MMS from Real Estate CRM 🏠📸 (${mediaUrls.length} attachment${mediaUrls.length > 1 ? 's' : ''})`,
+    mediaUrl: mediaUrls // Twilio accepts array of media URLs
   });
 
   console.log('✅ MMS SENT SUCCESSFULLY!');
@@ -86,11 +97,12 @@ try {
   console.log('  Direction:', message.direction);
   console.log('  Date Created:', message.dateCreated);
   console.log('  Num Media:', message.numMedia);
+  console.log('  Media URLs:', message.subresourceUris?.media || 'N/A');
   console.log('\n📱 Check your phone for the MMS!');
   console.log('\n📋 Next Steps:');
-  console.log('  1. Check if MMS was received');
+  console.log('  1. Check if MMS was received with all attachments');
   console.log('  2. Check server logs for webhook');
-  console.log('  3. Check lead detail page for image display');
+  console.log('  3. Check lead detail page for image/PDF display');
   
 } catch (error) {
   console.error('❌ ERROR:', error.message);
