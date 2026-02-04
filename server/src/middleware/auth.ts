@@ -33,12 +33,21 @@ export function authenticateWithQuery(req: Request, res: Response, next: NextFun
   // If no header token, try query param
   if (!token) {
     token = req.query.token as string;
-    // Decode URL-encoded token if needed
+    // Decode URL-encoded token if needed (JWT tokens may have special chars)
     if (token) {
       try {
-        token = decodeURIComponent(token);
+        // Try decoding - JWT tokens might be URL encoded
+        const decoded = decodeURIComponent(token);
+        // Check if it looks like a valid JWT (has dots)
+        if (decoded.includes('.')) {
+          token = decoded;
+        } else {
+          // If decoded doesn't have dots, might be double-encoded or original is fine
+          token = token;
+        }
       } catch {
         // If decode fails, use original token
+        token = token;
       }
     }
   }

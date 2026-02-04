@@ -917,8 +917,11 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
                     {(item as any).metadata.mediaUrls.map((media: any, idx: number) => {
                       const isImage = media.contentType?.startsWith('image/');
                       // Use proxy endpoint to avoid authentication issues
+                      // Get fresh token each time (in case it was refreshed)
                       const accessToken = localStorage.getItem('accessToken');
-                      const proxyUrl = `${API_BASE}/sms/media?mediaUrl=${encodeURIComponent(media.url)}${accessToken ? `&token=${encodeURIComponent(accessToken)}` : ''}`;
+                      // JWT tokens are safe in URLs, but encodeURIComponent ensures special chars are handled
+                      const tokenParam = accessToken ? `&token=${encodeURIComponent(accessToken)}` : '';
+                      const proxyUrl = `${API_BASE}/sms/media?mediaUrl=${encodeURIComponent(media.url)}${tokenParam}`;
                       return (
                         <div key={idx} className="rounded-lg overflow-hidden border border-slate-200 bg-white">
                           {isImage ? (
@@ -1538,8 +1541,11 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
 
             {selectedMMSMedia && selectedMMSMedia[activeMMSMediaIndex] && (() => {
               const activeMedia = selectedMMSMedia[activeMMSMediaIndex];
+              // Get fresh token each time (in case it was refreshed)
               const accessToken = localStorage.getItem('accessToken');
-              const proxyUrl = `${API_BASE}/sms/media?mediaUrl=${encodeURIComponent(activeMedia.url)}${accessToken ? `&token=${encodeURIComponent(accessToken)}` : ''}`;
+              // JWT tokens are safe in URLs, but encodeURIComponent ensures special chars are handled
+              const tokenParam = accessToken ? `&token=${encodeURIComponent(accessToken)}` : '';
+              const proxyUrl = `${API_BASE}/sms/media?mediaUrl=${encodeURIComponent(activeMedia.url)}${tokenParam}`;
               const isImage = activeMedia.contentType?.startsWith('image/');
               const isPDF = activeMedia.contentType === 'application/pdf';
 

@@ -9,6 +9,12 @@ router.post('/webhook', (req, res, next) =>
   smsController.webhook(req, res).catch(next)
 );
 
+// Proxy MMS media with authentication (allow token in query for iframe/img tags)
+// Must be before router.use(authenticate) to use authenticateWithQuery
+router.get('/media', authenticateWithQuery, (req, res, next) => 
+  smsController.proxyMMSMedia(req, res).catch(next)
+);
+
 // All other SMS routes require authentication
 router.use(authenticate);
 
@@ -35,11 +41,6 @@ router.get('/numbers', (req, res, next) =>
 // Get SMS history/conversations
 router.get('/history', (req, res, next) => 
   smsController.getSMSHistory(req, res).catch(next)
-);
-
-// Proxy MMS media with authentication (allow token in query for iframe/img tags)
-router.get('/media', authenticateWithQuery, (req, res, next) => 
-  smsController.proxyMMSMedia(req, res).catch(next)
 );
 
 export default router;
