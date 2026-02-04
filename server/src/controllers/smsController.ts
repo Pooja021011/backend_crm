@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { Readable } from 'node:stream';
 import { smsService } from '../services/smsService.js';
 import { logger } from '../config/logger.js';
 import { prisma } from '../config/db.js';
@@ -184,6 +185,66 @@ export const smsController = {
         success: false,
         error: 'Failed to get available numbers'
       });
+    }
+  },
+
+  /**
+   * Proxy Twilio MMS media with authentication
+   * Extracts MediaSid from Twilio MediaUrl and fetches it with proper auth
+   */
+  async proxyMMSMedia(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const { mediaUrl } = req.query;
+      if (!mediaUrl || typeof mediaUrl !== 'string') {
+        return res.status(400).json({ error: 'mediaUrl parameter required' });
+      }
+
+      // Extract MessageSid and MediaSid from Twilio MediaUrl
+      // Format: https://api.twilio.com/2010-04-01/Accounts/{AccountSid}/Messages/{MessageSid}/Media/{MediaSid}
+      const urlMatch = mediaUrl.match(/\/Messages\/([^\/]+)\/Media\/([^\/\?]+)/);
+      if (!urlMatch) {
+        return res.status(400).json({ error: 'Invalid Twilio MediaUrl format' });
+      }
+
+      const messageSid = urlMatch[1];
+      const mediaSid = urlMatch[2];
+      const accountSid = process.env.TWILIO_ACCOUNT_SID;
+      const authToken = process.env.TWILIO_AUTH_TOKEN;
+
+      if (!accountSid || !authToken) {
+        return res.status(500).json({ error: 'Twilio not configured' });
+      }
+
+      // Fetch media from Twilio with authentication
+      const twilioMediaUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages/${messageSid}/Media/${mediaSid}`;
+      const basic = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+      
+      const response = await fetch(twilioMediaUrl, {
+        headers: { Authorization: `Basic ${basic}` }
+      });
+
+      if (!response.ok || !response.body) {
+        logger.error({ mediaSid, status: response.status }, 'Failed to fetch Twilio media');
+        return res.status(502).json({ error: 'Failed to fetch media from Twilio' });
+      }
+
+      // Get content type from response
+      const contentType = response.headers.get('content-type') || 'image/jpeg';
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+
+      // Stream the media to client
+      const nodeStream = Readable.fromWeb(response.body as any);
+      nodeStream.pipe(res);
+
+    } catch (error: any) {
+      logger.error({ error: error.message }, 'Error proxying MMS media');
+      res.status(500).json({ error: 'Failed to proxy media' });
     }
   },
 

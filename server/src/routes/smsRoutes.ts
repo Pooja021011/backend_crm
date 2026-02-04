@@ -37,4 +37,9 @@ router.get('/history', (req, res, next) =>
   smsController.getSMSHistory(req, res).catch(next)
 );
 
+// Proxy MMS media with authentication
+router.get('/media', (req, res, next) => 
+  smsController.proxyMMSMedia(req, res).catch(next)
+);
+
 export default router;

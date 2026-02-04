@@ -894,21 +894,23 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
                   <div className="mt-2 space-y-2">
                     {(item as any).metadata.mediaUrls.map((media: any, idx: number) => {
                       const isImage = media.contentType?.startsWith('image/');
+                      // Use proxy endpoint to avoid authentication issues
+                      const proxyUrl = `${API_BASE}/sms/media?mediaUrl=${encodeURIComponent(media.url)}`;
                       return (
                         <div key={idx} className="rounded-lg overflow-hidden border border-slate-200 bg-white">
                           {isImage ? (
                             <img
-                              src={media.url}
+                              src={proxyUrl}
                               alt={`SMS attachment ${idx + 1}`}
-                              className="max-w-full h-auto rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
-                              onClick={() => window.open(media.url, '_blank')}
+                              className="max-w-[200px] h-auto rounded-lg cursor-pointer hover:opacity-90 transition-opacity object-contain"
+                              onClick={() => window.open(proxyUrl, '_blank')}
                               onError={(e) => {
                                 (e.target as HTMLImageElement).src = '/placeholder.svg';
                               }}
                             />
                           ) : (
                             <a
-                              href={media.url}
+                              href={proxyUrl}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="flex items-center gap-2 p-2 bg-slate-50 rounded text-xs text-slate-700 hover:bg-slate-100"
