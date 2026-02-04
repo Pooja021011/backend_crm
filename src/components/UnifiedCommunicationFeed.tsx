@@ -30,7 +30,8 @@ import {
   Save,
   ChevronLeft,
   ChevronRight,
-  X
+  X,
+  Download
 } from 'lucide-react';
 
 interface Communication {
@@ -938,10 +939,10 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
                                 setSelectedMMSMedia((item as any).metadata.mediaUrls);
                                 setActiveMMSMediaIndex(idx);
                               }}
-                              className="flex items-center gap-2 p-2 bg-slate-50 rounded text-xs text-slate-700 hover:bg-slate-100 cursor-pointer"
+                              className="w-20 h-20 flex flex-col items-center justify-center bg-slate-50 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors"
                             >
-                              <FileText className="w-4 h-4" />
-                              <span>View attachment</span>
+                              <FileText className="w-6 h-6 text-slate-600 mb-1" />
+                              <span className="text-[10px] text-slate-600 text-center px-1 leading-tight">View</span>
                             </div>
                           )}
                         </div>
@@ -1539,9 +1540,10 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
               if (isPDF) {
                 return (
                   <iframe
-                    src={proxyUrl}
+                    src={`${proxyUrl}#toolbar=0&navpanes=0&scrollbar=0`}
                     className="w-full h-[80vh]"
                     title="MMS PDF"
+                    style={{ border: 'none' }}
                   />
                 );
               } else if (isImage) {
@@ -1607,11 +1609,25 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
               <div className="text-sm text-muted-foreground truncate flex-1">
                 Attachment {activeMMSMediaIndex + 1} ({selectedMMSMedia[activeMMSMediaIndex].contentType})
               </div>
-              {selectedMMSMedia.length > 1 && (
-                <div className="text-xs text-muted-foreground">
-                  {activeMMSMediaIndex + 1} / {selectedMMSMedia.length}
-                </div>
-              )}
+              <div className="flex items-center gap-3">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const activeMedia = selectedMMSMedia[activeMMSMediaIndex];
+                    const proxyUrl = `${API_BASE}/sms/media?mediaUrl=${encodeURIComponent(activeMedia.url)}`;
+                    window.open(proxyUrl, '_blank');
+                  }}
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Download
+                </Button>
+                {selectedMMSMedia.length > 1 && (
+                  <div className="text-xs text-muted-foreground">
+                    {activeMMSMediaIndex + 1} / {selectedMMSMedia.length}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </DialogContent>
