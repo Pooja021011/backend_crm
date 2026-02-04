@@ -917,7 +917,8 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
                     {(item as any).metadata.mediaUrls.map((media: any, idx: number) => {
                       const isImage = media.contentType?.startsWith('image/');
                       // Use proxy endpoint to avoid authentication issues
-                      const proxyUrl = `${API_BASE}/sms/media?mediaUrl=${encodeURIComponent(media.url)}`;
+                      const accessToken = localStorage.getItem('accessToken');
+                      const proxyUrl = `${API_BASE}/sms/media?mediaUrl=${encodeURIComponent(media.url)}${accessToken ? `&token=${encodeURIComponent(accessToken)}` : ''}`;
                       return (
                         <div key={idx} className="rounded-lg overflow-hidden border border-slate-200 bg-white">
                           {isImage ? (
@@ -1533,7 +1534,8 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
 
             {selectedMMSMedia && selectedMMSMedia[activeMMSMediaIndex] && (() => {
               const activeMedia = selectedMMSMedia[activeMMSMediaIndex];
-              const proxyUrl = `${API_BASE}/sms/media?mediaUrl=${encodeURIComponent(activeMedia.url)}`;
+              const accessToken = localStorage.getItem('accessToken');
+              const proxyUrl = `${API_BASE}/sms/media?mediaUrl=${encodeURIComponent(activeMedia.url)}${accessToken ? `&token=${encodeURIComponent(accessToken)}` : ''}`;
               const isImage = activeMedia.contentType?.startsWith('image/');
               const isPDF = activeMedia.contentType === 'application/pdf';
 

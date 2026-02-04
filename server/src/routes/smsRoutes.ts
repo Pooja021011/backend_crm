@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { smsController } from '../controllers/smsController.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, authenticateWithQuery } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -37,8 +37,8 @@ router.get('/history', (req, res, next) =>
   smsController.getSMSHistory(req, res).catch(next)
 );
 
-// Proxy MMS media with authentication
-router.get('/media', (req, res, next) => 
+// Proxy MMS media with authentication (allow token in query for iframe/img tags)
+router.get('/media', authenticateWithQuery, (req, res, next) => 
   smsController.proxyMMSMedia(req, res).catch(next)
 );
 
