@@ -33,6 +33,14 @@ export function authenticateWithQuery(req: Request, res: Response, next: NextFun
   // If no header token, try query param
   if (!token) {
     token = req.query.token as string;
+    // Decode URL-encoded token if needed
+    if (token) {
+      try {
+        token = decodeURIComponent(token);
+      } catch {
+        // If decode fails, use original token
+      }
+    }
   }
   
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
@@ -41,7 +49,9 @@ export function authenticateWithQuery(req: Request, res: Response, next: NextFun
     const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as AuthUser & { iat: number; exp: number };
     (req as any).user = { id: decoded.id, roles: decoded.roles } satisfies AuthUser;
     return next();
-  } catch {
+  } catch (error: any) {
+    // Log error for debugging (but don't expose details to client)
+    console.error('Token verification failed:', error.message);
     return res.status(401).json({ error: 'Unauthorized' });
   }
 }

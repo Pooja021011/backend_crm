@@ -1519,6 +1519,10 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
         }
       }}>
         <DialogContent className="max-w-5xl p-0 overflow-hidden [&>button.absolute]:hidden">
+          <DialogHeader className="sr-only">
+            <DialogTitle>MMS Media Viewer</DialogTitle>
+            <DialogDescription>View MMS attachments including images and PDFs</DialogDescription>
+          </DialogHeader>
           <div className="relative bg-black">
             <DialogClose asChild>
               <Button
