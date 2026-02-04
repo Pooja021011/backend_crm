@@ -237,6 +237,14 @@ export const smsController = {
       const contentType = response.headers.get('content-type') || 'image/jpeg';
       res.setHeader('Content-Type', contentType);
       res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+      
+      // Set Content-Disposition for proper download handling
+      // Extract filename from content type
+      const isPDF = contentType === 'application/pdf';
+      const isImage = contentType.startsWith('image/');
+      const extension = isPDF ? 'pdf' : isImage ? contentType.split('/')[1] : 'bin';
+      const filename = `mms-attachment.${extension}`;
+      res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
 
       // Stream the media to client
       const nodeStream = Readable.fromWeb(response.body as any);

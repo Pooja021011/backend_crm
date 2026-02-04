@@ -1613,10 +1613,45 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => {
-                    const activeMedia = selectedMMSMedia[activeMMSMediaIndex];
-                    const proxyUrl = `${API_BASE}/sms/media?mediaUrl=${encodeURIComponent(activeMedia.url)}`;
-                    window.open(proxyUrl, '_blank');
+                  onClick={async () => {
+                    try {
+                      const activeMedia = selectedMMSMedia[activeMMSMediaIndex];
+                      const proxyUrl = `${API_BASE}/sms/media?mediaUrl=${encodeURIComponent(activeMedia.url)}`;
+                      const accessToken = localStorage.getItem('accessToken');
+                      
+                      const response = await fetch(proxyUrl, {
+                        credentials: 'include',
+                        headers: {
+                          'Authorization': `Bearer ${accessToken}`
+                        }
+                      });
+
+                      if (!response.ok) {
+                        throw new Error('Download failed');
+                      }
+
+                      const blob = await response.blob();
+                      const url = window.URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.style.display = 'none';
+                      a.href = url;
+                      // Extract filename from content type or use default
+                      const extension = activeMedia.contentType === 'application/pdf' ? 'pdf' : 
+                                       activeMedia.contentType?.startsWith('image/') ? 
+                                       activeMedia.contentType.split('/')[1] : 'bin';
+                      a.download = `mms-attachment-${activeMMSMediaIndex + 1}.${extension}`;
+                      document.body.appendChild(a);
+                      a.click();
+                      window.URL.revokeObjectURL(url);
+                      document.body.removeChild(a);
+                    } catch (error) {
+                      console.error('Download failed:', error);
+                      toast({
+                        title: "Download Failed",
+                        description: "Failed to download the file",
+                        variant: "destructive"
+                      });
+                    }
                   }}
                 >
                   <Download className="w-4 h-4 mr-2" />
