@@ -102,12 +102,15 @@ export const reminderRepository = {
                       }
                     }
                   },
-                  // Exclude leads that have ANY open tasks (upcoming or overdue), but ignore auto-created tasks
+                  // Exclude leads that have upcoming tasks (due date in future), but ignore auto-created tasks
                   {
                     NOT: {
                       tasks: {
                         some: {
                           status: TaskStatus.OPEN,
+                          dueAt: {
+                            gt: now // Only upcoming tasks (due date in future), not overdue
+                          },
                           // Exclude auto-created tasks from this check
                           NOT: [
                             { title: { startsWith: 'Review note on ' } },
@@ -358,11 +361,14 @@ export const reminderRepository = {
                 }
               },
               {
-                // Exclude leads that have ANY open tasks (upcoming or overdue), but ignore auto-created tasks
+                // Exclude leads that have upcoming tasks (due date in future), but ignore auto-created tasks
                 NOT: {
                   tasks: {
                     some: {
                       status: TaskStatus.OPEN,
+                      dueAt: {
+                        gt: now // Only upcoming tasks (due date in future), not overdue
+                      },
                       // Exclude auto-created tasks from this check
                       NOT: [
                         { title: { startsWith: 'Review note on ' } },
