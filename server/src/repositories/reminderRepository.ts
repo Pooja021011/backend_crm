@@ -462,154 +462,38 @@ export const reminderRepository = {
         console.log(`[ACQ Reminders] Created ${untouchedLeads.length} LEAD_UNTOUCHED reminders`);
         console.log(`[ACQ Reminders] Total reminders: ${reminders.length}`);
       } else if (userRoles.includes('DISP')) {
-        // DISPOSITIONS AGENT - Leads untouched 36h, due diligence < 3-5 days
-        // Leads untouched 36h
-        const untouchedLeads = await prisma.lead.findMany({
+        // DISPOSITIONS AGENT - Own leads with tasks overdue 4h+ OR untouched 36h+
+        // Priority: Task overdue (4h) checked first, then untouched (36h)
+        console.log(`[DISP Reminders] DISP role found! User ID: ${userId}, Roles:`, userRoles);
+        
+        // Step 1: Get ALL overdue tasks for user (4h+)
+        // Using tasksCutoffDate declared at top for consistency
+        // Exclude auto-created tasks (note mentions, stage transitions, etc.) - same as frontend Tasks tab
+        const overdueTasks = await prisma.task.findMany({
           where: {
-            assignedUserId: userId,
-            lastContactAt: {
-              lte: hoursAgo(36)
+            assignedToId: userId,
+            status: TaskStatus.OPEN,
+            dueAt: {
+              lte: hoursAgo(4),
+              gte: tasksCutoffDate // Only show tasks due >= Jan 20, 2026 (same as Tasks tab)
             },
-            // Exclude leads with "dead" status (ONLY for reminders tab)
-            leadStatus: {
-              NOT: {
-                name: {
-                  equals: 'dead',
-                  mode: 'insensitive'
-                }
-              }
-            }
-          },
-          include: {
-            address: true,
-            pipelineStage: true,
-            leadStatus: true
-          }
-        });
-
-        untouchedLeads.forEach(lead => {
-          reminders.push({
-            id: `disp-untouched-${lead.id}`,
-            type: 'LEAD_UNTOUCHED',
-            priority: 'HIGH',
-            title: 'Lead Untouched 36h+',
-            description: `Your lead at ${lead.address?.address1 || 'Unknown address'} needs attention (${Math.floor((now.getTime() - new Date(lead.lastContactAt || lead.createdAt).getTime()) / (1000 * 60 * 60))}h ago)`,
-            leadId: lead.id,
-            createdAt: now,
-            status: 'PENDING',
-            lead: lead
-          });
-        });
-
-        // Due diligence 3-5 days
-        const dueDiligenceLeads = await prisma.lead.findMany({
-          where: {
-            assignedUserId: userId,
-            pipelineStage: {
-              name: { contains: 'Due Diligence', mode: 'insensitive' }
-            },
-            stageEnteredAt: {
-              gte: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
-              lte: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)  // 3 days ago
-            },
-            // Exclude leads with "dead" status (ONLY for reminders tab)
-            leadStatus: {
-              NOT: {
-                name: {
-                  equals: 'dead',
-                  mode: 'insensitive'
-                }
-              }
-            }
-          },
-          include: {
-            address: true,
-            pipelineStage: true,
-            leadStatus: true
-          }
-        });
-
-        dueDiligenceLeads.forEach(lead => {
-          reminders.push({
-            id: `disp-due-diligence-${lead.id}`,
-            type: 'DUE_DILIGENCE',
-            priority: 'URGENT',
-            title: 'Due Diligence Alert',
-            description: `Due diligence for ${lead.address?.address1 || 'Unknown address'} is ${Math.floor((now.getTime() - new Date(lead.stageEnteredAt || lead.createdAt).getTime()) / (1000 * 60 * 60 * 24))} days old`,
-            leadId: lead.id,
-            createdAt: now,
-            status: 'PENDING',
-            lead: lead
-          });
-        });
-      } else if (userRoles.includes('TC')) {
-        // TRANSACTION COORDINATOR - Contracts closing within 2 days, unanswered comms
-        // Contracts closing within 2 days
-        const closingSoonLeads = await prisma.lead.findMany({
-          where: {
-            deal: {
-              closedAt: {
-                gte: now,
-                lte: daysFromNow(2)
-              }
-            },
-            // Exclude leads with "dead" status (ONLY for reminders tab)
-            leadStatus: {
-              NOT: {
-                name: {
-                  equals: 'dead',
-                  mode: 'insensitive'
-                }
-              }
-            }
-          },
-          include: {
-            address: true,
-            deal: true,
-            pipelineStage: true,
-            leadStatus: true
-          }
-        });
-
-        closingSoonLeads.forEach(lead => {
-          const daysUntilClosing = Math.ceil((new Date(lead.deal?.closedAt || now).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-          reminders.push({
-            id: `closing-soon-${lead.id}`,
-            type: 'CLOSING_SOON',
-            priority: 'URGENT',
-            title: 'Closing Soon',
-            description: `${lead.address?.address1 || 'Unknown address'} closes in ${daysUntilClosing} day${daysUntilClosing !== 1 ? 's' : ''}`,
-            leadId: lead.id,
-            dueDate: new Date(lead.deal?.closedAt || now),
-            createdAt: now,
-            status: 'PENDING',
-            lead: lead
-          });
-        });
-
-        // Unanswered communications (2/16h - using 16h for now)
-        const unansweredComms = await prisma.communication.findMany({
-          where: {
-            direction: 'INBOUND',
-            occurredAt: {
-              lte: hoursAgo(16)
-            },
-            // Assuming we have a responded field or can check for outbound response
+            // Exclude auto-created tasks (note mentions, stage transitions, DocuSign, etc.)
+            NOT: [
+              { title: { startsWith: 'Review note on ' } },
+              { title: { startsWith: 'Underwrite ' } },
+              { title: { startsWith: 'Make Offer on ' } },
+              { title: { startsWith: 'Follow Up With ' } },
+              { title: { startsWith: 'Contract Sent - Awaiting Signature for ' } },
+              { title: { startsWith: 'URGENT: DocuSign Failed for ' } },
+              { title: { startsWith: 'Check Voided Contract With ' } }
+            ],
+            // Exclude tasks for leads with "dead" status (ONLY for reminders tab)
             lead: {
-              // Exclude communications for leads with "dead" status (ONLY for reminders tab)
               leadStatus: {
                 NOT: {
                   name: {
                     equals: 'dead',
                     mode: 'insensitive'
-                  }
-                }
-              },
-              communications: {
-                none: {
-                  direction: 'OUTBOUND',
-                  occurredAt: {
-                    gte: hoursAgo(16)
                   }
                 }
               }
@@ -619,28 +503,344 @@ export const reminderRepository = {
             lead: {
               include: {
                 address: true,
+                pipelineStage: true,
                 leadStatus: true
               }
             }
           },
-          take: 50 // Limit to avoid too many alerts
+          orderBy: { dueAt: 'asc' }
         });
-
-        unansweredComms.forEach(comm => {
+        
+        console.log(`[DISP Reminders] Found ${overdueTasks.length} overdue tasks (4h+)`);
+        
+        // Create reminders for overdue tasks
+        const taskLeadIds = new Set<string>();
+        overdueTasks.forEach(task => {
+          taskLeadIds.add(task.leadId);
+          const hoursOverdue = Math.floor((now.getTime() - new Date(task.dueAt).getTime()) / (1000 * 60 * 60));
+          
           reminders.push({
-            id: `unanswered-${comm.id}`,
-            type: 'UNANSWERED_COMM',
-            priority: 'HIGH',
-            title: 'Unanswered Communication',
-            description: `${comm.type} from ${comm.lead?.address?.address1 || 'Unknown'} needs response (${Math.floor((now.getTime() - new Date(comm.occurredAt).getTime()) / (1000 * 60 * 60))}h ago)`,
-            leadId: comm.leadId,
-            communicationId: comm.id,
+            id: `disp-task-${task.id}`,
+            type: 'TASK_OVERDUE',
+            priority: hoursOverdue >= 24 ? 'URGENT' : 'HIGH',
+            title: 'Task overdue 4h+',
+            description: 'Task overdue 4h+',
+            leadId: task.leadId,
             createdAt: now,
             status: 'PENDING',
-            lead: comm.lead,
-            communication: comm
+            lead: task.lead
           });
         });
+        
+        console.log(`[DISP Reminders] Created ${overdueTasks.length} TASK_OVERDUE reminders`);
+        
+        // Step 2: Get assigned/created leads that are untouched 36h+ (excluding leads with any open tasks, except auto-created ones)
+        // Requirement: Only PIPELINE STATUS leads, use OUTBOUND communication - reached out (no fallback)
+        const untouchedLeads = await prisma.lead.findMany({
+          where: {
+            AND: [
+              {
+                OR: [
+                  { assignedUserId: userId },
+                  { createdById: userId }
+                ]
+              },
+              {
+                NOT: {
+                  id: { in: Array.from(taskLeadIds) } // Exclude leads that already have overdue task reminders
+                }
+              },
+              {
+                // Exclude leads that have upcoming tasks (due date in future), but ignore auto-created tasks
+                NOT: {
+                  tasks: {
+                    some: {
+                      status: TaskStatus.OPEN,
+                      dueAt: {
+                        gt: now // Only upcoming tasks (due date in future), not overdue
+                      },
+                      // Exclude auto-created tasks from this check
+                      NOT: [
+                        { title: { startsWith: 'Review note on ' } },
+                        { title: { startsWith: 'Underwrite ' } },
+                        { title: { startsWith: 'Make Offer on ' } },
+                        { title: { startsWith: 'Follow Up With ' } },
+                        { title: { startsWith: 'Contract Sent - Awaiting Signature for ' } },
+                        { title: { startsWith: 'URGENT: DocuSign Failed for ' } },
+                        { title: { startsWith: 'Check Voided Contract With ' } }
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                // Has at least one OUTBOUND communication older than 36h
+                communications: {
+                  some: {
+                    direction: 'OUTBOUND',
+                    occurredAt: {
+                      lte: hoursAgo(36)
+                    }
+                  }
+                }
+              },
+              {
+                // Does NOT have any OUTBOUND communication newer than 36h
+                NOT: {
+                  communications: {
+                    some: {
+                      direction: 'OUTBOUND',
+                      occurredAt: {
+                        gt: hoursAgo(36)
+                      }
+                    }
+                  }
+                }
+              },
+              // Only PIPELINE STATUS leads
+              {
+                leadStatus: {
+                  name: {
+                    equals: 'Pipeline',
+                    mode: 'insensitive'
+                  }
+                }
+              }
+            ]
+          },
+          include: {
+            address: true,
+            pipelineStage: true,
+            leadStatus: true,
+            communications: {
+              where: {
+                direction: 'OUTBOUND'
+              },
+              orderBy: {
+                occurredAt: 'desc'
+              },
+              take: 1 // Most recent OUTBOUND communication only
+            }
+          }
+        });
+        
+        console.log(`[DISP Reminders] Found ${untouchedLeads.length} untouched leads (36h+)`);
+        
+        // Create reminders for untouched leads
+        untouchedLeads.forEach(lead => {
+          // Get last OUTBOUND communication (reached out)
+          const lastOutboundComm = lead.communications?.[0];
+          // Skip if no OUTBOUND communication exists (no fallback)
+          if (!lastOutboundComm) return;
+          
+          const lastReachedOutAt = lastOutboundComm.occurredAt;
+          const hoursUntouched = Math.floor((now.getTime() - new Date(lastReachedOutAt).getTime()) / (1000 * 60 * 60));
+          
+          reminders.push({
+            id: `disp-untouched-${lead.id}`,
+            type: 'LEAD_UNTOUCHED',
+            priority: 'HIGH',
+            title: 'Lead Untouched 36h+',
+            description: `Your lead at ${lead.address?.address1 || 'Unknown address'} needs follow-up (last updated ${hoursUntouched}h ago)`,
+            leadId: lead.id,
+            createdAt: now,
+            status: 'PENDING',
+            lead: lead
+          });
+        });
+        
+        console.log(`[DISP Reminders] Created ${untouchedLeads.length} LEAD_UNTOUCHED reminders`);
+        console.log(`[DISP Reminders] Total reminders: ${reminders.length}`);
+      } else if (userRoles.includes('TC')) {
+        // TRANSACTION COORDINATOR - Own leads with tasks overdue 4h+ OR untouched 36h+
+        // Priority: Task overdue (4h) checked first, then untouched (36h)
+        console.log(`[TC Reminders] TC role found! User ID: ${userId}, Roles:`, userRoles);
+        
+        // Step 1: Get ALL overdue tasks for user (4h+)
+        // Using tasksCutoffDate declared at top for consistency
+        // Exclude auto-created tasks (note mentions, stage transitions, etc.) - same as frontend Tasks tab
+        const overdueTasks = await prisma.task.findMany({
+          where: {
+            assignedToId: userId,
+            status: TaskStatus.OPEN,
+            dueAt: {
+              lte: hoursAgo(4),
+              gte: tasksCutoffDate // Only show tasks due >= Jan 20, 2026 (same as Tasks tab)
+            },
+            // Exclude auto-created tasks (note mentions, stage transitions, DocuSign, etc.)
+            NOT: [
+              { title: { startsWith: 'Review note on ' } },
+              { title: { startsWith: 'Underwrite ' } },
+              { title: { startsWith: 'Make Offer on ' } },
+              { title: { startsWith: 'Follow Up With ' } },
+              { title: { startsWith: 'Contract Sent - Awaiting Signature for ' } },
+              { title: { startsWith: 'URGENT: DocuSign Failed for ' } },
+              { title: { startsWith: 'Check Voided Contract With ' } }
+            ],
+            // Exclude tasks for leads with "dead" status (ONLY for reminders tab)
+            lead: {
+              leadStatus: {
+                NOT: {
+                  name: {
+                    equals: 'dead',
+                    mode: 'insensitive'
+                  }
+                }
+              }
+            }
+          },
+          include: {
+            lead: {
+              include: {
+                address: true,
+                pipelineStage: true,
+                leadStatus: true
+              }
+            }
+          },
+          orderBy: { dueAt: 'asc' }
+        });
+        
+        console.log(`[TC Reminders] Found ${overdueTasks.length} overdue tasks (4h+)`);
+        
+        // Create reminders for overdue tasks
+        const taskLeadIds = new Set<string>();
+        overdueTasks.forEach(task => {
+          taskLeadIds.add(task.leadId);
+          const hoursOverdue = Math.floor((now.getTime() - new Date(task.dueAt).getTime()) / (1000 * 60 * 60));
+          
+          reminders.push({
+            id: `tc-task-${task.id}`,
+            type: 'TASK_OVERDUE',
+            priority: hoursOverdue >= 24 ? 'URGENT' : 'HIGH',
+            title: 'Task overdue 4h+',
+            description: 'Task overdue 4h+',
+            leadId: task.leadId,
+            createdAt: now,
+            status: 'PENDING',
+            lead: task.lead
+          });
+        });
+        
+        console.log(`[TC Reminders] Created ${overdueTasks.length} TASK_OVERDUE reminders`);
+        
+        // Step 2: Get assigned/created leads that are untouched 36h+ (excluding leads with any open tasks, except auto-created ones)
+        // Requirement: Only PIPELINE STATUS leads, use OUTBOUND communication - reached out (no fallback)
+        const untouchedLeads = await prisma.lead.findMany({
+          where: {
+            AND: [
+              {
+                OR: [
+                  { assignedUserId: userId },
+                  { createdById: userId }
+                ]
+              },
+              {
+                NOT: {
+                  id: { in: Array.from(taskLeadIds) } // Exclude leads that already have overdue task reminders
+                }
+              },
+              {
+                // Exclude leads that have upcoming tasks (due date in future), but ignore auto-created tasks
+                NOT: {
+                  tasks: {
+                    some: {
+                      status: TaskStatus.OPEN,
+                      dueAt: {
+                        gt: now // Only upcoming tasks (due date in future), not overdue
+                      },
+                      // Exclude auto-created tasks from this check
+                      NOT: [
+                        { title: { startsWith: 'Review note on ' } },
+                        { title: { startsWith: 'Underwrite ' } },
+                        { title: { startsWith: 'Make Offer on ' } },
+                        { title: { startsWith: 'Follow Up With ' } },
+                        { title: { startsWith: 'Contract Sent - Awaiting Signature for ' } },
+                        { title: { startsWith: 'URGENT: DocuSign Failed for ' } },
+                        { title: { startsWith: 'Check Voided Contract With ' } }
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                // Has at least one OUTBOUND communication older than 36h
+                communications: {
+                  some: {
+                    direction: 'OUTBOUND',
+                    occurredAt: {
+                      lte: hoursAgo(36)
+                    }
+                  }
+                }
+              },
+              {
+                // Does NOT have any OUTBOUND communication newer than 36h
+                NOT: {
+                  communications: {
+                    some: {
+                      direction: 'OUTBOUND',
+                      occurredAt: {
+                        gt: hoursAgo(36)
+                      }
+                    }
+                  }
+                }
+              },
+              // Only PIPELINE STATUS leads
+              {
+                leadStatus: {
+                  name: {
+                    equals: 'Pipeline',
+                    mode: 'insensitive'
+                  }
+                }
+              }
+            ]
+          },
+          include: {
+            address: true,
+            pipelineStage: true,
+            leadStatus: true,
+            communications: {
+              where: {
+                direction: 'OUTBOUND'
+              },
+              orderBy: {
+                occurredAt: 'desc'
+              },
+              take: 1 // Most recent OUTBOUND communication only
+            }
+          }
+        });
+        
+        console.log(`[TC Reminders] Found ${untouchedLeads.length} untouched leads (36h+)`);
+        
+        // Create reminders for untouched leads
+        untouchedLeads.forEach(lead => {
+          // Get last OUTBOUND communication (reached out)
+          const lastOutboundComm = lead.communications?.[0];
+          // Skip if no OUTBOUND communication exists (no fallback)
+          if (!lastOutboundComm) return;
+          
+          const lastReachedOutAt = lastOutboundComm.occurredAt;
+          const hoursUntouched = Math.floor((now.getTime() - new Date(lastReachedOutAt).getTime()) / (1000 * 60 * 60));
+          
+          reminders.push({
+            id: `tc-untouched-${lead.id}`,
+            type: 'LEAD_UNTOUCHED',
+            priority: 'HIGH',
+            title: 'Lead Untouched 36h+',
+            description: `Your lead at ${lead.address?.address1 || 'Unknown address'} needs follow-up (last updated ${hoursUntouched}h ago)`,
+            leadId: lead.id,
+            createdAt: now,
+            status: 'PENDING',
+            lead: lead
+          });
+        });
+        
+        console.log(`[TC Reminders] Created ${untouchedLeads.length} LEAD_UNTOUCHED reminders`);
+        console.log(`[TC Reminders] Total reminders: ${reminders.length}`);
       }
 
       const sortedReminders = reminders.sort((a, b) => {
