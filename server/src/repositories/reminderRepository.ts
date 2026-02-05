@@ -81,11 +81,11 @@ export const reminderRepository = {
               }
             },
             OR: [
-              // Condition 1: Lead untouched 48h+ without upcoming tasks (use updatedAt - any update resets the timer)
+              // Condition 1: Lead untouched 48h+ without upcoming tasks (use lastContactAt - last contact time)
               {
                 AND: [
                   {
-                    updatedAt: {
+                    lastContactAt: {
                       lte: hoursAgo(48)
                     }
                   },
@@ -169,8 +169,10 @@ export const reminderRepository = {
         });
 
         managerLeads.forEach(lead => {
-          // Use updatedAt - any update to the lead (like source change) resets the timer
-          const lastUpdate = lead.updatedAt;
+          // Use lastContactAt - last contact time
+          const lastUpdate = lead.lastContactAt;
+          // Skip if lastContactAt is null
+          if (!lastUpdate) return;
           const hoursUntouched = Math.floor((now.getTime() - new Date(lastUpdate).getTime()) / (1000 * 60 * 60));
           const isUntouched = hoursUntouched >= 48;
           
@@ -323,8 +325,8 @@ export const reminderRepository = {
                 }
               },
               {
-                // Use updatedAt - any update to the lead (like source change) resets the timer
-                updatedAt: {
+                // Use lastContactAt - last contact time
+                lastContactAt: {
                   lte: hoursAgo(36)
                 }
               },
@@ -350,8 +352,10 @@ export const reminderRepository = {
         
         // Create reminders for untouched leads
         untouchedLeads.forEach(lead => {
-          // Use updatedAt - any update to the lead (like source change) resets the timer
-          const lastUpdate = lead.updatedAt;
+          // Use lastContactAt - last contact time
+          const lastUpdate = lead.lastContactAt;
+          // Skip if lastContactAt is null
+          if (!lastUpdate) return;
           const hoursUntouched = Math.floor((now.getTime() - new Date(lastUpdate).getTime()) / (1000 * 60 * 60));
           
           reminders.push({
