@@ -34,9 +34,16 @@ export const reminderRepository = {
     const daysFromNow = (days: number) => new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
 
     try {
-      // MANAGER / ADMIN - ACQ agents' leads with tasks overdue 6h+ OR untouched 48h+
+      // Apply same date filter as Tasks tab (Jan 20, 2026) for consistency across all roles
+      const tasksCutoffDate = new Date(2026, 0, 20); // Jan 20, 2026 - same as frontend Tasks tab
+      
+      // Role-based reminders with priority: MANAGER > ACQ > DISP > TC
+      // If user has multiple roles, only highest priority role's reminders will be shown
+      
+      // MANAGER - ACQ agents' leads with tasks overdue 6h+ OR untouched 48h+
       // Priority: Task overdue (6h) checked first, then untouched (48h)
-      if (userRoles.includes('MANAGER') || userRoles.includes('ADMIN')) {
+      // Note: ADMIN role does not receive reminders
+      if (userRoles.includes('MANAGER')) {
         // Collect lead IDs that will be shown in ACQ reminders (to avoid duplicates)
         const acqLeadIds = new Set<string>();
         
@@ -71,13 +78,14 @@ export const reminderRepository = {
                   lte: hoursAgo(48)
                 }
               },
-              // Condition 2: Lead has task overdue 6h+
+              // Condition 2: Lead has task overdue 6h+ (with date filter)
               {
                 tasks: {
                   some: {
                     status: TaskStatus.OPEN,
                     dueAt: {
-                      lte: hoursAgo(6)
+                      lte: hoursAgo(6),
+                      gte: tasksCutoffDate // Only show tasks due >= Jan 20, 2026 (same as Tasks tab)
                     }
                   }
                 }
@@ -93,7 +101,8 @@ export const reminderRepository = {
               where: {
                 status: TaskStatus.OPEN,
                 dueAt: {
-                  lte: hoursAgo(6)
+                  lte: hoursAgo(6),
+                  gte: tasksCutoffDate // Only show tasks due >= Jan 20, 2026 (same as Tasks tab)
                 }
               },
               orderBy: { dueAt: 'asc' },
@@ -105,11 +114,6 @@ export const reminderRepository = {
         });
 
         managerLeads.forEach(lead => {
-          // Skip if this is user's own lead and user is also ACQ (will be handled in ACQ block)
-          if (userRoles.includes('ACQ') && lead.assignedUserId === userId) {
-            return;
-          }
-
           // Use updatedAt - any update to the lead (like source change) resets the timer
           const lastUpdate = lead.updatedAt;
           const hoursUntouched = Math.floor((now.getTime() - new Date(lastUpdate).getTime()) / (1000 * 60 * 60));
@@ -154,25 +158,20 @@ export const reminderRepository = {
             });
           }
         });
-      }
-
-      // ACQUISITIONS AGENT - Own leads with tasks overdue 4h+ OR untouched 36h+
-      // Priority: Task overdue (4h) checked first, then untouched (36h)
-      console.log(`[ACQ Reminders] Checking ACQ role. userRoles:`, userRoles);
-      console.log(`[ACQ Reminders] userRoles.includes('ACQ'):`, userRoles.includes('ACQ'));
-      console.log(`[ACQ Reminders] userRoles type:`, typeof userRoles, 'isArray:', Array.isArray(userRoles));
-      console.log(`[ACQ Reminders] userRoles values:`, userRoles.map(r => `"${r}"`).join(', '));
-      
-      if (userRoles.includes('ACQ')) {
+      } else if (userRoles.includes('ACQ')) {
+        // ACQUISITIONS AGENT - Own leads with tasks overdue 4h+ OR untouched 36h+
+        // Priority: Task overdue (4h) checked first, then untouched (36h)
         console.log(`[ACQ Reminders] ACQ role found! User ID: ${userId}, Roles:`, userRoles);
         
         // Step 1: Get ALL overdue tasks for user (4h+)
+        // Using tasksCutoffDate declared at top for consistency
         const overdueTasks = await prisma.task.findMany({
           where: {
             assignedToId: userId,
             status: TaskStatus.OPEN,
             dueAt: {
-              lte: hoursAgo(4)
+              lte: hoursAgo(4),
+              gte: tasksCutoffDate // Only show tasks due >= Jan 20, 2026 (same as Tasks tab)
             },
             // Exclude tasks for leads with "dead" status (ONLY for reminders tab)
             lead: {
@@ -285,10 +284,8 @@ export const reminderRepository = {
         
         console.log(`[ACQ Reminders] Created ${untouchedLeads.length} LEAD_UNTOUCHED reminders`);
         console.log(`[ACQ Reminders] Total reminders: ${reminders.length}`);
-      }
-
-      // DISPOSITIONS AGENT - Leads untouched 36h, due diligence < 3-5 days
-      if (userRoles.includes('DISP')) {
+      } else if (userRoles.includes('DISP')) {
+        // DISPOSITIONS AGENT - Leads untouched 36h, due diligence < 3-5 days
         // Leads untouched 36h
         const untouchedLeads = await prisma.lead.findMany({
           where: {
@@ -368,10 +365,8 @@ export const reminderRepository = {
             lead: lead
           });
         });
-      }
-
-      // TRANSACTION COORDINATOR - Contracts closing within 2 days, unanswered comms
-      if (userRoles.includes('TC')) {
+      } else if (userRoles.includes('TC')) {
+        // TRANSACTION COORDINATOR - Contracts closing within 2 days, unanswered comms
         // Contracts closing within 2 days
         const closingSoonLeads = await prisma.lead.findMany({
           where: {
