@@ -51,6 +51,7 @@ export const reminderRepository = {
         // This will be populated after ACQ block runs, so we'll filter at the end
         
         // Get all ACQ agents' leads that match EITHER condition
+        // Requirement: Only PIPELINE STATUS leads
         const managerLeads = await prisma.lead.findMany({
           where: {
             assignedUser: {
@@ -62,21 +63,43 @@ export const reminderRepository = {
                 }
               }
             },
-            // Exclude leads with "dead" status (ONLY for reminders tab)
+            // Only PIPELINE STATUS leads
             leadStatus: {
-              NOT: {
-                name: {
-                  equals: 'dead',
-                  mode: 'insensitive'
-                }
+              name: {
+                equals: 'Pipeline',
+                mode: 'insensitive'
               }
             },
             OR: [
-              // Condition 1: Lead untouched 48h+ (use updatedAt - any update resets the timer)
+              // Condition 1: Lead untouched 48h+ without upcoming tasks (use updatedAt - any update resets the timer)
               {
-                updatedAt: {
-                  lte: hoursAgo(48)
-                }
+                AND: [
+                  {
+                    updatedAt: {
+                      lte: hoursAgo(48)
+                    }
+                  },
+                  // Exclude leads that have ANY open tasks (upcoming or overdue), but ignore auto-created tasks
+                  {
+                    NOT: {
+                      tasks: {
+                        some: {
+                          status: TaskStatus.OPEN,
+                          // Exclude auto-created tasks from this check
+                          NOT: [
+                            { title: { startsWith: 'Review note on ' } },
+                            { title: { startsWith: 'Underwrite ' } },
+                            { title: { startsWith: 'Make Offer on ' } },
+                            { title: { startsWith: 'Follow Up With ' } },
+                            { title: { startsWith: 'Contract Sent - Awaiting Signature for ' } },
+                            { title: { startsWith: 'URGENT: DocuSign Failed for ' } },
+                            { title: { startsWith: 'Check Voided Contract With ' } }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                ]
               },
               // Condition 2: Lead has task overdue 6h+ (with date filter, excluding auto-created tasks)
               {
@@ -251,7 +274,8 @@ export const reminderRepository = {
         
         console.log(`[ACQ Reminders] Created ${overdueTasks.length} TASK_OVERDUE reminders`);
         
-        // Step 2: Get assigned/created leads that are untouched 36h+ (excluding leads with overdue tasks)
+        // Step 2: Get assigned/created leads that are untouched 36h+ (excluding leads with any open tasks, except auto-created ones)
+        // Requirement: Only PIPELINE STATUS leads
         const untouchedLeads = await prisma.lead.findMany({
           where: {
             AND: [
@@ -267,19 +291,37 @@ export const reminderRepository = {
                 }
               },
               {
+                // Exclude leads that have ANY open tasks (upcoming or overdue), but ignore auto-created tasks
+                NOT: {
+                  tasks: {
+                    some: {
+                      status: TaskStatus.OPEN,
+                      // Exclude auto-created tasks from this check
+                      NOT: [
+                        { title: { startsWith: 'Review note on ' } },
+                        { title: { startsWith: 'Underwrite ' } },
+                        { title: { startsWith: 'Make Offer on ' } },
+                        { title: { startsWith: 'Follow Up With ' } },
+                        { title: { startsWith: 'Contract Sent - Awaiting Signature for ' } },
+                        { title: { startsWith: 'URGENT: DocuSign Failed for ' } },
+                        { title: { startsWith: 'Check Voided Contract With ' } }
+                      ]
+                    }
+                  }
+                }
+              },
+              {
                 // Use updatedAt - any update to the lead (like source change) resets the timer
                 updatedAt: {
                   lte: hoursAgo(36)
                 }
               },
-              // Exclude leads with "dead" status (ONLY for reminders tab)
+              // Only PIPELINE STATUS leads
               {
                 leadStatus: {
-                  NOT: {
-                    name: {
-                      equals: 'dead',
-                      mode: 'insensitive'
-                    }
+                  name: {
+                    equals: 'Pipeline',
+                    mode: 'insensitive'
                   }
                 }
               }
