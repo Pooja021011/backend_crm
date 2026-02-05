@@ -50,19 +50,29 @@ export const reminderRepository = {
         // First, collect all ACQ lead IDs from the ACQ block if user is also ACQ
         // This will be populated after ACQ block runs, so we'll filter at the end
         
-        // Get all ACQ agents' leads that match EITHER condition
-        // Requirement: Only PIPELINE STATUS leads
+        // Get logged-in Manager's own leads that match EITHER condition
+        // Requirement: Only PIPELINE STATUS leads, only Manager's own leads
         const managerLeads = await prisma.lead.findMany({
           where: {
-            assignedUser: {
-              roles: {
-                some: {
-                  role: {
-                    name: 'ACQ'
+            AND: [
+              {
+                OR: [
+                  { assignedUserId: userId },  // Leads assigned to Manager
+                  { createdById: userId }        // Leads created by Manager
+                ]
+              },
+              {
+                assignedUser: {
+                  roles: {
+                    some: {
+                      role: {
+                        name: 'ACQ'
+                      }
+                    }
                   }
                 }
               }
-            },
+            ],
             // Only PIPELINE STATUS leads
             leadStatus: {
               name: {
@@ -101,10 +111,11 @@ export const reminderRepository = {
                   }
                 ]
               },
-              // Condition 2: Lead has task overdue 6h+ (with date filter, excluding auto-created tasks)
+              // Condition 2: Lead has task overdue 6h+ assigned to logged-in Manager (with date filter, excluding auto-created tasks)
               {
                 tasks: {
                   some: {
+                    assignedToId: userId,  // Only tasks assigned to logged-in Manager
                     status: TaskStatus.OPEN,
                     dueAt: {
                       lte: hoursAgo(6),
@@ -132,6 +143,7 @@ export const reminderRepository = {
             leadStatus: true,
             tasks: {
               where: {
+                assignedToId: userId,  // Only tasks assigned to logged-in Manager
                 status: TaskStatus.OPEN,
                 dueAt: {
                   lte: hoursAgo(6),
@@ -162,16 +174,16 @@ export const reminderRepository = {
           const hoursUntouched = Math.floor((now.getTime() - new Date(lastUpdate).getTime()) / (1000 * 60 * 60));
           const isUntouched = hoursUntouched >= 48;
           
-          // Filter tasks to only those assigned to the ACQ agent (lead owner)
-          const acqAgentTasks = lead.tasks?.filter(task => task.assignedToId === lead.assignedUserId) || [];
-          const hasOverdueTask = acqAgentTasks.length > 0;
+          // Filter tasks to only those assigned to the logged-in Manager
+          const managerTasks = lead.tasks?.filter(task => task.assignedToId === userId) || [];
+          const hasOverdueTask = managerTasks.length > 0;
           
-          console.log(`[Manager/Admin Reminders] Lead ${lead.id}: ACQ agent tasks overdue 6h+ = ${acqAgentTasks.length}, untouched 48h+ = ${isUntouched}`);
+          console.log(`[Manager/Admin Reminders] Lead ${lead.id}: Manager tasks overdue 6h+ = ${managerTasks.length}, untouched 48h+ = ${isUntouched}`);
 
           // Priority: Task overdue (6h) comes BEFORE untouched (48h)
           if (hasOverdueTask) {
-            // Primary: Task overdue - task assigned to ACQ agent
-            const task = acqAgentTasks[0]; // Most overdue task assigned to ACQ agent
+            // Primary: Task overdue - task assigned to logged-in Manager
+            const task = managerTasks[0]; // Most overdue task assigned to Manager
             const hoursOverdue = Math.floor((now.getTime() - new Date(task.dueAt).getTime()) / (1000 * 60 * 60));
             
             reminders.push({
