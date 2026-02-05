@@ -78,7 +78,7 @@ export const reminderRepository = {
                   lte: hoursAgo(48)
                 }
               },
-              // Condition 2: Lead has task overdue 6h+ (with date filter)
+              // Condition 2: Lead has task overdue 6h+ (with date filter, excluding auto-created tasks)
               {
                 tasks: {
                   some: {
@@ -86,7 +86,17 @@ export const reminderRepository = {
                     dueAt: {
                       lte: hoursAgo(6),
                       gte: tasksCutoffDate // Only show tasks due >= Jan 20, 2026 (same as Tasks tab)
-                    }
+                    },
+                    // Exclude auto-created tasks
+                    NOT: [
+                      { title: { startsWith: 'Review note on ' } },
+                      { title: { startsWith: 'Underwrite ' } },
+                      { title: { startsWith: 'Make Offer on ' } },
+                      { title: { startsWith: 'Follow Up With ' } },
+                      { title: { startsWith: 'Contract Sent - Awaiting Signature for ' } },
+                      { title: { startsWith: 'URGENT: DocuSign Failed for ' } },
+                      { title: { startsWith: 'Check Voided Contract With ' } }
+                    ]
                   }
                 }
               }
@@ -103,7 +113,17 @@ export const reminderRepository = {
                 dueAt: {
                   lte: hoursAgo(6),
                   gte: tasksCutoffDate // Only show tasks due >= Jan 20, 2026 (same as Tasks tab)
-                }
+                },
+                // Exclude auto-created tasks
+                NOT: [
+                  { title: { startsWith: 'Review note on ' } },
+                  { title: { startsWith: 'Underwrite ' } },
+                  { title: { startsWith: 'Make Offer on ' } },
+                  { title: { startsWith: 'Follow Up With ' } },
+                  { title: { startsWith: 'Contract Sent - Awaiting Signature for ' } },
+                  { title: { startsWith: 'URGENT: DocuSign Failed for ' } },
+                  { title: { startsWith: 'Check Voided Contract With ' } }
+                ]
               },
               orderBy: { dueAt: 'asc' },
               include: {
@@ -165,6 +185,7 @@ export const reminderRepository = {
         
         // Step 1: Get ALL overdue tasks for user (4h+)
         // Using tasksCutoffDate declared at top for consistency
+        // Exclude auto-created tasks (note mentions, stage transitions, etc.) - same as frontend Tasks tab
         const overdueTasks = await prisma.task.findMany({
           where: {
             assignedToId: userId,
@@ -173,6 +194,16 @@ export const reminderRepository = {
               lte: hoursAgo(4),
               gte: tasksCutoffDate // Only show tasks due >= Jan 20, 2026 (same as Tasks tab)
             },
+            // Exclude auto-created tasks (note mentions, stage transitions, DocuSign, etc.)
+            NOT: [
+              { title: { startsWith: 'Review note on ' } },
+              { title: { startsWith: 'Underwrite ' } },
+              { title: { startsWith: 'Make Offer on ' } },
+              { title: { startsWith: 'Follow Up With ' } },
+              { title: { startsWith: 'Contract Sent - Awaiting Signature for ' } },
+              { title: { startsWith: 'URGENT: DocuSign Failed for ' } },
+              { title: { startsWith: 'Check Voided Contract With ' } }
+            ],
             // Exclude tasks for leads with "dead" status (ONLY for reminders tab)
             lead: {
               leadStatus: {
