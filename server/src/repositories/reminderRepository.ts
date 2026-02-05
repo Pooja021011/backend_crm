@@ -75,12 +75,31 @@ export const reminderRepository = {
               }
             },
             OR: [
-              // Condition 1: Lead untouched 48h+ without upcoming tasks (use lastContactAt - last contact time)
+              // Condition 1: Lead untouched 48h+ without upcoming tasks (use OUTBOUND communication - reached out, no fallback)
               {
                 AND: [
+                  // Has at least one OUTBOUND communication older than 48h
                   {
-                    lastContactAt: {
-                      lte: hoursAgo(48)
+                    communications: {
+                      some: {
+                        direction: 'OUTBOUND',
+                        occurredAt: {
+                          lte: hoursAgo(48)
+                        }
+                      }
+                    }
+                  },
+                  // Does NOT have any OUTBOUND communication newer than 48h
+                  {
+                    NOT: {
+                      communications: {
+                        some: {
+                          direction: 'OUTBOUND',
+                          occurredAt: {
+                            gt: hoursAgo(48)
+                          }
+                        }
+                      }
                     }
                   },
                   // Exclude leads that have ANY open tasks (upcoming or overdue), but ignore auto-created tasks
@@ -144,6 +163,15 @@ export const reminderRepository = {
             assignedUser: true,
             pipelineStage: true,
             leadStatus: true,
+            communications: {
+              where: {
+                direction: 'OUTBOUND'
+              },
+              orderBy: {
+                occurredAt: 'desc'
+              },
+              take: 1 // Most recent OUTBOUND communication only
+            },
             tasks: {
               where: {
                 status: TaskStatus.OPEN,
@@ -189,11 +217,13 @@ export const reminderRepository = {
         });
 
         managerLeads.forEach(lead => {
-          // Use lastContactAt - last contact time
-          const lastUpdate = lead.lastContactAt;
-          // Skip if lastContactAt is null
-          if (!lastUpdate) return;
-          const hoursUntouched = Math.floor((now.getTime() - new Date(lastUpdate).getTime()) / (1000 * 60 * 60));
+          // Get last OUTBOUND communication (reached out)
+          const lastOutboundComm = lead.communications?.[0];
+          // Skip if no OUTBOUND communication exists (no fallback)
+          if (!lastOutboundComm) return;
+          
+          const lastReachedOutAt = lastOutboundComm.occurredAt;
+          const hoursUntouched = Math.floor((now.getTime() - new Date(lastReachedOutAt).getTime()) / (1000 * 60 * 60));
           const isUntouched = hoursUntouched >= 48;
           
           // Filter tasks to only those assigned to ACQ agents (not Manager)
@@ -312,7 +342,7 @@ export const reminderRepository = {
         console.log(`[ACQ Reminders] Created ${overdueTasks.length} TASK_OVERDUE reminders`);
         
         // Step 2: Get assigned/created leads that are untouched 36h+ (excluding leads with any open tasks, except auto-created ones)
-        // Requirement: Only PIPELINE STATUS leads
+        // Requirement: Only PIPELINE STATUS leads, use OUTBOUND communication - reached out (no fallback)
         const untouchedLeads = await prisma.lead.findMany({
           where: {
             AND: [
@@ -348,9 +378,27 @@ export const reminderRepository = {
                 }
               },
               {
-                // Use lastContactAt - last contact time
-                lastContactAt: {
-                  lte: hoursAgo(36)
+                // Has at least one OUTBOUND communication older than 36h
+                communications: {
+                  some: {
+                    direction: 'OUTBOUND',
+                    occurredAt: {
+                      lte: hoursAgo(36)
+                    }
+                  }
+                }
+              },
+              {
+                // Does NOT have any OUTBOUND communication newer than 36h
+                NOT: {
+                  communications: {
+                    some: {
+                      direction: 'OUTBOUND',
+                      occurredAt: {
+                        gt: hoursAgo(36)
+                      }
+                    }
+                  }
                 }
               },
               // Only PIPELINE STATUS leads
@@ -367,7 +415,16 @@ export const reminderRepository = {
           include: {
             address: true,
             pipelineStage: true,
-            leadStatus: true
+            leadStatus: true,
+            communications: {
+              where: {
+                direction: 'OUTBOUND'
+              },
+              orderBy: {
+                occurredAt: 'desc'
+              },
+              take: 1 // Most recent OUTBOUND communication only
+            }
           }
         });
         
@@ -375,11 +432,13 @@ export const reminderRepository = {
         
         // Create reminders for untouched leads
         untouchedLeads.forEach(lead => {
-          // Use lastContactAt - last contact time
-          const lastUpdate = lead.lastContactAt;
-          // Skip if lastContactAt is null
-          if (!lastUpdate) return;
-          const hoursUntouched = Math.floor((now.getTime() - new Date(lastUpdate).getTime()) / (1000 * 60 * 60));
+          // Get last OUTBOUND communication (reached out)
+          const lastOutboundComm = lead.communications?.[0];
+          // Skip if no OUTBOUND communication exists (no fallback)
+          if (!lastOutboundComm) return;
+          
+          const lastReachedOutAt = lastOutboundComm.occurredAt;
+          const hoursUntouched = Math.floor((now.getTime() - new Date(lastReachedOutAt).getTime()) / (1000 * 60 * 60));
           
           reminders.push({
             id: `acq-untouched-${lead.id}`,
