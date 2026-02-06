@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { underwritingRepository } from '../repositories/underwritingRepository.js';
+import { underwritingService } from '../services/underwritingService.js';
 import { logger } from '../config/logger.js';
 
 export const underwritingController = {
@@ -146,6 +147,225 @@ export const underwritingController = {
       res.status(500).json({
         success: false,
         error: 'Failed to delete calculation'
+      });
+    }
+  },
+
+  // ========== SCENARIO METHODS ==========
+
+  /**
+   * Get all scenarios for a lead
+   */
+  async getScenarios(req: Request, res: Response) {
+    try {
+      const { leadId } = req.params;
+      const scenarios = await underwritingService.getScenariosByLeadId(leadId);
+
+      res.json({
+        success: true,
+        data: scenarios
+      });
+    } catch (error: any) {
+      logger.error('Error in getScenarios controller', { error: error.message });
+      res.status(500).json({
+        success: false,
+        error: 'Failed to get underwriting scenarios'
+      });
+    }
+  },
+
+  /**
+   * Get a scenario by ID
+   */
+  async getScenario(req: Request, res: Response) {
+    try {
+      const { scenarioId } = req.params;
+      const scenario = await underwritingService.getScenarioById(scenarioId);
+
+      if (!scenario) {
+        return res.status(404).json({
+          success: false,
+          error: 'Scenario not found'
+        });
+      }
+
+      res.json({
+        success: true,
+        data: scenario
+      });
+    } catch (error: any) {
+      logger.error('Error in getScenario controller', { error: error.message });
+      res.status(500).json({
+        success: false,
+        error: 'Failed to get scenario'
+      });
+    }
+  },
+
+  /**
+   * Create a new scenario
+   */
+  async createScenario(req: Request, res: Response) {
+    try {
+      const { leadId } = req.params;
+      const { name, isPrimary, inputs, outputs } = req.body;
+      const userId = (req as any).user?.id;
+
+      if (!name || !inputs) {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing required fields: name, inputs'
+        });
+      }
+
+      const scenario = await underwritingService.createScenario({
+        leadId,
+        name,
+        isPrimary,
+        inputs,
+        outputs,
+        createdById: userId
+      });
+
+      res.status(201).json({
+        success: true,
+        data: scenario
+      });
+    } catch (error: any) {
+      logger.error('Error in createScenario controller', { error: error.message });
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to create scenario'
+      });
+    }
+  },
+
+  /**
+   * Update a scenario
+   */
+  async updateScenario(req: Request, res: Response) {
+    try {
+      const { scenarioId } = req.params;
+      const { name, isPrimary, inputs, outputs } = req.body;
+
+      const scenario = await underwritingService.updateScenario(scenarioId, {
+        name,
+        isPrimary,
+        inputs,
+        outputs
+      });
+
+      res.json({
+        success: true,
+        data: scenario
+      });
+    } catch (error: any) {
+      logger.error('Error in updateScenario controller', { error: error.message });
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to update scenario'
+      });
+    }
+  },
+
+  /**
+   * Delete a scenario
+   */
+  async deleteScenario(req: Request, res: Response) {
+    try {
+      const { scenarioId } = req.params;
+      await underwritingService.deleteScenario(scenarioId);
+
+      res.json({
+        success: true,
+        message: 'Scenario deleted successfully'
+      });
+    } catch (error: any) {
+      logger.error('Error in deleteScenario controller', { error: error.message });
+      res.status(500).json({
+        success: false,
+        error: 'Failed to delete scenario'
+      });
+    }
+  },
+
+  /**
+   * Set a scenario as primary
+   */
+  async setPrimaryScenario(req: Request, res: Response) {
+    try {
+      const { scenarioId } = req.params;
+      const scenario = await underwritingService.setPrimaryScenario(scenarioId);
+
+      res.json({
+        success: true,
+        data: scenario
+      });
+    } catch (error: any) {
+      logger.error('Error in setPrimaryScenario controller', { error: error.message });
+      res.status(500).json({
+        success: false,
+        error: 'Failed to set primary scenario'
+      });
+    }
+  },
+
+  /**
+   * Duplicate a scenario
+   */
+  async duplicateScenario(req: Request, res: Response) {
+    try {
+      const { scenarioId } = req.params;
+      const { name } = req.body;
+      const userId = (req as any).user?.id;
+
+      if (!name) {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing required field: name'
+        });
+      }
+
+      const scenario = await underwritingService.duplicateScenario(scenarioId, name, userId);
+
+      res.status(201).json({
+        success: true,
+        data: scenario
+      });
+    } catch (error: any) {
+      logger.error('Error in duplicateScenario controller', { error: error.message });
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to duplicate scenario'
+      });
+    }
+  },
+
+  /**
+   * Calculate scenario outputs (doesn't save)
+   */
+  async calculateScenario(req: Request, res: Response) {
+    try {
+      const { inputs } = req.body;
+
+      if (!inputs) {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing required field: inputs'
+        });
+      }
+
+      const outputs = underwritingService.calculateScenario(inputs);
+
+      res.json({
+        success: true,
+        data: outputs
+      });
+    } catch (error: any) {
+      logger.error('Error in calculateScenario controller', { error: error.message });
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to calculate scenario'
       });
     }
   }

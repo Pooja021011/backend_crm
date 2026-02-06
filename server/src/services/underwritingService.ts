@@ -1,15 +1,8 @@
-import { underwritingRepository, CreateUnderwritingScenarioData, UpdateUnderwritingScenarioData } from '../repositories/underwritingRepository';
+import { underwritingRepository, CreateUnderwritingScenarioData, UpdateUnderwritingScenarioData, UnderwritingCalculationInputs } from '../repositories/underwritingRepository';
 import { UnderwritingScenario } from '@prisma/client';
 
-export interface UnderwritingCalculationInputs {
-  purchasePrice?: number;
-  repairCosts?: number;
-  arv?: number;
-  holdingCosts?: number;
-  closingCosts?: number;
-  realtorFees?: number;
-  otherCosts?: number;
-}
+// Re-export for external use
+export type { UnderwritingCalculationInputs };
 
 export interface UnderwritingCalculationOutputs {
   totalCosts: number;

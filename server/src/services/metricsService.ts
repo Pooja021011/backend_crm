@@ -240,15 +240,18 @@ export const metricsService = {
       end = now.endOf('quarter');
     }
 
-    const isAdmin = roles.includes('ADMIN') || roles.includes('EXECUTIVE');
+    const isAdmin = roles.includes('ADMIN');
     const isManager = roles.includes('MANAGER');
     const isACQ = roles.includes('ACQ');
+    const isDISP = roles.includes('DISP');
+    const isTC = roles.includes('TC');
 
     const result: any = {
       modes: [],
     };
 
-    // ADMIN KPIs (company-wide)
+    // Role-based KPIs with priority: Admin > Manager > ACQ > DISP > TC
+    // ADMIN KPIs (company-wide) - Highest Priority
     if (isAdmin) {
       result.modes.push('admin');
       
@@ -281,9 +284,8 @@ export const metricsService = {
         .filter(d => d.netProfit != null) // Only include deals with netProfit
         .reduce((sum, d) => sum + d.netProfit, 0);
     }
-
-    // MANAGER KPIs (team-wide for all ACQ agents)
-    if (isManager) {
+    // MANAGER KPIs (team-wide for all ACQ agents) - Second Priority
+    else if (isManager) {
       result.modes.push('manager');
       
       const managerData = await this.calculateAcqKpis(start.toDate(), end.toDate(), undefined);
@@ -295,9 +297,8 @@ export const metricsService = {
       result.stale48h = managerData.stale48h;
       result.mishandledColor = this.getColorForMishandled(managerData.leadsMishandled);
     }
-
-    // ACQ AGENT KPIs (personal stats for this agent)
-    if (isACQ) {
+    // ACQ AGENT KPIs (personal stats for this agent) - Third Priority
+    else if (isACQ) {
       result.modes.push('acq');
       
       const acqData = await this.calculateAcqKpis(start.toDate(), end.toDate(), userId);
@@ -308,6 +309,32 @@ export const metricsService = {
       result.slaBreachesPersonal = acqData.slaBreaches;
       result.stale48hPersonal = acqData.stale48h;
       result.mishandledColorPersonal = this.getColorForMishandled(acqData.leadsMishandled);
+    }
+    // DISP (Dispositions) KPIs - Same rules as ACQ - Fourth Priority
+    else if (isDISP) {
+      result.modes.push('disp');
+      
+      const dispData = await this.calculateAcqKpis(start.toDate(), end.toDate(), userId);
+      result.totalContractsPersonal = dispData.totalContracts;
+      result.leadsPerContractPersonal = dispData.leadsPerContract;
+      result.leadsMishandledPersonal = dispData.leadsMishandled;
+      result.leadsReceivedPersonal = dispData.leadsReceived;
+      result.slaBreachesPersonal = dispData.slaBreaches;
+      result.stale48hPersonal = dispData.stale48h;
+      result.mishandledColorPersonal = this.getColorForMishandled(dispData.leadsMishandled);
+    }
+    // TC (Transaction Coordinator) KPIs - Same rules as ACQ - Fifth Priority
+    else if (isTC) {
+      result.modes.push('tc');
+      
+      const tcData = await this.calculateAcqKpis(start.toDate(), end.toDate(), userId);
+      result.totalContractsPersonal = tcData.totalContracts;
+      result.leadsPerContractPersonal = tcData.leadsPerContract;
+      result.leadsMishandledPersonal = tcData.leadsMishandled;
+      result.leadsReceivedPersonal = tcData.leadsReceived;
+      result.slaBreachesPersonal = tcData.slaBreaches;
+      result.stale48hPersonal = tcData.stale48h;
+      result.mishandledColorPersonal = this.getColorForMishandled(tcData.leadsMishandled);
     }
 
     // If no roles matched, return admin-like fallback for backward compatibility
@@ -440,11 +467,12 @@ export const metricsService = {
 
   /**
    * Helper function to get color coding for leads mishandled
+   * Yellow: 1-4, Orange: 5-9, Red: 10+
    */
   getColorForMishandled(count: number): 'green' | 'yellow' | 'orange' | 'red' {
     if (count >= 10) return 'red';
-    if (count >= 5) return 'orange';
-    if (count >= 1) return 'yellow';
+    if (count >= 5 && count <= 9) return 'orange';
+    if (count >= 1 && count <= 4) return 'yellow';
     return 'green';
   },
 

@@ -209,6 +209,8 @@ const LeadEdit: React.FC = () => {
   const suppressNextAutoSaveRef = useRef(true);
   const rehabImmediateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoSaveDraftKey = id ? `lead-edit-draft:${id}` : null;
+  // Track current lead ID to prevent stale closure issues and data corruption
+  const currentLeadIdRef = useRef<string | null>(null);
   const [activeTab, setActiveTab] = useState('acquisitions');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [agents, setAgents] = useState<any[]>([]);
@@ -798,6 +800,34 @@ const LeadEdit: React.FC = () => {
   };
 
   useEffect(() => {
+    // SAFE: Cancel pending operations when id changes (prevents data corruption)
+    // Only cancel pending timers, don't interrupt in-flight saves (preserves data)
+    
+    // Clear pending timers (safe - these haven't started yet)
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    
+    if (rehabImmediateSaveTimerRef.current) {
+      clearTimeout(rehabImmediateSaveTimerRef.current);
+      rehabImmediateSaveTimerRef.current = null;
+    }
+    
+    // Reset state flags (safe - new lead will set these)
+    autoSavePendingRef.current = false;
+    dirtyFieldsRef.current.clear();
+    lastSavedPayloadRef.current = '';
+    autoSaveBaselineReadyRef.current = false;
+    suppressNextAutoSaveRef.current = true;
+    
+    // Update current id ref (prevents stale closures)
+    currentLeadIdRef.current = id || null;
+    
+    // DON'T cancel autoSaveInFlightRef - let it complete if user confirmed save
+    // The ID validation in flushAutoSave will prevent wrong saves
+    
+    // Load new lead data
     loadLead();
     loadAgents();
     loadPipelineStages();
@@ -1840,7 +1870,20 @@ const LeadEdit: React.FC = () => {
 
   const flushAutoSave = useCallback(
     async (reason: 'debounce' | 'blur' | 'manual' | 'pending' = 'manual', options?: { forceAllFields?: boolean }) => {
-      if (!id || !lead || !canEditLead) return;
+      // SAFE: Validate current id matches before proceeding (prevents stale closure issues)
+      const currentId = currentLeadIdRef.current;
+      if (!currentId || !id || currentId !== id) {
+        console.warn('🚫 Auto-save cancelled: ID mismatch or missing', { currentId, id });
+        return;
+      }
+      
+      if (!lead || !canEditLead) return;
+      
+      // SAFE: Double-check lead.id matches current id (prevents data corruption)
+      if (lead.id !== currentId) {
+        console.warn('🚫 Auto-save cancelled: Lead ID mismatch', { leadId: lead.id, currentId });
+        return;
+      }
 
       // Never autosave while stage validation is in progress (popups open / pending stage move).
       // This prevents PATCH requests with incomplete local state from wiping persisted data.
@@ -1886,8 +1929,16 @@ const LeadEdit: React.FC = () => {
       setAutoSaveStatus('saving');
 
       const run = (async () => {
+        // SAFE: Re-validate id before making API call (prevents saving to wrong lead)
+        const saveId = currentLeadIdRef.current;
+        if (!saveId || saveId !== id || !lead || lead.id !== saveId) {
+          console.warn('🚫 Auto-save aborted: ID changed during save', { saveId, id, leadId: lead?.id });
+          setAutoSaveStatus('idle');
+          return;
+        }
+        
         try {
-          const response = await makeApiCall(`${API_BASE}/leads/${id}`, {
+          const response = await makeApiCall(`${API_BASE}/leads/${saveId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
@@ -1929,6 +1980,16 @@ const LeadEdit: React.FC = () => {
             throw new Error(errorData.message || errorData.error || 'Failed to auto-save lead');
           }
 
+          // SAFE: Validate id again after response (before updating state)
+          if (currentLeadIdRef.current !== saveId) {
+            console.warn('🚫 Auto-save response ignored: ID changed after save', { 
+              savedId: saveId, 
+              currentId: currentLeadIdRef.current 
+            });
+            // Don't update state - user navigated away
+            return;
+          }
+
           lastSavedPayloadRef.current = payloadStr;
           lastSavedAtRef.current = Date.now();
           
@@ -1967,22 +2028,29 @@ const LeadEdit: React.FC = () => {
             // ignore
           }
         } catch (e: any) {
-          setAutoSaveStatus('error');
-          setAutoSaveError(e?.message || 'Auto-save failed');
-          if (autoSaveDraftKey) {
-            try {
-              localStorage.setItem(autoSaveDraftKey, payloadStr);
-            } catch (err) {
-              // ignore
+          // SAFE: Only handle error if still on same lead
+          if (currentLeadIdRef.current === saveId) {
+            setAutoSaveStatus('error');
+            setAutoSaveError(e?.message || 'Auto-save failed');
+            if (autoSaveDraftKey) {
+              try {
+                localStorage.setItem(autoSaveDraftKey, payloadStr);
+              } catch (err) {
+                // ignore
+              }
             }
           }
+          // If ID changed, silently ignore error (user navigated away)
         } finally {
           autoSaveInFlightRef.current = null;
 
+          // SAFE: Only trigger pending save if still on same lead
           if (autoSavePendingRef.current) {
             autoSavePendingRef.current = false;
-            // Run again immediately to capture any edits that happened during the in-flight save
-            await flushAutoSave('pending');
+            if (currentLeadIdRef.current === id) {
+              // Run again immediately to capture any edits that happened during the in-flight save
+              await flushAutoSave('pending');
+            }
           }
         }
       })();
@@ -3545,11 +3613,24 @@ const LeadEdit: React.FC = () => {
                 className="h-5 w-6 p-0 rounded-md inline-flex items-center justify-center"
                 onClick={async () => {
                   if (effectivePrevLeadId) {
-                    // Check for unsaved changes
+                    // SAFE: Check for unsaved changes (existing behavior preserved)
                     if (autoSaveStatus === 'dirty' || autoSaveStatus === 'saving') {
                       const shouldNavigate = window.confirm('You have unsaved changes. Do you want to save before navigating?');
                       if (shouldNavigate) {
-                        await flushAutoSave('manual'); // Wait for save to complete
+                        // Wait for save to complete
+                        await flushAutoSave('manual');
+                        // SAFE: Verify save completed before navigating
+                        if (autoSaveStatus === 'saving') {
+                          // Wait a bit more if still saving
+                          await new Promise(resolve => setTimeout(resolve, 500));
+                        }
+                      } else {
+                        // User chose not to save - clear pending operations
+                        autoSavePendingRef.current = false;
+                        if (autoSaveTimerRef.current) {
+                          clearTimeout(autoSaveTimerRef.current);
+                          autoSaveTimerRef.current = null;
+                        }
                       }
                     }
                     setNavigating(true);
@@ -3566,11 +3647,24 @@ const LeadEdit: React.FC = () => {
                 className="h-5 w-6 p-0 rounded-md inline-flex items-center justify-center"
                 onClick={async () => {
                   if (effectiveNextLeadId) {
-                    // Check for unsaved changes
+                    // SAFE: Check for unsaved changes (existing behavior preserved)
                     if (autoSaveStatus === 'dirty' || autoSaveStatus === 'saving') {
                       const shouldNavigate = window.confirm('You have unsaved changes. Do you want to save before navigating?');
                       if (shouldNavigate) {
-                        await flushAutoSave('manual'); // Wait for save to complete
+                        // Wait for save to complete
+                        await flushAutoSave('manual');
+                        // SAFE: Verify save completed before navigating
+                        if (autoSaveStatus === 'saving') {
+                          // Wait a bit more if still saving
+                          await new Promise(resolve => setTimeout(resolve, 500));
+                        }
+                      } else {
+                        // User chose not to save - clear pending operations
+                        autoSavePendingRef.current = false;
+                        if (autoSaveTimerRef.current) {
+                          clearTimeout(autoSaveTimerRef.current);
+                          autoSaveTimerRef.current = null;
+                        }
                       }
                     }
                     setNavigating(true);

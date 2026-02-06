@@ -99,14 +99,14 @@ export const pipelineService = {
       };
     }
     
-    // Dispositions Agent: Only their assigned leads, needs attention only
+    // Dispositions Agent: Only their assigned leads
     if (hasRole('DISP')) {
       return {
         canViewFull: false,
         canViewAssignedOnly: true,
         canViewTeam: false,
         allowedPipelines: ['DISPOSITIONS'],
-        availableToggles: ['NEEDS_ATTENTION'] // Only needs attention toggle
+        availableToggles: [] // Needs attention filter hidden for now
       };
     }
     
@@ -587,38 +587,105 @@ export const pipelineService = {
         if (isAdmin) {
           console.log('🔍 Applying ADMIN needs attention criteria');
           
-          // 1. ACQ agents with no outreach in 72h AND no upcoming task
+          // Apply same date filter as Tasks tab (Jan 20, 2026) for consistency - same as reminder logic
+          const tasksCutoffDate = new Date(2026, 0, 20); // Jan 20, 2026
+          
+          // 1. All pipeline lead status leads that an Acquisitions Agent has had no outreach in the last 72 hours that does not have an upcoming task
+          // Use OUTBOUND communication (reached out) - same as reminder logic
           needsAttentionConditions.push({
-            assignedUser: {
-              roles: { some: { role: { name: 'ACQ' } } }
-            },
-            OR: [
-              { lastContactAt: { lte: hoursAgo(72) } },
-              { lastContactAt: null, createdAt: { lte: hoursAgo(72) } }
-            ],
-            tasks: {
-              none: {
-                status: 'OPEN',
-                dueAt: { gt: now }
+            AND: [
+              {
+                assignedUser: {
+                  roles: { some: { role: { name: 'ACQ' } } }
+                }
+              },
+              {
+                leadStatus: {
+                  name: {
+                    equals: 'Pipeline',
+                    mode: 'insensitive'
+                  }
+                }
+              },
+              {
+                communications: {
+                  some: {
+                    direction: 'OUTBOUND',
+                    occurredAt: {
+                      lte: hoursAgo(72)
+                    }
+                  }
+                }
+              },
+              {
+                NOT: {
+                  communications: {
+                    some: {
+                      direction: 'OUTBOUND',
+                      occurredAt: {
+                        gt: hoursAgo(72)
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                NOT: {
+                  tasks: {
+                    some: {
+                      status: 'OPEN',
+                      dueAt: {
+                        gt: now
+                      },
+                      NOT: [
+                        { title: { startsWith: 'Review note on ' } },
+                        { title: { startsWith: 'Underwrite ' } },
+                        { title: { startsWith: 'Make Offer on ' } },
+                        { title: { startsWith: 'Follow Up With ' } },
+                        { title: { startsWith: 'Contract Sent - Awaiting Signature for ' } },
+                        { title: { startsWith: 'URGENT: DocuSign Failed for ' } },
+                        { title: { startsWith: 'Check Voided Contract With ' } }
+                      ]
+                    }
+                  }
+                }
               }
-            }
+            ]
           });
           
-          // 2. Any lead with task past due for 48 hours
+          // 2. Any lead with a task that has been past due for 48 hours (manual tasks only)
+          // Only show tasks due >= Jan 20, 2026 (same as Tasks tab and reminder logic)
           needsAttentionConditions.push({
             tasks: {
               some: {
                 status: 'OPEN',
-                dueAt: { lte: hoursAgo(48) }
+                dueAt: {
+                  lte: hoursAgo(48),
+                  gte: tasksCutoffDate // Only show tasks due >= Jan 20, 2026 (same as Tasks tab)
+                },
+                NOT: [
+                  { title: { startsWith: 'Review note on ' } },
+                  { title: { startsWith: 'Underwrite ' } },
+                  { title: { startsWith: 'Make Offer on ' } },
+                  { title: { startsWith: 'Follow Up With ' } },
+                  { title: { startsWith: 'Contract Sent - Awaiting Signature for ' } },
+                  { title: { startsWith: 'URGENT: DocuSign Failed for ' } },
+                  { title: { startsWith: 'Check Voided Contract With ' } }
+                ]
               }
             }
           });
           
-          // 3. Lead in user's communication inbox (unread inbound)
+          // 3. Any lead actively in the user's communication inbox
+          // Check if there's an unread communication (INBOUND or OUTBOUND)
+          // The "most recent" check will be done after fetching leads
           needsAttentionConditions.push({
             communications: {
               some: {
-                direction: 'INBOUND',
+                OR: [
+                  { direction: 'INBOUND' },
+                  { direction: 'OUTBOUND' }
+                ],
                 reads: { none: { userId: filters.userId } }
               }
             }
@@ -629,55 +696,119 @@ export const pipelineService = {
         if (isManager) {
           console.log('🔍 Applying MANAGER needs attention criteria');
           
-          // 1. New Leads stage for all ACQ agents (excluding own if also ACQ)
+          // Apply same date filter as Tasks tab (Jan 20, 2026) for consistency - same as reminder logic
+          const tasksCutoffDate = new Date(2026, 0, 20); // Jan 20, 2026
+          
+          // 1. Any leads in the 'New Leads' pipeline status for all acquisitions agents
           needsAttentionConditions.push({
             assignedUser: {
               roles: { some: { role: { name: 'ACQ' } } }
             },
-            ...(isACQ ? { NOT: { assignedUserId: filters.userId } } : {}),
             pipelineStage: {
               name: { contains: 'New Lead', mode: 'insensitive' }
             }
           });
           
-          // 2. ACQ agents with no outreach in 48h AND no upcoming task (excluding own if also ACQ)
+          // 2. All pipeline lead status leads that an Acquisitions Agent has had no outreach in the last 48 hours that does not have an upcoming task
+          // Use OUTBOUND communication (reached out) - same as reminder logic
           needsAttentionConditions.push({
-            assignedUser: {
-              roles: { some: { role: { name: 'ACQ' } } }
-            },
-            ...(isACQ ? { NOT: { assignedUserId: filters.userId } } : {}),
-            OR: [
-              { lastContactAt: { lte: hoursAgo(48) } },
-              { lastContactAt: null, createdAt: { lte: hoursAgo(48) } }
-            ],
-            tasks: {
-              none: {
-                status: 'OPEN',
-                dueAt: { gt: now }
+            AND: [
+              {
+                assignedUser: {
+                  roles: { some: { role: { name: 'ACQ' } } }
+                }
+              },
+              {
+                leadStatus: {
+                  name: {
+                    equals: 'Pipeline',
+                    mode: 'insensitive'
+                  }
+                }
+              },
+              {
+                communications: {
+                  some: {
+                    direction: 'OUTBOUND',
+                    occurredAt: {
+                      lte: hoursAgo(48)
+                    }
+                  }
+                }
+              },
+              {
+                NOT: {
+                  communications: {
+                    some: {
+                      direction: 'OUTBOUND',
+                      occurredAt: {
+                        gt: hoursAgo(48)
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                NOT: {
+                  tasks: {
+                    some: {
+                      status: 'OPEN',
+                      dueAt: {
+                        gt: now
+                      },
+                      NOT: [
+                        { title: { startsWith: 'Review note on ' } },
+                        { title: { startsWith: 'Underwrite ' } },
+                        { title: { startsWith: 'Make Offer on ' } },
+                        { title: { startsWith: 'Follow Up With ' } },
+                        { title: { startsWith: 'Contract Sent - Awaiting Signature for ' } },
+                        { title: { startsWith: 'URGENT: DocuSign Failed for ' } },
+                        { title: { startsWith: 'Check Voided Contract With ' } }
+                      ]
+                    }
+                  }
+                }
               }
-            }
+            ]
           });
           
-          // 3. Past due task for at least 6 hours (all ACQ agents, excluding own if also ACQ)
+          // 3. Any lead that has a past due task for all acquisitions agents that has been past due for at least 6 hours
+          // Only show tasks due >= Jan 20, 2026 (same as Tasks tab and reminder logic)
           needsAttentionConditions.push({
             assignedUser: {
               roles: { some: { role: { name: 'ACQ' } } }
             },
-            ...(isACQ ? { NOT: { assignedUserId: filters.userId } } : {}),
             tasks: {
               some: {
                 status: 'OPEN',
-                dueAt: { lte: hoursAgo(6) }  // Changed from 30 minutes to 6 hours
+                dueAt: {
+                  lte: hoursAgo(6),
+                  gte: tasksCutoffDate // Only show tasks due >= Jan 20, 2026 (same as Tasks tab)
+                },
+                NOT: [
+                  { title: { startsWith: 'Review note on ' } },
+                  { title: { startsWith: 'Underwrite ' } },
+                  { title: { startsWith: 'Make Offer on ' } },
+                  { title: { startsWith: 'Follow Up With ' } },
+                  { title: { startsWith: 'Contract Sent - Awaiting Signature for ' } },
+                  { title: { startsWith: 'URGENT: DocuSign Failed for ' } },
+                  { title: { startsWith: 'Check Voided Contract With ' } }
+                ]
               }
             }
           });
           
-          // 4. Lead in user's communication inbox (Manager's own inbox)
+          // 4. Any lead actively in the user's communication inbox
+          // Check if there's an unread communication (INBOUND or OUTBOUND)
+          // The "most recent" check will be done after fetching leads
           if (!isAdmin) { // Don't duplicate if already added by Admin role
             needsAttentionConditions.push({
               communications: {
                 some: {
-                  direction: 'INBOUND',
+                  OR: [
+                    { direction: 'INBOUND' },
+                    { direction: 'OUTBOUND' }
+                  ],
                   reads: { none: { userId: filters.userId } }
                 }
               }
@@ -689,7 +820,10 @@ export const pipelineService = {
         if (isACQ) {
           console.log('🔍 Applying ACQ needs attention criteria');
           
-          // 1. Own leads in New Leads stage
+          // Apply same date filter as Tasks tab (Jan 20, 2026) for consistency - same as reminder logic
+          const tasksCutoffDate = new Date(2026, 0, 20); // Jan 20, 2026
+          
+          // 1. Any leads in the 'New Leads' pipeline status for the user
           needsAttentionConditions.push({
             assignedUserId: filters.userId,
             pipelineStage: {
@@ -697,40 +831,95 @@ export const pipelineService = {
             }
           });
           
-          // 2. Own leads with no outreach in 36h AND no upcoming task
+          // 2. All pipeline lead status leads that an Acquisitions Agent has had no outreach in the last 36 hours that does not have an upcoming task
+          // Use OUTBOUND communication (reached out) - same as reminder logic
           needsAttentionConditions.push({
-            assignedUserId: filters.userId,
-            OR: [
-              { lastContactAt: { lte: hoursAgo(36) } },
-              { lastContactAt: null, createdAt: { lte: hoursAgo(36) } }
-            ],
-            tasks: {
-              none: {
-                status: 'OPEN',
-                dueAt: { gt: now }
+            AND: [
+              {
+                assignedUserId: filters.userId
+              },
+              {
+                leadStatus: {
+                  name: {
+                    equals: 'Pipeline',
+                    mode: 'insensitive'
+                  }
+                }
+              },
+              {
+                communications: {
+                  some: {
+                    direction: 'OUTBOUND',
+                    occurredAt: {
+                      lte: hoursAgo(36)
+                    }
+                  }
+                }
+              },
+              {
+                NOT: {
+                  communications: {
+                    some: {
+                      direction: 'OUTBOUND',
+                      occurredAt: {
+                        gt: hoursAgo(36)
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                NOT: {
+                  tasks: {
+                    some: {
+                      status: 'OPEN',
+                      dueAt: {
+                        gt: now
+                      },
+                      NOT: [
+                        { title: { startsWith: 'Review note on ' } },
+                        { title: { startsWith: 'Underwrite ' } },
+                        { title: { startsWith: 'Make Offer on ' } },
+                        { title: { startsWith: 'Follow Up With ' } },
+                        { title: { startsWith: 'Contract Sent - Awaiting Signature for ' } },
+                        { title: { startsWith: 'URGENT: DocuSign Failed for ' } },
+                        { title: { startsWith: 'Check Voided Contract With ' } }
+                      ]
+                    }
+                  }
+                }
               }
-            }
+            ]
           });
           
-          // 3. Own leads with any past due task assigned to the user
+          // 3. Any lead that has a past due task for the user
+          // Only show tasks due >= Jan 20, 2026 (same as Tasks tab and reminder logic)
           needsAttentionConditions.push({
             assignedUserId: filters.userId,
             tasks: {
               some: {
                 status: 'OPEN',
-                dueAt: { lt: now },
+                dueAt: {
+                  lt: now,
+                  gte: tasksCutoffDate // Only show tasks due >= Jan 20, 2026 (same as Tasks tab)
+                },
                 assignedToId: filters.userId  // Task must be assigned to the user
               }
             }
           });
           
-          // 4. Own leads in communication inbox
+          // 4. Any lead actively in the user's communication inbox
+          // Check if there's an unread communication (INBOUND or OUTBOUND)
+          // The "most recent" check will be done after fetching leads
           if (!isAdmin && !isManager) { // Don't duplicate if already added by Admin/Manager role
             needsAttentionConditions.push({
               assignedUserId: filters.userId,
               communications: {
                 some: {
-                  direction: 'INBOUND',
+                  OR: [
+                    { direction: 'INBOUND' },
+                    { direction: 'OUTBOUND' }
+                  ],
                   reads: { none: { userId: filters.userId } }
                 }
               }
@@ -841,6 +1030,302 @@ export const pipelineService = {
           dispAgentId: l.dispAgentId,
           dispAgent: l.dispAgent?.firstName + ' ' + l.dispAgent?.lastName
         })));
+      }
+
+      // For Admin, Manager, and ACQ needs attention: Filter leads where most recent communication is unread (Rule 4)
+      // This ensures we only show leads where the latest communication (INBOUND or OUTBOUND) is unread
+      // Leads matching Rule 1, Rule 2, or Rule 3 are kept regardless of communication status
+      if (filters.needsAttention && filters.userId && filters.userRole) {
+        const userRoles = Array.isArray(filters.userRole) ? filters.userRole : [filters.userRole];
+        const isAdmin = userRoles.includes('ADMIN');
+        const isManager = userRoles.includes('MANAGER');
+        const isACQ = userRoles.includes('ACQ');
+        
+        if (isAdmin || isManager || isACQ) {
+          const originalCount = leads.length;
+          const now = new Date(); // Current time for date comparisons
+          
+          // Apply same date filter as Tasks tab (Jan 20, 2026) for consistency - same as reminder logic
+          const tasksCutoffDate = new Date(2026, 0, 20); // Jan 20, 2026
+          
+          // Check Rule 1, Rule 2, and Rule 3 matches first (these leads should always be kept)
+          const rule1Or2Or3LeadIds = new Set<string>();
+          
+          leads.forEach(lead => {
+            // Priority order: Admin > Manager > ACQ
+            // If user has multiple roles, highest priority applies
+            
+            // Admin Role Conditions (Highest Priority)
+            if (isAdmin) {
+              // Admin Rule 2: Past due task 48h+ (all ACQ agents)
+              const hasPastDueTask = lead.tasks?.some((t: any) => {
+                if (t.status !== 'OPEN') return false;
+                const dueDate = new Date(t.dueAt);
+                
+                // Date filter: Only tasks due >= Jan 20, 2026
+                if (dueDate < tasksCutoffDate) return false;
+                
+                const hoursPastDue = (now.getTime() - dueDate.getTime()) / (1000 * 60 * 60);
+                if (hoursPastDue < 48) return false;
+                
+                // Exclude auto-created tasks
+                const title = t.title || '';
+                const isAutoCreated = 
+                  title.startsWith('Review note on ') ||
+                  title.startsWith('Underwrite ') ||
+                  title.startsWith('Make Offer on ') ||
+                  title.startsWith('Follow Up With ') ||
+                  title.startsWith('Contract Sent - Awaiting Signature for ') ||
+                  title.startsWith('URGENT: DocuSign Failed for ') ||
+                  title.startsWith('Check Voided Contract With ');
+                
+                return !isAutoCreated;
+              });
+              
+              if (hasPastDueTask) {
+                rule1Or2Or3LeadIds.add(lead.id);
+                return;
+              }
+              
+              // Admin Rule 1: ACQ agent, pipeline status, no outreach in 72h, no upcoming task
+              const isACQAgent = lead.assignedUser?.roles?.some((ur: any) => ur.role?.name === 'ACQ');
+              if (isACQAgent && lead.leadStatus?.name?.toLowerCase() === 'pipeline') {
+                const outboundComms = lead.communications?.filter((c: any) => c.direction === 'OUTBOUND') || [];
+                if (outboundComms.length > 0) {
+                  const lastOutbound = outboundComms[0]; // Already sorted by occurredAt desc
+                  const lastOutboundTime = new Date(lastOutbound.occurredAt);
+                  const hoursSinceOutbound = (now.getTime() - lastOutboundTime.getTime()) / (1000 * 60 * 60);
+                  
+                  if (hoursSinceOutbound >= 72) {
+                    // Check if there's no newer outbound
+                    const hasNewerOutbound = outboundComms.some((c: any) => {
+                      const commTime = new Date(c.occurredAt);
+                      return commTime > lastOutboundTime && (now.getTime() - commTime.getTime()) / (1000 * 60 * 60) < 72;
+                    });
+                    
+                    if (!hasNewerOutbound) {
+                      // Check if no upcoming task (excluding auto-created)
+                      const hasUpcomingTask = lead.tasks?.some((t: any) => {
+                        if (t.status !== 'OPEN') return false;
+                        const dueDate = new Date(t.dueAt);
+                        if (dueDate <= now) return false; // Not upcoming
+                        
+                        const title = t.title || '';
+                        const isAutoCreated = 
+                          title.startsWith('Review note on ') ||
+                          title.startsWith('Underwrite ') ||
+                          title.startsWith('Make Offer on ') ||
+                          title.startsWith('Follow Up With ') ||
+                          title.startsWith('Contract Sent - Awaiting Signature for ') ||
+                          title.startsWith('URGENT: DocuSign Failed for ') ||
+                          title.startsWith('Check Voided Contract With ');
+                        
+                        return !isAutoCreated;
+                      });
+                      
+                      if (!hasUpcomingTask) {
+                        rule1Or2Or3LeadIds.add(lead.id);
+                        return;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            // Manager Role Conditions (Second Priority)
+            else if (isManager) {
+              // Manager Rule 1: New Leads for all ACQ agents
+              const isACQAgentForNewLead = lead.assignedUser?.roles?.some((ur: any) => ur.role?.name === 'ACQ');
+              const isNewLead = lead.pipelineStage?.name?.toLowerCase().includes('new lead');
+              
+              if (isACQAgentForNewLead && isNewLead) {
+                rule1Or2Or3LeadIds.add(lead.id);
+                return;
+              }
+              
+              // Manager Rule 3: Past due task 6h+ (all ACQ agents)
+              const hasPastDueTask = lead.tasks?.some((t: any) => {
+                if (t.status !== 'OPEN') return false;
+                const dueDate = new Date(t.dueAt);
+                
+                // Date filter: Only tasks due >= Jan 20, 2026
+                if (dueDate < tasksCutoffDate) return false;
+                
+                const hoursPastDue = (now.getTime() - dueDate.getTime()) / (1000 * 60 * 60);
+                if (hoursPastDue < 6) return false;
+                
+                // Exclude auto-created tasks
+                const title = t.title || '';
+                const isAutoCreated = 
+                  title.startsWith('Review note on ') ||
+                  title.startsWith('Underwrite ') ||
+                  title.startsWith('Make Offer on ') ||
+                  title.startsWith('Follow Up With ') ||
+                  title.startsWith('Contract Sent - Awaiting Signature for ') ||
+                  title.startsWith('URGENT: DocuSign Failed for ') ||
+                  title.startsWith('Check Voided Contract With ');
+                
+                return !isAutoCreated;
+              });
+              
+              if (hasPastDueTask) {
+                rule1Or2Or3LeadIds.add(lead.id);
+                return;
+              }
+              
+              // Manager Rule 2: ACQ agent, pipeline status, no outreach in 48h, no upcoming task
+              const isACQAgent = lead.assignedUser?.roles?.some((ur: any) => ur.role?.name === 'ACQ');
+              if (isACQAgent && lead.leadStatus?.name?.toLowerCase() === 'pipeline') {
+                const outboundComms = lead.communications?.filter((c: any) => c.direction === 'OUTBOUND') || [];
+                if (outboundComms.length > 0) {
+                  const lastOutbound = outboundComms[0]; // Already sorted by occurredAt desc
+                  const lastOutboundTime = new Date(lastOutbound.occurredAt);
+                  const hoursSinceOutbound = (now.getTime() - lastOutboundTime.getTime()) / (1000 * 60 * 60);
+                  
+                  if (hoursSinceOutbound >= 48) {
+                    // Check if there's no newer outbound
+                    const hasNewerOutbound = outboundComms.some((c: any) => {
+                      const commTime = new Date(c.occurredAt);
+                      return commTime > lastOutboundTime && (now.getTime() - commTime.getTime()) / (1000 * 60 * 60) < 48;
+                    });
+                    
+                    if (!hasNewerOutbound) {
+                      // Check if no upcoming task (excluding auto-created)
+                      const hasUpcomingTask = lead.tasks?.some((t: any) => {
+                        if (t.status !== 'OPEN') return false;
+                        const dueDate = new Date(t.dueAt);
+                        if (dueDate <= now) return false; // Not upcoming
+                        
+                        const title = t.title || '';
+                        const isAutoCreated = 
+                          title.startsWith('Review note on ') ||
+                          title.startsWith('Underwrite ') ||
+                          title.startsWith('Make Offer on ') ||
+                          title.startsWith('Follow Up With ') ||
+                          title.startsWith('Contract Sent - Awaiting Signature for ') ||
+                          title.startsWith('URGENT: DocuSign Failed for ') ||
+                          title.startsWith('Check Voided Contract With ');
+                        
+                        return !isAutoCreated;
+                      });
+                      
+                      if (!hasUpcomingTask) {
+                        rule1Or2Or3LeadIds.add(lead.id);
+                        return;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            // ACQ Role Conditions (Lowest Priority)
+            else if (isACQ && lead.assignedUserId === filters.userId) {
+              // ACQ Rule 1: New Leads for the user
+              const isNewLead = lead.pipelineStage?.name?.toLowerCase().includes('new lead');
+              if (isNewLead) {
+                rule1Or2Or3LeadIds.add(lead.id);
+                return;
+              }
+              
+              // ACQ Rule 3: Past due task for the user (any past due)
+              const hasPastDueTask = lead.tasks?.some((t: any) => {
+                if (t.status !== 'OPEN') return false;
+                if (t.assignedToId !== filters.userId) return false; // Task must be assigned to the user
+                const dueDate = new Date(t.dueAt);
+                
+                // Date filter: Only tasks due >= Jan 20, 2026
+                if (dueDate < tasksCutoffDate) return false;
+                
+                // Any past due task (no minimum hours requirement)
+                if (dueDate > now) return false; // Not past due
+                
+                return true; // Past due task assigned to user
+              });
+              
+              if (hasPastDueTask) {
+                rule1Or2Or3LeadIds.add(lead.id);
+                return;
+              }
+              
+              // ACQ Rule 2: Pipeline leads, no outreach in 36h, no upcoming task
+              if (lead.leadStatus?.name?.toLowerCase() === 'pipeline') {
+                const outboundComms = lead.communications?.filter((c: any) => c.direction === 'OUTBOUND') || [];
+                if (outboundComms.length > 0) {
+                  const lastOutbound = outboundComms[0]; // Already sorted by occurredAt desc
+                  const lastOutboundTime = new Date(lastOutbound.occurredAt);
+                  const hoursSinceOutbound = (now.getTime() - lastOutboundTime.getTime()) / (1000 * 60 * 60);
+                  
+                  if (hoursSinceOutbound >= 36) {
+                    // Check if there's no newer outbound
+                    const hasNewerOutbound = outboundComms.some((c: any) => {
+                      const commTime = new Date(c.occurredAt);
+                      return commTime > lastOutboundTime && (now.getTime() - commTime.getTime()) / (1000 * 60 * 60) < 36;
+                    });
+                    
+                    if (!hasNewerOutbound) {
+                      // Check if no upcoming task (excluding auto-created)
+                      const hasUpcomingTask = lead.tasks?.some((t: any) => {
+                        if (t.status !== 'OPEN') return false;
+                        const dueDate = new Date(t.dueAt);
+                        if (dueDate <= now) return false; // Not upcoming
+                        
+                        const title = t.title || '';
+                        const isAutoCreated = 
+                          title.startsWith('Review note on ') ||
+                          title.startsWith('Underwrite ') ||
+                          title.startsWith('Make Offer on ') ||
+                          title.startsWith('Follow Up With ') ||
+                          title.startsWith('Contract Sent - Awaiting Signature for ') ||
+                          title.startsWith('URGENT: DocuSign Failed for ') ||
+                          title.startsWith('Check Voided Contract With ');
+                        
+                        return !isAutoCreated;
+                      });
+                      
+                      if (!hasUpcomingTask) {
+                        rule1Or2Or3LeadIds.add(lead.id);
+                        return;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          });
+          
+          // Filter leads: Keep if matches Rule 1/2/3 OR if most recent comm (INBOUND/OUTBOUND) is unread
+          const filteredLeads = leads.filter(lead => {
+            // Always keep if matches Rule 1, Rule 2, or Rule 3
+            if (rule1Or2Or3LeadIds.has(lead.id)) {
+              return true;
+            }
+            
+            // For Rule 4: Check if most recent communication is unread
+            const mostRecentComm = lead.communications?.[0];
+            
+            if (!mostRecentComm) {
+              return false; // No communication and doesn't match Rule 1/2/3
+            }
+            
+            // Only check INBOUND or OUTBOUND communications (not NOTES)
+            const isValidDirection = mostRecentComm.direction === 'INBOUND' || mostRecentComm.direction === 'OUTBOUND';
+            if (!isValidDirection) {
+              return false; // Most recent is not INBOUND/OUTBOUND
+            }
+            
+            // Check if most recent communication is unread
+            const isUnread = !mostRecentComm.reads || mostRecentComm.reads.length === 0;
+            
+            return isUnread; // Keep if unread, exclude if read
+          });
+          
+          // Replace leads array with filtered results
+          leads.length = 0;
+          leads.push(...filteredLeads);
+          
+          const roleLabel = isAdmin ? 'Admin' : isManager ? 'Manager' : 'ACQ';
+          console.log(`🔍 ${roleLabel} needs attention: Filtered from ${originalCount} to ${leads.length} leads (Rule 1/2/3: ${rule1Or2Or3LeadIds.size}, Rule 4: most recent comm check)`);
+        }
       }
 
       const stageOrderIndexByLeadId = new Map<string, number>();
