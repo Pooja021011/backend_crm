@@ -102,14 +102,14 @@ export const reminderRepository = {
                       }
                     }
                   },
-                  // Exclude leads that have upcoming tasks (due date in future), but ignore auto-created tasks
+                  // Exclude leads that have tasks due within last 6 hours or in future (user still has time to complete), but ignore auto-created tasks
                   {
                     NOT: {
                       tasks: {
                         some: {
                           status: TaskStatus.OPEN,
                           dueAt: {
-                            gt: now // Only upcoming tasks (due date in future), not overdue
+                            gt: hoursAgo(6) // Exclude if task is due within last 6 hours or in future
                           },
                           // Exclude auto-created tasks from this check
                           NOT: [
@@ -121,6 +121,16 @@ export const reminderRepository = {
                             { title: { startsWith: 'URGENT: DocuSign Failed for ' } },
                             { title: { startsWith: 'Check Voided Contract With ' } }
                           ]
+                        }
+                      }
+                    }
+                  },
+                  // Exclude "Under Contract" stage from untouched reminders (only past due task category)
+                  {
+                    pipelineStage: {
+                      name: {
+                        not: {
+                          contains: 'Under Contract'
                         }
                       }
                     }
@@ -415,6 +425,16 @@ export const reminderRepository = {
                     mode: 'insensitive'
                   }
                 }
+              },
+              // Exclude "Under Contract" stage from untouched reminders (only past due task category)
+              {
+                pipelineStage: {
+                  name: {
+                    not: {
+                      contains: 'Under Contract'
+                    }
+                  }
+                }
               }
             ]
           },
@@ -551,13 +571,13 @@ export const reminderRepository = {
                 }
               },
               {
-                // Exclude leads that have upcoming tasks (due date in future), but ignore auto-created tasks
+                // Exclude leads that have tasks due within last 4 hours or in future (user still has time to complete), but ignore auto-created tasks
                 NOT: {
                   tasks: {
                     some: {
                       status: TaskStatus.OPEN,
                       dueAt: {
-                        gt: now // Only upcoming tasks (due date in future), not overdue
+                        gt: hoursAgo(4) // Exclude if task is due within last 4 hours or in future
                       },
                       // Exclude auto-created tasks from this check
                       NOT: [
@@ -603,6 +623,16 @@ export const reminderRepository = {
                   name: {
                     equals: 'Pipeline',
                     mode: 'insensitive'
+                  }
+                }
+              },
+              // Exclude "Under Contract" stage from untouched reminders (only past due task category)
+              {
+                pipelineStage: {
+                  name: {
+                    not: {
+                      contains: 'Under Contract'
+                    }
                   }
                 }
               }
@@ -741,13 +771,13 @@ export const reminderRepository = {
                 }
               },
               {
-                // Exclude leads that have upcoming tasks (due date in future), but ignore auto-created tasks
+                // Exclude leads that have tasks due within last 4 hours or in future (user still has time to complete), but ignore auto-created tasks
                 NOT: {
                   tasks: {
                     some: {
                       status: TaskStatus.OPEN,
                       dueAt: {
-                        gt: now // Only upcoming tasks (due date in future), not overdue
+                        gt: hoursAgo(4) // Exclude if task is due within last 4 hours or in future
                       },
                       // Exclude auto-created tasks from this check
                       NOT: [
@@ -793,6 +823,16 @@ export const reminderRepository = {
                   name: {
                     equals: 'Pipeline',
                     mode: 'insensitive'
+                  }
+                }
+              },
+              // Exclude "Under Contract" stage from untouched reminders (only past due task category)
+              {
+                pipelineStage: {
+                  name: {
+                    not: {
+                      contains: 'Under Contract'
+                    }
                   }
                 }
               }
