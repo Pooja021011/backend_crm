@@ -3644,16 +3644,27 @@ const LeadEdit: React.FC = () => {
                 className="h-5 w-6 p-0 rounded-md inline-flex items-center justify-center"
                 onClick={async () => {
                   if (effectivePrevLeadId) {
+                    // SAFE: Prevent multiple rapid clicks
+                    if (navigating) {
+                      console.warn('🚫 Navigation already in progress, ignoring click');
+                      return;
+                    }
+                    
                     // SAFE: Check for unsaved changes (existing behavior preserved)
                     if (autoSaveStatus === 'dirty' || autoSaveStatus === 'saving') {
                       const shouldNavigate = window.confirm('You have unsaved changes. Do you want to save before navigating?');
                       if (shouldNavigate) {
                         // Wait for save to complete
                         await flushAutoSave('manual');
-                        // SAFE: Verify save completed before navigating
-                        if (autoSaveStatus === 'saving') {
-                          // Wait a bit more if still saving
+                        // SAFE: Verify save completed AND ID hasn't changed
+                        if (autoSaveStatus === 'saving' || currentLeadIdRef.current !== id) {
+                          // Wait a bit more if still saving OR ID changed
                           await new Promise(resolve => setTimeout(resolve, 500));
+                          // Final check: if ID changed, cancel navigation
+                          if (currentLeadIdRef.current !== id) {
+                            console.warn('🚫 Navigation cancelled: ID changed during save');
+                            return;
+                          }
                         }
                       } else {
                         // User chose not to save - clear pending operations
@@ -3664,6 +3675,13 @@ const LeadEdit: React.FC = () => {
                         }
                       }
                     }
+                    
+                    // Final ID check before navigation
+                    if (currentLeadIdRef.current !== id) {
+                      console.warn('🚫 Navigation cancelled: ID changed');
+                      return;
+                    }
+                    
                     setNavigating(true);
                     navigate(`/leads/${effectivePrevLeadId}/edit`);
                   }
@@ -3678,16 +3696,27 @@ const LeadEdit: React.FC = () => {
                 className="h-5 w-6 p-0 rounded-md inline-flex items-center justify-center"
                 onClick={async () => {
                   if (effectiveNextLeadId) {
+                    // SAFE: Prevent multiple rapid clicks
+                    if (navigating) {
+                      console.warn('🚫 Navigation already in progress, ignoring click');
+                      return;
+                    }
+                    
                     // SAFE: Check for unsaved changes (existing behavior preserved)
                     if (autoSaveStatus === 'dirty' || autoSaveStatus === 'saving') {
                       const shouldNavigate = window.confirm('You have unsaved changes. Do you want to save before navigating?');
                       if (shouldNavigate) {
                         // Wait for save to complete
                         await flushAutoSave('manual');
-                        // SAFE: Verify save completed before navigating
-                        if (autoSaveStatus === 'saving') {
-                          // Wait a bit more if still saving
+                        // SAFE: Verify save completed AND ID hasn't changed
+                        if (autoSaveStatus === 'saving' || currentLeadIdRef.current !== id) {
+                          // Wait a bit more if still saving OR ID changed
                           await new Promise(resolve => setTimeout(resolve, 500));
+                          // Final check: if ID changed, cancel navigation
+                          if (currentLeadIdRef.current !== id) {
+                            console.warn('🚫 Navigation cancelled: ID changed during save');
+                            return;
+                          }
                         }
                       } else {
                         // User chose not to save - clear pending operations
@@ -3698,6 +3727,13 @@ const LeadEdit: React.FC = () => {
                         }
                       }
                     }
+                    
+                    // Final ID check before navigation
+                    if (currentLeadIdRef.current !== id) {
+                      console.warn('🚫 Navigation cancelled: ID changed');
+                      return;
+                    }
+                    
                     setNavigating(true);
                     navigate(`/leads/${effectiveNextLeadId}/edit`);
                   }
