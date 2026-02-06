@@ -518,19 +518,19 @@ export const DashboardHeader = () => {
               {kpiData.modes?.includes('admin') && (
                 <>
                   <KPICard
-                    title="CONTRACTS (TEAM)"
+                    title="CONTRACTS SIGNED"
                     value={isLoadingKpis ? "..." : String(kpiData.contractsSigned || 0)}
                     color="blue"
                   />
                   <KPICard
-                    title="LEADS/CONTRACT (TEAM)"
-                    value={isLoadingKpis ? "..." : formatPct2(kpiData.leadsPerContract)}
+                    title="CONTRACTS SOLD"
+                    value={isLoadingKpis ? "..." : String(kpiData.contractsSold || 0)}
                     color="green"
                   />
                   <KPICard
-                    title="MISHANDLED (TEAM)"
-                    value={isLoadingKpis ? "..." : String(kpiData.leadsMishandled || 0)}
-                    color={kpiData.mishandledColor || 'green'}
+                    title="TOTAL PROFIT"
+                    value={isLoadingKpis ? "..." : formatCurrency(kpiData.totalProfit)}
+                    color="purple"
                   />
                 </>
               )}
