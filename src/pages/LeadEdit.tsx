@@ -854,6 +854,14 @@ const LeadEdit: React.FC = () => {
 
     const tick = async () => {
       if (cancelled) return;
+      
+      // SAFE: Validate current id matches before proceeding
+      const currentId = currentLeadIdRef.current;
+      if (!currentId || currentId !== id) {
+        console.warn('🚫 Polling cancelled: ID mismatch', { currentId, id });
+        return;
+      }
+      
       // Don't fight with an in-progress user stage move or required popups.
       if (pendingPipelineStatusRef.current) return;
       if (popupOpenRef.current) return;
@@ -861,8 +869,27 @@ const LeadEdit: React.FC = () => {
       try {
         const response = await makeApiCall(`${API_BASE}/leads/${id}`);
         if (!response.ok) return;
+        
+        // SAFE: Re-validate id before processing response
+        if (currentLeadIdRef.current !== id) {
+          console.warn('🚫 Polling response ignored: ID changed during API call', {
+            pollId: id,
+            currentId: currentLeadIdRef.current
+          });
+          return;
+        }
+        
         const json = await response.json().catch(() => ({}));
         const leadData = (json as any)?.data || (json as any);
+
+        // SAFE: Final validation before updating state
+        if (currentLeadIdRef.current !== id) {
+          console.warn('🚫 Polling update cancelled: ID changed after response', {
+            pollId: id,
+            currentId: currentLeadIdRef.current
+          });
+          return;
+        }
 
         const serverStageId = String(leadData?.pipelineStageId || '');
         if (!serverStageId) return;
@@ -871,29 +898,33 @@ const LeadEdit: React.FC = () => {
         if (serverStageId !== localStageId) {
           // Update ONLY stage-related UI (avoid re-hydrating the full form while user edits).
           setPipelineStatus(serverStageId);
-          setLead((prev: any) =>
-            prev
-              ? {
-                  ...prev,
-                  pipelineStageId: serverStageId,
-                  stageEnteredAt: leadData?.stageEnteredAt ?? prev.stageEnteredAt,
-                  lastContactAt: leadData?.lastContactAt ?? prev.lastContactAt,
-                  updatedAt: leadData?.updatedAt ?? prev.updatedAt,
-                }
-              : prev
-          );
+          setLead((prev: any) => {
+            // SAFE: Double-check ID before updating
+            if (!prev || prev.id !== id || currentLeadIdRef.current !== id) {
+              return prev; // Don't update if ID mismatch
+            }
+            return {
+              ...prev,
+              pipelineStageId: serverStageId,
+              stageEnteredAt: leadData?.stageEnteredAt ?? prev.stageEnteredAt,
+              lastContactAt: leadData?.lastContactAt ?? prev.lastContactAt,
+              updatedAt: leadData?.updatedAt ?? prev.updatedAt,
+            };
+          });
         } else {
           // Keep timers fresh if backend updated lastContactAt/stageEnteredAt.
-          setLead((prev: any) =>
-            prev
-              ? {
-                  ...prev,
-                  stageEnteredAt: leadData?.stageEnteredAt ?? prev.stageEnteredAt,
-                  lastContactAt: leadData?.lastContactAt ?? prev.lastContactAt,
-                  updatedAt: leadData?.updatedAt ?? prev.updatedAt,
-                }
-              : prev
-          );
+          setLead((prev: any) => {
+            // SAFE: Double-check ID before updating
+            if (!prev || prev.id !== id || currentLeadIdRef.current !== id) {
+              return prev; // Don't update if ID mismatch
+            }
+            return {
+              ...prev,
+              stageEnteredAt: leadData?.stageEnteredAt ?? prev.stageEnteredAt,
+              lastContactAt: leadData?.lastContactAt ?? prev.lastContactAt,
+              updatedAt: leadData?.updatedAt ?? prev.updatedAt,
+            };
+          });
         }
       } catch {
         // silent
@@ -912,7 +943,7 @@ const LeadEdit: React.FC = () => {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [id]);
+  }, [id, currentLeadIdRef]);
 
   // Check permissions after lead and tasks are loaded
   useEffect(() => {

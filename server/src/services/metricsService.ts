@@ -250,15 +250,25 @@ export const metricsService = {
       modes: [],
     };
 
-    // Role-based KPIs with priority: Admin > Manager > ACQ > DISP > TC
+    // Role-based KPIs with priority: Admin > Manager > ACQ
+    // Priority order: Admin (highest) > Manager > ACQ (lowest)
+    // If user has multiple roles, highest priority applies
+    
     // ADMIN KPIs (company-wide) - Highest Priority
     if (isAdmin) {
       result.modes.push('admin');
       
-      // ✅ Contracts signed: Count deals where contractedAt is within timeframe (company-wide)
+      // Always use current month for Admin KPIs
+      const adminStart = now.startOf('month');
+      const adminEnd = now.endOf('month');
+      
+      // 1. Total number of contracts signed: Acquisitions Team signed that month
       const contractsSignedDeals = await prisma.deal.findMany({
         where: {
-          contractedAt: { gte: start.toDate(), lt: end.toDate() },
+          contractedAt: { 
+            gte: adminStart.toDate(),
+            lt: adminEnd.toDate() 
+          },
           lead: {
             pipelineStage: { pipeline: { key: 'ACQUISITIONS' } },
             leadType: 'SELLER'
@@ -268,74 +278,106 @@ export const metricsService = {
       });
       result.contractsSigned = new Set(contractsSignedDeals.map(d => d.leadId)).size;
 
-      // Contracts sold: DISP properties closed this month
-      const dispClosedDeals = await metricsRepository.getDealsClosedBetween(start.toDate(), end.toDate(), {
-        pipelineKey: 'DISPOSITIONS',
-        leadType: 'SELLER',
-      });
+      // 2. Total number of contracts sold: Dispositions Team sold that month
+      const dispClosedDeals = await metricsRepository.getDealsClosedBetween(
+        adminStart.toDate(),
+        adminEnd.toDate(),
+        {
+          pipelineKey: 'DISPOSITIONS',
+          leadType: 'SELLER',
+        }
+      );
       result.contractsSold = new Set(dispClosedDeals.map((d) => d.leadId)).size;
       
-      // Total profit: Sum of profit from ALL closed deals (ACQ + DISP) this month
-      // Only count deals with actual netProfit value (no fallback)
-      const allClosedDeals = await metricsRepository.getDealsClosedBetween(start.toDate(), end.toDate(), {
-        leadType: 'SELLER',
-      });
+      // 3. Total Profit: Total profit closed that month
+      const allClosedDeals = await metricsRepository.getDealsClosedBetween(
+        adminStart.toDate(),
+        adminEnd.toDate(),
+        {
+          leadType: 'SELLER',
+        }
+      );
       result.totalProfit = allClosedDeals
         .filter(d => d.netProfit != null) // Only include deals with netProfit
         .reduce((sum, d) => sum + d.netProfit, 0);
     }
     // MANAGER KPIs (team-wide for all ACQ agents) - Second Priority
+    // Manager KPIs always show current month data (ignore timeframe parameter)
     else if (isManager) {
       result.modes.push('manager');
       
-      const managerData = await this.calculateAcqKpis(start.toDate(), end.toDate(), undefined);
+      // Always use current month for Manager KPIs
+      const managerStart = now.startOf('month');
+      const managerEnd = now.endOf('month');
+      
+      const managerData = await this.calculateAcqKpis(managerStart.toDate(), managerEnd.toDate(), undefined);
+      
+      // 1. Total contracts for the month: All ACQ agents' leads under contract that month
       result.totalContracts = managerData.totalContracts;
-      result.leadsPerContract = managerData.leadsPerContract;
+      
+      // 2. Leads per contract: Ratio of contracts to leads received (format: 00.00)
+      // Example: 100 leads received, 10 contracts = 10.00 (10 contracts per 100 leads)
+      // Format as 00.00 (e.g., 10.00, 5.50, 0.10)
+      const contractsPer100Leads = managerData.leadsReceived > 0
+        ? (managerData.totalContracts / managerData.leadsReceived) * 100
+        : 0;
+      result.leadsPerContract = Number(contractsPer100Leads.toFixed(2));
+      
+      // 3. Number of leads mishandled: Combined for ALL ACQ agents
+      // - New leads that month that have gone 2/16 hours without being touched
+      // - Plus leads that have gone 48 hours without being touched
       result.leadsMishandled = managerData.leadsMishandled;
-      result.leadsReceived = managerData.leadsReceived;
-      result.slaBreaches = managerData.slaBreaches;
-      result.stale48h = managerData.stale48h;
       result.mishandledColor = this.getColorForMishandled(managerData.leadsMishandled);
+      
+      // Additional breakdown for debugging/transparency
+      result.slaBreaches = managerData.slaBreaches; // New leads mishandled (2h/16h)
+      result.stale48h = managerData.stale48h; // Leads untouched 48h+
+      result.leadsReceived = managerData.leadsReceived;
     }
     // ACQ AGENT KPIs (personal stats for this agent) - Third Priority
+    // ACQ Agent KPIs always show current month data (ignore timeframe parameter)
     else if (isACQ) {
       result.modes.push('acq');
       
-      const acqData = await this.calculateAcqKpis(start.toDate(), end.toDate(), userId);
+      // Always use current month for ACQ Agent KPIs
+      const acqStart = now.startOf('month');
+      const acqEnd = now.endOf('month');
+      
+      const acqData = await this.calculateAcqKpis(acqStart.toDate(), acqEnd.toDate(), userId);
+      
+      // 1. Total contracts for the month: Acquisitions Agent's leads under contract that month
       result.totalContractsPersonal = acqData.totalContracts;
-      result.leadsPerContractPersonal = acqData.leadsPerContract;
+      
+      // 2. Leads per contract: Ratio of contracts to leads received (format: 00.00)
+      // Example: 100 leads received, 10 contracts = 10.00 (10 contracts per 100 leads)
+      // Format as 00.00 (e.g., 10.00, 5.50, 0.10)
+      const contractsPer100Leads = acqData.leadsReceived > 0
+        ? (acqData.totalContracts / acqData.leadsReceived) * 100
+        : 0;
+      result.leadsPerContractPersonal = Number(contractsPer100Leads.toFixed(2));
+      
+      // 3. Number of leads mishandled: Personal leads
+      // - New leads that month that have gone 2/16 hours without being touched
+      // - Plus leads that have gone 48 hours without being touched
       result.leadsMishandledPersonal = acqData.leadsMishandled;
-      result.leadsReceivedPersonal = acqData.leadsReceived;
-      result.slaBreachesPersonal = acqData.slaBreaches;
-      result.stale48hPersonal = acqData.stale48h;
       result.mishandledColorPersonal = this.getColorForMishandled(acqData.leadsMishandled);
-    }
-    // DISP (Dispositions) KPIs - Same rules as ACQ - Fourth Priority
-    else if (isDISP) {
-      result.modes.push('disp');
       
-      const dispData = await this.calculateAcqKpis(start.toDate(), end.toDate(), userId);
-      result.totalContractsPersonal = dispData.totalContracts;
-      result.leadsPerContractPersonal = dispData.leadsPerContract;
-      result.leadsMishandledPersonal = dispData.leadsMishandled;
-      result.leadsReceivedPersonal = dispData.leadsReceived;
-      result.slaBreachesPersonal = dispData.slaBreaches;
-      result.stale48hPersonal = dispData.stale48h;
-      result.mishandledColorPersonal = this.getColorForMishandled(dispData.leadsMishandled);
+      // Additional breakdown for debugging/transparency
+      result.slaBreachesPersonal = acqData.slaBreaches; // New leads mishandled (2h/16h)
+      result.stale48hPersonal = acqData.stale48h; // Leads untouched 48h+
+      result.leadsReceivedPersonal = acqData.leadsReceived;
     }
-    // TC (Transaction Coordinator) KPIs - Same rules as ACQ - Fifth Priority
-    else if (isTC) {
-      result.modes.push('tc');
-      
-      const tcData = await this.calculateAcqKpis(start.toDate(), end.toDate(), userId);
-      result.totalContractsPersonal = tcData.totalContracts;
-      result.leadsPerContractPersonal = tcData.leadsPerContract;
-      result.leadsMishandledPersonal = tcData.leadsMishandled;
-      result.leadsReceivedPersonal = tcData.leadsReceived;
-      result.slaBreachesPersonal = tcData.slaBreaches;
-      result.stale48hPersonal = tcData.stale48h;
-      result.mishandledColorPersonal = this.getColorForMishandled(tcData.leadsMishandled);
-    }
+    // DISP (Dispositions) KPIs - Hidden for now
+    // else if (isDISP) {
+    //   result.modes.push('disp');
+    //   ...
+    // }
+    
+    // TC (Transaction Coordinator) KPIs - Hidden for now
+    // else if (isTC) {
+    //   result.modes.push('tc');
+    //   ...
+    // }
 
     // If no roles matched, return admin-like fallback for backward compatibility
     if (result.modes.length === 0) {
@@ -408,12 +450,18 @@ export const metricsService = {
     });
     const leadsReceivedCount = leadsReceived.length;
 
-    // Leads per contract ratio: how many leads needed to get one contract
+    // Leads per contract ratio: Will be calculated in Manager section
+    // For Manager: (contracts / leadsReceived) * 100, format 00.00
+    // For ACQ: Keep existing calculation (leadsReceived / contracts)
     const leadsPerContract = totalContracts > 0
       ? leadsReceivedCount / totalContracts
       : 0;
 
     // Mishandled = SLA breaches on new leads this month + stale 48h on all active ACQ leads
+    // SLA breaches: New leads that month that have gone 2/16 hours without being touched
+    // - Within 2 hours if uploaded to system between 8am and 5pm ET
+    // - Within 16 hours if uploaded to system between 5pm and 8am ET
+    // Stale 48h: Leads that have gone 48 hours without being touched
     const activeLeads = await metricsRepository.getActiveLeadsWithActivityByPipeline({
       pipelineKey: 'ACQUISITIONS',
       leadType: 'SELLER',

@@ -353,9 +353,10 @@ export const DashboardHeader = () => {
     fetchKpiData();
     
     // Refresh KPI data frequently for near-live updates
-    const intervalId = setInterval(fetchKpiData, 30 * 1000);
+    // Commented out: Now only fetches on page reload, not every 30 seconds
+    // const intervalId = setInterval(fetchKpiData, 30 * 1000);
     
-    return () => clearInterval(intervalId);
+    // return () => clearInterval(intervalId);
   }, []);
 
   // Format currency values
