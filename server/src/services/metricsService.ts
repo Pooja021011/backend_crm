@@ -463,32 +463,64 @@ export const metricsService = {
    * @param assignedUserId User ID for personal stats, undefined for team-wide stats
    */
   async calculateAcqKpis(start: Date, end: Date, assignedUserId?: string) {
-    // ✅ Total contracts: Count deals where contractedAt is within timeframe (team or personal)
-    // For ACQ agent: Count leads assigned to them that are under contract
-    // For Manager: Count leads assigned to ALL ACQ agents that are under contract
-    const contractDeals = await prisma.deal.findMany({
+    // ✅ Total contracts: Use stageHistory.changedAt from timeline section (when lead entered "Under Contract" stage)
+    // For ACQ agent: Count leads assigned to them that entered "Under Contract" that month
+    // For Manager: Count leads assigned to ALL ACQ agents that entered "Under Contract" that month
+    const contractsSignedLeads = await prisma.lead.findMany({
       where: {
-        contractedAt: { gte: start, lt: end },
-        lead: {
-          pipelineStage: { pipeline: { key: 'ACQUISITIONS' } },
-          leadType: 'SELLER',
-          ...(assignedUserId 
-            ? { assignedUserId } 
-            : {
-                // When assignedUserId is undefined (Manager view), filter by ACQ role
-                assignedUser: {
-                  roles: {
-                    some: {
-                      role: { name: 'ACQ' }
-                    }
+        leadType: 'SELLER',
+        ...(assignedUserId 
+          ? { assignedUserId } 
+          : {
+              // When assignedUserId is undefined (Manager view), filter by ACQ role
+              assignedUser: {
+                roles: {
+                  some: {
+                    role: { name: 'ACQ' }
                   }
                 }
-              })
-        }
+              }
+            })
       },
-      select: { leadId: true }
+      select: { 
+        id: true,
+        stageHistory: {
+          select: {
+            toStageId: true,
+            changedAt: true,
+            toStage: {
+              select: {
+                name: true
+              }
+            }
+          },
+          orderBy: {
+            changedAt: 'asc' // Oldest first to find first entry
+          }
+        }
+      }
     });
-    const totalContracts = new Set(contractDeals.map(d => d.leadId)).size;
+
+    // Filter by date range (current month) - Check stageHistory.changedAt from timeline section
+    const contractsSignedThisMonth = contractsSignedLeads.filter(lead => {
+      if (!lead.stageHistory || lead.stageHistory.length === 0) return false;
+      
+      // Find first entry where lead entered "Under Contract" stage (from stageHistory)
+      // Just match text "Under contract" - don't check pipeline key
+      const underContractEntry = lead.stageHistory.find(history => {
+        const stageName = (history.toStage?.name || '').toLowerCase();
+        
+        // Just match "Under contract" text (case-insensitive)
+        return stageName.includes('under contract');
+      });
+      
+      if (!underContractEntry) return false;
+      
+      const contractDate = new Date(underContractEntry.changedAt);
+      return contractDate >= start && contractDate < end;
+    });
+
+    const totalContracts = contractsSignedThisMonth.length;
 
     // Leads received this month (assigned to ACQ agent)
     const leadsReceived = await metricsRepository.getLeadsCreatedBetweenScoped(start, end, {
