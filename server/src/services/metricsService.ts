@@ -263,20 +263,63 @@ export const metricsService = {
       const adminEnd = now.endOf('month');
       
       // 1. Total number of contracts signed: Acquisitions Team signed that month
-      const contractsSignedDeals = await prisma.deal.findMany({
+      // Use stageHistory.changedAt from timeline section (when lead first entered "Under Contract" stage in ACQUISITIONS pipeline)
+      // Fetch ALL SELLER leads (regardless of current stage or pipeline) and check stageHistory for "Under Contract" entry in ACQUISITIONS pipeline
+      // Note: Current stage doesn't matter - once lead was in "Under Contract" in ACQUISITIONS pipeline, it counts
+      const contractsSignedLeads = await prisma.lead.findMany({
         where: {
-          contractedAt: { 
-            gte: adminStart.toDate(),
-            lt: adminEnd.toDate() 
-          },
-          lead: {
-            pipelineStage: { pipeline: { key: 'ACQUISITIONS' } },
-            leadType: 'SELLER'
-          }
+          leadType: 'SELLER'
+          // Don't filter by current pipelineStage - we'll check stageHistory for ACQUISITIONS "Under Contract" entry
         },
-        select: { leadId: true }
+        select: { 
+          id: true,
+          stageHistory: {
+            select: {
+              toStageId: true,
+              changedAt: true,
+              toStage: {
+                select: {
+                  name: true
+                }
+              }
+            },
+            orderBy: {
+              changedAt: 'asc' // Oldest first to find first entry
+            }
+          }
+        }
       });
-      result.contractsSigned = new Set(contractsSignedDeals.map(d => d.leadId)).size;
+
+      // Filter by date range (current month) - Check stageHistory.changedAt from timeline section
+      const contractsSignedThisMonth = contractsSignedLeads.filter(lead => {
+        if (!lead.stageHistory || lead.stageHistory.length === 0) {
+          console.log(`[Contracts Signed] Lead ${lead.id}: No stageHistory`);
+          return false;
+        }
+        
+        // Find first entry where lead entered "Under Contract" stage (from stageHistory)
+        // Just match text "Under contract" - don't check pipeline key
+        const underContractEntry = lead.stageHistory.find(history => {
+          const stageName = (history.toStage?.name || '').toLowerCase();
+          
+          // Just match "Under contract" text (case-insensitive)
+          return stageName.includes('under contract');
+        });
+        
+        if (!underContractEntry) {
+          console.log(`[Contracts Signed] Lead ${lead.id}: No "Under Contract" entry found`);
+          return false;
+        }
+        
+        const contractDate = new Date(underContractEntry.changedAt);
+        const isInCurrentMonth = contractDate >= adminStart.toDate() && contractDate < adminEnd.toDate();
+        
+        console.log(`[Contracts Signed] Lead ${lead.id}: Under Contract date: ${contractDate.toISOString()}, In current month: ${isInCurrentMonth}`);
+        
+        return isInCurrentMonth;
+      });
+
+      result.contractsSigned = contractsSignedThisMonth.length;
 
       // 2. Total number of contracts sold: Dispositions Team sold that month
       const dispClosedDeals = await metricsRepository.getDealsClosedBetween(
