@@ -379,7 +379,13 @@ export const metricsService = {
     //   ...
     // }
 
+    // DISP and TC should not see KPIs - return empty modes
+    if (isDISP || isTC) {
+      return { modes: [] };
+    }
+
     // If no roles matched, return admin-like fallback for backward compatibility
+    // (Only for users who are not DISP or TC)
     if (result.modes.length === 0) {
       result.modes.push('admin');
       
