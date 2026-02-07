@@ -1228,32 +1228,39 @@ export const pipelineService = {
             
             // Rule 1: No outreach in X hours (needs refinement)
             // Only check if ACQ agent and Pipeline status
+            // CRITICAL: Exclude leads with upcoming tasks from Rule 1
             if (isACQAgent && isPipelineStatus) {
-              const outboundComms = lead.communications?.filter((c: any) => 
-                c.direction === 'OUTBOUND' && c.type !== 'NOTE'
-              ) || [];
-              
-              // Refinement: Must have had at least one OUTBOUND comm in the past
-              if (outboundComms.length > 0) {
-                const lastOutbound = outboundComms[0];
-                const lastOutboundTime = new Date(lastOutbound.occurredAt);
-                const hoursSinceOutbound = (now.getTime() - lastOutboundTime.getTime()) / (1000 * 60 * 60);
-                const thresholdHours = isAdmin ? 72 : isManager ? 48 : 36;
+              // First check: If lead has upcoming tasks, exclude from Rule 1 completely
+              if (hasUpcomingTask(lead)) {
+                // Don't match Rule 1 - continue to check Rule 4 below
+              } else {
+                const outboundComms = lead.communications?.filter((c: any) => 
+                  c.direction === 'OUTBOUND' && c.type !== 'NOTE'
+                ) || [];
                 
-                if (hoursSinceOutbound >= thresholdHours) {
-                  // Check if there's no newer outbound within threshold
-                  const hasNewerOutbound = outboundComms.some((c: any) => {
-                    const commTime = new Date(c.occurredAt);
-                    return commTime > lastOutboundTime && (now.getTime() - commTime.getTime()) / (1000 * 60 * 60) < thresholdHours;
-                  });
+                // Refinement: Must have had at least one OUTBOUND comm in the past
+                // If no OUTBOUND comms at all (only NOTES), don't match Rule 1
+                if (outboundComms.length > 0) {
+                  const lastOutbound = outboundComms[0];
+                  const lastOutboundTime = new Date(lastOutbound.occurredAt);
+                  const hoursSinceOutbound = (now.getTime() - lastOutboundTime.getTime()) / (1000 * 60 * 60);
+                  const thresholdHours = isAdmin ? 72 : isManager ? 48 : 36;
                   
-                  if (!hasNewerOutbound && !hasUpcomingTask(lead)) {
-                    ruleMatches.rule1.add(lead.id);
-                    return true; // Keep - matches Rule 1
+                  if (hoursSinceOutbound >= thresholdHours) {
+                    // Check if there's no newer outbound within threshold
+                    const hasNewerOutbound = outboundComms.some((c: any) => {
+                      const commTime = new Date(c.occurredAt);
+                      return commTime > lastOutboundTime && (now.getTime() - commTime.getTime()) / (1000 * 60 * 60) < thresholdHours;
+                    });
+                    
+                    if (!hasNewerOutbound) {
+                      ruleMatches.rule1.add(lead.id);
+                      return true; // Keep - matches Rule 1
+                    }
                   }
                 }
+                // If no OUTBOUND comms, don't match Rule 1 - check Rule 4 below
               }
-              // If no OUTBOUND comms or has upcoming task, don't match Rule 1 - check Rule 4 below
             }
             
             // Rule 4: Unread communications (excluding NOTES)
