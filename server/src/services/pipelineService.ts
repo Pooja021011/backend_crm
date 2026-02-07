@@ -1486,6 +1486,29 @@ export const pipelineService = {
             
             // For Rule 3/4: Check if most recent communication is unread AND meets date filter
             // NOTES are excluded from needs attention - they're internal, not actionable
+            // CRITICAL: Exclude leads with upcoming tasks from Rule 4 (same as Rule 1 exclusion)
+            const hasUpcomingTask = lead.tasks?.some((t: any) => {
+              if (t.status !== 'OPEN') return false;
+              const dueDate = new Date(t.dueAt);
+              if (dueDate < tasksCutoffDate) return false;
+              if (dueDate <= now) return false; // Not upcoming
+              const title = t.title || '';
+              const isAutoCreated = 
+                title.startsWith('Review note on ') ||
+                title.startsWith('Underwrite ') ||
+                title.startsWith('Make Offer on ') ||
+                title.startsWith('Follow Up With ') ||
+                title.startsWith('Contract Sent - Awaiting Signature for ') ||
+                title.startsWith('URGENT: DocuSign Failed for ') ||
+                title.startsWith('Check Voided Contract With ');
+              return !isAutoCreated;
+            });
+            
+            // If lead has upcoming task, exclude from Rule 4 (unread communications)
+            if (hasUpcomingTask) {
+              return false;
+            }
+            
             const mostRecentComm = lead.communications?.find(c => c.type !== 'NOTE'); // Skip NOTES
             
             if (!mostRecentComm) {
