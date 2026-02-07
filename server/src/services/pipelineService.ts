@@ -1214,6 +1214,8 @@ export const pipelineService = {
               }
               
               // Admin Rule 1: ACQ agent, pipeline status, no outreach in 72h, no upcoming task
+              // Only trigger if there WAS at least one OUTBOUND communication (excluding NOTES) in the past
+              // If there are NO communications at all (only NOTES), don't trigger needs attention
               const isACQAgent = lead.assignedUser?.roles?.some((ur: any) => ur.role?.name === 'ACQ');
               if (isACQAgent && lead.leadStatus?.name?.toLowerCase() === 'pipeline') {
                 // Exclude NOTES from outreach check - they're internal, not outreach
@@ -1281,13 +1283,11 @@ export const pipelineService = {
                     }
                   }
                 } else {
-                  // No OUTBOUND communications = no outreach in 72h, but still need to check for upcoming tasks
-                  const hasUpcoming = checkUpcomingTask();
-                  if (!hasUpcoming) {
-                    rule1Or2Or3LeadIds.add(lead.id);
-                    return;
-                  } else if (lead.id === 'e451a3c0-4e31-450e-a5a4-3ff0efb184b3') {
-                    console.log(`🔍 [DEBUG] Lead ${lead.id} excluded from Rule 1 (no OUTBOUND) due to upcoming task`);
+                  // No OUTBOUND communications (excluding NOTES) at all
+                  // Don't trigger needs attention if there are no actual communications (only NOTES)
+                  // This lead has never had any outreach, so it shouldn't trigger needs attention
+                  if (lead.id === 'e451a3c0-4e31-450e-a5a4-3ff0efb184b3') {
+                    console.log(`🔍 [DEBUG] Lead ${lead.id} excluded from Rule 1: No OUTBOUND communications (excluding NOTES) at all`);
                   }
                 }
               }
@@ -1334,6 +1334,7 @@ export const pipelineService = {
               }
               
               // Manager Rule 2: ACQ agent, pipeline status, no outreach in 48h, no upcoming task
+              // Only trigger if there WAS at least one OUTBOUND communication (excluding NOTES) in the past
               const isACQAgent = lead.assignedUser?.roles?.some((ur: any) => ur.role?.name === 'ACQ');
               if (isACQAgent && lead.leadStatus?.name?.toLowerCase() === 'pipeline') {
                 // Exclude NOTES from outreach check - they're internal, not outreach
@@ -1388,11 +1389,8 @@ export const pipelineService = {
                     }
                   }
                 } else {
-                  // No OUTBOUND communications = no outreach in 48h, but still need to check for upcoming tasks
-                  if (!checkUpcomingTask()) {
-                    rule1Or2Or3LeadIds.add(lead.id);
-                    return;
-                  }
+                  // No OUTBOUND communications (excluding NOTES) at all
+                  // Don't trigger needs attention if there are no actual communications (only NOTES)
                 }
               }
             }
@@ -1426,6 +1424,7 @@ export const pipelineService = {
               }
               
               // ACQ Rule 2: Pipeline leads, no outreach in 36h, no upcoming task
+              // Only trigger if there WAS at least one OUTBOUND communication (excluding NOTES) in the past
               if (lead.leadStatus?.name?.toLowerCase() === 'pipeline') {
                 // Exclude NOTES from outreach check - they're internal, not outreach
                 const outboundComms = lead.communications?.filter((c: any) => 
@@ -1479,11 +1478,8 @@ export const pipelineService = {
                     }
                   }
                 } else {
-                  // No OUTBOUND communications = no outreach in 36h, but still need to check for upcoming tasks
-                  if (!checkUpcomingTask()) {
-                    rule1Or2Or3LeadIds.add(lead.id);
-                    return;
-                  }
+                  // No OUTBOUND communications (excluding NOTES) at all
+                  // Don't trigger needs attention if there are no actual communications (only NOTES)
                 }
               }
             }
