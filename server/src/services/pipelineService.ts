@@ -709,19 +709,26 @@ export const pipelineService = {
           });
           
           // 3. Any lead actively in the user's communication inbox
-          // Check if there's an unread communication (INBOUND or OUTBOUND) with date filter
-          // Apply same conditions as inbox page (unread + date filter)
+          // Check if there's an unread communication (INBOUND or OUTBOUND, excluding NOTES) with date filter
+          // NOTES are internal and should not trigger needs attention
           needsAttentionConditions.push({
             communications: {
               some: {
-                OR: [
-                  { direction: 'INBOUND' },
-                  { direction: 'OUTBOUND' }
-                ],
-                occurredAt: {
-                  gte: tasksCutoffDate // Only show communications >= Jan 20, 2026 (same as inbox page)
-                },
-                reads: { none: { userId: filters.userId } } // Unread check (same as inbox page)
+                AND: [
+                  {
+                    OR: [
+                      { direction: 'INBOUND' },
+                      { direction: 'OUTBOUND' }
+                    ]
+                  },
+                  { type: { not: 'NOTE' } }, // Exclude NOTES - they're internal, not actionable
+                  {
+                    occurredAt: {
+                      gte: tasksCutoffDate // Only show communications >= Jan 20, 2026 (same as inbox page)
+                    }
+                  },
+                  { reads: { none: { userId: filters.userId } } } // Unread check (same as inbox page)
+                ]
               }
             }
           });
@@ -866,20 +873,27 @@ export const pipelineService = {
           });
           
           // 4. Any lead actively in the user's communication inbox
-          // Check if there's an unread communication (INBOUND or OUTBOUND) with date filter
-          // Apply same conditions as inbox page (unread + date filter)
+          // Check if there's an unread communication (INBOUND or OUTBOUND, excluding NOTES) with date filter
+          // NOTES are internal and should not trigger needs attention
           if (!isAdmin) { // Don't duplicate if already added by Admin role
             needsAttentionConditions.push({
               communications: {
                 some: {
-                  OR: [
-                    { direction: 'INBOUND' },
-                    { direction: 'OUTBOUND' }
-                  ],
-                  occurredAt: {
-                    gte: tasksCutoffDate // Only show communications >= Jan 20, 2026 (same as inbox page)
-                  },
-                  reads: { none: { userId: filters.userId } } // Unread check (same as inbox page)
+                  AND: [
+                    {
+                      OR: [
+                        { direction: 'INBOUND' },
+                        { direction: 'OUTBOUND' }
+                      ]
+                    },
+                    { type: { not: 'NOTE' } }, // Exclude NOTES - they're internal, not actionable
+                    {
+                      occurredAt: {
+                        gte: tasksCutoffDate // Only show communications >= Jan 20, 2026 (same as inbox page)
+                      }
+                    },
+                    { reads: { none: { userId: filters.userId } } } // Unread check (same as inbox page)
+                  ]
                 }
               }
             });
@@ -1011,21 +1025,28 @@ export const pipelineService = {
           });
           
           // 4. Any lead actively in the user's communication inbox
-          // Check if there's an unread communication (INBOUND or OUTBOUND) with date filter
-          // Apply same conditions as inbox page (unread + date filter)
+          // Check if there's an unread communication (INBOUND or OUTBOUND, excluding NOTES) with date filter
+          // NOTES are internal and should not trigger needs attention
           if (!isAdmin && !isManager) { // Don't duplicate if already added by Admin/Manager role
             needsAttentionConditions.push({
               assignedUserId: filters.userId,
               communications: {
                 some: {
-                  OR: [
-                    { direction: 'INBOUND' },
-                    { direction: 'OUTBOUND' }
-                  ],
-                  occurredAt: {
-                    gte: tasksCutoffDate // Only show communications >= Jan 20, 2026 (same as inbox page)
-                  },
-                  reads: { none: { userId: filters.userId } } // Unread check (same as inbox page)
+                  AND: [
+                    {
+                      OR: [
+                        { direction: 'INBOUND' },
+                        { direction: 'OUTBOUND' }
+                      ]
+                    },
+                    { type: { not: 'NOTE' } }, // Exclude NOTES - they're internal, not actionable
+                    {
+                      occurredAt: {
+                        gte: tasksCutoffDate // Only show communications >= Jan 20, 2026 (same as inbox page)
+                      }
+                    },
+                    { reads: { none: { userId: filters.userId } } } // Unread check (same as inbox page)
+                  ]
                 }
               }
             });
@@ -1538,27 +1559,25 @@ export const pipelineService = {
               return true;
             }
             
-            // For Rule 3/4: Check if most recent communication is unread AND meets date filter (same as inbox page)
-            // NOTES are included in inbox communications, so include them here too (matching inbox behavior)
-            const mostRecentComm = lead.communications?.[0];
+            // For Rule 3/4: Check if most recent communication is unread AND meets date filter
+            // NOTES are excluded from needs attention - they're internal, not actionable
+            const mostRecentComm = lead.communications?.find(c => c.type !== 'NOTE'); // Skip NOTES
             
             if (!mostRecentComm) {
               if (lead.id === 'e451a3c0-4e31-450e-a5a4-3ff0efb184b3') {
-                console.log(`🔍 [DEBUG] Lead ${lead.id} EXCLUDED: No communication`);
+                console.log(`🔍 [DEBUG] Lead ${lead.id} EXCLUDED: No communication (excluding NOTES)`);
               }
-              return false; // No communication and doesn't match Rule 1/2/3
+              return false; // No communication (excluding NOTES) and doesn't match Rule 1/2/3
             }
             
-            // Include all communication types (EMAIL, SMS, CALL, NOTE) - matching inbox page behavior
-            // NOTES are shown in inbox communications tab, so include them here too
+            // Only include actionable communication types (EMAIL, SMS, CALL) - exclude NOTES
             const isValidComm = mostRecentComm.type === 'EMAIL' || 
                                 mostRecentComm.type === 'SMS' || 
-                                mostRecentComm.type === 'CALL' || 
-                                mostRecentComm.type === 'NOTE';
+                                mostRecentComm.type === 'CALL';
             
             if (!isValidComm) {
               if (lead.id === 'e451a3c0-4e31-450e-a5a4-3ff0efb184b3') {
-                console.log(`🔍 [DEBUG] Lead ${lead.id} EXCLUDED: Most recent comm is not a valid type`);
+                console.log(`🔍 [DEBUG] Lead ${lead.id} EXCLUDED: Most recent comm is not a valid type (excluding NOTES)`);
               }
               return false;
             }
