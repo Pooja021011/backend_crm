@@ -610,24 +610,32 @@ export const pipelineService = {
               },
               {
                 OR: [
-                  // Case 1: No OUTBOUND communications at all
+                  // Case 1: No OUTBOUND communications at all (excluding NOTES - they're internal, not outreach)
                   {
                     communications: {
                       none: {
-                        direction: 'OUTBOUND'
+                        AND: [
+                          { direction: 'OUTBOUND' },
+                          { type: { not: 'NOTE' } } // Exclude NOTES - they're internal, not outreach
+                        ]
                       }
                     }
                   },
-                  // Case 2: Has OUTBOUND communication that is 72+ hours old AND no newer OUTBOUND within 72h
+                  // Case 2: Has OUTBOUND communication (excluding NOTES) that is 72+ hours old AND no newer OUTBOUND within 72h
                   {
                     AND: [
                       {
                         communications: {
                           some: {
-                            direction: 'OUTBOUND',
-                            occurredAt: {
-                              lte: hoursAgo(72)
-                            }
+                            AND: [
+                              { direction: 'OUTBOUND' },
+                              { type: { not: 'NOTE' } }, // Exclude NOTES from outreach check
+                              {
+                                occurredAt: {
+                                  lte: hoursAgo(72)
+                                }
+                              }
+                            ]
                           }
                         }
                       },
@@ -635,10 +643,15 @@ export const pipelineService = {
                         NOT: {
                           communications: {
                             some: {
-                              direction: 'OUTBOUND',
-                              occurredAt: {
-                                gt: hoursAgo(72)
-                              }
+                              AND: [
+                                { direction: 'OUTBOUND' },
+                                { type: { not: 'NOTE' } }, // Exclude NOTES from outreach check
+                                {
+                                  occurredAt: {
+                                    gt: hoursAgo(72)
+                                  }
+                                }
+                              ]
                             }
                           }
                         }
@@ -751,24 +764,32 @@ export const pipelineService = {
               },
               {
                 OR: [
-                  // Case 1: No OUTBOUND communications at all
+                  // Case 1: No OUTBOUND communications at all (excluding NOTES - they're internal, not outreach)
                   {
                     communications: {
                       none: {
-                        direction: 'OUTBOUND'
+                        AND: [
+                          { direction: 'OUTBOUND' },
+                          { type: { not: 'NOTE' } } // Exclude NOTES - they're internal, not outreach
+                        ]
                       }
                     }
                   },
-                  // Case 2: Has OUTBOUND communication that is 48+ hours old AND no newer OUTBOUND within 48h
+                  // Case 2: Has OUTBOUND communication (excluding NOTES) that is 48+ hours old AND no newer OUTBOUND within 48h
                   {
                     AND: [
                       {
                         communications: {
                           some: {
-                            direction: 'OUTBOUND',
-                            occurredAt: {
-                              lte: hoursAgo(48)
-                            }
+                            AND: [
+                              { direction: 'OUTBOUND' },
+                              { type: { not: 'NOTE' } }, // Exclude NOTES from outreach check
+                              {
+                                occurredAt: {
+                                  lte: hoursAgo(48)
+                                }
+                              }
+                            ]
                           }
                         }
                       },
@@ -776,10 +797,15 @@ export const pipelineService = {
                         NOT: {
                           communications: {
                             some: {
-                              direction: 'OUTBOUND',
-                              occurredAt: {
-                                gt: hoursAgo(48)
-                              }
+                              AND: [
+                                { direction: 'OUTBOUND' },
+                                { type: { not: 'NOTE' } }, // Exclude NOTES from outreach check
+                                {
+                                  occurredAt: {
+                                    gt: hoursAgo(48)
+                                  }
+                                }
+                              ]
                             }
                           }
                         }
@@ -893,24 +919,32 @@ export const pipelineService = {
               },
               {
                 OR: [
-                  // Case 1: No OUTBOUND communications at all
+                  // Case 1: No OUTBOUND communications at all (excluding NOTES - they're internal, not outreach)
                   {
                     communications: {
                       none: {
-                        direction: 'OUTBOUND'
+                        AND: [
+                          { direction: 'OUTBOUND' },
+                          { type: { not: 'NOTE' } } // Exclude NOTES - they're internal, not outreach
+                        ]
                       }
                     }
                   },
-                  // Case 2: Has OUTBOUND communication that is 36+ hours old AND no newer OUTBOUND within 36h
+                  // Case 2: Has OUTBOUND communication (excluding NOTES) that is 36+ hours old AND no newer OUTBOUND within 36h
                   {
                     AND: [
                       {
                         communications: {
                           some: {
-                            direction: 'OUTBOUND',
-                            occurredAt: {
-                              lte: hoursAgo(36)
-                            }
+                            AND: [
+                              { direction: 'OUTBOUND' },
+                              { type: { not: 'NOTE' } }, // Exclude NOTES from outreach check
+                              {
+                                occurredAt: {
+                                  lte: hoursAgo(36)
+                                }
+                              }
+                            ]
                           }
                         }
                       },
@@ -918,10 +952,15 @@ export const pipelineService = {
                         NOT: {
                           communications: {
                             some: {
-                              direction: 'OUTBOUND',
-                              occurredAt: {
-                                gt: hoursAgo(36)
-                              }
+                              AND: [
+                                { direction: 'OUTBOUND' },
+                                { type: { not: 'NOTE' } }, // Exclude NOTES from outreach check
+                                {
+                                  occurredAt: {
+                                    gt: hoursAgo(36)
+                                  }
+                                }
+                              ]
                             }
                           }
                         }
@@ -1156,7 +1195,10 @@ export const pipelineService = {
               // Admin Rule 1: ACQ agent, pipeline status, no outreach in 72h, no upcoming task
               const isACQAgent = lead.assignedUser?.roles?.some((ur: any) => ur.role?.name === 'ACQ');
               if (isACQAgent && lead.leadStatus?.name?.toLowerCase() === 'pipeline') {
-                const outboundComms = lead.communications?.filter((c: any) => c.direction === 'OUTBOUND') || [];
+                // Exclude NOTES from outreach check - they're internal, not outreach
+                const outboundComms = lead.communications?.filter((c: any) => 
+                  c.direction === 'OUTBOUND' && c.type !== 'NOTE'
+                ) || [];
                 
                 // Helper function to check for upcoming tasks
                 const checkUpcomingTask = () => {
@@ -1273,7 +1315,10 @@ export const pipelineService = {
               // Manager Rule 2: ACQ agent, pipeline status, no outreach in 48h, no upcoming task
               const isACQAgent = lead.assignedUser?.roles?.some((ur: any) => ur.role?.name === 'ACQ');
               if (isACQAgent && lead.leadStatus?.name?.toLowerCase() === 'pipeline') {
-                const outboundComms = lead.communications?.filter((c: any) => c.direction === 'OUTBOUND') || [];
+                // Exclude NOTES from outreach check - they're internal, not outreach
+                const outboundComms = lead.communications?.filter((c: any) => 
+                  c.direction === 'OUTBOUND' && c.type !== 'NOTE'
+                ) || [];
                 
                 // Helper function to check for upcoming tasks
                 const checkUpcomingTask = () => {
@@ -1361,7 +1406,10 @@ export const pipelineService = {
               
               // ACQ Rule 2: Pipeline leads, no outreach in 36h, no upcoming task
               if (lead.leadStatus?.name?.toLowerCase() === 'pipeline') {
-                const outboundComms = lead.communications?.filter((c: any) => c.direction === 'OUTBOUND') || [];
+                // Exclude NOTES from outreach check - they're internal, not outreach
+                const outboundComms = lead.communications?.filter((c: any) => 
+                  c.direction === 'OUTBOUND' && c.type !== 'NOTE'
+                ) || [];
                 
                 // Helper function to check for upcoming tasks
                 const checkUpcomingTask = () => {
@@ -1491,6 +1539,7 @@ export const pipelineService = {
             }
             
             // For Rule 3/4: Check if most recent communication is unread AND meets date filter (same as inbox page)
+            // NOTES are included in inbox communications, so include them here too (matching inbox behavior)
             const mostRecentComm = lead.communications?.[0];
             
             if (!mostRecentComm) {
@@ -1500,13 +1549,18 @@ export const pipelineService = {
               return false; // No communication and doesn't match Rule 1/2/3
             }
             
-            // Only check INBOUND or OUTBOUND communications (not NOTES)
-            const isValidDirection = mostRecentComm.direction === 'INBOUND' || mostRecentComm.direction === 'OUTBOUND';
-            if (!isValidDirection) {
+            // Include all communication types (EMAIL, SMS, CALL, NOTE) - matching inbox page behavior
+            // NOTES are shown in inbox communications tab, so include them here too
+            const isValidComm = mostRecentComm.type === 'EMAIL' || 
+                                mostRecentComm.type === 'SMS' || 
+                                mostRecentComm.type === 'CALL' || 
+                                mostRecentComm.type === 'NOTE';
+            
+            if (!isValidComm) {
               if (lead.id === 'e451a3c0-4e31-450e-a5a4-3ff0efb184b3') {
-                console.log(`🔍 [DEBUG] Lead ${lead.id} EXCLUDED: Most recent comm is not INBOUND/OUTBOUND`);
+                console.log(`🔍 [DEBUG] Lead ${lead.id} EXCLUDED: Most recent comm is not a valid type`);
               }
-              return false; // Most recent is not INBOUND/OUTBOUND
+              return false;
             }
             
             // Date filter: Only show communications >= Jan 20, 2026 (same as inbox page)
