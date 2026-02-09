@@ -153,6 +153,34 @@ const LeadEdit: React.FC = () => {
     dirtyFieldsRef.current.add(fieldName);
   }, []);
 
+  // Track when all sections finish loading for delayed hide
+  const allSectionsLoadedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showLoader, setShowLoader] = useState(false);
+
+  // Helper to update section loading state
+  const setSectionLoading = useCallback((section: keyof typeof loadingSections, isLoading: boolean) => {
+    setLoadingSections(prev => {
+      const updated = { ...prev, [section]: isLoading };
+      // Check if all sections are loaded
+      const allLoaded = Object.values(updated).every(loaded => !loaded);
+      if (allLoaded) {
+        // Clear any existing timer
+        if (allSectionsLoadedTimerRef.current) {
+          clearTimeout(allSectionsLoadedTimerRef.current);
+        }
+        // Set loading states immediately
+        setLoading(false);
+        setNavigating(false);
+        // Hide loader after 2 seconds
+        allSectionsLoadedTimerRef.current = setTimeout(() => {
+          setShowLoader(false);
+          allSectionsLoadedTimerRef.current = null;
+        }, 2000);
+      }
+      return updated;
+    });
+  }, []);
+
   // Fallback: if LeadEdit is opened via refresh/direct link, fetch prev/next from backend
   useEffect(() => {
     const run = async () => {
@@ -194,6 +222,22 @@ const LeadEdit: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [changingPipelineStatus, setChangingPipelineStatus] = useState(false);
   const [navigating, setNavigating] = useState(false);
+  
+  // Comprehensive loading states for all sections
+  const [loadingSections, setLoadingSections] = useState({
+    lead: true,
+    deal: true,
+    underwriting: true,
+    comparables: true,
+    tasks: true,
+    communications: true,
+    files: true,
+    photos: true,
+    owners: true,
+    notes: true,
+    buyerOffers: true,
+    buyers: true,
+  });
 
   // Autosave state (Lead Detail page)
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'dirty' | 'saving' | 'saved' | 'error'>('idle');
@@ -827,24 +871,110 @@ const LeadEdit: React.FC = () => {
     // DON'T cancel autoSaveInFlightRef - let it complete if user confirmed save
     // The ID validation in flushAutoSave will prevent wrong saves
     
-    // Load new lead data
-    loadLead();
+    // Reset all loading states
+    setLoading(true);
+    setShowLoader(true); // Show loader immediately
+    setLoadingSections({
+      lead: true,
+      deal: true,
+      underwriting: true,
+      comparables: true,
+      tasks: true,
+      communications: true,
+      files: true,
+      photos: true,
+      owners: true,
+      notes: true,
+      buyerOffers: true,
+      buyers: true,
+    });
+    
+    // Clear any existing timer
+    if (allSectionsLoadedTimerRef.current) {
+      clearTimeout(allSectionsLoadedTimerRef.current);
+      allSectionsLoadedTimerRef.current = null;
+    }
+    
+    // Load all data with proper loading tracking
+    const currentId = id; // Capture id for validation
+    
+    loadLead().finally(() => {
+      if (currentLeadIdRef.current === currentId) {
+        setSectionLoading('lead', false);
+      }
+    });
+    
     loadAgents();
     loadPipelineStages();
     loadLeadSources();
     loadLeadStatuses();
-    loadOwners();
-    loadNotes();
-    loadComparables();
-    loadUnderwritingScenarios();
-    loadFiles();
-    loadPhotos();
-    loadDeal();
-    loadBuyerOffers();
-    loadBuyers();
-    loadTasks();
-    loadCommunications();
-  }, [id]);
+    
+    loadOwners().finally(() => {
+      if (currentLeadIdRef.current === currentId) {
+        setSectionLoading('owners', false);
+      }
+    });
+    
+    loadNotes().finally(() => {
+      if (currentLeadIdRef.current === currentId) {
+        setSectionLoading('notes', false);
+      }
+    });
+    
+    loadComparables().finally(() => {
+      if (currentLeadIdRef.current === currentId) {
+        setSectionLoading('comparables', false);
+      }
+    });
+    
+    loadUnderwritingScenarios().finally(() => {
+      if (currentLeadIdRef.current === currentId) {
+        setSectionLoading('underwriting', false);
+      }
+    });
+    
+    loadFiles().finally(() => {
+      if (currentLeadIdRef.current === currentId) {
+        setSectionLoading('files', false);
+      }
+    });
+    
+    loadPhotos().finally(() => {
+      if (currentLeadIdRef.current === currentId) {
+        setSectionLoading('photos', false);
+      }
+    });
+    
+    loadDeal().finally(() => {
+      if (currentLeadIdRef.current === currentId) {
+        setSectionLoading('deal', false);
+      }
+    });
+    
+    loadBuyerOffers().finally(() => {
+      if (currentLeadIdRef.current === currentId) {
+        setSectionLoading('buyerOffers', false);
+      }
+    });
+    
+    loadBuyers().finally(() => {
+      if (currentLeadIdRef.current === currentId) {
+        setSectionLoading('buyers', false);
+      }
+    });
+    
+    loadTasks().finally(() => {
+      if (currentLeadIdRef.current === currentId) {
+        setSectionLoading('tasks', false);
+      }
+    });
+    
+    loadCommunications().finally(() => {
+      if (currentLeadIdRef.current === currentId) {
+        setSectionLoading('communications', false);
+      }
+    });
+  }, [id, setSectionLoading]);
 
   // Poll backend for pipelineStageId updates (auto-moves from calls/SMS) so UI updates without reload.
   useEffect(() => {
@@ -945,6 +1075,16 @@ const LeadEdit: React.FC = () => {
     };
   }, [id, currentLeadIdRef]);
 
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (allSectionsLoadedTimerRef.current) {
+        clearTimeout(allSectionsLoadedTimerRef.current);
+        allSectionsLoadedTimerRef.current = null;
+      }
+    };
+  }, []);
+
   // Check permissions after lead and tasks are loaded
   useEffect(() => {
     if (lead && !loading && !loadingTasks) {
@@ -964,11 +1104,25 @@ const LeadEdit: React.FC = () => {
   }, [leadOwners]);
 
   const loadLead = async () => {
+    const currentId = id; // Capture id for validation
     try {
       const response = await makeApiCall(`${API_BASE}/leads/${id}`);
       if (response.ok) {
+        // CRITICAL: Check if ID changed during API call
+        if (currentLeadIdRef.current !== currentId) {
+          console.warn('🚫 loadLead cancelled: ID changed during API call');
+          return;
+        }
+        
         const data = await response.json();
         const leadData = data.data;
+        
+        // CRITICAL: Final validation before updating state
+        if (currentLeadIdRef.current !== currentId) {
+          console.warn('🚫 loadLead cancelled: ID changed after response');
+          return;
+        }
+        
         console.log('Loaded lead data:', leadData);
         console.log('📍 Address from DB:', leadData.address);
         setLead(leadData);
@@ -1110,15 +1264,15 @@ const LeadEdit: React.FC = () => {
       }
     } catch (error) {
       console.error('Error loading lead:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load lead details',
-        variant: 'destructive'
-      });
-    } finally {
-      setLoading(false);
-      setNavigating(false); // Reset navigating state when data loads
+      if (currentLeadIdRef.current === currentId) {
+        toast({
+          title: 'Error',
+          description: 'Failed to load lead details',
+          variant: 'destructive'
+        });
+      }
     }
+    // Don't set loading = false here, let setSectionLoading handle it
   };
 
   const loadAgents = async () => {
@@ -1179,10 +1333,24 @@ const LeadEdit: React.FC = () => {
 
   const loadOwners = async () => {
     if (!id) return;
+    const currentId = id;
     try {
       const response = await makeApiCall(`${API_BASE}/leads/${id}/owners`);
       if (response.ok) {
+        // CRITICAL: Check if ID changed
+        if (currentLeadIdRef.current !== currentId) {
+          console.warn('🚫 loadOwners cancelled: ID changed');
+          return;
+        }
+        
         const data = await response.json();
+        
+        // CRITICAL: Final validation
+        if (currentLeadIdRef.current !== currentId) {
+          console.warn('🚫 loadOwners cancelled: ID changed after response');
+          return;
+        }
+        
         setLeadOwners(data.data || []);
       }
     } catch (error) {
@@ -1324,11 +1492,26 @@ const LeadEdit: React.FC = () => {
   // Task Management Functions
   const loadTasks = async () => {
     if (!id) return;
+    const currentId = id;
     setLoadingTasks(true);
     try {
       const response = await makeApiCall(`${API_BASE}/leads/${id}/tasks`);
       if (response.ok) {
+        // CRITICAL: Check if ID changed
+        if (currentLeadIdRef.current !== currentId) {
+          console.warn('🚫 loadTasks cancelled: ID changed');
+          setLoadingTasks(false);
+          return;
+        }
+        
         const data = await response.json();
+        
+        // CRITICAL: Final validation
+        if (currentLeadIdRef.current !== currentId) {
+          console.warn('🚫 loadTasks cancelled: ID changed after response');
+          setLoadingTasks(false);
+          return;
+        }
         
         // Filter out ALL auto-created tasks (same as Inbox filtering)
         const autoCreatedTaskPrefixes = [
@@ -2576,10 +2759,25 @@ const LeadEdit: React.FC = () => {
   }
 
   const loadNotes = async () => {
+    if (!id) return;
+    const currentId = id;
     try {
       const response = await makeApiCall(`${API_BASE}/leads/${id}/communications`);
       if (response.ok) {
+        // CRITICAL: Check if ID changed
+        if (currentLeadIdRef.current !== currentId) {
+          console.warn('🚫 loadNotes cancelled: ID changed');
+          return;
+        }
+        
         const data = await response.json();
+        
+        // CRITICAL: Final validation
+        if (currentLeadIdRef.current !== currentId) {
+          console.warn('🚫 loadNotes cancelled: ID changed after response');
+          return;
+        }
+        
         // Filter for notes only (type: 'NOTE')
         const communications = data.data || [];
         const notesList = communications
@@ -2637,11 +2835,26 @@ const LeadEdit: React.FC = () => {
 
   // Fetch communication history
   const loadCommunications = async () => {
+    if (!id) return;
+    const currentId = id;
     setLoadingCommunications(true);
     try {
       const response = await makeApiCall(`${API_BASE}/leads/${id}/communications`);
       if (response.ok) {
+        // CRITICAL: Check if ID changed
+        if (currentLeadIdRef.current !== currentId) {
+          console.warn('🚫 loadCommunications cancelled: ID changed');
+          return;
+        }
+        
         const data = await response.json();
+        
+        // CRITICAL: Final validation
+        if (currentLeadIdRef.current !== currentId) {
+          console.warn('🚫 loadCommunications cancelled: ID changed after response');
+          return;
+        }
+        
         // Include ALL communication types: CALL, SMS, EMAIL, and NOTE
         // Map createdBy to user for frontend compatibility
         const comms = (data.data || []).map((c: any) => ({
@@ -3067,10 +3280,25 @@ const LeadEdit: React.FC = () => {
   };
 
   const loadComparables = async () => {
+    if (!id) return;
+    const currentId = id;
     try {
       const response = await makeApiCall(`${API_BASE}/comps/leads/${id}/comparables`);
       if (response.ok) {
+        // CRITICAL: Check if ID changed
+        if (currentLeadIdRef.current !== currentId) {
+          console.warn('🚫 loadComparables cancelled: ID changed');
+          return;
+        }
+        
         const data = await response.json();
+        
+        // CRITICAL: Final validation
+        if (currentLeadIdRef.current !== currentId) {
+          console.warn('🚫 loadComparables cancelled: ID changed after response');
+          return;
+        }
+        
         setComparables(data.data || []);
       }
     } catch (error) {
@@ -3079,10 +3307,25 @@ const LeadEdit: React.FC = () => {
   };
 
   const loadUnderwritingScenarios = async () => {
+    if (!id) return;
+    const currentId = id;
     try {
       const response = await makeApiCall(`${API_BASE}/underwriting/leads/${id}/scenarios`);
       if (response.ok) {
+        // CRITICAL: Check if ID changed
+        if (currentLeadIdRef.current !== currentId) {
+          console.warn('🚫 loadUnderwritingScenarios cancelled: ID changed');
+          return;
+        }
+        
         const data = await response.json();
+        
+        // CRITICAL: Final validation
+        if (currentLeadIdRef.current !== currentId) {
+          console.warn('🚫 loadUnderwritingScenarios cancelled: ID changed after response');
+          return;
+        }
+        
         setUnderwritingScenarios(data.data || []);
       }
     } catch (error) {
@@ -3091,10 +3334,25 @@ const LeadEdit: React.FC = () => {
   };
 
   const loadFiles = async () => {
+    if (!id) return;
+    const currentId = id;
     try {
       const response = await makeApiCall(`${API_BASE}/leads/${id}/files`);
       if (response.ok) {
+        // CRITICAL: Check if ID changed
+        if (currentLeadIdRef.current !== currentId) {
+          console.warn('🚫 loadFiles cancelled: ID changed');
+          return;
+        }
+        
         const data = await response.json();
+        
+        // CRITICAL: Final validation
+        if (currentLeadIdRef.current !== currentId) {
+          console.warn('🚫 loadFiles cancelled: ID changed after response');
+          return;
+        }
+        
         // Files tab should NOT include photo-category items. Photos are shown in the Photos section.
         const onlyNonPhotos = (data.data || []).filter((file: any) => {
           const category = (file?.category || '').toString().toLowerCase();
@@ -3109,10 +3367,25 @@ const LeadEdit: React.FC = () => {
   };
 
   const loadPhotos = async () => {
+    if (!id) return;
+    const currentId = id;
     try {
       const response = await makeApiCall(`${API_BASE}/files/lead/${id}`);
       if (response.ok) {
+        // CRITICAL: Check if ID changed
+        if (currentLeadIdRef.current !== currentId) {
+          console.warn('🚫 loadPhotos cancelled: ID changed');
+          return;
+        }
+        
         const data = await response.json();
+        
+        // CRITICAL: Final validation
+        if (currentLeadIdRef.current !== currentId) {
+          console.warn('🚫 loadPhotos cancelled: ID changed after response');
+          return;
+        }
+        
         // Photos section is category-driven: only items categorized as photos appear here.
         const photoFiles = (data.data || []).filter((file: any) => {
           const category = (file?.category || '').toString().toLowerCase();
@@ -3127,11 +3400,26 @@ const LeadEdit: React.FC = () => {
   };
 
   const loadDeal = async () => {
+    if (!id) return;
+    const currentId = id;
     try {
       const response = await makeApiCall(`${API_BASE}/deals/${id}`);
       if (response.ok) {
+        // CRITICAL: Check if ID changed
+        if (currentLeadIdRef.current !== currentId) {
+          console.warn('🚫 loadDeal cancelled: ID changed');
+          return;
+        }
+        
         const data = await response.json();
         const dealData = data.data;
+        
+        // CRITICAL: Final validation
+        if (currentLeadIdRef.current !== currentId) {
+          console.warn('🚫 loadDeal cancelled: ID changed after response');
+          return;
+        }
+        
         if (dealData) {
           setDeal(dealData);
           setContractPrice(dealData.contractPrice?.toString() || '');
@@ -3211,10 +3499,25 @@ const LeadEdit: React.FC = () => {
   };
 
   const loadBuyerOffers = async () => {
+    if (!id) return;
+    const currentId = id;
     try {
       const response = await makeApiCall(`${API_BASE}/buyer-offers/leads/${id}/offers`);
       if (response.ok) {
+        // CRITICAL: Check if ID changed
+        if (currentLeadIdRef.current !== currentId) {
+          console.warn('🚫 loadBuyerOffers cancelled: ID changed');
+          return;
+        }
+        
         const data = await response.json();
+        
+        // CRITICAL: Final validation
+        if (currentLeadIdRef.current !== currentId) {
+          console.warn('🚫 loadBuyerOffers cancelled: ID changed after response');
+          return;
+        }
+        
         setBuyerOffers(data || []);
       }
     } catch (error) {
@@ -3223,10 +3526,25 @@ const LeadEdit: React.FC = () => {
   };
 
   const loadBuyers = async () => {
+    if (!id) return;
+    const currentId = id;
     try {
       const response = await makeApiCall(`${API_BASE}/buyers`);
       if (response.ok) {
+        // CRITICAL: Check if ID changed
+        if (currentLeadIdRef.current !== currentId) {
+          console.warn('🚫 loadBuyers cancelled: ID changed');
+          return;
+        }
+        
         const data = await response.json();
+        
+        // CRITICAL: Final validation
+        if (currentLeadIdRef.current !== currentId) {
+          console.warn('🚫 loadBuyers cancelled: ID changed after response');
+          return;
+        }
+        
         setBuyers(data.data || data || []);
       }
     } catch (error) {
@@ -3532,13 +3850,8 @@ const LeadEdit: React.FC = () => {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-lg text-slate-600">Loading lead details...</div>
-      </div>
-    );
-  }
+  // Show loader overlay while any section is loading
+  const isLoadingAnySection = Object.values(loadingSections).some(loading => loading);
 
   if (!lead) {
     return (
@@ -3579,12 +3892,21 @@ const LeadEdit: React.FC = () => {
 
   return (
     <>
-      {/* Navigation Loading Overlay */}
-      {navigating && (
+      {/* Simple loader overlay - shows until ALL sections are loaded + 2 seconds delay */}
+      {showLoader && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-6 shadow-xl flex flex-col items-center gap-4">
+            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+            <p className="text-sm font-medium text-gray-700">Loading lead data...</p>
+          </div>
+        </div>
+      )}
+      
+      {navigating && !showLoader && (
         <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
           <div className="bg-white rounded-lg shadow-xl p-6 flex flex-col items-center gap-3 pointer-events-auto">
             <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-            <p className="text-sm font-medium text-gray-700">Loading lead...</p>
+            <p className="text-sm font-medium text-gray-700">Navigating...</p>
           </div>
         </div>
       )}
@@ -4394,6 +4716,11 @@ const LeadEdit: React.FC = () => {
                     initialTaxes={underwritingTaxes}
                     initialTimeline={underwritingTimeline}
                     onValuesChange={(values) => {
+                      // CRITICAL: Don't update during initial load or if ID changed
+                      if (isLoadingAnySection || currentLeadIdRef.current !== id) {
+                        return;
+                      }
+                      
                       // IMPORTANT:
                       // UnderwritingCalculator calls onValuesChange whenever it recalculates (including on mount / prop sync).
                       // We must NOT mark fields as dirty unless the user actually changed inputs.
