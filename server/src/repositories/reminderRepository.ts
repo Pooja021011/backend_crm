@@ -102,14 +102,15 @@ export const reminderRepository = {
                       }
                     }
                   },
-                  // Exclude leads that have tasks due within last 6 hours or in future (user still has time to complete), but ignore auto-created tasks
+                  // Exclude leads that have ANY open past due tasks (wait for 4+ or 6+ hour past due task filter)
+                  // If there's a task set for today (e.g., 8am this morning), even if it's past due, don't show in untouched category
                   {
                     NOT: {
                       tasks: {
                         some: {
                           status: TaskStatus.OPEN,
                           dueAt: {
-                            gt: hoursAgo(6) // Exclude if task is due within last 6 hours or in future
+                            lte: now // Exclude if task is past due (due date <= now)
                           },
                           // Exclude auto-created tasks from this check
                           NOT: [
@@ -125,13 +126,22 @@ export const reminderRepository = {
                       }
                     }
                   },
-                  // Exclude "Under Contract" stage from untouched reminders (only past due task category)
+                  // Only include pipeline stages from "New Lead" through "Contract Sent" (exclude "Under Contract")
                   {
                     pipelineStage: {
                       name: {
-                        not: {
-                          contains: 'Under Contract'
-                        }
+                        in: [
+                          'New Lead',
+                          'No Contact',
+                          'No Contact Made',
+                          'Contact Made',
+                          'Appointment Set',
+                          'Appointment Complete',
+                          'Due Diligence',
+                          'Due Diligence Complete',
+                          'Offer Made',
+                          'Contract Sent'
+                        ]
                       }
                     }
                   }
@@ -371,13 +381,14 @@ export const reminderRepository = {
                 }
               },
               {
-                // Exclude leads that have upcoming tasks (due date in future), but ignore auto-created tasks
+                // Exclude leads that have ANY open past due tasks (wait for 4+ hour past due task filter)
+                // If there's a task set for today (e.g., 8am this morning), even if it's past due, don't show in untouched category
                 NOT: {
                   tasks: {
                     some: {
                       status: TaskStatus.OPEN,
                       dueAt: {
-                        gt: now // Only upcoming tasks (due date in future), not overdue
+                        lte: now // Exclude if task is past due (due date <= now)
                       },
                       // Exclude auto-created tasks from this check
                       NOT: [
@@ -426,13 +437,22 @@ export const reminderRepository = {
                   }
                 }
               },
-              // Exclude "Under Contract" stage from untouched reminders (only past due task category)
+              // Only include pipeline stages from "New Lead" through "Contract Sent" (exclude "Under Contract")
               {
                 pipelineStage: {
                   name: {
-                    not: {
-                      contains: 'Under Contract'
-                    }
+                    in: [
+                      'New Lead',
+                      'No Contact',
+                      'No Contact Made',
+                      'Contact Made',
+                      'Appointment Set',
+                      'Appointment Complete',
+                      'Due Diligence',
+                      'Due Diligence Complete',
+                      'Offer Made',
+                      'Contract Sent'
+                    ]
                   }
                 }
               }
@@ -571,13 +591,14 @@ export const reminderRepository = {
                 }
               },
               {
-                // Exclude leads that have tasks due within last 4 hours or in future (user still has time to complete), but ignore auto-created tasks
+                // Exclude leads that have ANY open past due tasks (wait for 4+ hour past due task filter)
+                // If there's a task set for today (e.g., 8am this morning), even if it's past due, don't show in untouched category
                 NOT: {
                   tasks: {
                     some: {
                       status: TaskStatus.OPEN,
                       dueAt: {
-                        gt: hoursAgo(4) // Exclude if task is due within last 4 hours or in future
+                        lte: now // Exclude if task is past due (due date <= now)
                       },
                       // Exclude auto-created tasks from this check
                       NOT: [
@@ -626,13 +647,22 @@ export const reminderRepository = {
                   }
                 }
               },
-              // Exclude "Under Contract" stage from untouched reminders (only past due task category)
+              // Only include pipeline stages from "New Lead" through "Contract Sent" (exclude "Under Contract")
               {
                 pipelineStage: {
                   name: {
-                    not: {
-                      contains: 'Under Contract'
-                    }
+                    in: [
+                      'New Lead',
+                      'No Contact',
+                      'No Contact Made',
+                      'Contact Made',
+                      'Appointment Set',
+                      'Appointment Complete',
+                      'Due Diligence',
+                      'Due Diligence Complete',
+                      'Offer Made',
+                      'Contract Sent'
+                    ]
                   }
                 }
               }
@@ -771,13 +801,14 @@ export const reminderRepository = {
                 }
               },
               {
-                // Exclude leads that have tasks due within last 4 hours or in future (user still has time to complete), but ignore auto-created tasks
+                // Exclude leads that have ANY open past due tasks (wait for 4+ hour past due task filter)
+                // If there's a task set for today (e.g., 8am this morning), even if it's past due, don't show in untouched category
                 NOT: {
                   tasks: {
                     some: {
                       status: TaskStatus.OPEN,
                       dueAt: {
-                        gt: hoursAgo(4) // Exclude if task is due within last 4 hours or in future
+                        lte: now // Exclude if task is past due (due date <= now)
                       },
                       // Exclude auto-created tasks from this check
                       NOT: [
@@ -826,13 +857,22 @@ export const reminderRepository = {
                   }
                 }
               },
-              // Exclude "Under Contract" stage from untouched reminders (only past due task category)
+              // Only include pipeline stages from "New Lead" through "Contract Sent" (exclude "Under Contract")
               {
                 pipelineStage: {
                   name: {
-                    not: {
-                      contains: 'Under Contract'
-                    }
+                    in: [
+                      'New Lead',
+                      'No Contact',
+                      'No Contact Made',
+                      'Contact Made',
+                      'Appointment Set',
+                      'Appointment Complete',
+                      'Due Diligence',
+                      'Due Diligence Complete',
+                      'Offer Made',
+                      'Contract Sent'
+                    ]
                   }
                 }
               }
