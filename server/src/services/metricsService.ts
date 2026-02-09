@@ -279,7 +279,12 @@ export const metricsService = {
               changedAt: true,
               toStage: {
                 select: {
-                  name: true
+                  name: true,
+                  pipeline: {
+                    select: {
+                      key: true
+                    }
+                  }
                 }
               }
             },
@@ -297,17 +302,18 @@ export const metricsService = {
           return false;
         }
         
-        // Find first entry where lead entered "Under Contract" stage (from stageHistory)
-        // Just match text "Under contract" - don't check pipeline key
+        // Find first entry where lead entered "Under Contract" stage in ACQUISITIONS pipeline (from stageHistory)
+        // Must match both: stage name includes "under contract" AND pipeline key is "ACQUISITIONS"
         const underContractEntry = lead.stageHistory.find(history => {
           const stageName = (history.toStage?.name || '').toLowerCase();
+          const pipelineKey = history.toStage?.pipeline?.key;
           
-          // Just match "Under contract" text (case-insensitive)
-          return stageName.includes('under contract');
+          // Check both stage name AND pipeline key (must be ACQUISITIONS)
+          return stageName.includes('under contract') && pipelineKey === 'ACQUISITIONS';
         });
         
         if (!underContractEntry) {
-          console.log(`[Contracts Signed] Lead ${lead.id}: No "Under Contract" entry found`);
+          console.log(`[Contracts Signed] Lead ${lead.id}: No "Under Contract" entry found in ACQUISITIONS pipeline`);
           return false;
         }
         
@@ -463,9 +469,9 @@ export const metricsService = {
    * @param assignedUserId User ID for personal stats, undefined for team-wide stats
    */
   async calculateAcqKpis(start: Date, end: Date, assignedUserId?: string) {
-    // ✅ Total contracts: Use stageHistory.changedAt from timeline section (when lead entered "Under Contract" stage)
-    // For ACQ agent: Count leads assigned to them that entered "Under Contract" that month
-    // For Manager: Count leads assigned to ALL ACQ agents that entered "Under Contract" that month
+    // ✅ Total contracts: Use stageHistory.changedAt from timeline section (when lead entered "Under Contract" stage in ACQUISITIONS pipeline)
+    // For ACQ agent: Count leads assigned to them that entered "Under Contract" in ACQUISITIONS pipeline that month
+    // For Manager: Count leads assigned to ALL ACQ agents that entered "Under Contract" in ACQUISITIONS pipeline that month
     const contractsSignedLeads = await prisma.lead.findMany({
       where: {
         leadType: 'SELLER',
@@ -490,7 +496,12 @@ export const metricsService = {
             changedAt: true,
             toStage: {
               select: {
-                name: true
+                name: true,
+                pipeline: {
+                  select: {
+                    key: true
+                  }
+                }
               }
             }
           },
@@ -505,13 +516,14 @@ export const metricsService = {
     const contractsSignedThisMonth = contractsSignedLeads.filter(lead => {
       if (!lead.stageHistory || lead.stageHistory.length === 0) return false;
       
-      // Find first entry where lead entered "Under Contract" stage (from stageHistory)
-      // Just match text "Under contract" - don't check pipeline key
+      // Find first entry where lead entered "Under Contract" stage in ACQUISITIONS pipeline (from stageHistory)
+      // Must match both: stage name includes "under contract" AND pipeline key is "ACQUISITIONS"
       const underContractEntry = lead.stageHistory.find(history => {
         const stageName = (history.toStage?.name || '').toLowerCase();
+        const pipelineKey = history.toStage?.pipeline?.key;
         
-        // Just match "Under contract" text (case-insensitive)
-        return stageName.includes('under contract');
+        // Check both stage name AND pipeline key (must be ACQUISITIONS)
+        return stageName.includes('under contract') && pipelineKey === 'ACQUISITIONS';
       });
       
       if (!underContractEntry) return false;
