@@ -156,6 +156,10 @@ const LeadEdit: React.FC = () => {
   // Track when all sections finish loading for delayed hide
   const allSectionsLoadedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showLoader, setShowLoader] = useState(false);
+  
+  // Track next/prev button visibility (hide when popup open, show 1-2 sec after close)
+  const [showNavButtons, setShowNavButtons] = useState(true);
+  const navButtonsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Helper to update section loading state
   const setSectionLoading = useCallback((section: keyof typeof loadingSections, isLoading: boolean) => {
@@ -371,6 +375,25 @@ const LeadEdit: React.FC = () => {
       !!showTaskDialog;
 
     popupOpenRef.current = nextPopupOpen;
+
+    // Hide next/prev buttons when popup opens
+    if (nextPopupOpen) {
+      setShowNavButtons(false);
+      // Clear any pending timer
+      if (navButtonsTimerRef.current) {
+        clearTimeout(navButtonsTimerRef.current);
+        navButtonsTimerRef.current = null;
+      }
+    } else {
+      // Show buttons 1.5 seconds after popup closes
+      if (navButtonsTimerRef.current) {
+        clearTimeout(navButtonsTimerRef.current);
+      }
+      navButtonsTimerRef.current = setTimeout(() => {
+        setShowNavButtons(true);
+        navButtonsTimerRef.current = null;
+      }, 1500); // 1.5 seconds delay
+    }
 
     // IMPORTANT: while stage-validation popups are open (or a stage move is pending),
     // cancel any scheduled autosave so it cannot fire mid-flow and wipe data.
@@ -1075,12 +1098,16 @@ const LeadEdit: React.FC = () => {
     };
   }, [id, currentLeadIdRef]);
 
-  // Cleanup timer on unmount
+  // Cleanup timers on unmount
   useEffect(() => {
     return () => {
       if (allSectionsLoadedTimerRef.current) {
         clearTimeout(allSectionsLoadedTimerRef.current);
         allSectionsLoadedTimerRef.current = null;
+      }
+      if (navButtonsTimerRef.current) {
+        clearTimeout(navButtonsTimerRef.current);
+        navButtonsTimerRef.current = null;
       }
     };
   }, []);
@@ -3960,6 +3987,7 @@ const LeadEdit: React.FC = () => {
               {saving ? 'Saving...' : 'Save now'}
             </Button>
             {/* Prev / Next lead navigation (from Pipeline view) */}
+            {showNavButtons && (
             <div className="flex items-center gap-1">
               <Button
                 variant="outline"
@@ -4066,6 +4094,7 @@ const LeadEdit: React.FC = () => {
                 {navigating ? <Loader2 className="w-3 h-3 animate-spin" /> : <ChevronRight className="w-3 h-3" />}
               </Button>
             </div>
+            )}
           </div>
         </div>
 
