@@ -289,7 +289,7 @@ export const metricsService = {
               }
             },
             orderBy: {
-              changedAt: 'asc' // Oldest first to find first entry
+              changedAt: 'desc' // Newest first to find most recent entry
             }
           }
         }
@@ -302,8 +302,9 @@ export const metricsService = {
           return false;
         }
         
-        // Find first entry where lead entered "Under Contract" stage in ACQUISITIONS pipeline (from stageHistory)
+        // Find most recent entry where lead entered "Under Contract" stage in ACQUISITIONS pipeline (from stageHistory)
         // Must match both: stage name includes "under contract" AND pipeline key is "ACQUISITIONS"
+        // Note: History is ordered desc (newest first), so .find() will get the most recent entry
         const underContractEntry = lead.stageHistory.find(history => {
           const stageName = (history.toStage?.name || '').toLowerCase();
           const pipelineKey = history.toStage?.pipeline?.key;
@@ -506,7 +507,7 @@ export const metricsService = {
             }
           },
           orderBy: {
-            changedAt: 'asc' // Oldest first to find first entry
+            changedAt: 'desc' // Newest first to find most recent entry
           }
         }
       }
@@ -516,8 +517,9 @@ export const metricsService = {
     const contractsSignedThisMonth = contractsSignedLeads.filter(lead => {
       if (!lead.stageHistory || lead.stageHistory.length === 0) return false;
       
-      // Find first entry where lead entered "Under Contract" stage in ACQUISITIONS pipeline (from stageHistory)
+      // Find most recent entry where lead entered "Under Contract" stage in ACQUISITIONS pipeline (from stageHistory)
       // Must match both: stage name includes "under contract" AND pipeline key is "ACQUISITIONS"
+      // Note: History is ordered desc (newest first), so .find() will get the most recent entry
       const underContractEntry = lead.stageHistory.find(history => {
         const stageName = (history.toStage?.name || '').toLowerCase();
         const pipelineKey = history.toStage?.pipeline?.key;
