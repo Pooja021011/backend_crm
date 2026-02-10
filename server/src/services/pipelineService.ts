@@ -1953,7 +1953,24 @@ export const pipelineService = {
                 return dueDate < now;
               }) || false;
               
-              meetsAcqCriteria = isNewLeadStage || condition2 || hasPastDueTask;
+              // Condition 4: Unread communications in logged-in user's inbox (from Jan 20, 2026 onwards)
+              // Note: reads are already filtered by userId in the query, so if reads.length === 0, it's unread
+              const hasUnreadComms = (lead.communications || []).some((c: any) => {
+                // Must be INBOUND or OUTBOUND (not NOTE)
+                if (c.type === 'NOTE') return false;
+                if (c.direction !== 'INBOUND' && c.direction !== 'OUTBOUND') return false;
+                
+                // Date filter: Only communications >= Jan 20, 2026
+                const commDate = new Date(c.occurredAt || c.createdAt);
+                if (commDate < tasksCutoffDate) return false;
+                
+                // Check if unread (reads are filtered by userId in query, so empty array means unread)
+                const isUnread = !c.reads || c.reads.length === 0;
+                
+                return isUnread;
+              });
+              
+              meetsAcqCriteria = isNewLeadStage || condition2 || hasPastDueTask || hasUnreadComms;
             }
           }
           
