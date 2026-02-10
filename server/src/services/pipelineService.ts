@@ -1737,8 +1737,8 @@ export const pipelineService = {
               condition1 = !hasRecentOutboundComm && hasNoUpcomingTasks;
             }
             
-            // Condition 2: Task past due 48+ hours (due date + 48 hours <= current time)
-            // Same logic as reminders: dueDate + 48 hours <= now
+            // Condition 2: Any lead with a task that has been past due for 48 hours (for any user)
+            // Task is past due for 48 hours if: dueDate + 48 hours <= current time
             const tasksPastDue48h = lead.tasks?.some((t: any) => {
               if (t.status !== 'OPEN') return false;
               
