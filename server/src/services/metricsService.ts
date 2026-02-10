@@ -49,8 +49,9 @@ function getEtHour(d: Date): number {
 
 function getSlaThresholdHoursEt(createdAt: Date): number {
   const hourEt = getEtHour(createdAt);
-  // 8am–5pm ET => 2h SLA; else 16h SLA
-  return hourEt >= 8 && hourEt < 17 ? 2 : 16;
+  // 8am–5pm ET (inclusive) => 2h SLA; else 16h SLA
+  // Changed to hourEt <= 17 to include 5pm (17:00 = 5:00 PM)
+  return hourEt >= 8 && hourEt <= 17 ? 2 : 16;
 }
 
 function computeLastActivityAt(lead: {
