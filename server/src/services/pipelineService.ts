@@ -1687,6 +1687,25 @@ export const pipelineService = {
         
         console.log('🔍 Post-fetch filter: User roles:', userRolesArray, { isAdmin, isManager, isACQ });
         
+        // Fetch logged-in user's contact info to check if communications are for them
+        let loggedInUserContactInfo: { phone?: string; email?: string } = {};
+        if (filters.userId) {
+          try {
+            const loggedInUser = await prisma.user.findUnique({
+              where: { id: filters.userId },
+              select: { phone: true, email: true }
+            });
+            if (loggedInUser) {
+              loggedInUserContactInfo = {
+                phone: loggedInUser.phone || undefined,
+                email: loggedInUser.email || undefined
+              };
+            }
+          } catch (error) {
+            console.error('Error fetching logged-in user contact info:', error);
+          }
+        }
+        
         // Filter leads based on ALL roles the user has (combined approach)
         const filteredLeads = transformedLeads.filter(lead => {
           let meetsAdminCriteria = false;
@@ -1768,7 +1787,7 @@ export const pipelineService = {
             }) || false;
             
             // Condition 3: Unread communications in logged-in user's inbox (from Jan 20, 2026 onwards)
-            // Only check INBOUND communications (not OUTBOUND - those are sent by agents, not to admin)
+            // Only check INBOUND communications that are FOR the logged-in user (not assigned agent)
             // Note: reads are already filtered by userId in the query, so if reads.length === 0, it's unread
             const hasUnreadComms = (lead.communications || []).some((c: any) => {
               // Must be INBOUND only (not OUTBOUND, not NOTE)
@@ -1778,6 +1797,20 @@ export const pipelineService = {
               // Date filter: Only communications >= Jan 20, 2026
               const commDate = new Date(c.occurredAt || c.createdAt);
               if (commDate < tasksCutoffDate) return false;
+              
+              // Check if communication is FOR the logged-in user (not assigned agent)
+              // For CALL/SMS: check if metadata.to matches logged-in user's phone
+              // For EMAIL: check if metadata.to matches logged-in user's email
+              const metadata = c.metadata || {};
+              const commTo = metadata.to || metadata.To || '';
+              const isForLoggedInUser = 
+                (c.type === 'CALL' || c.type === 'SMS') && loggedInUserContactInfo.phone && 
+                  (commTo === loggedInUserContactInfo.phone || 
+                   commTo.replace(/[\s\(\)\-]/g, '') === loggedInUserContactInfo.phone.replace(/[\s\(\)\-]/g, '')) ||
+                (c.type === 'EMAIL' && loggedInUserContactInfo.email && 
+                  commTo.toLowerCase() === loggedInUserContactInfo.email.toLowerCase());
+              
+              if (!isForLoggedInUser) return false;
               
               // Check if unread (reads are filtered by userId in query, so empty array means unread)
               const isUnread = !c.reads || c.reads.length === 0;
@@ -1867,7 +1900,7 @@ export const pipelineService = {
             }) || false;
             
             // Condition 4: Unread communications in logged-in user's inbox (from Jan 20, 2026 onwards)
-            // Only check INBOUND communications (not OUTBOUND - those are sent by agents, not to user)
+            // Only check INBOUND communications that are FOR the logged-in user (not assigned agent)
             // Note: reads are already filtered by userId in the query, so if reads.length === 0, it's unread
             const hasUnreadComms = (lead.communications || []).some((c: any) => {
               // Must be INBOUND only (not OUTBOUND, not NOTE)
@@ -1877,6 +1910,20 @@ export const pipelineService = {
               // Date filter: Only communications >= Jan 20, 2026
               const commDate = new Date(c.occurredAt || c.createdAt);
               if (commDate < tasksCutoffDate) return false;
+              
+              // Check if communication is FOR the logged-in user (not assigned agent)
+              // For CALL/SMS: check if metadata.to matches logged-in user's phone
+              // For EMAIL: check if metadata.to matches logged-in user's email
+              const metadata = c.metadata || {};
+              const commTo = metadata.to || metadata.To || '';
+              const isForLoggedInUser = 
+                (c.type === 'CALL' || c.type === 'SMS') && loggedInUserContactInfo.phone && 
+                  (commTo === loggedInUserContactInfo.phone || 
+                   commTo.replace(/[\s\(\)\-]/g, '') === loggedInUserContactInfo.phone.replace(/[\s\(\)\-]/g, '')) ||
+                (c.type === 'EMAIL' && loggedInUserContactInfo.email && 
+                  commTo.toLowerCase() === loggedInUserContactInfo.email.toLowerCase());
+              
+              if (!isForLoggedInUser) return false;
               
               // Check if unread (reads are filtered by userId in query, so empty array means unread)
               const isUnread = !c.reads || c.reads.length === 0;
@@ -1956,7 +2003,7 @@ export const pipelineService = {
               }) || false;
               
               // Condition 4: Unread communications in logged-in user's inbox (from Jan 20, 2026 onwards)
-              // Only check INBOUND communications (not OUTBOUND - those are sent by user, not to user)
+              // Only check INBOUND communications that are FOR the logged-in user (not assigned agent)
               // Note: reads are already filtered by userId in the query, so if reads.length === 0, it's unread
               const hasUnreadComms = (lead.communications || []).some((c: any) => {
                 // Must be INBOUND only (not OUTBOUND, not NOTE)
@@ -1966,6 +2013,20 @@ export const pipelineService = {
                 // Date filter: Only communications >= Jan 20, 2026
                 const commDate = new Date(c.occurredAt || c.createdAt);
                 if (commDate < tasksCutoffDate) return false;
+                
+                // Check if communication is FOR the logged-in user (not assigned agent)
+                // For CALL/SMS: check if metadata.to matches logged-in user's phone
+                // For EMAIL: check if metadata.to matches logged-in user's email
+                const metadata = c.metadata || {};
+                const commTo = metadata.to || metadata.To || '';
+                const isForLoggedInUser = 
+                  (c.type === 'CALL' || c.type === 'SMS') && loggedInUserContactInfo.phone && 
+                    (commTo === loggedInUserContactInfo.phone || 
+                     commTo.replace(/[\s\(\)\-]/g, '') === loggedInUserContactInfo.phone.replace(/[\s\(\)\-]/g, '')) ||
+                  (c.type === 'EMAIL' && loggedInUserContactInfo.email && 
+                    commTo.toLowerCase() === loggedInUserContactInfo.email.toLowerCase());
+                
+                if (!isForLoggedInUser) return false;
                 
                 // Check if unread (reads are filtered by userId in query, so empty array means unread)
                 const isUnread = !c.reads || c.reads.length === 0;
