@@ -2038,8 +2038,19 @@ export const pipelineService = {
             }
           }
           
-          // Lead passes if it meets ANY role's criteria (combined approach)
-          return meetsAdminCriteria || meetsManagerCriteria || meetsAcqCriteria;
+          // Lead passes if it meets role's criteria
+          // Priority: Admin > Manager > ACQ
+          // If user has Manager role (even if also has ACQ), use Manager criteria only
+          if (isAdmin) {
+            return meetsAdminCriteria;
+          } else if (isManager) {
+            // Manager takes priority over ACQ when both roles are present
+            return meetsManagerCriteria;
+          } else if (isACQ) {
+            return meetsAcqCriteria;
+          }
+          
+          return false;
         });
         
         console.log(`🔍 Post-fetch filter: ${filteredLeads.length} leads match needs attention criteria`);
