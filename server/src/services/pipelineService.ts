@@ -1768,11 +1768,12 @@ export const pipelineService = {
             }) || false;
             
             // Condition 3: Unread communications in logged-in user's inbox (from Jan 20, 2026 onwards)
+            // Only check INBOUND communications (not OUTBOUND - those are sent by agents, not to admin)
             // Note: reads are already filtered by userId in the query, so if reads.length === 0, it's unread
             const hasUnreadComms = (lead.communications || []).some((c: any) => {
-              // Must be INBOUND or OUTBOUND (not NOTE)
+              // Must be INBOUND only (not OUTBOUND, not NOTE)
               if (c.type === 'NOTE') return false;
-              if (c.direction !== 'INBOUND' && c.direction !== 'OUTBOUND') return false;
+              if (c.direction !== 'INBOUND') return false;
               
               // Date filter: Only communications >= Jan 20, 2026
               const commDate = new Date(c.occurredAt || c.createdAt);
@@ -1866,11 +1867,12 @@ export const pipelineService = {
             }) || false;
             
             // Condition 4: Unread communications in logged-in user's inbox (from Jan 20, 2026 onwards)
+            // Only check INBOUND communications (not OUTBOUND - those are sent by agents, not to user)
             // Note: reads are already filtered by userId in the query, so if reads.length === 0, it's unread
             const hasUnreadComms = (lead.communications || []).some((c: any) => {
-              // Must be INBOUND or OUTBOUND (not NOTE)
+              // Must be INBOUND only (not OUTBOUND, not NOTE)
               if (c.type === 'NOTE') return false;
-              if (c.direction !== 'INBOUND' && c.direction !== 'OUTBOUND') return false;
+              if (c.direction !== 'INBOUND') return false;
               
               // Date filter: Only communications >= Jan 20, 2026
               const commDate = new Date(c.occurredAt || c.createdAt);
@@ -1954,11 +1956,12 @@ export const pipelineService = {
               }) || false;
               
               // Condition 4: Unread communications in logged-in user's inbox (from Jan 20, 2026 onwards)
+              // Only check INBOUND communications (not OUTBOUND - those are sent by user, not to user)
               // Note: reads are already filtered by userId in the query, so if reads.length === 0, it's unread
               const hasUnreadComms = (lead.communications || []).some((c: any) => {
-                // Must be INBOUND or OUTBOUND (not NOTE)
+                // Must be INBOUND only (not OUTBOUND, not NOTE)
                 if (c.type === 'NOTE') return false;
-                if (c.direction !== 'INBOUND' && c.direction !== 'OUTBOUND') return false;
+                if (c.direction !== 'INBOUND') return false;
                 
                 // Date filter: Only communications >= Jan 20, 2026
                 const commDate = new Date(c.occurredAt || c.createdAt);
