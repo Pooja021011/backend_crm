@@ -1111,6 +1111,7 @@ export const pipelineService = {
               createdAt: true,
               occurredAt: true,
               metadata: true,
+              createdById: true, // Include to check who created the communication (for ACQ Agent needs attention filter)
               reads: filters.userId ? {
                 where: { userId: filters.userId },
                 select: { readAt: true }
@@ -1637,6 +1638,7 @@ export const pipelineService = {
           // Basic info
           leadType: lead.leadType,
           status: lead.status,
+          leadStatus: lead.leadStatus, // Include leadStatus for needs attention filtering
           
           // Attention flags
           needsAttention: lead.needsAttention,
@@ -1693,69 +1695,194 @@ export const pipelineService = {
           
           // ADMIN CRITERIA
           if (isAdmin) {
-            // Criterion 1: No outreach in 72h + no upcoming tasks (for ACQ-assigned leads)
-            const assignedUserRoles = lead.assignedUserRoles || [];
-            const isAssignedToACQ = assignedUserRoles.includes('ACQ');
-            const lastContactDate = lead.lastContactDate ? new Date(lead.lastContactDate) : null;
-            const hoursSinceLastContact = lastContactDate 
-              ? (now.getTime() - lastContactDate.getTime()) / (1000 * 60 * 60)
-              : Infinity;
-            // Check for no upcoming tasks (past due tasks are allowed)
-            const hasNoUpcomingTasks = !lead.tasks || !lead.tasks.some((t: any) => 
-              t.status === 'OPEN' && new Date(t.dueAt) > now
-            );
-            const noOutreachNoTasks = isAssignedToACQ && hoursSinceLastContact >= 72 && hasNoUpcomingTasks;
+            const hoursAgo72 = new Date(now.getTime() - 72 * 60 * 60 * 1000);
+            const tasksCutoffDate = new Date(2026, 0, 20); // Jan 20, 2026
             
-            // Criterion 2: Task past due for 48+ hours
+            // Condition 1: Pipeline status leads where ANY Acquisitions Agent has had no outreach in last 72 hours + no upcoming task
+            const leadStatusName = lead.leadStatus?.name?.toLowerCase() || '';
+            const isPipelineStatus = leadStatusName === 'pipeline';
+            
+            let condition1 = false;
+            if (isPipelineStatus) {
+              // Get ALL OUTBOUND communications (excluding NOTES) - these are from ACQ agents
+              const outboundComms = (lead.communications || []).filter((c: any) => 
+                c.direction === 'OUTBOUND' && c.type !== 'NOTE'
+              );
+              
+              // Check if ANY OUTBOUND communication in last 72 hours
+              const hasRecentOutboundComm = outboundComms.some((c: any) => {
+                const commDate = new Date(c.occurredAt || c.createdAt);
+                return commDate > hoursAgo72;
+              });
+              
+              // Check for no upcoming tasks (excluding auto-generated)
+              const hasNoUpcomingTasks = !lead.tasks || !lead.tasks.some((t: any) => {
+                if (t.status !== 'OPEN') return false;
+                const dueDate = new Date(t.dueAt);
+                if (dueDate < tasksCutoffDate || dueDate <= now) return false;
+                
+                const title = String(t.title || '');
+                const isAutoCreated = 
+                  title.startsWith('Review note on ') ||
+                  title.startsWith('Underwrite ') ||
+                  title.startsWith('Make Offer on ') ||
+                  title.startsWith('Follow Up With ') ||
+                  title.startsWith('Contract Sent - Awaiting Signature for ') ||
+                  title.startsWith('URGENT: DocuSign Failed for ') ||
+                  title.startsWith('Check Voided Contract With ');
+                
+                return !isAutoCreated;
+              });
+              
+              condition1 = !hasRecentOutboundComm && hasNoUpcomingTasks;
+            }
+            
+            // Condition 2: Task past due 48+ hours (due date + 48 hours <= current time)
+            // Same logic as reminders: dueDate + 48 hours <= now
             const tasksPastDue48h = lead.tasks?.some((t: any) => {
               if (t.status !== 'OPEN') return false;
+              
               const dueDate = new Date(t.dueAt);
-              if (dueDate >= now) return false;
-              const hoursPastDue = (now.getTime() - dueDate.getTime()) / (1000 * 60 * 60);
-              return hoursPastDue >= 48;
+              
+              // Check cap date: dueDate >= tasksCutoffDate
+              if (dueDate < tasksCutoffDate) return false;
+              
+              // Check: dueDate + 48 hours <= current time
+              const dueDatePlus48Hours = new Date(dueDate.getTime() + 48 * 60 * 60 * 1000);
+              const isPastDue48h = now.getTime() >= dueDatePlus48Hours.getTime();
+              
+              if (!isPastDue48h) return false;
+              
+              // Exclude auto-generated tasks
+              const title = String(t.title || '');
+              const isAutoCreated = 
+                title.startsWith('Review note on ') ||
+                title.startsWith('Underwrite ') ||
+                title.startsWith('Make Offer on ') ||
+                title.startsWith('Follow Up With ') ||
+                title.startsWith('Contract Sent - Awaiting Signature for ') ||
+                title.startsWith('URGENT: DocuSign Failed for ') ||
+                title.startsWith('Check Voided Contract With ');
+              
+              return !isAutoCreated;
             }) || false;
             
-            // Criterion 3: Unread communications
-            const hasUnreadComms = lead.unreadCount > 0;
+            // Condition 3: Unread communications in logged-in user's inbox (from Jan 20, 2026 onwards)
+            // Note: reads are already filtered by userId in the query, so if reads.length === 0, it's unread
+            const hasUnreadComms = (lead.communications || []).some((c: any) => {
+              // Must be INBOUND or OUTBOUND (not NOTE)
+              if (c.type === 'NOTE') return false;
+              if (c.direction !== 'INBOUND' && c.direction !== 'OUTBOUND') return false;
+              
+              // Date filter: Only communications >= Jan 20, 2026
+              const commDate = new Date(c.occurredAt || c.createdAt);
+              if (commDate < tasksCutoffDate) return false;
+              
+              // Check if unread (reads are filtered by userId in query, so empty array means unread)
+              const isUnread = !c.reads || c.reads.length === 0;
+              
+              return isUnread;
+            });
             
-            meetsAdminCriteria = noOutreachNoTasks || tasksPastDue48h || hasUnreadComms;
+            meetsAdminCriteria = condition1 || tasksPastDue48h || hasUnreadComms;
           }
           
           // MANAGER CRITERIA
           if (isManager) {
-            // Manager only sees ACQ agent leads (SELLER type)
-            const isAcqLead = lead.leadType === 'SELLER' && !!lead.assignedUserId;
+            const hoursAgo48 = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+            const tasksCutoffDate = new Date(2026, 0, 20); // Jan 20, 2026
             
-            if (isAcqLead) {
-              // Criterion 1: New Leads pipeline stage (all ACQ agents per requirements)
-              const stageName = (lead.stageName || '').toLowerCase();
-              const isNewLeadStage = stageName === 'new lead' || stageName === 'new leads';
-              
-              // Criterion 2: No outreach in 48h + no upcoming tasks (past due tasks are allowed)
-              const lastContactDate = lead.lastContactDate ? new Date(lead.lastContactDate) : null;
-              const hoursSinceLastContact = lastContactDate 
-                ? (now.getTime() - lastContactDate.getTime()) / (1000 * 60 * 60)
-                : Infinity;
-              // Check for no upcoming tasks (past due tasks are allowed)
-              const hasNoUpcomingTasks = !lead.tasks || !lead.tasks.some((t: any) => 
-                t.status === 'OPEN' && new Date(t.dueAt) > now
+            // Condition 1: Any leads in the 'New Leads' pipeline status for all acquisitions agents
+            const stageName = (lead.stageName || '').toLowerCase();
+            const isNewLeadStage = stageName === 'new lead' || stageName === 'new leads';
+            
+            // Condition 2: Pipeline status leads where ANY Acquisitions Agent has had no outreach in last 48 hours + no upcoming task
+            const leadStatusName = lead.leadStatus?.name?.toLowerCase() || '';
+            const isPipelineStatus = leadStatusName === 'pipeline';
+            
+            let condition2 = false;
+            if (isPipelineStatus) {
+              // Get ALL OUTBOUND communications (excluding NOTES) - these are from ACQ agents
+              const outboundComms = (lead.communications || []).filter((c: any) => 
+                c.direction === 'OUTBOUND' && c.type !== 'NOTE'
               );
-              const noCommNoTasks = hoursSinceLastContact >= 48 && hasNoUpcomingTasks;
               
-              // Criterion 3: Task past due for at least 6 hours (assigned to ACQ agent)
-              const tasksPastDue6h = lead.tasks?.some((t: any) => {
+              // Check if ANY OUTBOUND communication in last 48 hours
+              const hasRecentOutboundComm = outboundComms.some((c: any) => {
+                const commDate = new Date(c.occurredAt || c.createdAt);
+                return commDate > hoursAgo48;
+              });
+              
+              // Check for no upcoming tasks (excluding auto-generated)
+              const hasNoUpcomingTasks = !lead.tasks || !lead.tasks.some((t: any) => {
                 if (t.status !== 'OPEN') return false;
                 const dueDate = new Date(t.dueAt);
-                if (dueDate >= now) return false;
-                const hoursPastDue = (now.getTime() - dueDate.getTime()) / (1000 * 60 * 60);
-                return hoursPastDue >= 6;  // Changed from 30 minutes to 6 hours
-              }) || false;
+                if (dueDate < tasksCutoffDate || dueDate <= now) return false;
+                
+                const title = String(t.title || '');
+                const isAutoCreated = 
+                  title.startsWith('Review note on ') ||
+                  title.startsWith('Underwrite ') ||
+                  title.startsWith('Make Offer on ') ||
+                  title.startsWith('Follow Up With ') ||
+                  title.startsWith('Contract Sent - Awaiting Signature for ') ||
+                  title.startsWith('URGENT: DocuSign Failed for ') ||
+                  title.startsWith('Check Voided Contract With ');
+                
+                return !isAutoCreated;
+              });
               
-              // Criterion 4: Unread communications
-              const hasUnreadComms = lead.unreadCount > 0;
-              
-              meetsManagerCriteria = isNewLeadStage || noCommNoTasks || tasksPastDue6h || hasUnreadComms;
+              condition2 = !hasRecentOutboundComm && hasNoUpcomingTasks;
             }
+            
+            // Condition 3: Any lead that has a past due task for all acquisitions agents that has been past due for at least 6 hours
+            // Same logic as reminders: dueDate + 6 hours <= now
+            const tasksPastDue6h = lead.tasks?.some((t: any) => {
+              if (t.status !== 'OPEN') return false;
+              
+              const dueDate = new Date(t.dueAt);
+              
+              // Check cap date: dueDate >= tasksCutoffDate
+              if (dueDate < tasksCutoffDate) return false;
+              
+              // Check: dueDate + 6 hours <= current time
+              const dueDatePlus6Hours = new Date(dueDate.getTime() + 6 * 60 * 60 * 1000);
+              const isPastDue6h = now.getTime() >= dueDatePlus6Hours.getTime();
+              
+              if (!isPastDue6h) return false;
+              
+              // Exclude auto-generated tasks
+              const title = String(t.title || '');
+              const isAutoCreated = 
+                title.startsWith('Review note on ') ||
+                title.startsWith('Underwrite ') ||
+                title.startsWith('Make Offer on ') ||
+                title.startsWith('Follow Up With ') ||
+                title.startsWith('Contract Sent - Awaiting Signature for ') ||
+                title.startsWith('URGENT: DocuSign Failed for ') ||
+                title.startsWith('Check Voided Contract With ');
+              
+              return !isAutoCreated;
+            }) || false;
+            
+            // Condition 4: Unread communications in logged-in user's inbox (from Jan 20, 2026 onwards)
+            // Note: reads are already filtered by userId in the query, so if reads.length === 0, it's unread
+            const hasUnreadComms = (lead.communications || []).some((c: any) => {
+              // Must be INBOUND or OUTBOUND (not NOTE)
+              if (c.type === 'NOTE') return false;
+              if (c.direction !== 'INBOUND' && c.direction !== 'OUTBOUND') return false;
+              
+              // Date filter: Only communications >= Jan 20, 2026
+              const commDate = new Date(c.occurredAt || c.createdAt);
+              if (commDate < tasksCutoffDate) return false;
+              
+              // Check if unread (reads are filtered by userId in query, so empty array means unread)
+              const isUnread = !c.reads || c.reads.length === 0;
+              
+              return isUnread;
+            });
+            
+            meetsManagerCriteria = isNewLeadStage || condition2 || tasksPastDue6h || hasUnreadComms;
           }
           
           // ACQ AGENT CRITERIA
@@ -1764,33 +1891,69 @@ export const pipelineService = {
             const isMyLead = lead.leadType === 'SELLER' && lead.assignedUserId === filters.userId;
             
             if (isMyLead) {
-              // Criterion 1: New Leads pipeline stage for this user
+              const hoursAgo36 = new Date(now.getTime() - 36 * 60 * 60 * 1000);
+              const tasksCutoffDate = new Date(2026, 0, 20); // Jan 20, 2026
+              
+              // Condition 1: Any leads in the 'New Leads' pipeline status for the logged in user
               const stageName = (lead.stageName || '').toLowerCase();
               const isNewLeadStage = stageName === 'new lead' || stageName === 'new leads';
               
-              // Criterion 2: No outreach in 36h + no upcoming tasks (past due tasks are allowed)
-              const lastContactDate = lead.lastContactDate ? new Date(lead.lastContactDate) : null;
-              const hoursSinceLastContact = lastContactDate 
-                ? (now.getTime() - lastContactDate.getTime()) / (1000 * 60 * 60)
-                : Infinity;
-              // Check for no upcoming tasks (past due tasks are allowed)
-              const hasNoUpcomingTasks = !lead.tasks || !lead.tasks.some((t: any) => 
-                t.status === 'OPEN' && new Date(t.dueAt) > now
-              );
-              const noCommNoTasks = hoursSinceLastContact >= 36 && hasNoUpcomingTasks;
+              // Condition 2: Pipeline status leads that the logged in user has had no outreach in last 36 hours + no upcoming task
+              const leadStatusName = lead.leadStatus?.name?.toLowerCase() || '';
+              const isPipelineStatus = leadStatusName === 'pipeline';
               
-              // Criterion 3: Any past due task for this user
+              let condition2 = false;
+              if (isPipelineStatus) {
+                // Get OUTBOUND communications created by logged in user ONLY (excluding NOTES)
+                const userOutboundComms = (lead.communications || []).filter((c: any) => 
+                  c.direction === 'OUTBOUND' && 
+                  c.type !== 'NOTE' &&
+                  c.createdById === filters.userId // Check if created by logged in user
+                );
+                
+                // Check if logged in user has ANY OUTBOUND communication in last 36 hours
+                const hasRecentOutboundComm = userOutboundComms.some((c: any) => {
+                  const commDate = new Date(c.occurredAt || c.createdAt);
+                  return commDate > hoursAgo36;
+                });
+                
+                // Check for no upcoming tasks (excluding auto-generated)
+                const hasNoUpcomingTasks = !lead.tasks || !lead.tasks.some((t: any) => {
+                  if (t.status !== 'OPEN') return false;
+                  const dueDate = new Date(t.dueAt);
+                  if (dueDate < tasksCutoffDate || dueDate <= now) return false;
+                  
+                  const title = String(t.title || '');
+                  const isAutoCreated = 
+                    title.startsWith('Review note on ') ||
+                    title.startsWith('Underwrite ') ||
+                    title.startsWith('Make Offer on ') ||
+                    title.startsWith('Follow Up With ') ||
+                    title.startsWith('Contract Sent - Awaiting Signature for ') ||
+                    title.startsWith('URGENT: DocuSign Failed for ') ||
+                    title.startsWith('Check Voided Contract With ');
+                  
+                  return !isAutoCreated;
+                });
+                
+                condition2 = !hasRecentOutboundComm && hasNoUpcomingTasks;
+              }
+              
+              // Condition 3: Any lead that has a past due task for the logged in user
               const hasPastDueTask = lead.tasks?.some((t: any) => {
                 if (t.status !== 'OPEN') return false;
                 if (t.assignedToId !== filters.userId) return false;
+                
                 const dueDate = new Date(t.dueAt);
+                
+                // Check cap date: dueDate >= tasksCutoffDate
+                if (dueDate < tasksCutoffDate) return false;
+                
+                // Check if past due (dueDate < now)
                 return dueDate < now;
               }) || false;
               
-              // Criterion 4: Unread communications
-              const hasUnreadComms = lead.unreadCount > 0;
-              
-              meetsAcqCriteria = isNewLeadStage || noCommNoTasks || hasPastDueTask || hasUnreadComms;
+              meetsAcqCriteria = isNewLeadStage || condition2 || hasPastDueTask;
             }
           }
           
