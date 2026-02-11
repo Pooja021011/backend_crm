@@ -264,100 +264,56 @@ export const metricsService = {
       const adminEnd = now.endOf('month');
       
       // 1. Total number of contracts signed: Acquisitions Team signed that month
-      // Use stageHistory.changedAt from timeline section (when lead first entered "Under Contract" stage in ACQUISITIONS pipeline)
-      // Fetch ALL SELLER leads (regardless of current stage or pipeline) and check stageHistory for "Under Contract" entry in ACQUISITIONS pipeline
-      // Note: Current stage doesn't matter - once lead was in "Under Contract" in ACQUISITIONS pipeline, it counts
+      // Use customFields.underContractAt from timeline section (when lead first entered "Under Contract" stage in ACQUISITIONS pipeline)
+      // Fetch ALL SELLER leads that have underContractAt date set
       const contractsSignedLeads = await prisma.lead.findMany({
         where: {
-          leadType: 'SELLER'
-          // Don't filter by current pipelineStage - we'll check stageHistory for ACQUISITIONS "Under Contract" entry
+          leadType: 'SELLER',
+          customFields: {
+            path: ['underContractAt'],
+            not: null
+          }
         },
         select: { 
           id: true,
-          stageHistory: {
+          customFields: true,
+          pipelineStage: {
             select: {
-              toStageId: true,
-              changedAt: true,
-              toStage: {
+              pipeline: {
                 select: {
-                  name: true,
-                  pipeline: {
-                    select: {
-                      key: true
-                    }
-                  }
+                  key: true
                 }
               }
-            },
-            orderBy: {
-              changedAt: 'desc' // Newest first to find most recent entry
             }
           }
         }
       });
 
-      // Filter by date range (current month) - Check stageHistory.changedAt from timeline section
-      // Use Set to ensure each lead is counted only once (prevent duplicates)
-      const uniqueLeadIds = new Set<string>();
-      
+      // Filter by date range (current month) - Check customFields.underContractAt from timeline section
       const contractsSignedThisMonth = contractsSignedLeads.filter(lead => {
-        // Prevent duplicate counting - each lead should be counted only once
-        if (uniqueLeadIds.has(lead.id)) {
-          console.log(`[Contracts Signed] Lead ${lead.id}: Already counted, skipping duplicate`);
+        const customFields = (lead.customFields as any) || {};
+        const underContractAt = customFields.underContractAt;
+        
+        if (!underContractAt) return false;
+        
+        // Check if date falls within the current month
+        const contractDate = new Date(underContractAt);
+        if (isNaN(contractDate.getTime())) {
+          console.log(`[Contracts Signed] Lead ${lead.id}: Invalid underContractAt date`);
           return false;
         }
         
-        if (!lead.stageHistory || lead.stageHistory.length === 0) {
-          console.log(`[Contracts Signed] Lead ${lead.id}: No stageHistory`);
-          return false;
-        }
+        const inDateRange = contractDate >= adminStart.toDate() && contractDate < adminEnd.toDate();
+        if (!inDateRange) return false;
         
-        // stageHistory is already in desc order (newest first) from query
-        // Find ALL entries where lead entered "Under Contract" stage in ACQUISITIONS pipeline
-        // Exclude "Contract Sent" and other non-actual contract stages
-        const underContractEntries = lead.stageHistory.filter(history => {
-          const stageName = (history.toStage?.name || '').toLowerCase();
-          const pipelineKey = history.toStage?.pipeline?.key;
-          
-          // Must be ACQUISITIONS pipeline
-          if (pipelineKey !== 'ACQUISITIONS') return false;
-          
-          // Must include "under contract" but exclude variations like "contract sent", "offer made", etc.
-          const isUnderContract = stageName.includes('under contract') && 
-                                  !stageName.includes('contract sent') &&
-                                  !stageName.includes('offer') &&
-                                  !stageName.includes('pending');
-          
-          return isUnderContract;
-        });
+        // Verify this was in ACQUISITIONS pipeline
+        // The underContractAt field is only set when in ACQUISITIONS pipeline, so if it exists, it was in ACQUISITIONS
+        // But we can also check current pipeline for additional verification
+        const pipelineKey = lead.pipelineStage?.pipeline?.key;
         
-        if (underContractEntries.length === 0) {
-          console.log(`[Contracts Signed] Lead ${lead.id}: No "Under Contract" entry found in ACQUISITIONS pipeline`);
-          return false;
-        }
-        
-        // Since stageHistory is desc (newest first), we need to find the FIRST entry in current month
-        // Reverse to get chronological order (oldest first), then find first entry in month
-        const underContractEntriesAsc = [...underContractEntries].reverse();
-        
-        // Find FIRST entry that falls within the current month (oldest entry in the month)
-        const underContractEntry = underContractEntriesAsc.find(history => {
-          if (!history.changedAt) return false; // Skip if no date
-          const contractDate = new Date(history.changedAt);
-          if (isNaN(contractDate.getTime())) return false; // Skip if invalid date
-          return contractDate >= adminStart.toDate() && contractDate < adminEnd.toDate();
-        });
-        
-        if (!underContractEntry) {
-          console.log(`[Contracts Signed] Lead ${lead.id}: No "Under Contract" entry found in current month`);
-          return false;
-        }
-        
-        const contractDate = new Date(underContractEntry.changedAt);
-        console.log(`[Contracts Signed] Lead ${lead.id}: Under Contract date: ${contractDate.toISOString()}, In current month: true`);
-        
-        // Mark this lead as counted to prevent duplicates
-        uniqueLeadIds.add(lead.id);
+        // If underContractAt exists and date matches, count it
+        // (The field itself indicates it was in ACQUISITIONS when set)
+        console.log(`[Contracts Signed] Lead ${lead.id}: Under Contract date: ${contractDate.toISOString()}, In current month: true, Pipeline: ${pipelineKey || 'unknown'}`);
         return true;
       });
 
@@ -505,12 +461,16 @@ export const metricsService = {
    * @param assignedUserId User ID for personal stats, undefined for team-wide stats
    */
   async calculateAcqKpis(start: Date, end: Date, assignedUserId?: string) {
-    // ✅ Total contracts: Use stageHistory.changedAt from timeline section (when lead entered "Under Contract" stage in ACQUISITIONS pipeline)
-    // For ACQ agent: Count leads assigned to them that entered "Under Contract" in ACQUISITIONS pipeline that month
-    // For Manager: Count leads assigned to ALL ACQ agents that entered "Under Contract" in ACQUISITIONS pipeline that month
+    // ✅ Total contracts: Use customFields.underContractAt from timeline section
+    // For ACQ agent: Count leads assigned to them that have underContractAt date in ACQUISITIONS pipeline that month
+    // For Manager: Count leads assigned to ALL ACQ agents that have underContractAt date in ACQUISITIONS pipeline that month
     const contractsSignedLeads = await prisma.lead.findMany({
       where: {
         leadType: 'SELLER',
+        customFields: {
+          path: ['underContractAt'],
+          not: null
+        },
         ...(assignedUserId 
           ? { assignedUserId } 
           : {
@@ -526,77 +486,37 @@ export const metricsService = {
       },
       select: { 
         id: true,
-        stageHistory: {
+        customFields: true,
+        pipelineStage: {
           select: {
-            toStageId: true,
-            changedAt: true,
-            toStage: {
+            pipeline: {
               select: {
-                name: true,
-                pipeline: {
-                  select: {
-                    key: true
-                  }
-                }
+                key: true
               }
             }
-          },
-          orderBy: {
-            changedAt: 'desc' // Newest first to find most recent entry
           }
         }
       }
     });
 
-    // Filter by date range (current month) - Check stageHistory.changedAt from timeline section
-    // Use Set to ensure each lead is counted only once (prevent duplicates)
-    const uniqueLeadIds = new Set<string>();
-    
+    // Filter by date range - Check customFields.underContractAt from timeline section
     const contractsSignedThisMonth = contractsSignedLeads.filter(lead => {
-      // Prevent duplicate counting - each lead should be counted only once
-      if (uniqueLeadIds.has(lead.id)) {
-        return false;
-      }
+      const customFields = (lead.customFields as any) || {};
+      const underContractAt = customFields.underContractAt;
       
-      if (!lead.stageHistory || lead.stageHistory.length === 0) return false;
+      if (!underContractAt) return false;
       
-      // stageHistory is already in desc order (newest first) from query
-      // Find ALL entries where lead entered "Under Contract" stage in ACQUISITIONS pipeline
-      // Exclude "Contract Sent" and other non-actual contract stages
-      const underContractEntries = lead.stageHistory.filter(history => {
-        const stageName = (history.toStage?.name || '').toLowerCase();
-        const pipelineKey = history.toStage?.pipeline?.key;
-        
-        // Must be ACQUISITIONS pipeline
-        if (pipelineKey !== 'ACQUISITIONS') return false;
-        
-        // Must include "under contract" but exclude variations like "contract sent", "offer made", etc.
-        const isUnderContract = stageName.includes('under contract') && 
-                                !stageName.includes('contract sent') &&
-                                !stageName.includes('offer') &&
-                                !stageName.includes('pending');
-        
-        return isUnderContract;
-      });
+      // Check if date falls within the date range
+      const contractDate = new Date(underContractAt);
+      if (isNaN(contractDate.getTime())) return false;
       
-      if (underContractEntries.length === 0) return false;
+      const inDateRange = contractDate >= start && contractDate < end;
+      if (!inDateRange) return false;
       
-      // Since stageHistory is desc (newest first), we need to find the FIRST entry in current month
-      // Reverse to get chronological order (oldest first), then find first entry in month
-      const underContractEntriesAsc = [...underContractEntries].reverse();
-      
-      // Find FIRST entry that falls within the current month (oldest entry in the month)
-      const underContractEntry = underContractEntriesAsc.find(history => {
-        if (!history.changedAt) return false; // Skip if no date
-        const contractDate = new Date(history.changedAt);
-        if (isNaN(contractDate.getTime())) return false; // Skip if invalid date
-        return contractDate >= start && contractDate < end;
-      });
-      
-      if (!underContractEntry) return false;
-      
-      // Mark this lead as counted to prevent duplicates
-      uniqueLeadIds.add(lead.id);
+      // Verify this was in ACQUISITIONS pipeline
+      // The underContractAt field is only set when in ACQUISITIONS pipeline, so if it exists, it was in ACQUISITIONS
+      // Even if current stage is not ACQUISITIONS (e.g., moved to DISPOSITIONS),
+      // if underContractAt exists, it means it was signed in ACQUISITIONS pipeline
       return true;
     });
 

@@ -718,6 +718,7 @@ const LeadEdit: React.FC = () => {
         // If successful, clear the previous status and reload lead to get updated timeline dates
         setPreviousPipelineStatus(null);
         await loadLead(); // Reload to get offerMadeAt, underContractAt etc from backend
+        await loadDeal(); // Reload deal data to get updated contractPrice and contractedAt
         
         // CRITICAL: Re-enable autosave after reload completes
         popupOpenRef.current = false;
@@ -1764,6 +1765,7 @@ const LeadEdit: React.FC = () => {
             setPendingPipelineStatus(null);
             setPreviousPipelineStatus(null); // Clear previous status on success
             await loadLead();
+            await loadDeal(); // Reload deal data to get updated contractPrice and contractedAt
           }
           
           // If we have a pending lead status (e.g., user tried to set Lead Status to "Follow Up"),
@@ -5294,6 +5296,7 @@ const LeadEdit: React.FC = () => {
                 // Update previousPipelineStatus to Appointment Complete so if user cancels next popup, it reverts to Appointment Complete
                 setPreviousPipelineStatus(appointmentCompleteStage.id);
                 await loadLead();
+                await loadDeal(); // Reload deal data to get updated contractPrice and contractedAt
               } catch (e: any) {
                 console.error('❌ Failed to move to Appointment Complete:', e);
                 // If moving to Appointment Complete fails, show error
@@ -5319,6 +5322,7 @@ const LeadEdit: React.FC = () => {
                 setPendingPipelineStatus(null);
                 setPreviousPipelineStatus(null);
                 await loadLead();
+                await loadDeal(); // Reload deal data to get updated contractPrice and contractedAt
               } catch (e: any) {
                 if (e?.code === 'VALIDATION_REQUIRED') {
                   const requiredFields: string[] = Array.isArray(e?.requiredFields) ? e.requiredFields : [];
@@ -5460,6 +5464,7 @@ const LeadEdit: React.FC = () => {
                 // Update previousPipelineStatus to Appointment Set so if user cancels next popup, it reverts to Appointment Set (not original stage)
                 setPreviousPipelineStatus(appointmentSetStage.id);
                 await loadLead();
+                await loadDeal(); // Reload deal data to get updated contractPrice and contractedAt
               } catch (e: any) {
                 console.error('❌ Failed to move to Appointment Set:', e);
                 // If moving to Appointment Set fails, show error
@@ -5485,6 +5490,7 @@ const LeadEdit: React.FC = () => {
                 setPendingPipelineStatus(null);
                 setPreviousPipelineStatus(null);
                 await loadLead();
+                await loadDeal(); // Reload deal data to get updated contractPrice and contractedAt
               } catch (e: any) {
                 // If validation still fails, show next required popup
                 if (e?.code === 'VALIDATION_REQUIRED') {
@@ -6226,6 +6232,7 @@ const LeadEdit: React.FC = () => {
                 // Update previousPipelineStatus to Due Diligence Complete so if user cancels next popup, it reverts to Due Diligence Complete
                 setPreviousPipelineStatus(dueDiligenceCompleteStage.id);
                 await loadLead();
+                await loadDeal(); // Reload deal data to get updated contractPrice and contractedAt
               } catch (e: any) {
                 console.error('❌ Failed to move to Due Diligence Complete:', e);
                 // If moving to Due Diligence Complete fails, show error
@@ -6421,6 +6428,7 @@ const LeadEdit: React.FC = () => {
                 // Update previousPipelineStatus to Offer Made so if user cancels next popup, it reverts to Offer Made
                 setPreviousPipelineStatus(offerMadeStage.id);
                 await loadLead();
+                await loadDeal(); // Reload deal data to get updated contractPrice and contractedAt
               } catch (e: any) {
                 console.error('❌ Failed to move to Offer Made:', e);
                 // If moving to Offer Made fails, show error
@@ -6587,6 +6595,7 @@ const LeadEdit: React.FC = () => {
               setPendingPipelineStatus(null);
               setPreviousPipelineStatus(null);
               await loadLead();
+              await loadDeal(); // Reload deal data to get updated contractPrice and contractedAt
             }
             
             // Handle lead status change if that's what triggered this

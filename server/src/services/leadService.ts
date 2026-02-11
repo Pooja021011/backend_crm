@@ -31,46 +31,148 @@ export const leadService = {
       throw error;
     }
     
-    // PRE-UPDATE: Track stage transition dates BEFORE changing stage
-    // This prevents race condition with frontend autosave
-    const toStage = await prisma.pipelineStage.findUnique({
-      where: { id: toStageId },
-      select: { name: true }
+    // Get current and new stages with orderIndex and pipeline info
+    const [currentStage, toStage] = await Promise.all([
+      currentLead?.pipelineStageId 
+        ? prisma.pipelineStage.findUnique({
+            where: { id: currentLead.pipelineStageId },
+            select: { 
+              name: true, 
+              orderIndex: true,
+              pipeline: { select: { key: true } }
+            }
+          })
+        : null,
+      prisma.pipelineStage.findUnique({
+        where: { id: toStageId },
+        select: { 
+          name: true, 
+          orderIndex: true,
+          pipeline: { select: { key: true } }
+        }
+      })
+    ]);
+    
+    // CRITICAL: Re-fetch customFields to ensure we have latest data
+    const freshLead = await prisma.lead.findUnique({
+      where: { id: leadId },
+      select: { customFields: true }
     });
     
+    const currentCustomFields = (freshLead?.customFields as any) || {};
+    const dateFieldsToUpdate: any = {};
+    
+    // Check if moving backwards and if it's ACQUISITIONS pipeline
+    const isMovingBackwards = currentStage && toStage && 
+      toStage.orderIndex < currentStage.orderIndex;
+    // CRITICAL: Only clear data when BOTH stages are in ACQUISITIONS pipeline
+    // Don't clear when moving to/from DISPOSITIONS or TRANSACTION pipelines
+    const isAcquisitionsPipeline = currentStage?.pipeline?.key === 'ACQUISITIONS' && 
+                                    toStage?.pipeline?.key === 'ACQUISITIONS';
+    
+    // BACKWARD MOVEMENT: Clear timeline dates in reverse order (ACQUISITIONS only)
+    if (isMovingBackwards && isAcquisitionsPipeline && currentStage && toStage) {
+      const currentOrderIndex = currentStage.orderIndex;
+      const toOrderIndex = toStage.orderIndex;
+      
+      // Rule 1: Clear underContractAt if moving from Under Contract (orderIndex >= 8) to earlier stage
+      if (currentOrderIndex >= 8 && toOrderIndex < 8) {
+        dateFieldsToUpdate.underContractAt = null;
+      }
+      
+      // Rule 2: Clear offerMadeAt if moving from Offer Made or later (orderIndex >= 6) to earlier stage
+      if (currentOrderIndex >= 6 && toOrderIndex < 6) {
+        dateFieldsToUpdate.offerMadeAt = null;
+      }
+      
+      // Rule 3: Clear appointmentDate if moving from Appointment Set/Complete (orderIndex >= 3) to earlier stage
+      if (currentOrderIndex >= 3 && toOrderIndex < 3) {
+        dateFieldsToUpdate.appointmentDate = null;
+      }
+    }
+    
+    // FORWARD MOVEMENT: Set timeline dates when moving forward (ACQUISITIONS only)
     if (toStage) {
       const stageName = (toStage.name || '').toLowerCase();
-      // CRITICAL: Re-fetch customFields to ensure we have latest data
-      // This prevents overwriting recently saved data (e.g., from frontend autosave)
-      const freshLead = await prisma.lead.findUnique({
+      const isAcqPipeline = toStage.pipeline?.key === 'ACQUISITIONS';
+      
+      // Track "Appointment Set" stage transition (orderIndex 3)
+      // Set appointmentDate when moving to Appointment Set (first time appointment is scheduled)
+      if (isAcqPipeline && 
+          stageName.includes('appointment') && 
+          stageName.includes('set') &&
+          !stageName.includes('complete') &&
+          !currentCustomFields.appointmentDate) {
+        dateFieldsToUpdate.appointmentDate = new Date().toISOString();
+      }
+      
+      // Track "Appointment Complete" stage transition (orderIndex 4)
+      // If appointmentDate doesn't exist, set it (in case someone moves directly to Appointment Complete)
+      // Otherwise, keep the original appointmentDate from Appointment Set
+      if (isAcqPipeline && 
+          stageName.includes('appointment') && 
+          stageName.includes('complete') &&
+          !currentCustomFields.appointmentDate) {
+        dateFieldsToUpdate.appointmentDate = new Date().toISOString();
+      }
+      
+      // Track "Offer Made" stage transition (orderIndex 6)
+      // Set offerMadeAt when moving to Offer Made stage
+      if (isAcqPipeline &&
+          stageName.includes('offer') && 
+          stageName.includes('made') && 
+          !currentCustomFields.offerMadeAt) {
+        dateFieldsToUpdate.offerMadeAt = new Date().toISOString();
+      }
+      
+      // Track "Under Contract" stage transition (orderIndex 8)
+      // Set underContractAt when moving to Under Contract stage
+      if (isAcqPipeline &&
+          stageName.includes('contract') && 
+          !stageName.includes('offer') && 
+          !stageName.includes('sent') && 
+          !currentCustomFields.underContractAt) {
+        dateFieldsToUpdate.underContractAt = new Date().toISOString();
+        
+        // CRITICAL: If moving directly to "Under Contract" (skipping "Offer Made"),
+        // also set offerMadeAt if it doesn't exist (logically, you can't be under contract without making an offer)
+        if (!currentCustomFields.offerMadeAt) {
+          dateFieldsToUpdate.offerMadeAt = new Date().toISOString();
+        }
+        
+        // CRITICAL: If moving directly to "Under Contract" (skipping "Appointment Set/Complete"),
+        // also set appointmentDate if it doesn't exist (logically, you need appointment before contract)
+        if (!currentCustomFields.appointmentDate) {
+          dateFieldsToUpdate.appointmentDate = new Date().toISOString();
+        }
+      }
+    }
+    
+    // Update customFields BEFORE stage change to avoid race condition
+    if (Object.keys(dateFieldsToUpdate).length > 0) {
+      // Fetch current customFields to merge properly
+      const currentLeadForUpdate = await prisma.lead.findUnique({
         where: { id: leadId },
         select: { customFields: true }
       });
       
-      const currentCustomFields = (freshLead?.customFields as any) || {};
-      const dateFieldsToAdd: any = {};
+      const existingCustomFields = (currentLeadForUpdate?.customFields as any) || {};
       
-      // Track "Offer Made" stage transition
-      if (stageName.includes('offer') && stageName.includes('made') && !currentCustomFields.offerMadeAt) {
-        dateFieldsToAdd.offerMadeAt = new Date().toISOString();
-      }
+      // Merge existing fields with updates
+      // Explicitly set null values to clear fields (don't delete keys, set to null)
+      const mergedCustomFields: any = { ...existingCustomFields };
       
-      // Track "Under Contract" stage transition
-      // Only set when moving to actual "Under Contract" stage, NOT "Contract Sent"
-      if (stageName.includes('contract') && 
-          !stageName.includes('offer') && 
-          !stageName.includes('sent') && 
-          !currentCustomFields.underContractAt) {
-        dateFieldsToAdd.underContractAt = new Date().toISOString();
-      }
+      // Apply all updates (including null values to clear fields)
+      Object.keys(dateFieldsToUpdate).forEach(key => {
+        mergedCustomFields[key] = dateFieldsToUpdate[key];
+      });
       
-      // Update customFields BEFORE stage change to avoid race condition
-      // CRITICAL: Send ONLY the new date fields - leadRepository.update will merge with existing data
-      if (Object.keys(dateFieldsToAdd).length > 0) {
-        await leadRepository.update(leadId, { 
-          customFields: dateFieldsToAdd  // Only the new date fields - merge will preserve rest
-        });
-      }
+      // Update using Prisma directly to ensure JSON field is properly updated
+      // This bypasses the repository merge logic to have full control
+      await prisma.lead.update({
+        where: { id: leadId },
+        data: { customFields: mergedCustomFields }
+      });
     }
     
     // EXISTING LOGIC - Change the stage
@@ -80,7 +182,21 @@ export const leadService = {
     const stage = updated?.pipelineStage;
     const name = (stage?.name || '').toLowerCase();
     
-    if (name.includes('contract') && !name.includes('offer')) {
+    // Clear deal.contractedAt and contractPrice if underContractAt was cleared (backward movement in ACQUISITIONS only)
+    // CRITICAL: Only clear when BOTH stages are in ACQUISITIONS pipeline
+    if (isMovingBackwards && isAcquisitionsPipeline && currentStage && toStage) {
+      const currentOrderIndex = currentStage.orderIndex;
+      const toOrderIndex = toStage.orderIndex;
+      
+      if (currentOrderIndex >= 8 && toOrderIndex < 8) {
+        // Clear both contractedAt and contractPrice when moving backwards from Under Contract
+        await dealRepository.upsertByLeadId(leadId, { 
+          contractedAt: null,
+          contractPrice: null 
+        });
+      }
+    } else if (name.includes('contract') && !name.includes('offer')) {
+      // Set deal.contractedAt when moving forward to Under Contract
       await dealRepository.upsertByLeadId(leadId, { contractedAt: new Date() });
     }
     
