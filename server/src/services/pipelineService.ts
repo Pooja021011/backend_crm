@@ -1708,6 +1708,18 @@ export const pipelineService = {
         
         // Filter leads based on ALL roles the user has (combined approach)
         const filteredLeads = transformedLeads.filter(lead => {
+          // EXCLUDE: Under Contract leads should never be in Needs Attention
+          // Only exclude actual "Under Contract" stage, not "Contract Sent" or "Offer" stages
+          const stageName = (lead.stageName || lead.pipelineStage?.name || '').toLowerCase();
+          const isUnderContract = stageName.includes('under contract') && 
+                                  !stageName.includes('contract sent') &&
+                                  !stageName.includes('offer') &&
+                                  !stageName.includes('pending');
+          
+          if (isUnderContract) {
+            return false; // Exclude Under Contract leads from Needs Attention filter
+          }
+          
           let meetsAdminCriteria = false;
           let meetsManagerCriteria = false;
           let meetsAcqCriteria = false;
