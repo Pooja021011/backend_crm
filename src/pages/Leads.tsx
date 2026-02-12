@@ -465,29 +465,73 @@ const Leads = () => {
     
     if (selectedDateRange) {
       const now = new Date();
-      const filterDate = new Date();
       
       switch (selectedDateRange) {
-        case 'today':
-          filterDate.setHours(0, 0, 0, 0);
-          filteredLeads = filteredLeads.filter(lead => new Date(lead.createdAt) >= filterDate);
+        case 'today': {
+          const startDate = new Date(now);
+          startDate.setHours(0, 0, 0, 0);
+          const endDate = new Date(now);
+          endDate.setHours(23, 59, 59, 999);
+          
+          filteredLeads = filteredLeads.filter((lead) => {
+            const createdAt = new Date(lead.createdAt);
+            return createdAt >= startDate && createdAt <= endDate;
+          });
           break;
-        case 'week':
-          filterDate.setDate(now.getDate() - 7);
-          filteredLeads = filteredLeads.filter(lead => new Date(lead.createdAt) >= filterDate);
+        }
+        case 'week': {
+          const startDate = new Date(now);
+          startDate.setDate(now.getDate() - 7);
+          startDate.setHours(0, 0, 0, 0);
+          const endDate = new Date(now);
+          endDate.setHours(23, 59, 59, 999);
+          
+          filteredLeads = filteredLeads.filter((lead) => {
+            const createdAt = new Date(lead.createdAt);
+            return createdAt >= startDate && createdAt <= endDate;
+          });
           break;
-        case 'month':
-          filterDate.setMonth(now.getMonth() - 1);
-          filteredLeads = filteredLeads.filter(lead => new Date(lead.createdAt) >= filterDate);
+        }
+        case 'month': {
+          // Set start date to 1st of current month at 00:00:00
+          const startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          startDate.setHours(0, 0, 0, 0);
+          
+          // Set end date to last day of current month at 23:59:59
+          const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+          endDate.setHours(23, 59, 59, 999);
+          
+          filteredLeads = filteredLeads.filter((lead) => {
+            const createdAt = new Date(lead.createdAt);
+            return createdAt >= startDate && createdAt <= endDate;
+          });
           break;
-        case 'quarter':
-          filterDate.setMonth(now.getMonth() - 3);
-          filteredLeads = filteredLeads.filter(lead => new Date(lead.createdAt) >= filterDate);
+        }
+        case 'quarter': {
+          const currentQuarter = Math.floor(now.getMonth() / 3);
+          const startDate = new Date(now.getFullYear(), currentQuarter * 3, 1);
+          startDate.setHours(0, 0, 0, 0);
+          const endDate = new Date(now.getFullYear(), currentQuarter * 3 + 3, 0);
+          endDate.setHours(23, 59, 59, 999);
+          
+          filteredLeads = filteredLeads.filter((lead) => {
+            const createdAt = new Date(lead.createdAt);
+            return createdAt >= startDate && createdAt <= endDate;
+          });
           break;
-        case 'year':
-          filterDate.setFullYear(now.getFullYear(), 0, 1);
-          filteredLeads = filteredLeads.filter(lead => new Date(lead.createdAt) >= filterDate);
+        }
+        case 'year': {
+          const startDate = new Date(now.getFullYear(), 0, 1);
+          startDate.setHours(0, 0, 0, 0);
+          const endDate = new Date(now.getFullYear(), 11, 31);
+          endDate.setHours(23, 59, 59, 999);
+          
+          filteredLeads = filteredLeads.filter((lead) => {
+            const createdAt = new Date(lead.createdAt);
+            return createdAt >= startDate && createdAt <= endDate;
+          });
           break;
+        }
         case 'custom': {
           const from = customDateFrom ? new Date(customDateFrom) : null;
           const to = customDateTo ? new Date(customDateTo) : null;
