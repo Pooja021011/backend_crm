@@ -602,18 +602,19 @@ export const metricsService = {
     const totalContracts = contractsSignedThisMonth.length;
 
     // Leads received this month
-    // For Manager (assignedUserId undefined): Count ALL SELLER leads created in ACQUISITIONS pipeline in the month
+    // For Manager (assignedUserId undefined): Count ALL SELLER leads created in current month (by createdAt date)
+    // This matches the Leads page filter logic - count all leads created in the month, regardless of current pipelineStage
     // For ACQ Agent: Count leads assigned to that agent
     let leadsReceived: any[];
     if (assignedUserId === undefined) {
-      // Manager: Count ALL leads, not filtered by assignedUser
+      // Manager: Count ALL SELLER leads created in current month (by createdAt)
+      // Don't filter by pipelineStage - count all leads created in the month (matches Leads page "This Month" filter)
       leadsReceived = await prisma.lead.findMany({
         where: {
           createdAt: { gte: start, lt: end },
           leadType: 'SELLER',
-          pipelineStage: {
-            pipeline: { key: 'ACQUISITIONS' }
-          }
+          // Remove pipelineStage filter to match Leads page behavior
+          // Leads page counts all SELLER leads created in month, regardless of current pipelineStage
         },
         select: { id: true, createdAt: true, updatedAt: true }
       });
