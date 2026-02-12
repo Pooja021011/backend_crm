@@ -254,6 +254,7 @@ export const metricsService = {
     // Role-based KPIs with priority: Admin > Manager > ACQ
     // Priority order: Admin (highest) > Manager > ACQ (lowest)
     // If user has multiple roles, highest priority applies
+    // IMPORTANT: Use if-else chain to ensure only one role's KPIs are calculated
     
     // ADMIN KPIs (company-wide) - Highest Priority
     if (isAdmin) {
@@ -396,9 +397,11 @@ export const metricsService = {
       // 2. Leads per contract: Ratio of leads to contracts (format: 00.00)
       // Example: 70 leads received, 4 contracts = 17.50 (70 / 4 = 17.5)
       // Format as 00.00 (e.g., 17.50, 10.00, 5.50)
+      console.log(`[Manager KPIs] leadsReceived: ${managerData.leadsReceived}, totalContracts: ${managerData.totalContracts}`);
       const leadsPerContract = managerData.leadsReceived > 0 && managerData.totalContracts > 0
         ? managerData.leadsReceived / managerData.totalContracts
         : 0;
+      console.log(`[Manager KPIs] Calculated leadsPerContract: ${leadsPerContract}, Final: ${Number(leadsPerContract.toFixed(2))}`);
       result.leadsPerContract = Number(leadsPerContract.toFixed(2));
       
       // 3. Number of leads mishandled: Combined for ALL ACQ agents
