@@ -620,12 +620,16 @@ export const metricsService = {
         select: { id: true, createdAt: true, updatedAt: true }
       });
     } else {
-      // ACQ Agent: Count only their assigned leads
-      leadsReceived = await metricsRepository.getLeadsCreatedBetweenScoped(start, end, {
-        pipelineKey: 'ACQUISITIONS',
-        leadType: 'SELLER',
-        assignedUserId,
-        onlyPipelineStatus: false,
+      // ACQ Agent: Count only their assigned leads created in current month (by createdAt date)
+      // Don't filter by pipelineStage - count all SELLER leads assigned to this agent (matches Leads page behavior)
+      leadsReceived = await prisma.lead.findMany({
+        where: {
+          createdAt: { gte: start, lt: end },
+          leadType: 'SELLER',
+          assignedUserId,
+          // Remove pipelineStage filter to match Leads page - count all leads regardless of current pipelineStage
+        },
+        select: { id: true, createdAt: true, updatedAt: true }
       });
     }
     const leadsReceivedCount = leadsReceived.length;
