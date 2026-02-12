@@ -604,10 +604,10 @@ export const metricsService = {
     // Leads received this month
     // For Manager (assignedUserId undefined): Count ALL SELLER leads created in ACQUISITIONS pipeline in the month
     // For ACQ Agent: Count leads assigned to that agent
-    let leadsReceivedCount: number;
+    let leadsReceived: any[];
     if (assignedUserId === undefined) {
       // Manager: Count ALL leads, not filtered by assignedUser
-      const allLeads = await prisma.lead.findMany({
+      leadsReceived = await prisma.lead.findMany({
         where: {
           createdAt: { gte: start, lt: end },
           leadType: 'SELLER',
@@ -615,19 +615,18 @@ export const metricsService = {
             pipeline: { key: 'ACQUISITIONS' }
           }
         },
-        select: { id: true }
+        select: { id: true, createdAt: true, updatedAt: true }
       });
-      leadsReceivedCount = allLeads.length;
     } else {
       // ACQ Agent: Count only their assigned leads
-      const leadsReceived = await metricsRepository.getLeadsCreatedBetweenScoped(start, end, {
+      leadsReceived = await metricsRepository.getLeadsCreatedBetweenScoped(start, end, {
         pipelineKey: 'ACQUISITIONS',
         leadType: 'SELLER',
         assignedUserId,
         onlyPipelineStatus: false,
       });
-      leadsReceivedCount = leadsReceived.length;
     }
+    const leadsReceivedCount = leadsReceived.length;
 
     // Leads per contract ratio: Will be calculated in Manager section
     // For Manager: (contracts / leadsReceived) * 100, format 00.00
