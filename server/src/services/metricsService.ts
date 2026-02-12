@@ -602,11 +602,13 @@ export const metricsService = {
     const totalContracts = contractsSignedThisMonth.length;
 
     // Leads received this month (assigned to ACQ agent)
+    // For Manager: Count ALL leads created in the month (not just Pipeline status)
+    // For ACQ Agent: Count ALL leads created in the month (not just Pipeline status)
     const leadsReceived = await metricsRepository.getLeadsCreatedBetweenScoped(start, end, {
       pipelineKey: 'ACQUISITIONS',
       leadType: 'SELLER',
       assignedUserId,
-      onlyPipelineStatus: true,
+      onlyPipelineStatus: false, // Changed: Count all leads, not just Pipeline status
     });
     const leadsReceivedCount = leadsReceived.length;
 
