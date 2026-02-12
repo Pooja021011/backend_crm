@@ -466,6 +466,16 @@ const Leads = () => {
     if (selectedDateRange) {
       const now = new Date();
       
+      // Check if "Under Contract" stage is selected - if so, use underContractAt date instead of createdAt
+      const isUnderContractStageSelected = selectedPipelineStatuses.length > 0 && 
+        pipelineStages.some(stage => 
+          selectedPipelineStatuses.includes(stage.id) && 
+          stage.name?.toLowerCase().includes('under contract') &&
+          !stage.name?.toLowerCase().includes('contract sent') &&
+          !stage.name?.toLowerCase().includes('offer') &&
+          !stage.name?.toLowerCase().includes('pending')
+        );
+      
       switch (selectedDateRange) {
         case 'today': {
           const startDate = new Date(now);
@@ -473,7 +483,17 @@ const Leads = () => {
           const endDate = new Date(now);
           endDate.setHours(23, 59, 59, 999);
           
-          filteredLeads = filteredLeads.filter((lead) => {
+          filteredLeads = filteredLeads.filter((lead: any) => {
+            // If "Under Contract" stage is selected, use underContractAt date
+            if (isUnderContractStageSelected) {
+              const customFields = lead.customFields || {};
+              const underContractAt = customFields.underContractAt;
+              if (!underContractAt) return false;
+              const contractDate = new Date(underContractAt);
+              if (isNaN(contractDate.getTime())) return false;
+              return contractDate >= startDate && contractDate <= endDate;
+            }
+            // Otherwise use createdAt
             const createdAt = new Date(lead.createdAt);
             return createdAt >= startDate && createdAt <= endDate;
           });
@@ -486,7 +506,17 @@ const Leads = () => {
           const endDate = new Date(now);
           endDate.setHours(23, 59, 59, 999);
           
-          filteredLeads = filteredLeads.filter((lead) => {
+          filteredLeads = filteredLeads.filter((lead: any) => {
+            // If "Under Contract" stage is selected, use underContractAt date
+            if (isUnderContractStageSelected) {
+              const customFields = lead.customFields || {};
+              const underContractAt = customFields.underContractAt;
+              if (!underContractAt) return false;
+              const contractDate = new Date(underContractAt);
+              if (isNaN(contractDate.getTime())) return false;
+              return contractDate >= startDate && contractDate <= endDate;
+            }
+            // Otherwise use createdAt
             const createdAt = new Date(lead.createdAt);
             return createdAt >= startDate && createdAt <= endDate;
           });
@@ -501,7 +531,17 @@ const Leads = () => {
           const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
           endDate.setHours(23, 59, 59, 999);
           
-          filteredLeads = filteredLeads.filter((lead) => {
+          filteredLeads = filteredLeads.filter((lead: any) => {
+            // If "Under Contract" stage is selected, use underContractAt date
+            if (isUnderContractStageSelected) {
+              const customFields = lead.customFields || {};
+              const underContractAt = customFields.underContractAt;
+              if (!underContractAt) return false;
+              const contractDate = new Date(underContractAt);
+              if (isNaN(contractDate.getTime())) return false;
+              return contractDate >= startDate && contractDate <= endDate;
+            }
+            // Otherwise use createdAt
             const createdAt = new Date(lead.createdAt);
             return createdAt >= startDate && createdAt <= endDate;
           });
@@ -514,7 +554,17 @@ const Leads = () => {
           const endDate = new Date(now.getFullYear(), currentQuarter * 3 + 3, 0);
           endDate.setHours(23, 59, 59, 999);
           
-          filteredLeads = filteredLeads.filter((lead) => {
+          filteredLeads = filteredLeads.filter((lead: any) => {
+            // If "Under Contract" stage is selected, use underContractAt date
+            if (isUnderContractStageSelected) {
+              const customFields = lead.customFields || {};
+              const underContractAt = customFields.underContractAt;
+              if (!underContractAt) return false;
+              const contractDate = new Date(underContractAt);
+              if (isNaN(contractDate.getTime())) return false;
+              return contractDate >= startDate && contractDate <= endDate;
+            }
+            // Otherwise use createdAt
             const createdAt = new Date(lead.createdAt);
             return createdAt >= startDate && createdAt <= endDate;
           });
@@ -526,7 +576,17 @@ const Leads = () => {
           const endDate = new Date(now.getFullYear(), 11, 31);
           endDate.setHours(23, 59, 59, 999);
           
-          filteredLeads = filteredLeads.filter((lead) => {
+          filteredLeads = filteredLeads.filter((lead: any) => {
+            // If "Under Contract" stage is selected, use underContractAt date
+            if (isUnderContractStageSelected) {
+              const customFields = lead.customFields || {};
+              const underContractAt = customFields.underContractAt;
+              if (!underContractAt) return false;
+              const contractDate = new Date(underContractAt);
+              if (isNaN(contractDate.getTime())) return false;
+              return contractDate >= startDate && contractDate <= endDate;
+            }
+            // Otherwise use createdAt
             const createdAt = new Date(lead.createdAt);
             return createdAt >= startDate && createdAt <= endDate;
           });
@@ -538,7 +598,19 @@ const Leads = () => {
           if (from) from.setHours(0, 0, 0, 0);
           if (to) to.setHours(23, 59, 59, 999);
 
-          filteredLeads = filteredLeads.filter((lead) => {
+          filteredLeads = filteredLeads.filter((lead: any) => {
+            // If "Under Contract" stage is selected, use underContractAt date
+            if (isUnderContractStageSelected) {
+              const customFields = lead.customFields || {};
+              const underContractAt = customFields.underContractAt;
+              if (!underContractAt) return false;
+              const contractDate = new Date(underContractAt);
+              if (isNaN(contractDate.getTime())) return false;
+              if (from && contractDate < from) return false;
+              if (to && contractDate > to) return false;
+              return true;
+            }
+            // Otherwise use createdAt
             const createdAt = new Date(lead.createdAt);
             if (from && createdAt < from) return false;
             if (to && createdAt > to) return false;
@@ -555,7 +627,7 @@ const Leads = () => {
     }
     
     return filteredLeads;
-  }, [getLeadsByType, activeTab, searchQuery, searchLeads, selectedMarkets, selectedStatuses, selectedPipelineStatuses, selectedDateRange, customDateFrom, customDateTo, selectedAgents, selectedLeadSources, sortConfig, sortLeads]);
+  }, [getLeadsByType, activeTab, searchQuery, searchLeads, selectedMarkets, selectedStatuses, selectedPipelineStatuses, selectedDateRange, customDateFrom, customDateTo, selectedAgents, selectedLeadSources, sortConfig, sortLeads, pipelineStages]);
 
   const getLeadCount = (type: "SELLER" | "BUYER" | "VENDOR") => {
     // Count all leads of this type from the main leads array (not filtered by role)
