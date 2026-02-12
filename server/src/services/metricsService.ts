@@ -264,11 +264,46 @@ export const metricsService = {
       const adminEnd = now.endOf('month');
       
       // 1. Total number of contracts signed: Acquisitions Team signed that month
-      // Use customFields.underContractAt from timeline section (when lead first entered "Under Contract" stage in ACQUISITIONS pipeline)
-      // Fetch ALL SELLER leads that have underContractAt date set
+      // FIX: First find currently "Under Contract" stage IDs, then check their underContractAt date
+      // This ensures consistency with Lead page filter (current stage based)
+      
+      // Find all "Under Contract" stages in ACQUISITIONS pipeline
+      const underContractStages = await prisma.pipelineStage.findMany({
+        where: {
+          pipeline: {
+            key: 'ACQUISITIONS'
+          },
+          name: {
+            contains: 'under contract',
+            mode: 'insensitive'
+          }
+        },
+        select: {
+          id: true,
+          name: true
+        }
+      });
+
+      // Filter out "Contract Sent", "Offer", "Pending" variations
+      const actualUnderContractStages = underContractStages.filter(stage => {
+        const stageName = (stage.name || '').toLowerCase();
+        return (
+          stageName.includes('under contract') &&
+          !stageName.includes('contract sent') &&
+          !stageName.includes('offer') &&
+          !stageName.includes('pending')
+        );
+      });
+
+      const underContractStageIds = actualUnderContractStages.map(s => s.id);
+
+      // Fetch leads that are CURRENTLY in "Under Contract" stage
       const contractsSignedLeads = await prisma.lead.findMany({
         where: {
           leadType: 'SELLER',
+          pipelineStageId: {
+            in: underContractStageIds
+          },
           customFields: {
             path: ['underContractAt'],
             not: null
@@ -279,6 +314,8 @@ export const metricsService = {
           customFields: true,
           pipelineStage: {
             select: {
+              id: true,
+              name: true,
               pipeline: {
                 select: {
                   key: true
@@ -306,14 +343,14 @@ export const metricsService = {
         const inDateRange = contractDate >= adminStart.toDate() && contractDate < adminEnd.toDate();
         if (!inDateRange) return false;
         
-        // Verify this was in ACQUISITIONS pipeline
-        // The underContractAt field is only set when in ACQUISITIONS pipeline, so if it exists, it was in ACQUISITIONS
-        // But we can also check current pipeline for additional verification
+        // Verify this is in ACQUISITIONS pipeline (should already be filtered by stage, but double-check)
         const pipelineKey = lead.pipelineStage?.pipeline?.key;
+        if (pipelineKey !== 'ACQUISITIONS') {
+          console.log(`[Contracts Signed] Lead ${lead.id}: Not in ACQUISITIONS pipeline, skipping`);
+          return false;
+        }
         
-        // If underContractAt exists and date matches, count it
-        // (The field itself indicates it was in ACQUISITIONS when set)
-        console.log(`[Contracts Signed] Lead ${lead.id}: Under Contract date: ${contractDate.toISOString()}, In current month: true, Pipeline: ${pipelineKey || 'unknown'}`);
+        console.log(`[Contracts Signed] Lead ${lead.id}: Under Contract date: ${contractDate.toISOString()}, In current month: true, Current Stage: ${lead.pipelineStage?.name || 'Unknown'}`);
         return true;
       });
 
@@ -462,11 +499,46 @@ export const metricsService = {
    */
   async calculateAcqKpis(start: Date, end: Date, assignedUserId?: string) {
     // ✅ Total contracts: Use customFields.underContractAt from timeline section
-    // For ACQ agent: Count leads assigned to them that have underContractAt date in ACQUISITIONS pipeline that month
-    // For Manager: Count leads assigned to ALL ACQ agents that have underContractAt date in ACQUISITIONS pipeline that month
+    // FIX: First find currently "Under Contract" stage IDs, then check their underContractAt date
+    // This ensures consistency with Lead page filter (current stage based)
+    
+    // Find all "Under Contract" stages in ACQUISITIONS pipeline
+    const underContractStages = await prisma.pipelineStage.findMany({
+      where: {
+        pipeline: {
+          key: 'ACQUISITIONS'
+        },
+        name: {
+          contains: 'under contract',
+          mode: 'insensitive'
+        }
+      },
+      select: {
+        id: true,
+        name: true
+      }
+    });
+
+    // Filter out "Contract Sent", "Offer", "Pending" variations
+    const actualUnderContractStages = underContractStages.filter(stage => {
+      const stageName = (stage.name || '').toLowerCase();
+      return (
+        stageName.includes('under contract') &&
+        !stageName.includes('contract sent') &&
+        !stageName.includes('offer') &&
+        !stageName.includes('pending')
+      );
+    });
+
+    const underContractStageIds = actualUnderContractStages.map(s => s.id);
+
+    // Fetch leads that are CURRENTLY in "Under Contract" stage
     const contractsSignedLeads = await prisma.lead.findMany({
       where: {
         leadType: 'SELLER',
+        pipelineStageId: {
+          in: underContractStageIds
+        },
         customFields: {
           path: ['underContractAt'],
           not: null
@@ -489,6 +561,8 @@ export const metricsService = {
         customFields: true,
         pipelineStage: {
           select: {
+            id: true,
+            name: true,
             pipeline: {
               select: {
                 key: true
@@ -513,10 +587,12 @@ export const metricsService = {
       const inDateRange = contractDate >= start && contractDate < end;
       if (!inDateRange) return false;
       
-      // Verify this was in ACQUISITIONS pipeline
-      // The underContractAt field is only set when in ACQUISITIONS pipeline, so if it exists, it was in ACQUISITIONS
-      // Even if current stage is not ACQUISITIONS (e.g., moved to DISPOSITIONS),
-      // if underContractAt exists, it means it was signed in ACQUISITIONS pipeline
+      // Verify this is in ACQUISITIONS pipeline (should already be filtered by stage, but double-check)
+      const pipelineKey = lead.pipelineStage?.pipeline?.key;
+      if (pipelineKey !== 'ACQUISITIONS') {
+        return false;
+      }
+      
       return true;
     });
 
