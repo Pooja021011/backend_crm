@@ -540,17 +540,17 @@ export const DashboardHeader = () => {
                 <>
                   <div className="h-8 w-px bg-white/30 flex-shrink-0" /> {/* Separator */}
                   <KPICard
-                    title="CONTRACTS (TEAM)"
+                    title="CONTRACTS"
                     value={isLoadingKpis ? "..." : String(kpiData.totalContracts || 0)}
                     color="orange"
                   />
                   <KPICard
-                    title="LEADS/CONTRACT (TEAM)"
+                    title="LEADS/CONTRACT"
                     value={isLoadingKpis ? "..." : formatPct2(kpiData.leadsPerContract)}
                     color="orange"
                   />
                   <KPICard
-                    title="MISHANDLED (TEAM)"
+                    title="MISHANDLED"
                     value={isLoadingKpis ? "..." : String(kpiData.leadsMishandled || 0)}
                     color={kpiData.mishandledColor || 'green'}
                   />

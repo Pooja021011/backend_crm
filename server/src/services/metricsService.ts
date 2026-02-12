@@ -393,13 +393,13 @@ export const metricsService = {
       // 1. Total contracts for the month: All ACQ agents' leads under contract that month
       result.totalContracts = managerData.totalContracts;
       
-      // 2. Leads per contract: Ratio of contracts to leads received (format: 00.00)
-      // Example: 100 leads received, 10 contracts = 10.00 (10 contracts per 100 leads)
-      // Format as 00.00 (e.g., 10.00, 5.50, 0.10)
-      const contractsPer100Leads = managerData.leadsReceived > 0
-        ? (managerData.totalContracts / managerData.leadsReceived) * 100
+      // 2. Leads per contract: Ratio of leads to contracts (format: 00.00)
+      // Example: 70 leads received, 4 contracts = 17.50 (70 / 4 = 17.5)
+      // Format as 00.00 (e.g., 17.50, 10.00, 5.50)
+      const leadsPerContract = managerData.leadsReceived > 0 && managerData.totalContracts > 0
+        ? managerData.leadsReceived / managerData.totalContracts
         : 0;
-      result.leadsPerContract = Number(contractsPer100Leads.toFixed(2));
+      result.leadsPerContract = Number(leadsPerContract.toFixed(2));
       
       // 3. Number of leads mishandled: Combined for ALL ACQ agents
       // - New leads that month that have gone 2/16 hours without being touched
