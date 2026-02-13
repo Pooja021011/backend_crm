@@ -699,6 +699,7 @@ export const metricsService = {
       assignedUserId,
       onlyPipelineStatus: true,
       includePipelineStage: true,
+      includeOutboundCommunications: true, // Include OUTBOUND communications for SLA breach check
     });
 
     const nowDt = new Date();
@@ -737,25 +738,36 @@ export const metricsService = {
       });
     }
 
-    // SLA breaches for leads created this month (2h/16h/48h ET) using lastContactAt (no fallback)
+    // SLA breaches for leads created this month (2h/16h/48h ET) - Only OUTBOUND communications count as "reach out"
     const createdThisMonthIds = new Set(leadsReceived.map((l) => l.id));
     const slaBreaches = activeLeads.filter((l) => {
       if (!createdThisMonthIds.has(l.id)) return false;
-      // Use lastContactAt only (no fallback to updatedAt or other fields)
-      if (!l.lastContactAt) {
-        // If never contacted, check if threshold exceeded
-        const thresholdHours = getSlaThresholdHoursEt(l.createdAt);
+      
+      // Get the FIRST OUTBOUND communication (CALL/SMS/EMAIL only) for SLA breach check
+      // Communications are ordered by occurredAt asc, so [0] is the first/earliest
+      const allOutboundComms = (l as any).communications || [];
+      const firstOutboundComm = allOutboundComms[0]; // First in asc order = earliest
+      const firstOutboundAt = firstOutboundComm?.occurredAt ? new Date(firstOutboundComm.occurredAt) : null;
+      
+      const thresholdHours = getSlaThresholdHoursEt(l.createdAt);
+      
+      if (!firstOutboundAt) {
+        // If never reached out (no OUTBOUND communication), check if threshold exceeded
         const hoursSinceCreation = (nowDt.getTime() - l.createdAt.getTime()) / (1000 * 60 * 60);
         return hoursSinceCreation > thresholdHours;
       }
-      // If contacted, check if contact happened within threshold
-      const thresholdHours = getSlaThresholdHoursEt(l.createdAt);
-      const hoursToTouch = (l.lastContactAt.getTime() - l.createdAt.getTime()) / (1000 * 60 * 60);
-      return hoursToTouch > thresholdHours;
+      
+      // If reached out (OUTBOUND), check if FIRST reach out happened within threshold
+      // Calculate time from lead creation to FIRST outbound contact
+      const leadCreatedAt = new Date(l.createdAt);
+      const hoursToReachOut = (firstOutboundAt.getTime() - leadCreatedAt.getTime()) / (1000 * 60 * 60);
+      
+      // Only count as breach if the FIRST contact happened AFTER the threshold
+      return hoursToReachOut > thresholdHours;
     }).length;
 
     // 48h stale across leads in pipeline status "No contact made" through "contract sent"
-    // that have gone 48 hours without being reached out to
+    // that have gone 48 hours without being reached out to (OUTBOUND only)
     const stale48h = activeLeads.filter((l) => {
       // Filter by pipeline stage: only "No Contact Made" through "Contract Sent"
       if (!l.pipelineStage) {
@@ -765,14 +777,19 @@ export const metricsService = {
         return false;
       }
       
-      // Use lastContactAt only (no fallback)
-      if (!l.lastContactAt) {
-        // If never contacted, check if 48h passed since creation
+      // Get the MOST RECENT OUTBOUND communication (CALL/SMS/EMAIL only) for stale48h check
+      // Communications are ordered by occurredAt asc, so last item is the most recent
+      const allOutboundComms = (l as any).communications || [];
+      const lastOutboundComm = allOutboundComms[allOutboundComms.length - 1]; // Last in asc order = most recent
+      const lastOutboundAt = lastOutboundComm?.occurredAt ? new Date(lastOutboundComm.occurredAt) : null;
+      
+      if (!lastOutboundAt) {
+        // If never reached out (no OUTBOUND communication), check if 48h passed since creation
         const hoursSinceCreation = (nowDt.getTime() - l.createdAt.getTime()) / (1000 * 60 * 60);
         return hoursSinceCreation >= 48;
       }
-      // If contacted, check if 48h passed since last contact
-      const hoursSince = (nowDt.getTime() - l.lastContactAt.getTime()) / (1000 * 60 * 60);
+      // If reached out (OUTBOUND), check if 48h passed since last OUTBOUND reach out
+      const hoursSince = (nowDt.getTime() - new Date(lastOutboundAt).getTime()) / (1000 * 60 * 60);
       return hoursSince >= 48;
     }).length;
 

@@ -181,7 +181,7 @@ export const metricsRepository = {
       select: { id: true, createdAt: true, updatedAt: true },
     }),
 
-  getActiveLeadsWithActivityByPipeline: (filters: { pipelineKey: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION'; leadType?: any; createdById?: string; assignedUserId?: string; onlyPipelineStatus?: boolean; includePipelineStage?: boolean }) =>
+  getActiveLeadsWithActivityByPipeline: (filters: { pipelineKey: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION'; leadType?: any; createdById?: string; assignedUserId?: string; onlyPipelineStatus?: boolean; includePipelineStage?: boolean; includeOutboundCommunications?: boolean }) =>
     prisma.lead.findMany({
       where: {
         pipelineStage: { pipeline: { key: filters.pipelineKey as any } },
@@ -216,6 +216,19 @@ export const metricsRepository = {
               id: true,
               name: true,
               orderIndex: true,
+            }
+          }
+        } : {}),
+        ...(filters.includeOutboundCommunications ? {
+          communications: {
+            where: {
+              direction: 'OUTBOUND',
+              type: { in: ['CALL', 'SMS', 'EMAIL'] }
+            },
+            orderBy: { occurredAt: 'asc' }, // Order by asc to get first, but we'll take all and filter in code
+            select: {
+              occurredAt: true,
+              createdAt: true,
             }
           }
         } : {}),

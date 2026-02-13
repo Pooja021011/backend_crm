@@ -108,6 +108,18 @@ async function testMishandledLeads(assignedUserId?: string) {
             name: true,
             orderIndex: true,
           }
+        },
+        // Include OUTBOUND communications for SLA breach check (matching Major KPI logic)
+        communications: {
+          where: {
+            direction: 'OUTBOUND',
+            type: { in: ['CALL', 'SMS', 'EMAIL'] }
+          },
+          orderBy: { occurredAt: 'asc' }, // Order by asc to get all, filter first/last in code
+          select: {
+            occurredAt: true,
+            createdAt: true,
+          }
         }
       },
     });
@@ -138,55 +150,83 @@ async function testMishandledLeads(assignedUserId?: string) {
 
     console.log(`\n📋 Valid Stages for Stale48h: ${Array.from(validStageIdsForStale48h).join(', ') || 'None'}`);
 
-    // 4. SLA Breaches
+    // 4. SLA Breaches - Only OUTBOUND communications count as "reach out" (matching Major KPI logic)
     const createdThisMonthIds = new Set(leadsReceived.map((l) => l.id));
     const slaBreachLeads = activeLeads.filter((l) => {
       if (!createdThisMonthIds.has(l.id)) return false;
       
-      if (!l.lastContactAt) {
-        const thresholdHours = getSlaThresholdHoursEt(l.createdAt);
+      // Get the FIRST OUTBOUND communication (CALL/SMS/EMAIL only) for SLA breach check
+      // Communications are ordered by occurredAt asc, so [0] is the first/earliest
+      const allOutboundComms = (l as any).communications || [];
+      const firstOutboundComm = allOutboundComms[0]; // First in asc order = earliest
+      const firstOutboundAt = firstOutboundComm?.occurredAt ? new Date(firstOutboundComm.occurredAt) : null;
+      
+      const thresholdHours = getSlaThresholdHoursEt(l.createdAt);
+      
+      if (!firstOutboundAt) {
+        // If never reached out (no OUTBOUND communication), check if threshold exceeded
         const hoursSinceCreation = (nowDt.getTime() - l.createdAt.getTime()) / (1000 * 60 * 60);
         return hoursSinceCreation > thresholdHours;
       }
       
-      const thresholdHours = getSlaThresholdHoursEt(l.createdAt);
-      const hoursToTouch = (l.lastContactAt.getTime() - l.createdAt.getTime()) / (1000 * 60 * 60);
-      return hoursToTouch > thresholdHours;
+      // If reached out (OUTBOUND), check if FIRST reach out happened within threshold
+      // Calculate time from lead creation to FIRST outbound contact
+      const leadCreatedAt = new Date(l.createdAt);
+      const hoursToReachOut = (firstOutboundAt.getTime() - leadCreatedAt.getTime()) / (1000 * 60 * 60);
+      
+      // Only count as breach if the FIRST contact happened AFTER the threshold
+      return hoursToReachOut > thresholdHours;
     });
 
-    console.log(`\n🚨 SLA BREACHES (${slaBreachLeads.length}):`);
+    console.log(`\n🚨 SLA BREACHES (${slaBreachLeads.length}) - OUTBOUND only:`);
     slaBreachLeads.forEach(lead => {
+      const allOutboundComms = (lead as any).communications || [];
+      const firstOutboundComm = allOutboundComms[0];
+      const firstOutboundAt = firstOutboundComm?.occurredAt ? new Date(firstOutboundComm.occurredAt) : null;
       const threshold = getSlaThresholdHoursEt(lead.createdAt);
-      const hoursSince = lead.lastContactAt 
-        ? (nowDt.getTime() - lead.lastContactAt.getTime()) / (1000 * 60 * 60)
-        : (nowDt.getTime() - lead.createdAt.getTime()) / (1000 * 60 * 60);
+      const leadCreatedAt = new Date(lead.createdAt);
+      const hoursToReachOut = firstOutboundAt
+        ? (firstOutboundAt.getTime() - leadCreatedAt.getTime()) / (1000 * 60 * 60)
+        : (nowDt.getTime() - leadCreatedAt.getTime()) / (1000 * 60 * 60);
       console.log(`   - Lead ID: ${lead.id}`);
       console.log(`     Created: ${lead.createdAt.toISOString()}`);
-      console.log(`     Last Contact: ${lead.lastContactAt ? lead.lastContactAt.toISOString() : 'Never'}`);
-      console.log(`     Threshold: ${threshold}h, Hours Since: ${hoursSince.toFixed(2)}h`);
+      console.log(`     FIRST OUTBOUND: ${firstOutboundAt ? firstOutboundAt.toISOString() : 'Never'}`);
+      console.log(`     Last Contact (all): ${lead.lastContactAt ? lead.lastContactAt.toISOString() : 'Never'}`);
+      console.log(`     Threshold: ${threshold}h, Hours to Reach Out: ${hoursToReachOut.toFixed(2)}h`);
     });
 
-    // 5. Stale 48h
+    // 5. Stale 48h - Only OUTBOUND communications count as "reach out" (matching Major KPI logic)
     const stale48hLeads = activeLeads.filter((l) => {
       if (!l.pipelineStage) return false;
       if (!validStageIdsForStale48h.has(l.pipelineStage.id)) return false;
       
-      if (!l.lastContactAt) {
+      // Get the MOST RECENT OUTBOUND communication (CALL/SMS/EMAIL only) for stale48h check
+      // Communications are ordered by occurredAt asc, so last item is the most recent
+      const allOutboundComms = (l as any).communications || [];
+      const lastOutboundComm = allOutboundComms[allOutboundComms.length - 1];
+      const lastOutboundAt = lastOutboundComm?.occurredAt ? new Date(lastOutboundComm.occurredAt) : null;
+      
+      if (!lastOutboundAt) {
+        // If never reached out (no OUTBOUND communication), check if 48h passed since creation
         const hoursSinceCreation = (nowDt.getTime() - l.createdAt.getTime()) / (1000 * 60 * 60);
         return hoursSinceCreation >= 48;
       }
-      const hoursSince = (nowDt.getTime() - l.lastContactAt.getTime()) / (1000 * 60 * 60);
+      // If reached out (OUTBOUND), check if 48h passed since last OUTBOUND reach out
+      const hoursSince = (nowDt.getTime() - new Date(lastOutboundAt).getTime()) / (1000 * 60 * 60);
       return hoursSince >= 48;
     });
 
-    console.log(`\n⏰ STALE 48H (${stale48hLeads.length}):`);
+    console.log(`\n⏰ STALE 48H (${stale48hLeads.length}) - OUTBOUND only:`);
     stale48hLeads.forEach(lead => {
-      const hoursSince = lead.lastContactAt 
-        ? (nowDt.getTime() - lead.lastContactAt.getTime()) / (1000 * 60 * 60)
+      const outboundComm = (lead as any).communications?.[0];
+      const lastOutboundAt = outboundComm?.occurredAt || outboundComm?.createdAt || null;
+      const hoursSince = lastOutboundAt
+        ? (nowDt.getTime() - new Date(lastOutboundAt).getTime()) / (1000 * 60 * 60)
         : (nowDt.getTime() - lead.createdAt.getTime()) / (1000 * 60 * 60);
       console.log(`   - Lead ID: ${lead.id}`);
       console.log(`     Stage: ${lead.pipelineStage?.name || 'Unknown'}`);
-      console.log(`     Last Contact: ${lead.lastContactAt ? lead.lastContactAt.toISOString() : 'Never'}`);
+      console.log(`     Last OUTBOUND: ${lastOutboundAt ? new Date(lastOutboundAt).toISOString() : 'Never'}`);
+      console.log(`     Last Contact (all): ${lead.lastContactAt ? lead.lastContactAt.toISOString() : 'Never'}`);
       console.log(`     Hours Since: ${hoursSince.toFixed(2)}h`);
     });
 
