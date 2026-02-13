@@ -231,6 +231,7 @@ const LeadEdit: React.FC = () => {
   const [loadingSections, setLoadingSections] = useState({
     lead: true,
     deal: true,
+    timeline: true,
     underwriting: true,
     comparables: true,
     tasks: true,
@@ -679,6 +680,17 @@ const LeadEdit: React.FC = () => {
 
   // Handler for pipeline status changes with validation (popup only when backend requires it)
   const handlePipelineStatusChange = (newStageId: string) => {
+    // Don't allow stage changes while timeline data is still loading
+    if (loading || showLoader || loadingSections.timeline) {
+      console.warn('🚫 Stage change blocked: Timeline data still loading');
+      toast({
+        title: 'Please wait',
+        description: 'Data is still loading. Please wait before changing stage.',
+        variant: 'default',
+      });
+      return;
+    }
+
     const newStage = pipelineStages.find((s) => s.id === newStageId);
     
     console.log('🔄 Pipeline status change requested:', { 
@@ -889,6 +901,13 @@ const LeadEdit: React.FC = () => {
     autoSaveBaselineReadyRef.current = false;
     suppressNextAutoSaveRef.current = true;
     
+    // Clear lead and deal state immediately when id changes to prevent stale data
+    setLead(null);
+    setDeal(null);
+    
+    // Clear timeline-related state immediately when id changes
+    setAppointmentDate('');
+    
     // Update current id ref (prevents stale closures)
     currentLeadIdRef.current = id || null;
     
@@ -901,6 +920,7 @@ const LeadEdit: React.FC = () => {
     setLoadingSections({
       lead: true,
       deal: true,
+      timeline: true,
       underwriting: true,
       comparables: true,
       tasks: true,
@@ -999,6 +1019,13 @@ const LeadEdit: React.FC = () => {
       }
     });
   }, [id, setSectionLoading]);
+
+  // Mark timeline as loaded when both lead and deal are loaded
+  useEffect(() => {
+    if (!loadingSections.lead && !loadingSections.deal && loadingSections.timeline) {
+      setSectionLoading('timeline', false);
+    }
+  }, [loadingSections.lead, loadingSections.deal, loadingSections.timeline, setSectionLoading]);
 
   // Poll backend for pipelineStageId updates (auto-moves from calls/SMS) so UI updates without reload.
   useEffect(() => {
@@ -4390,26 +4417,31 @@ const LeadEdit: React.FC = () => {
 
           {/* Timeline - Right Side (4 cols) */}
           <div className="col-span-4 border border-slate-200 rounded-lg bg-white p-2 flex flex-col">
-            <LeadTimeline
-              leadId={id!}
-              leadCreatedAt={lead.createdAt}
-              deal={deal}
-              customFields={{
-                ...lead.customFields,
-                estimatedValue: estimatedValue ? parseInt(estimatedValue) : lead.customFields?.estimatedValue,
-                askingPrice: askingPrice ? parseInt(askingPrice) : lead.customFields?.askingPrice,
-                appointmentDate: appointmentDate || lead.customFields?.appointmentDate,
-                rehabBudget: rehabBudget ? parseInt(rehabBudget) : lead.customFields?.rehabBudget,
-              }}
-              lead={{
-                pipelineStage: lead.pipelineStage,
-                stageEnteredAt: lead.stageEnteredAt
-              }}
-              onRefresh={() => {
-                loadLead();
-                loadDeal();
-              }}
-            />
+            {lead && (
+              <LeadTimeline
+                key={id} // Force re-render when lead ID changes
+                leadId={id!}
+                leadCreatedAt={lead?.createdAt}
+                deal={deal || null}
+                customFields={{
+                  ...lead.customFields,
+                  estimatedValue: estimatedValue ? parseInt(estimatedValue) : lead.customFields?.estimatedValue,
+                  askingPrice: askingPrice ? parseInt(askingPrice) : lead.customFields?.askingPrice,
+                  appointmentDate: lead.customFields?.appointmentDate || null,
+                  offerMadeAt: lead.customFields?.offerMadeAt || null,
+                  underContractAt: lead.customFields?.underContractAt || null,
+                  rehabBudget: rehabBudget ? parseInt(rehabBudget) : lead.customFields?.rehabBudget,
+                }}
+                lead={{
+                  pipelineStage: lead.pipelineStage,
+                  stageEnteredAt: lead.stageEnteredAt
+                }}
+                onRefresh={() => {
+                  loadLead();
+                  loadDeal();
+                }}
+              />
+            )}
           </div>
         </div>
 
