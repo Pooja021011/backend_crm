@@ -126,11 +126,12 @@ export const leadService = {
       }
       
       // Track "Under Contract" stage transition (orderIndex 8)
-      // Set underContractAt when moving to Under Contract stage
+      // Set underContractAt when moving to Under Contract stage (exact match only)
       if (isAcqPipeline &&
-          stageName.includes('contract') && 
+          stageName.includes('under contract') && 
+          !stageName.includes('contract sent') &&
           !stageName.includes('offer') && 
-          !stageName.includes('sent') && 
+          !stageName.includes('pending') &&
           !currentCustomFields.underContractAt) {
         dateFieldsToUpdate.underContractAt = new Date().toISOString();
         
@@ -195,8 +196,11 @@ export const leadService = {
           contractPrice: null 
         });
       }
-    } else if (name.includes('contract') && !name.includes('offer')) {
-      // Set deal.contractedAt when moving forward to Under Contract
+    } else if (name.includes('under contract') && 
+               !name.includes('contract sent') && 
+               !name.includes('offer') && 
+               !name.includes('pending')) {
+      // Set deal.contractedAt when moving forward to Under Contract (exact match only)
       await dealRepository.upsertByLeadId(leadId, { contractedAt: new Date() });
     }
     
