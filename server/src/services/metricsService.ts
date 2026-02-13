@@ -335,6 +335,7 @@ export const metricsService = {
       const underContractStageIds = actualUnderContractStages.map(s => s.id);
 
       // Fetch leads that are CURRENTLY in "Under Contract" stage
+      // Filter by ACQ role to match "Acquisitions Team" requirement (same as Manager)
       const contractsSignedLeads = await prisma.lead.findMany({
         where: {
           leadType: 'SELLER',
@@ -344,6 +345,14 @@ export const metricsService = {
           customFields: {
             path: ['underContractAt'],
             not: null
+          },
+          // Filter by ACQ role to match "Acquisitions Team" requirement
+          assignedUser: {
+            roles: {
+              some: {
+                role: { name: 'ACQ' }
+              }
+            }
           }
         },
         select: { 
