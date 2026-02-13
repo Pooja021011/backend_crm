@@ -47,9 +47,45 @@ function getEtHour(d: Date): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function getEtDayOfWeek(d: Date): number {
+  // Get day of week in ET timezone (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'numeric',
+  });
+  const dayName = formatter.format(d);
+  const dayMap: Record<string, number> = {
+    'Sunday': 0,
+    'Monday': 1,
+    'Tuesday': 2,
+    'Wednesday': 3,
+    'Thursday': 4,
+    'Friday': 5,
+    'Saturday': 6,
+  };
+  return dayMap[dayName] ?? 0;
+}
+
 function getSlaThresholdHoursEt(createdAt: Date): number {
   const hourEt = getEtHour(createdAt);
-  // 8am–5pm ET (inclusive) => 2h SLA; else 16h SLA
+  const dayOfWeek = getEtDayOfWeek(createdAt);
+  
+  // Weekend rule: 5pm Friday to 6pm Sunday ET => 48h SLA
+  // Friday = 5, Saturday = 6, Sunday = 0
+  if (dayOfWeek === 5 && hourEt >= 17) {
+    // Friday 5pm or later
+    return 48;
+  }
+  if (dayOfWeek === 6) {
+    // Saturday (all day)
+    return 48;
+  }
+  if (dayOfWeek === 0 && hourEt < 18) {
+    // Sunday before 6pm
+    return 48;
+  }
+  
+  // Regular business hours: 8am–5pm ET (inclusive) => 2h SLA; else 16h SLA
   // Changed to hourEt <= 17 to include 5pm (17:00 = 5:00 PM)
   return hourEt >= 8 && hourEt <= 17 ? 2 : 16;
 }
@@ -411,8 +447,8 @@ export const metricsService = {
       result.mishandledColor = this.getColorForMishandled(managerData.leadsMishandled);
       
       // Additional breakdown for debugging/transparency
-      result.slaBreaches = managerData.slaBreaches; // New leads mishandled (2h/16h)
-      result.stale48h = managerData.stale48h; // Leads untouched 48h+
+      result.slaBreaches = managerData.slaBreaches; // New leads mishandled (2h/16h/48h)
+      result.stale48h = managerData.stale48h; // Leads untouched 48h+ (No Contact Made through Contract Sent)
       result.leadsReceived = managerData.leadsReceived;
     }
     // ACQ AGENT KPIs (personal stats for this agent) - Third Priority
@@ -445,8 +481,8 @@ export const metricsService = {
       result.mishandledColorPersonal = this.getColorForMishandled(acqData.leadsMishandled);
       
       // Additional breakdown for debugging/transparency
-      result.slaBreachesPersonal = acqData.slaBreaches; // New leads mishandled (2h/16h)
-      result.stale48hPersonal = acqData.stale48h; // Leads untouched 48h+
+      result.slaBreachesPersonal = acqData.slaBreaches; // New leads mishandled (2h/16h/48h)
+      result.stale48hPersonal = acqData.stale48h; // Leads untouched 48h+ (No Contact Made through Contract Sent)
       result.leadsReceivedPersonal = acqData.leadsReceived;
     }
     // DISP (Dispositions) KPIs - Hidden for now
@@ -641,21 +677,58 @@ export const metricsService = {
       ? leadsReceivedCount / totalContracts
       : 0;
 
-    // Mishandled = SLA breaches on new leads this month + stale 48h on all active ACQ leads
-    // SLA breaches: New leads that month that have gone 2/16 hours without being touched
+    // Mishandled = SLA breaches on new leads this month + stale 48h on all active ACQ leads + tasks past due > 6h
+    // SLA breaches: New leads that month that have gone 2/16/48 hours without being touched
     // - Within 2 hours if uploaded to system between 8am and 5pm ET
     // - Within 16 hours if uploaded to system between 5pm and 8am ET
-    // Stale 48h: Leads that have gone 48 hours without being touched
+    // - Within 48 hours if uploaded between 5pm on Friday and 6pm on Sunday ET
+    // Stale 48h: Leads in pipeline status "No contact made" through "contract sent" that have gone 48 hours without being reached out to
+    // Tasks past due: Leads with tasks that are past due more than 6 hours
     const activeLeads = await metricsRepository.getActiveLeadsWithActivityByPipeline({
       pipelineKey: 'ACQUISITIONS',
       leadType: 'SELLER',
       assignedUserId,
       onlyPipelineStatus: true,
+      includePipelineStage: true,
     });
 
     const nowDt = new Date();
 
-    // SLA breaches for leads created this month (2h/16h ET) using lastContactAt (no fallback)
+    // Get pipeline stages for filtering stale48h (No Contact Made through Contract Sent)
+    const pipelineStages = await prisma.pipelineStage.findMany({
+      where: {
+        pipeline: { key: 'ACQUISITIONS' }
+      },
+      select: {
+        id: true,
+        name: true,
+        orderIndex: true,
+      },
+      orderBy: {
+        orderIndex: 'asc',
+      }
+    });
+
+    // Find the orderIndex range for "No Contact Made" through "Contract Sent"
+    const noContactMadeStage = pipelineStages.find(s => 
+      s.name.toLowerCase().includes('no contact made') || s.name.toLowerCase() === 'no contact'
+    );
+    const contractSentStage = pipelineStages.find(s => 
+      s.name.toLowerCase().includes('contract sent')
+    );
+
+    // Build set of valid stage IDs for stale48h filtering
+    const validStageIdsForStale48h = new Set<string>();
+    if (noContactMadeStage && contractSentStage) {
+      pipelineStages.forEach(stage => {
+        if (stage.orderIndex >= noContactMadeStage.orderIndex && 
+            stage.orderIndex <= contractSentStage.orderIndex) {
+          validStageIdsForStale48h.add(stage.id);
+        }
+      });
+    }
+
+    // SLA breaches for leads created this month (2h/16h/48h ET) using lastContactAt (no fallback)
     const createdThisMonthIds = new Set(leadsReceived.map((l) => l.id));
     const slaBreaches = activeLeads.filter((l) => {
       if (!createdThisMonthIds.has(l.id)) return false;
@@ -672,8 +745,17 @@ export const metricsService = {
       return hoursToTouch > thresholdHours;
     }).length;
 
-    // 48h stale across all active leads using lastContactAt (no fallback)
+    // 48h stale across leads in pipeline status "No contact made" through "contract sent"
+    // that have gone 48 hours without being reached out to
     const stale48h = activeLeads.filter((l) => {
+      // Filter by pipeline stage: only "No Contact Made" through "Contract Sent"
+      if (!l.pipelineStage) {
+        return false; // Exclude leads without pipeline stage info
+      }
+      if (!validStageIdsForStale48h.has(l.pipelineStage.id)) {
+        return false;
+      }
+      
       // Use lastContactAt only (no fallback)
       if (!l.lastContactAt) {
         // If never contacted, check if 48h passed since creation
@@ -685,7 +767,57 @@ export const metricsService = {
       return hoursSince >= 48;
     }).length;
 
-    const leadsMishandled = slaBreaches + stale48h;
+    // Tasks past due more than 6 hours
+    // Get all leads with tasks that are past due more than 6 hours
+    const tasksCutoffDate = new Date('2026-01-20T00:00:00Z'); // Tasks cutoff date
+    const leadsWithPastDueTasks = await prisma.lead.findMany({
+      where: {
+        leadType: 'SELLER',
+        pipelineStage: { pipeline: { key: 'ACQUISITIONS' } },
+        leadStatus: { name: { equals: 'Pipeline', mode: 'insensitive' } },
+        tasks: {
+          some: {
+            status: 'OPEN',
+            dueAt: {
+              lte: new Date(nowDt.getTime() - 6 * 60 * 60 * 1000), // Past due by more than 6 hours
+              gte: tasksCutoffDate, // Only tasks from cutoff date onwards
+            },
+            // Exclude auto-generated tasks
+            NOT: {
+              OR: [
+                { title: { startsWith: 'Review note on ' } },
+                { title: { startsWith: 'Underwrite ' } },
+                { title: { startsWith: 'Make Offer on ' } },
+                { title: { startsWith: 'Follow Up With ' } },
+                { title: { startsWith: 'Contract Sent - Awaiting Signature for ' } },
+                { title: { startsWith: 'URGENT: DocuSign Failed for ' } },
+                { title: { startsWith: 'Check Voided Contract With ' } },
+              ]
+            }
+          }
+        },
+        ...(assignedUserId 
+          ? { assignedUserId } 
+          : {
+              // When assignedUserId is undefined (Manager view), filter by ACQ role
+              assignedUser: {
+                roles: {
+                  some: {
+                    role: { name: 'ACQ' }
+                  }
+                }
+              }
+            })
+      },
+      select: {
+        id: true,
+      },
+      distinct: ['id'], // Avoid counting same lead multiple times if it has multiple past due tasks
+    });
+
+    const tasksPastDue6h = leadsWithPastDueTasks.length;
+
+    const leadsMishandled = slaBreaches + stale48h + tasksPastDue6h;
 
     return {
       totalContracts,
@@ -694,6 +826,7 @@ export const metricsService = {
       leadsMishandled,
       slaBreaches,
       stale48h,
+      tasksPastDue6h,
     };
   },
 

@@ -466,16 +466,7 @@ const Leads = () => {
     if (selectedDateRange) {
       const now = new Date();
       
-      // Check if "Under Contract" stage is selected - if so, use underContractAt date instead of createdAt
-      const isUnderContractStageSelected = selectedPipelineStatuses.length > 0 && 
-        pipelineStages.some(stage => 
-          selectedPipelineStatuses.includes(stage.id) && 
-          stage.name?.toLowerCase().includes('under contract') &&
-          !stage.name?.toLowerCase().includes('contract sent') &&
-          !stage.name?.toLowerCase().includes('offer') &&
-          !stage.name?.toLowerCase().includes('pending')
-        );
-      
+      // Date Created filter: Always use createdAt, no fallback
       switch (selectedDateRange) {
         case 'today': {
           const startDate = new Date(now);
@@ -484,39 +475,22 @@ const Leads = () => {
           endDate.setHours(23, 59, 59, 999);
           
           filteredLeads = filteredLeads.filter((lead: any) => {
-            // If "Under Contract" stage is selected, use underContractAt date
-            if (isUnderContractStageSelected) {
-              const customFields = lead.customFields || {};
-              const underContractAt = customFields.underContractAt;
-              if (!underContractAt) return false;
-              const contractDate = new Date(underContractAt);
-              if (isNaN(contractDate.getTime())) return false;
-              return contractDate >= startDate && contractDate <= endDate;
-            }
-            // Otherwise use createdAt
             const createdAt = new Date(lead.createdAt);
             return createdAt >= startDate && createdAt <= endDate;
           });
           break;
         }
         case 'week': {
+          // Calculate current calendar week: Sunday (0) to Saturday (6)
+          const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
           const startDate = new Date(now);
-          startDate.setDate(now.getDate() - 7);
+          startDate.setDate(now.getDate() - dayOfWeek); // Go back to Sunday
           startDate.setHours(0, 0, 0, 0);
           const endDate = new Date(now);
+          endDate.setDate(now.getDate() + (6 - dayOfWeek)); // Go forward to Saturday
           endDate.setHours(23, 59, 59, 999);
           
           filteredLeads = filteredLeads.filter((lead: any) => {
-            // If "Under Contract" stage is selected, use underContractAt date
-            if (isUnderContractStageSelected) {
-              const customFields = lead.customFields || {};
-              const underContractAt = customFields.underContractAt;
-              if (!underContractAt) return false;
-              const contractDate = new Date(underContractAt);
-              if (isNaN(contractDate.getTime())) return false;
-              return contractDate >= startDate && contractDate <= endDate;
-            }
-            // Otherwise use createdAt
             const createdAt = new Date(lead.createdAt);
             return createdAt >= startDate && createdAt <= endDate;
           });
@@ -532,16 +506,6 @@ const Leads = () => {
           endDate.setHours(23, 59, 59, 999);
           
           filteredLeads = filteredLeads.filter((lead: any) => {
-            // If "Under Contract" stage is selected, use underContractAt date
-            if (isUnderContractStageSelected) {
-              const customFields = lead.customFields || {};
-              const underContractAt = customFields.underContractAt;
-              if (!underContractAt) return false;
-              const contractDate = new Date(underContractAt);
-              if (isNaN(contractDate.getTime())) return false;
-              return contractDate >= startDate && contractDate <= endDate;
-            }
-            // Otherwise use createdAt
             const createdAt = new Date(lead.createdAt);
             return createdAt >= startDate && createdAt <= endDate;
           });
@@ -555,16 +519,6 @@ const Leads = () => {
           endDate.setHours(23, 59, 59, 999);
           
           filteredLeads = filteredLeads.filter((lead: any) => {
-            // If "Under Contract" stage is selected, use underContractAt date
-            if (isUnderContractStageSelected) {
-              const customFields = lead.customFields || {};
-              const underContractAt = customFields.underContractAt;
-              if (!underContractAt) return false;
-              const contractDate = new Date(underContractAt);
-              if (isNaN(contractDate.getTime())) return false;
-              return contractDate >= startDate && contractDate <= endDate;
-            }
-            // Otherwise use createdAt
             const createdAt = new Date(lead.createdAt);
             return createdAt >= startDate && createdAt <= endDate;
           });
@@ -577,16 +531,6 @@ const Leads = () => {
           endDate.setHours(23, 59, 59, 999);
           
           filteredLeads = filteredLeads.filter((lead: any) => {
-            // If "Under Contract" stage is selected, use underContractAt date
-            if (isUnderContractStageSelected) {
-              const customFields = lead.customFields || {};
-              const underContractAt = customFields.underContractAt;
-              if (!underContractAt) return false;
-              const contractDate = new Date(underContractAt);
-              if (isNaN(contractDate.getTime())) return false;
-              return contractDate >= startDate && contractDate <= endDate;
-            }
-            // Otherwise use createdAt
             const createdAt = new Date(lead.createdAt);
             return createdAt >= startDate && createdAt <= endDate;
           });
@@ -595,23 +539,16 @@ const Leads = () => {
         case 'custom': {
           const from = customDateFrom ? new Date(customDateFrom) : null;
           const to = customDateTo ? new Date(customDateTo) : null;
-          if (from) from.setHours(0, 0, 0, 0);
-          if (to) to.setHours(23, 59, 59, 999);
+          if (from) {
+            from.setHours(0, 0, 0, 0);
+          }
+          if (to) {
+            to.setHours(23, 59, 59, 999);
+          }
 
           filteredLeads = filteredLeads.filter((lead: any) => {
-            // If "Under Contract" stage is selected, use underContractAt date
-            if (isUnderContractStageSelected) {
-              const customFields = lead.customFields || {};
-              const underContractAt = customFields.underContractAt;
-              if (!underContractAt) return false;
-              const contractDate = new Date(underContractAt);
-              if (isNaN(contractDate.getTime())) return false;
-              if (from && contractDate < from) return false;
-              if (to && contractDate > to) return false;
-              return true;
-            }
-            // Otherwise use createdAt
             const createdAt = new Date(lead.createdAt);
+            // Use >= and <= for consistency with preset ranges (same logic)
             if (from && createdAt < from) return false;
             if (to && createdAt > to) return false;
             return true;

@@ -561,10 +561,76 @@ export const pipelineService = {
       }
 
       if (filters.lastTouchedFrom || filters.lastTouchedTo) {
-        whereClause.lastContactAt = {
-          ...(filters.lastTouchedFrom ? { gte: parseRangeStart(filters.lastTouchedFrom) } : {}),
-          ...(filters.lastTouchedTo ? { lte: parseRangeEnd(filters.lastTouchedTo) } : {}),
-        };
+        // lastTouchedAt = lastContactAt || lastTouchedCommAt (from communications)
+        // So we need to check both: lastContactAt OR communications in date range
+        const dateFrom = filters.lastTouchedFrom ? parseRangeStart(filters.lastTouchedFrom) : undefined;
+        const dateTo = filters.lastTouchedTo ? parseRangeEnd(filters.lastTouchedTo) : undefined;
+        
+        // Build date filter for communications
+        const commDateFilter: any = {};
+        if (dateFrom) commDateFilter.gte = dateFrom;
+        if (dateTo) commDateFilter.lte = dateTo;
+        
+        // Create OR condition: (lastContactAt in range) OR (has valid communication in range)
+        const lastTouchedOr: any[] = [
+          // Condition 1: lastContactAt in range
+          {
+            lastContactAt: {
+              ...(dateFrom ? { gte: dateFrom } : {}),
+              ...(dateTo ? { lte: dateTo } : {}),
+            }
+          },
+          // Condition 2: Has communication (CALL/SMS/EMAIL, excluding missed/ringing calls) in range
+          {
+            communications: {
+              some: {
+                AND: [
+                  // Date check: occurredAt OR (occurredAt is null AND createdAt in range)
+                  {
+                    OR: [
+                      { occurredAt: commDateFilter },
+                      {
+                        AND: [
+                          { occurredAt: null },
+                          { createdAt: commDateFilter }
+                        ]
+                      }
+                    ]
+                  },
+                  // Type check: CALL, SMS, or EMAIL
+                  { type: { in: ['CALL', 'SMS', 'EMAIL'] } },
+                  // Exclude missed/ringing calls
+                  {
+                    OR: [
+                      { type: { not: 'CALL' } },
+                      {
+                        AND: [
+                          { type: 'CALL' },
+                          {
+                            OR: [
+                              { metadata: null },
+                              {
+                                NOT: {
+                                  metadata: {
+                                    path: ['status'],
+                                    in: ['missed', 'ringing']
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        ];
+        
+        // Add OR condition - Prisma will combine with existing conditions using AND
+        whereClause.OR = lastTouchedOr;
       }
 
       // Apply role-based Needs Attention filter

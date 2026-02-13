@@ -181,7 +181,7 @@ export const metricsRepository = {
       select: { id: true, createdAt: true, updatedAt: true },
     }),
 
-  getActiveLeadsWithActivityByPipeline: (filters: { pipelineKey: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION'; leadType?: any; createdById?: string; assignedUserId?: string; onlyPipelineStatus?: boolean }) =>
+  getActiveLeadsWithActivityByPipeline: (filters: { pipelineKey: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION'; leadType?: any; createdById?: string; assignedUserId?: string; onlyPipelineStatus?: boolean; includePipelineStage?: boolean }) =>
     prisma.lead.findMany({
       where: {
         pipelineStage: { pipeline: { key: filters.pipelineKey as any } },
@@ -210,6 +210,15 @@ export const metricsRepository = {
         createdAt: true,
         updatedAt: true,
         lastContactAt: true,
+        ...(filters.includePipelineStage ? {
+          pipelineStage: {
+            select: {
+              id: true,
+              name: true,
+              orderIndex: true,
+            }
+          }
+        } : {}),
       },
     }),
 

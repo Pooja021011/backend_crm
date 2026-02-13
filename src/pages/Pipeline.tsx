@@ -386,33 +386,63 @@ const Pipeline = () => {
     setTo: (v: string) => void
   ) => {
     const now = new Date();
-    const from = new Date(now);
-    const to = new Date(now);
+    let from: Date;
+    let to: Date;
 
     switch (range) {
-      case 'today':
+      case 'today': {
+        from = new Date(now);
+        from.setHours(0, 0, 0, 0);
+        to = new Date(now);
+        to.setHours(23, 59, 59, 999);
         setFrom(formatDateInput(from));
         setTo(formatDateInput(to));
         return;
-      case 'week':
-        from.setDate(now.getDate() - 7);
+      }
+      case 'week': {
+        // Calculate current calendar week: Sunday (0) to Saturday (6)
+        const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+        from = new Date(now);
+        from.setDate(now.getDate() - dayOfWeek); // Go back to Sunday
+        from.setHours(0, 0, 0, 0);
+        to = new Date(now);
+        to.setDate(now.getDate() + (6 - dayOfWeek)); // Go forward to Saturday
+        to.setHours(23, 59, 59, 999);
         setFrom(formatDateInput(from));
         setTo(formatDateInput(to));
         return;
-      case 'month':
-        from.setMonth(now.getMonth() - 1);
+      }
+      case 'month': {
+        // Current calendar month: 1st to last day of current month
+        from = new Date(now.getFullYear(), now.getMonth(), 1);
+        from.setHours(0, 0, 0, 0);
+        to = new Date(now.getFullYear(), now.getMonth() + 1, 0); // Last day of current month
+        to.setHours(23, 59, 59, 999);
         setFrom(formatDateInput(from));
         setTo(formatDateInput(to));
         return;
-      case 'quarter':
-        from.setMonth(now.getMonth() - 3);
+      }
+      case 'quarter': {
+        // Current calendar quarter: 1st day to last day of current quarter
+        const currentQuarter = Math.floor(now.getMonth() / 3);
+        from = new Date(now.getFullYear(), currentQuarter * 3, 1);
+        from.setHours(0, 0, 0, 0);
+        to = new Date(now.getFullYear(), currentQuarter * 3 + 3, 0); // Last day of quarter
+        to.setHours(23, 59, 59, 999);
         setFrom(formatDateInput(from));
         setTo(formatDateInput(to));
         return;
-      case 'year':
-        setFrom(`${now.getFullYear()}-01-01`);
+      }
+      case 'year': {
+        // Current calendar year: Jan 1 to Dec 31
+        from = new Date(now.getFullYear(), 0, 1);
+        from.setHours(0, 0, 0, 0);
+        to = new Date(now.getFullYear(), 11, 31);
+        to.setHours(23, 59, 59, 999);
+        setFrom(formatDateInput(from));
         setTo(formatDateInput(to));
         return;
+      }
       default:
         // All Time / empty
         setFrom('');
@@ -1647,21 +1677,38 @@ const Pipeline = () => {
         modifiers={[snapCenterToCursor]}
         >
         <div className="flex gap-2 overflow-x-auto pb-2 h-[calc(100vh-220px)]">
-          {pipelineStages.map(stage => (
-                <PipelineColumn
-                  key={stage.id}
-                  stage={stage}
-                  leads={getLeadsForStage(stage.id)}
-                  currentPipeline={currentPipeline}
-                  onLeadClick={handleLeadClick}
-                />
-              ))}
+          {pipelineStages.map(stage => {
+            // Check if filters are active
+            const isLastTouchedFilterActive = !!(lastTouchedFrom || lastTouchedTo);
+            const isLeadCreatedFilterActive = !!(createdFrom || createdTo);
+            
+            return (
+              <PipelineColumn
+                key={stage.id}
+                stage={stage}
+                leads={getLeadsForStage(stage.id)}
+                currentPipeline={currentPipeline}
+                onLeadClick={handleLeadClick}
+                isLastTouchedFilterActive={isLastTouchedFilterActive}
+                isLeadCreatedFilterActive={isLeadCreatedFilterActive}
+              />
+            );
+          })}
           </div>
 
           <DragOverlay>
-          {activeLead && (
-              <PipelineCard lead={activeLead} isDragging />
-          )}
+          {activeLead && (() => {
+            const isLastTouchedFilterActive = !!(lastTouchedFrom || lastTouchedTo);
+            const isLeadCreatedFilterActive = !!(createdFrom || createdTo);
+            return (
+              <PipelineCard 
+                lead={activeLead} 
+                isDragging 
+                isLastTouchedFilterActive={isLastTouchedFilterActive}
+                isLeadCreatedFilterActive={isLeadCreatedFilterActive}
+              />
+            );
+          })()}
           </DragOverlay>
         </DndContext>
       </div>

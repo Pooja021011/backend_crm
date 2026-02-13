@@ -37,9 +37,11 @@ interface PipelineColumnProps {
   }>;
   onLeadClick?: (leadId: string) => void;
   currentPipeline?: string;
+  isLastTouchedFilterActive?: boolean;
+  isLeadCreatedFilterActive?: boolean;
 }
 
-export const PipelineColumn = ({ stage, leads, onLeadClick, currentPipeline }: PipelineColumnProps) => {
+export const PipelineColumn = ({ stage, leads, onLeadClick, currentPipeline, isLastTouchedFilterActive, isLeadCreatedFilterActive }: PipelineColumnProps) => {
   const { setNodeRef } = useDroppable({
     id: stage.id,
   });
@@ -105,6 +107,8 @@ export const PipelineColumn = ({ stage, leads, onLeadClick, currentPipeline }: P
                     lead={lead}
                     onViewDetails={onLeadClick ? () => onLeadClick(lead.id) : undefined}
                     currentPipeline={currentPipeline}
+                    isLastTouchedFilterActive={isLastTouchedFilterActive}
+                    isLeadCreatedFilterActive={isLeadCreatedFilterActive}
                   />
                 ))}
               </div>

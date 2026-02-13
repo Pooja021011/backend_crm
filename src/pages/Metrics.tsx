@@ -214,36 +214,65 @@ const Metrics = () => {
     const currentYear = now.getFullYear();
 
     switch (period) {
-      case 'This Month':
-        return {
-          from: new Date(currentYear, currentMonth, 1),
-          to: new Date(currentYear, currentMonth + 1, 0)
-        };
-      case 'Last Month':
+      case 'This Week': {
+        // Calculate current calendar week: Sunday (0) to Saturday (6)
+        const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+        const from = new Date(now);
+        from.setDate(now.getDate() - dayOfWeek); // Go back to Sunday
+        from.setHours(0, 0, 0, 0);
+        const to = new Date(now);
+        to.setDate(now.getDate() + (6 - dayOfWeek)); // Go forward to Saturday
+        to.setHours(23, 59, 59, 999);
+        return { from, to };
+      }
+      case 'This Month': {
+        const from = new Date(currentYear, currentMonth, 1);
+        from.setHours(0, 0, 0, 0);
+        const to = new Date(currentYear, currentMonth + 1, 0);
+        to.setHours(23, 59, 59, 999);
+        return { from, to };
+      }
+      case 'Last Month': {
         const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
         const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
-        return {
-          from: new Date(lastMonthYear, lastMonth, 1),
-          to: new Date(lastMonthYear, lastMonth + 1, 0)
-        };
-      case 'This Quarter':
+        const from = new Date(lastMonthYear, lastMonth, 1);
+        from.setHours(0, 0, 0, 0);
+        const to = new Date(lastMonthYear, lastMonth + 1, 0);
+        to.setHours(23, 59, 59, 999);
+        return { from, to };
+      }
+      case 'This Quarter': {
         const quarterStart = Math.floor(currentMonth / 3) * 3;
-        return {
-          from: new Date(currentYear, quarterStart, 1),
-          to: new Date(currentYear, quarterStart + 3, 0)
-        };
-      case 'This Year':
-        return {
-          from: new Date(currentYear, 0, 1),
-          to: new Date(currentYear, 11, 31)
-        };
-      case 'Custom Range':
+        const from = new Date(currentYear, quarterStart, 1);
+        from.setHours(0, 0, 0, 0);
+        const to = new Date(currentYear, quarterStart + 3, 0);
+        to.setHours(23, 59, 59, 999);
+        return { from, to };
+      }
+      case 'This Year': {
+        const from = new Date(currentYear, 0, 1);
+        from.setHours(0, 0, 0, 0);
+        const to = new Date(currentYear, 11, 31);
+        to.setHours(23, 59, 59, 999);
+        return { from, to };
+      }
+      case 'Custom Range': {
+        // Ensure custom dates have proper time boundaries
+        if (customDateRange.from) {
+          customDateRange.from.setHours(0, 0, 0, 0);
+        }
+        if (customDateRange.to) {
+          customDateRange.to.setHours(23, 59, 59, 999);
+        }
         return customDateRange;
-      default:
-        return {
-          from: new Date(currentYear, currentMonth, 1),
-          to: new Date(currentYear, currentMonth + 1, 0)
-        };
+      }
+      default: {
+        const from = new Date(currentYear, currentMonth, 1);
+        from.setHours(0, 0, 0, 0);
+        const to = new Date(currentYear, currentMonth + 1, 0);
+        to.setHours(23, 59, 59, 999);
+        return { from, to };
+      }
     }
   };
 
@@ -1561,6 +1590,7 @@ const Metrics = () => {
                 value={selectedPeriod}
                 onChange={(e) => setSelectedPeriod(e.target.value)}
               >
+                <option value="This Week">This Week</option>
                 <option value="This Month">This Month</option>
                 <option value="Last Month">Last Month</option>
                 <option value="This Quarter">This Quarter</option>
@@ -1577,12 +1607,16 @@ const Metrics = () => {
                   <input
                     type="date"
                     value={customDateRange.from?.toISOString().split('T')[0] || ''}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const date = e.target.value ? new Date(e.target.value) : undefined;
+                      if (date) {
+                        date.setHours(0, 0, 0, 0);
+                      }
                       setCustomDateRange((prev) => ({
                         ...prev,
-                        from: e.target.value ? new Date(e.target.value) : undefined,
-                      }))
-                    }
+                        from: date,
+                      }));
+                    }}
                     className="w-full h-8 px-2 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
@@ -1591,12 +1625,16 @@ const Metrics = () => {
                   <input
                     type="date"
                     value={customDateRange.to?.toISOString().split('T')[0] || ''}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const date = e.target.value ? new Date(e.target.value) : undefined;
+                      if (date) {
+                        date.setHours(23, 59, 59, 999);
+                      }
                       setCustomDateRange((prev) => ({
                         ...prev,
-                        to: e.target.value ? new Date(e.target.value) : undefined,
-                      }))
-                    }
+                        to: date,
+                      }));
+                    }}
                     className="w-full h-8 px-2 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
@@ -1781,9 +1819,12 @@ const Metrics = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="This Week">This Week</SelectItem>
                     <SelectItem value="This Month">This Month</SelectItem>
                     <SelectItem value="Last Month">Last Month</SelectItem>
                     <SelectItem value="This Quarter">This Quarter</SelectItem>
+                    <SelectItem value="This Year">This Year</SelectItem>
+                    <SelectItem value="Custom Range">Custom Range</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -2450,9 +2491,12 @@ const Metrics = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="This Week">This Week</SelectItem>
                     <SelectItem value="This Month">This Month</SelectItem>
                     <SelectItem value="Last Month">Last Month</SelectItem>
                     <SelectItem value="This Quarter">This Quarter</SelectItem>
+                    <SelectItem value="This Year">This Year</SelectItem>
+                    <SelectItem value="Custom Range">Custom Range</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

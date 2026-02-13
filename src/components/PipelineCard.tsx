@@ -19,7 +19,7 @@ import { useEffect, useRef } from "react";
 interface PipelineCardProps {
   lead: {
     id: string;
-    address: string;
+    address: string | { address1?: string; [key: string]: any };
     sellerName: string;
     buyerName?: string;
     dateCreated: Date | string;
@@ -44,9 +44,11 @@ interface PipelineCardProps {
   isDragging?: boolean;
   onViewDetails?: () => void;
   currentPipeline?: string;
+  isLastTouchedFilterActive?: boolean;
+  isLeadCreatedFilterActive?: boolean;
 }
 
-export const PipelineCard = ({ lead, isDragging, onViewDetails, currentPipeline }: PipelineCardProps) => {
+export const PipelineCard = ({ lead, isDragging, onViewDetails, currentPipeline, isLastTouchedFilterActive, isLeadCreatedFilterActive }: PipelineCardProps) => {
   const { user } = useAuth();
   const userRoles = user?.roles || [];
   const canShowTransactionFlags = userRoles.includes('ADMIN') || userRoles.includes('MANAGER') || userRoles.includes('EXECUTIVE') || userRoles.includes('DISP') || userRoles.includes('TC');
@@ -173,7 +175,14 @@ export const PipelineCard = ({ lead, isDragging, onViewDetails, currentPipeline 
         <div className="flex items-center justify-between text-[11px] text-gray-500 pt-0.5 border-t border-gray-100">
           <div className="flex items-center gap-0.5">
             <Calendar className="w-2.5 h-2.5" />
-            <span>{safeDateFormat(lead.lastTouchedAt || lead.lastContactDate || lead.dateCreated, 'MMM dd')}</span>
+            <span>
+              {isLeadCreatedFilterActive
+                ? (lead.dateCreated ? safeDateFormat(lead.dateCreated, 'MMM dd') : 'N/A')
+                : isLastTouchedFilterActive 
+                  ? (lead.lastTouchedAt ? safeDateFormat(lead.lastTouchedAt, 'MMM dd') : 'N/A')
+                  : safeDateFormat(lead.lastTouchedAt || lead.lastContactDate || lead.dateCreated, 'MMM dd')
+              }
+            </span>
           </div>
           <div className="flex items-center gap-0.5">
             <Clock className={`w-2.5 h-2.5 ${getActivityAgingClass()}`} />
