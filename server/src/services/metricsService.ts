@@ -51,7 +51,7 @@ function getEtDayOfWeek(d: Date): number {
   // Get day of week in ET timezone (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
   const formatter = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
-    weekday: 'numeric',
+    weekday: 'long',
   });
   const dayName = formatter.format(d);
   const dayMap: Record<string, number> = {
