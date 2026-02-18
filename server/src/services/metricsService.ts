@@ -1,4 +1,6 @@
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+dayjs.extend(utc);
 import { prisma } from '../config/db.js';
 import { metricsRepository } from '../repositories/metricsRepository.js';
 
@@ -10,12 +12,12 @@ type MonthlyFlow = { name: string; totalLeads: number; contractedLeads: number; 
  * After hours: 5 PM - 8 AM ET (16-hour threshold)
  */
 function isLeadMishandled(createdAt: Date, lastContactAt: Date | null): boolean {
-  const now = dayjs();
-  const created = dayjs(createdAt);
-  const lastContact = lastContactAt ? dayjs(lastContactAt) : created;
+  const now = dayjs.utc();
+  const created = dayjs.utc(createdAt);
+  const lastContact = lastContactAt ? dayjs.utc(lastContactAt) : created;
   
   // If already contacted, not mishandled
-  if (lastContactAt && dayjs(lastContactAt).isAfter(created)) {
+  if (lastContactAt && dayjs.utc(lastContactAt).isAfter(created)) {
     return false;
   }
   
@@ -110,7 +112,7 @@ function computeLastActivityAt(lead: {
 
 export const metricsService = {
   async getLeadDealFlowLast12Months(userId?: string): Promise<MonthlyFlow[]> {
-    const end = dayjs().endOf('month');
+    const end = dayjs.utc().endOf('month');
     const start = end.subtract(11, 'month').startOf('month');
 
     // Pre-build 12 months buckets
@@ -139,7 +141,7 @@ export const metricsService = {
 
     // ✅ Count leads per month based on their CURRENT stage
     for (const lead of leads) {
-      const idx = dayjs(lead.createdAt).startOf('month').diff(start, 'month');
+      const idx = dayjs.utc(lead.createdAt).startOf('month').diff(start, 'month');
       if (idx < 0 || idx >= months.length) continue;
       
       months[idx].totalLeads += 1;
@@ -166,7 +168,7 @@ export const metricsService = {
   },
 
   async getLeadSourcesLast12Months(userId?: string): Promise<{ name: string; sources: Record<string, number> }[]> {
-    const end = dayjs().endOf('month');
+    const end = dayjs.utc().endOf('month');
     const start = end.subtract(11, 'month').startOf('month');
 
     const buckets: { name: string; sources: Record<string, number> }[] = [];
@@ -179,7 +181,7 @@ export const metricsService = {
       userId ? { createdById: userId } : undefined
     );
     for (const lead of leads) {
-      const idx = dayjs(lead.createdAt).startOf('month').diff(start, 'month');
+      const idx = dayjs.utc(lead.createdAt).startOf('month').diff(start, 'month');
       if (idx < 0 || idx >= buckets.length) continue;
       const cf = (lead as any).customFields as any;
       const source = (cf?.leadSource || cf?.source || 'Other') as string;
@@ -191,7 +193,7 @@ export const metricsService = {
   },
 
   async getCompanyKpis(timeframe: 'This Month' | 'Last Month' | 'This Quarter') {
-    const now = dayjs();
+    const now = dayjs.utc();
     let start: dayjs.Dayjs;
     let end: dayjs.Dayjs;
     if (timeframe === 'This Month') {
@@ -263,7 +265,7 @@ export const metricsService = {
     const roles = user?.roles || [];
     const userId = user?.id;
 
-    const now = dayjs();
+    const now = dayjs.utc();
     let start: dayjs.Dayjs;
     let end: dayjs.Dayjs;
     if (timeframe === 'This Month') {
@@ -868,7 +870,7 @@ export const metricsService = {
   },
 
   async getPipelineOverview(timeframe: 'This Month' | 'Last Month' | 'This Quarter', pipelineKey: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION' = 'ACQUISITIONS') {
-    const now = dayjs();
+    const now = dayjs.utc();
     let start: dayjs.Dayjs;
     let end: dayjs.Dayjs;
     if (timeframe === 'This Month') { start = now.startOf('month'); end = now.endOf('month'); }
@@ -1002,7 +1004,7 @@ export const metricsService = {
   },
 
   async getPipelineTimelineMetrics(timeframe: 'This Month' | 'Last Month' | 'This Quarter', pipelineKey: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION' = 'ACQUISITIONS') {
-    const now = dayjs();
+    const now = dayjs.utc();
     let start: dayjs.Dayjs;
     let end: dayjs.Dayjs;
     if (timeframe === 'This Month') { start = now.startOf('month'); end = now.endOf('month'); }
@@ -1208,14 +1210,14 @@ export const metricsService = {
     dateTo?: string;
     userId?: string;
   }) {
-    const now = dayjs();
+    const now = dayjs.utc();
     let start: dayjs.Dayjs;
     let end: dayjs.Dayjs;
     
     // Handle date filtering with global filter support
     if (filters.dateFrom && filters.dateTo) {
-      start = dayjs(filters.dateFrom);
-      end = dayjs(filters.dateTo);
+      start = dayjs.utc(filters.dateFrom);
+      end = dayjs.utc(filters.dateTo);
     } else {
       // Fallback to timeframe
       const timeframe = filters.timeframe || 'This Month';
@@ -1365,14 +1367,14 @@ export const metricsService = {
     userId?: string;
     scope?: 'personal' | 'team';
   }) {
-    const now = dayjs();
+    const now = dayjs.utc();
     let start: dayjs.Dayjs;
     let end: dayjs.Dayjs;
     
     // Handle date filtering with global filter support
     if (filters.dateFrom && filters.dateTo) {
-      start = dayjs(filters.dateFrom);
-      end = dayjs(filters.dateTo);
+      start = dayjs.utc(filters.dateFrom);
+      end = dayjs.utc(filters.dateTo);
     } else {
       // Fallback to timeframe
       const timeframe = filters.timeframe || 'This Month';
@@ -1537,14 +1539,14 @@ export const metricsService = {
     userId?: string;
     scope?: 'personal' | 'team';
   }) {
-    const now = dayjs();
+    const now = dayjs.utc();
     let start: dayjs.Dayjs;
     let end: dayjs.Dayjs;
     
     // Handle date filtering with global filter support
     if (filters.dateFrom && filters.dateTo) {
-      start = dayjs(filters.dateFrom);
-      end = dayjs(filters.dateTo);
+      start = dayjs.utc(filters.dateFrom);
+      end = dayjs.utc(filters.dateTo);
     } else {
       // Fallback to timeframe
       const timeframe = filters.timeframe || 'This Month';
@@ -1723,14 +1725,14 @@ export const metricsService = {
     userId?: string;
     scope?: 'personal' | 'overview';
   }) {
-    const now = dayjs();
+    const now = dayjs.utc();
     let start: dayjs.Dayjs;
     let end: dayjs.Dayjs;
     
     // Handle date filtering with global filter support
     if (filters.dateFrom && filters.dateTo) {
-      start = dayjs(filters.dateFrom);
-      end = dayjs(filters.dateTo);
+      start = dayjs.utc(filters.dateFrom);
+      end = dayjs.utc(filters.dateTo);
     } else {
       // Fallback to timeframe
       const timeframe = filters.timeframe || 'This Month';
@@ -1889,7 +1891,7 @@ export const metricsService = {
   async getAcquisitionsLeaderboard(filters: {
     period?: string;
   }) {
-    const now = dayjs();
+    const now = dayjs.utc();
     let start: dayjs.Dayjs;
     let end: dayjs.Dayjs;
     
@@ -2079,7 +2081,7 @@ export const metricsService = {
   async getDispositionsLeaderboard(filters: {
     period?: string;
   }) {
-    const now = dayjs();
+    const now = dayjs.utc();
     let start: dayjs.Dayjs;
     let end: dayjs.Dayjs;
     
@@ -2274,7 +2276,7 @@ export const metricsService = {
   },
 
   async getTeamKpis(timeframe: 'This Month' | 'Last Month' | 'This Quarter') {
-    const now = dayjs();
+    const now = dayjs.utc();
     let start: dayjs.Dayjs;
     let end: dayjs.Dayjs;
     if (timeframe === 'This Month') { start = now.startOf('month'); end = now.endOf('month'); }

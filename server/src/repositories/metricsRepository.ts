@@ -56,12 +56,13 @@ export const metricsRepository = {
     prisma.pipelineDefinition.findUnique({ where: { key }, include: { stages: { orderBy: { orderIndex: 'asc' } } } }),
 
   countLeadsByStageBetween: async (stageIds: string[], from: Date, to: Date) => {
-    // groupBy leads current stage
+    // Count leads created in the timeframe, grouped by their CURRENT stage
+    // This shows: "Of the leads created this month, where are they now?" (updated/current state)
     const groups = await prisma.lead.groupBy({
       by: ['pipelineStageId'],
       where: {
         pipelineStageId: { in: stageIds },
-        createdAt: { gte: from, lt: to },
+        createdAt: { gte: from, lte: to },
       },
       _count: { pipelineStageId: true },
     });
