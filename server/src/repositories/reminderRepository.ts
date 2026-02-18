@@ -102,16 +102,14 @@ export const reminderRepository = {
                       }
                     }
                   },
-                  // Exclude leads that have ANY open past due tasks (wait for 4+ or 6+ hour past due task filter)
-                  // If there's a task set for today (e.g., 8am this morning), even if it's past due, don't show in untouched category
+                  // Exclude leads that have ANY open tasks (past due OR upcoming) - wait for 4+ or 6+ hour past due task filter
+                  // If there's a task set (e.g., 8am this morning), even if it's past due or upcoming, don't show in untouched category
                   {
                     NOT: {
                       tasks: {
                         some: {
                           status: TaskStatus.OPEN,
-                          dueAt: {
-                            lte: now // Exclude if task is past due (due date <= now)
-                          },
+                          // No dueAt condition = excludes ALL open tasks (past due AND upcoming)
                           // Exclude auto-created tasks from this check
                           NOT: [
                             { title: { startsWith: 'Review note on ' } },
@@ -381,15 +379,13 @@ export const reminderRepository = {
                 }
               },
               {
-                // Exclude leads that have ANY open past due tasks (wait for 4+ hour past due task filter)
-                // If there's a task set for today (e.g., 8am this morning), even if it's past due, don't show in untouched category
+                // Exclude leads that have ANY open tasks (past due OR upcoming) - wait for 4+ hour past due task filter
+                // If there's a task set (e.g., 8am this morning), even if it's past due or upcoming, don't show in untouched category
                 NOT: {
                   tasks: {
                     some: {
                       status: TaskStatus.OPEN,
-                      dueAt: {
-                        lte: now // Exclude if task is past due (due date <= now)
-                      },
+                      // No dueAt condition = excludes ALL open tasks (past due AND upcoming)
                       // Exclude auto-created tasks from this check
                       NOT: [
                         { title: { startsWith: 'Review note on ' } },
@@ -591,15 +587,13 @@ export const reminderRepository = {
                 }
               },
               {
-                // Exclude leads that have ANY open past due tasks (wait for 4+ hour past due task filter)
-                // If there's a task set for today (e.g., 8am this morning), even if it's past due, don't show in untouched category
+                // Exclude leads that have ANY open tasks (past due OR upcoming) - wait for 4+ hour past due task filter
+                // If there's a task set (e.g., 8am this morning), even if it's past due or upcoming, don't show in untouched category
                 NOT: {
                   tasks: {
                     some: {
                       status: TaskStatus.OPEN,
-                      dueAt: {
-                        lte: now // Exclude if task is past due (due date <= now)
-                      },
+                      // No dueAt condition = excludes ALL open tasks (past due AND upcoming)
                       // Exclude auto-created tasks from this check
                       NOT: [
                         { title: { startsWith: 'Review note on ' } },
@@ -801,15 +795,13 @@ export const reminderRepository = {
                 }
               },
               {
-                // Exclude leads that have ANY open past due tasks (wait for 4+ hour past due task filter)
-                // If there's a task set for today (e.g., 8am this morning), even if it's past due, don't show in untouched category
+                // Exclude leads that have ANY open tasks (past due OR upcoming) - wait for 4+ hour past due task filter
+                // If there's a task set (e.g., 8am this morning), even if it's past due or upcoming, don't show in untouched category
                 NOT: {
                   tasks: {
                     some: {
                       status: TaskStatus.OPEN,
-                      dueAt: {
-                        lte: now // Exclude if task is past due (due date <= now)
-                      },
+                      // No dueAt condition = excludes ALL open tasks (past due AND upcoming)
                       // Exclude auto-created tasks from this check
                       NOT: [
                         { title: { startsWith: 'Review note on ' } },
