@@ -138,10 +138,6 @@ const Inbox = () => {
   const [loadingReminders, setLoadingReminders] = useState(false);
   const [reminderCounts, setReminderCounts] = useState<any>(null);
   
-  // SLA status state
-  const [slaStatus, setSlaStatus] = useState<any>(null);
-  const [loadingSLA, setLoadingSLA] = useState(false);
-  
   // Notifications state
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
@@ -1496,40 +1492,6 @@ const Inbox = () => {
     }
   };
 
-  // Fetch SLA status
-  const fetchSLAStatus = async () => {
-    setLoadingSLA(true);
-    console.log('📊 Fetching SLA status...');
-    try {
-      const accessToken = localStorage.getItem('accessToken');
-      console.log('🔑 Using token for SLA:', accessToken ? 'Token exists' : 'NO TOKEN!');
-      const res = await fetch(`${API_BASE}/reminders/sla-status`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
-      
-      if (!res.ok) {
-        console.error(`SLA status API error: ${res.status} ${res.statusText}`);
-        const errorText = await res.text();
-        console.error('Error response:', errorText);
-        setSlaStatus(null);
-        return;
-      }
-      
-      const json = await res.json();
-      console.log('SLA status response:', json);
-      
-      if (json.success) {
-        setSlaStatus(json.data);
-        console.log('✅ SLA Status loaded:', json.data);
-      } else {
-        console.error('SLA status API returned success: false', json);
-        setSlaStatus(null);
-      }
-    } catch (error) {
-      console.error('Error fetching SLA status:', error);
-      setSlaStatus(null);
-    } finally {
-      setLoadingSLA(false);
-    }
-  };
 
   // Fetch notifications
   const fetchNotifications = async () => {
@@ -1593,7 +1555,6 @@ const Inbox = () => {
     fetchCommunications();
     fetchReminders();
     fetchReminderCounts();
-    fetchSLAStatus();
     fetchCallHistory(); // Load call history on mount for badge count
     fetchSMSHistory(); // Load SMS history on mount for badge count
     // Re-enable notifications - backend should be working now
@@ -1745,64 +1706,6 @@ const Inbox = () => {
         </div>
       </div>
 
-      {/* SLA Status Display */}
-      {slaStatus && (
-        <div className="bg-white border-b border-gray-200 px-6 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-2">
-                <div className={`w-3 h-3 rounded-full ${slaStatus.totalAlerts > 0 ? 'bg-red-500' : 'bg-green-500'}`} />
-                <span className="text-sm font-medium text-gray-700">SLA Status</span>
-              </div>
-              
-              <div className="flex items-center gap-4 text-xs">
-                <div className="flex items-center gap-1">
-                  <span className="text-gray-500">Total Alerts:</span>
-                  <span className={`font-medium ${slaStatus.totalAlerts > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    {slaStatus.totalAlerts}
-                  </span>
-                </div>
-                
-                <div className="flex items-center gap-1">
-                  <span className="text-gray-500">Critical:</span>
-                  <span className={`font-medium ${slaStatus.criticalAlerts > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    {slaStatus.criticalAlerts}
-                  </span>
-                </div>
-                
-                <div className="flex items-center gap-1">
-                  <span className="text-gray-500">Overdue:</span>
-                  <span className={`font-medium ${slaStatus.overdueItems > 0 ? 'text-orange-600' : 'text-green-600'}`}>
-                    {slaStatus.overdueItems}
-                  </span>
-                </div>
-                
-                <div className="flex items-center gap-1">
-                  <span className="text-gray-500">Upcoming:</span>
-                  <span className={`font-medium ${slaStatus.upcomingDeadlines > 0 ? 'text-yellow-600' : 'text-green-600'}`}>
-                    {slaStatus.upcomingDeadlines}
-                  </span>
-                </div>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-2">
-              {loadingSLA && (
-                <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={fetchSLAStatus}
-                disabled={loadingSLA}
-                className="h-6 px-2 text-xs text-gray-500 hover:text-gray-700"
-              >
-                <RefreshCw className={`w-3 h-3 ${loadingSLA ? 'animate-spin' : ''}`} />
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Filter Tabs */}
       <div className="bg-white border-b border-gray-200 px-6">
