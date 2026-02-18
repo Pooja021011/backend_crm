@@ -1,22 +1,22 @@
 import { prisma } from '../config/db.js';
 
 export const metricsRepository = {
-  getLeadsCreatedBetween: (from: Date, to: Date, filters?: { createdById?: string }) =>
+  getLeadsCreatedBetween: (from: Date, to: Date, filters?: { assignedUserId?: string }) =>
     prisma.lead.findMany({
       where: {
         createdAt: { gte: from, lt: to },
-        ...(filters?.createdById ? { createdById: filters.createdById } : {}),
+        ...(filters?.assignedUserId ? { assignedUserId: filters.assignedUserId } : {}),
       },
       select: { id: true, createdAt: true },
     }),
 
-  getStageHistoryBetween: (from: Date, to: Date, filters?: { createdById?: string }) =>
+  getStageHistoryBetween: (from: Date, to: Date, filters?: { assignedUserId?: string }) =>
     prisma.stageHistory.findMany({
       where: {
         changedAt: { gte: from, lt: to },
-        ...(filters?.createdById ? {
+        ...(filters?.assignedUserId ? {
           lead: {
-            createdById: filters.createdById
+            assignedUserId: filters.assignedUserId
           }
         } : {}),
       },
@@ -25,11 +25,12 @@ export const metricsRepository = {
 
   // Lead source distribution per month using Lead.createdAt and source stored on lead.customFields or related tables (if any)
   // We infer from Lead.customFields.leadSource when available
-  getLeadsWithSourceBetween: (from: Date, to: Date, filters?: { createdById?: string }) =>
+  // Filter by assignedUserId instead of createdById (leads assigned to user, not created by user)
+  getLeadsWithSourceBetween: (from: Date, to: Date, filters?: { assignedUserId?: string }) =>
     prisma.lead.findMany({
       where: { 
         createdAt: { gte: from, lt: to },
-        ...(filters?.createdById ? { createdById: filters.createdById } : {}),
+        ...(filters?.assignedUserId ? { assignedUserId: filters.assignedUserId } : {}),
       },
       select: { id: true, createdAt: true, customFields: true },
     }),
@@ -256,7 +257,7 @@ export const metricsRepository = {
    * Get count of leads that entered a contract stage during the specified timeframe
    * This counts NEW contracts signed within the date range (not all current contracts)
    */
-  getContractsSignedBetween: async (from: Date, to: Date, filters: { pipelineKey: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION'; leadType?: any; createdById?: string }) => {
+  getContractsSignedBetween: async (from: Date, to: Date, filters: { pipelineKey: 'ACQUISITIONS'|'DISPOSITIONS'|'TRANSACTION'; leadType?: any; assignedUserId?: string }) => {
     // Get all stage history entries where a lead moved INTO a stage containing "Contract"
     const stageHistory = await prisma.stageHistory.findMany({
       where: {
@@ -265,10 +266,10 @@ export const metricsRepository = {
           pipeline: { key: filters.pipelineKey as any },
           name: { contains: 'Contract', mode: 'insensitive' }
         },
-        ...(filters.leadType || filters.createdById ? {
+        ...(filters.leadType || filters.assignedUserId ? {
           lead: {
             ...(filters.leadType ? { leadType: filters.leadType } : {}),
-            ...(filters.createdById ? { createdById: filters.createdById } : {}),
+            ...(filters.assignedUserId ? { assignedUserId: filters.assignedUserId } : {}),
           }
         } : {}),
       },

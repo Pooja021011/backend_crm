@@ -1844,19 +1844,6 @@ const Metrics = () => {
             <Card className="lg:col-span-3 p-6 hover:shadow-lg transition-shadow">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-semibold text-gray-900">Lead and Deal Flow for Last 12 Months</h3>
-                <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-                  <SelectTrigger className="w-40">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="This Week">This Week</SelectItem>
-                    <SelectItem value="This Month">This Month</SelectItem>
-                    <SelectItem value="Last Month">Last Month</SelectItem>
-                    <SelectItem value="This Quarter">This Quarter</SelectItem>
-                    <SelectItem value="This Year">This Year</SelectItem>
-                    <SelectItem value="Custom Range">Custom Range</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">

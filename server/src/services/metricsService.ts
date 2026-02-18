@@ -123,10 +123,12 @@ export const metricsService = {
     }
 
     // ✅ Fetch ALL leads with their CURRENT stage (JOIN with Lead table)
+    // Use lte instead of lt to include leads created on the last day of the range
+    // Filter by assignedUserId instead of createdById (leads assigned to user, not created by user)
     const leads = await prisma.lead.findMany({
       where: {
-        createdAt: { gte: start.toDate(), lt: end.toDate() },
-        ...(userId ? { createdById: userId } : {}),
+        createdAt: { gte: start.toDate(), lte: end.toDate() },
+        ...(userId ? { assignedUserId: userId } : {}),
       },
       select: {
         id: true,
@@ -141,7 +143,9 @@ export const metricsService = {
 
     // ✅ Count leads per month based on their CURRENT stage
     for (const lead of leads) {
-      const idx = dayjs.utc(lead.createdAt).startOf('month').diff(start, 'month');
+      // Calculate which month bucket this lead belongs to
+      const leadMonth = dayjs.utc(lead.createdAt).startOf('month');
+      const idx = leadMonth.diff(start, 'month');
       if (idx < 0 || idx >= months.length) continue;
       
       months[idx].totalLeads += 1;
@@ -178,7 +182,7 @@ export const metricsService = {
     }
 
     const leads = await metricsRepository.getLeadsWithSourceBetween(start.toDate(), end.toDate(),
-      userId ? { createdById: userId } : undefined
+      userId ? { assignedUserId: userId } : undefined
     );
     for (const lead of leads) {
       const idx = dayjs.utc(lead.createdAt).startOf('month').diff(start, 'month');
@@ -2325,12 +2329,21 @@ export const metricsService = {
   async getMarketingBreakdown(filters: { dateFrom?: string; dateTo?: string; sources?: string[] }) {
     const { dateFrom, dateTo, sources } = filters;
     
-    // Build date filter
+    // Build date filter - default to current month if no dates provided
     const dateFilter: any = {};
     if (dateFrom && dateTo) {
       dateFilter.createdAt = {
         gte: new Date(dateFrom),
         lte: new Date(dateTo)
+      };
+    } else {
+      // Default to current month if no date filters provided (matches Leads page behavior)
+      const now = dayjs.utc();
+      const monthStart = now.startOf('month');
+      const monthEnd = now.endOf('month');
+      dateFilter.createdAt = {
+        gte: monthStart.toDate(),
+        lte: monthEnd.toDate()
       };
     }
     
