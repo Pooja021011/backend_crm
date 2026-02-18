@@ -775,6 +775,8 @@ export const metricsService = {
 
     // 48h stale across leads in pipeline status "No contact made" through "contract sent"
     // that have gone 48 hours without being reached out to (OUTBOUND only)
+    // EXCLUDE leads with upcoming tasks (same as "Needs Attention" logic)
+    const tasksCutoffDate = new Date('2026-01-20T00:00:00Z'); // Tasks cutoff date (same as reminder logic)
     const stale48hLeads = activeLeads.filter((l) => {
       // Filter by pipeline stage: only "No Contact Made" through "Contract Sent"
       if (!l.pipelineStage) {
@@ -782,6 +784,27 @@ export const metricsService = {
       }
       if (!validStageIdsForStale48h.has(l.pipelineStage.id)) {
         return false;
+      }
+      
+      // EXCLUDE leads with upcoming tasks (matching "Needs Attention" logic)
+      const hasUpcomingTask = (l as any).tasks?.some((t: any) => {
+        if (t.status !== 'OPEN') return false;
+        const dueDate = new Date(t.dueAt);
+        if (dueDate < tasksCutoffDate || dueDate <= nowDt) return false; // Not upcoming
+        const title = String(t.title || '');
+        const isAutoCreated = 
+          title.startsWith('Review note on ') ||
+          title.startsWith('Underwrite ') ||
+          title.startsWith('Make Offer on ') ||
+          title.startsWith('Follow Up With ') ||
+          title.startsWith('Contract Sent - Awaiting Signature for ') ||
+          title.startsWith('URGENT: DocuSign Failed for ') ||
+          title.startsWith('Check Voided Contract With ');
+        return !isAutoCreated;
+      });
+      
+      if (hasUpcomingTask) {
+        return false; // Exclude leads with upcoming tasks
       }
       
       // Get the MOST RECENT OUTBOUND communication (CALL/SMS/EMAIL only) for stale48h check

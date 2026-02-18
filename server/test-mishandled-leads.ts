@@ -120,6 +120,18 @@ async function testMishandledLeads(assignedUserId?: string) {
             occurredAt: true,
             createdAt: true,
           }
+        },
+        // Include tasks for stale48h upcoming task exclusion
+        tasks: {
+          where: {
+            status: 'OPEN',
+          },
+          select: {
+            id: true,
+            title: true,
+            dueAt: true,
+            status: true,
+          },
         }
       },
     });
@@ -196,9 +208,32 @@ async function testMishandledLeads(assignedUserId?: string) {
     });
 
     // 5. Stale 48h - Only OUTBOUND communications count as "reach out" (matching Major KPI logic)
+    // EXCLUDE leads with upcoming tasks (same as "Needs Attention" logic)
+    const tasksCutoffDate = new Date('2026-01-20T00:00:00Z'); // Tasks cutoff date (same as reminder logic)
     const stale48hLeads = activeLeads.filter((l) => {
       if (!l.pipelineStage) return false;
       if (!validStageIdsForStale48h.has(l.pipelineStage.id)) return false;
+      
+      // EXCLUDE leads with upcoming tasks (matching "Needs Attention" logic)
+      const hasUpcomingTask = (l as any).tasks?.some((t: any) => {
+        if (t.status !== 'OPEN') return false;
+        const dueDate = new Date(t.dueAt);
+        if (dueDate < tasksCutoffDate || dueDate <= nowDt) return false; // Not upcoming
+        const title = String(t.title || '');
+        const isAutoCreated = 
+          title.startsWith('Review note on ') ||
+          title.startsWith('Underwrite ') ||
+          title.startsWith('Make Offer on ') ||
+          title.startsWith('Follow Up With ') ||
+          title.startsWith('Contract Sent - Awaiting Signature for ') ||
+          title.startsWith('URGENT: DocuSign Failed for ') ||
+          title.startsWith('Check Voided Contract With ');
+        return !isAutoCreated;
+      });
+      
+      if (hasUpcomingTask) {
+        return false; // Exclude leads with upcoming tasks
+      }
       
       // Get the MOST RECENT OUTBOUND communication (CALL/SMS/EMAIL only) for stale48h check
       // Communications are ordered by occurredAt asc, so last item is the most recent
@@ -218,14 +253,18 @@ async function testMishandledLeads(assignedUserId?: string) {
 
     console.log(`\n⏰ STALE 48H (${stale48hLeads.length}) - OUTBOUND only:`);
     stale48hLeads.forEach(lead => {
-      const outboundComm = (lead as any).communications?.[0];
-      const lastOutboundAt = outboundComm?.occurredAt || outboundComm?.createdAt || null;
+      // Get the MOST RECENT OUTBOUND communication (matching filter logic)
+      // Communications are ordered by occurredAt asc, so last item is the most recent
+      const allOutboundComms = (lead as any).communications || [];
+      const lastOutboundComm = allOutboundComms[allOutboundComms.length - 1]; // Last in asc order = most recent
+      const lastOutboundAt = lastOutboundComm?.occurredAt ? new Date(lastOutboundComm.occurredAt) : null;
+      
       const hoursSince = lastOutboundAt
-        ? (nowDt.getTime() - new Date(lastOutboundAt).getTime()) / (1000 * 60 * 60)
+        ? (nowDt.getTime() - lastOutboundAt.getTime()) / (1000 * 60 * 60)
         : (nowDt.getTime() - lead.createdAt.getTime()) / (1000 * 60 * 60);
       console.log(`   - Lead ID: ${lead.id}`);
       console.log(`     Stage: ${lead.pipelineStage?.name || 'Unknown'}`);
-      console.log(`     Last OUTBOUND: ${lastOutboundAt ? new Date(lastOutboundAt).toISOString() : 'Never'}`);
+      console.log(`     Last OUTBOUND: ${lastOutboundAt ? lastOutboundAt.toISOString() : 'Never'}`);
       console.log(`     Last Contact (all): ${lead.lastContactAt ? lead.lastContactAt.toISOString() : 'Never'}`);
       console.log(`     Hours Since: ${hoursSince.toFixed(2)}h`);
     });
@@ -278,6 +317,18 @@ async function testMishandledLeads(assignedUserId?: string) {
             dueAt: {
               lte: new Date(nowDt.getTime() - 6 * 60 * 60 * 1000),
               gte: tasksCutoffDate,
+            },
+            // Exclude auto-generated tasks (matching the query filter)
+            NOT: {
+              OR: [
+                { title: { startsWith: 'Review note on ' } },
+                { title: { startsWith: 'Underwrite ' } },
+                { title: { startsWith: 'Make Offer on ' } },
+                { title: { startsWith: 'Follow Up With ' } },
+                { title: { startsWith: 'Contract Sent - Awaiting Signature for ' } },
+                { title: { startsWith: 'URGENT: DocuSign Failed for ' } },
+                { title: { startsWith: 'Check Voided Contract With ' } },
+              ]
             }
           },
           select: {
@@ -301,14 +352,52 @@ async function testMishandledLeads(assignedUserId?: string) {
       });
     });
 
-    // 7. Summary
-    const totalMishandled = slaBreachLeads.length + stale48hLeads.length + leadsWithPastDueTasks.length;
+    // 7. Build comprehensive summary with matched rules for each lead
+    const slaBreachIds = new Set(slaBreachLeads.map(l => l.id));
+    const stale48hIds = new Set(stale48hLeads.map(l => l.id));
+    const tasksPastDueIds = new Set(leadsWithPastDueTasks.map(l => l.id));
+    
+    // Combine all mishandled lead IDs
+    const allMishandledIds = new Set([...slaBreachIds, ...stale48hIds, ...tasksPastDueIds]);
+    
     console.log(`\n${'='.repeat(80)}`);
     console.log(`\n📊 SUMMARY:`);
-    console.log(`   SLA Breaches: ${slaBreachLeads.length} (Lead IDs: ${slaBreachLeads.map(l => l.id).join(', ') || 'None'})`);
-    console.log(`   Stale 48h: ${stale48hLeads.length} (Lead IDs: ${stale48hLeads.map(l => l.id).join(', ') || 'None'})`);
-    console.log(`   Tasks Past Due 6h+: ${leadsWithPastDueTasks.length} (Lead IDs: ${leadsWithPastDueTasks.map(l => l.id).join(', ') || 'None'})`);
-    console.log(`   TOTAL MISHANDLED: ${totalMishandled}`);
+    console.log(`   SLA Breaches: ${slaBreachLeads.length}`);
+    console.log(`   Stale 48h: ${stale48hLeads.length}`);
+    console.log(`   Tasks Past Due 6h+: ${leadsWithPastDueTasks.length}`);
+    console.log(`   TOTAL MISHANDLED: ${allMishandledIds.size}`);
+    
+    // Detailed breakdown: Each lead with matched rules
+    console.log(`\n📋 DETAILED BREAKDOWN - Each Lead with Matched Rules:`);
+    console.log(`${'='.repeat(80)}`);
+    
+    const allMishandledLeads = Array.from(allMishandledIds).map(id => {
+      const slaBreach = slaBreachIds.has(id);
+      const stale48h = stale48hIds.has(id);
+      const tasksPastDue = tasksPastDueIds.has(id);
+      
+      const rules: string[] = [];
+      if (slaBreach) rules.push('SLA Breach');
+      if (stale48h) rules.push('Stale 48h');
+      if (tasksPastDue) rules.push('Tasks Past Due 6h+');
+      
+      return { id, rules };
+    });
+    
+    allMishandledLeads.forEach(({ id, rules }) => {
+      console.log(`\n   Lead ID: ${id}`);
+      console.log(`   Matched Rules: ${rules.join(', ')}`);
+    });
+    
+    console.log(`\n${'='.repeat(80)}`);
+    console.log(`\n📝 QUICK REFERENCE - Lead IDs by Rule:`);
+    console.log(`\n   SLA Breach Only: ${Array.from(slaBreachIds).filter(id => !stale48hIds.has(id) && !tasksPastDueIds.has(id)).join(', ') || 'None'}`);
+    console.log(`   Stale 48h Only: ${Array.from(stale48hIds).filter(id => !slaBreachIds.has(id) && !tasksPastDueIds.has(id)).join(', ') || 'None'}`);
+    console.log(`   Tasks Past Due Only: ${Array.from(tasksPastDueIds).filter(id => !slaBreachIds.has(id) && !stale48hIds.has(id)).join(', ') || 'None'}`);
+    console.log(`   Multiple Rules: ${Array.from(allMishandledIds).filter(id => {
+      const count = (slaBreachIds.has(id) ? 1 : 0) + (stale48hIds.has(id) ? 1 : 0) + (tasksPastDueIds.has(id) ? 1 : 0);
+      return count > 1;
+    }).join(', ') || 'None'}`);
     console.log(`\n${'='.repeat(80)}\n`);
 
   } catch (error) {

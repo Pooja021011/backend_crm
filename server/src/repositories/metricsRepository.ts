@@ -234,6 +234,18 @@ export const metricsRepository = {
             }
           }
         } : {}),
+        // Include tasks for stale48h upcoming task exclusion
+        tasks: {
+          where: {
+            status: 'OPEN',
+          },
+          select: {
+            id: true,
+            title: true,
+            dueAt: true,
+            status: true,
+          },
+        },
       },
     }),
 
