@@ -826,7 +826,7 @@ export const metricsService = {
 
     // Tasks past due more than 6 hours
     // Get all leads with tasks that are past due more than 6 hours
-    const tasksCutoffDate = new Date('2026-01-20T00:00:00Z'); // Tasks cutoff date
+    // Note: tasksCutoffDate is already declared above for stale48h logic
     const leadsWithPastDueTasks = await prisma.lead.findMany({
       where: {
         leadType: 'SELLER',
