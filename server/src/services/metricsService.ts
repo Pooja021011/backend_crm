@@ -2418,27 +2418,40 @@ export const metricsService = {
       };
     } else if (timeframe) {
       const now = new Date();
-      const currentYear = now.getFullYear();
-      const currentMonth = now.getMonth();
+      // Use UTC for consistent date calculations
+      const currentYear = now.getUTCFullYear();
+      const currentMonth = now.getUTCMonth();
       
       switch (timeframe) {
         case 'This Month':
+          // This Month: 1st day 12:00:00 AM to last day 11:59:59 PM UTC
           dateFilter.createdAt = {
-            gte: new Date(currentYear, currentMonth, 1),
-            lte: new Date(currentYear, currentMonth + 1, 0)
+            gte: new Date(Date.UTC(currentYear, currentMonth, 1, 0, 0, 0, 0)),
+            lte: new Date(Date.UTC(currentYear, currentMonth + 1, 0, 23, 59, 59, 999))
           };
           break;
         case 'Last Month':
+          // Last Month: 1st day 12:00:00 AM to last day 11:59:59 PM UTC
+          const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+          const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
           dateFilter.createdAt = {
-            gte: new Date(currentYear, currentMonth - 1, 1),
-            lte: new Date(currentYear, currentMonth, 0)
+            gte: new Date(Date.UTC(lastMonthYear, lastMonth, 1, 0, 0, 0, 0)),
+            lte: new Date(Date.UTC(lastMonthYear, lastMonth + 1, 0, 23, 59, 59, 999))
           };
           break;
         case 'This Quarter':
+          // This Quarter: 1st day of quarter 12:00:00 AM to last day 11:59:59 PM UTC
           const quarterStart = Math.floor(currentMonth / 3) * 3;
           dateFilter.createdAt = {
-            gte: new Date(currentYear, quarterStart, 1),
-            lte: new Date(currentYear, quarterStart + 3, 0)
+            gte: new Date(Date.UTC(currentYear, quarterStart, 1, 0, 0, 0, 0)),
+            lte: new Date(Date.UTC(currentYear, quarterStart + 3, 0, 23, 59, 59, 999))
+          };
+          break;
+        case 'This Year':
+          // This Year: Jan 1 12:00:00 AM to Dec 31 11:59:59 PM UTC
+          dateFilter.createdAt = {
+            gte: new Date(Date.UTC(currentYear, 0, 1, 0, 0, 0, 0)),
+            lte: new Date(Date.UTC(currentYear, 11, 31, 23, 59, 59, 999))
           };
           break;
       }

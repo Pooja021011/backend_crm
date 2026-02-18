@@ -465,14 +465,28 @@ const Leads = () => {
     
     if (selectedDateRange) {
       const now = new Date();
+      // Get current date in UTC
+      const utcYear = now.getUTCFullYear();
+      const utcMonth = now.getUTCMonth();
+      const utcDate = now.getUTCDate();
+      const utcDayOfWeek = now.getUTCDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+      
+      // Helper to get UTC date at start of day (00:00:00.000 UTC)
+      const getUTCStartOfDay = (year: number, month: number, day: number): Date => {
+        return new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+      };
+
+      // Helper to get UTC date at end of day (23:59:59.999 UTC)
+      const getUTCEndOfDay = (year: number, month: number, day: number): Date => {
+        return new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
+      };
       
       // Date Created filter: Always use createdAt, no fallback
       switch (selectedDateRange) {
         case 'today': {
-          const startDate = new Date(now);
-          startDate.setHours(0, 0, 0, 0);
-          const endDate = new Date(now);
-          endDate.setHours(23, 59, 59, 999);
+          // Today: 12:00:00 AM to 11:59:59 PM UTC
+          const startDate = getUTCStartOfDay(utcYear, utcMonth, utcDate);
+          const endDate = getUTCEndOfDay(utcYear, utcMonth, utcDate);
           
           filteredLeads = filteredLeads.filter((lead: any) => {
             const createdAt = new Date(lead.createdAt);
@@ -481,14 +495,13 @@ const Leads = () => {
           break;
         }
         case 'week': {
-          // Calculate current calendar week: Sunday (0) to Saturday (6)
-          const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-          const startDate = new Date(now);
-          startDate.setDate(now.getDate() - dayOfWeek); // Go back to Sunday
-          startDate.setHours(0, 0, 0, 0);
-          const endDate = new Date(now);
-          endDate.setDate(now.getDate() + (6 - dayOfWeek)); // Go forward to Saturday
-          endDate.setHours(23, 59, 59, 999);
+          // This Week: Sunday 12:00:00 AM to Saturday 11:59:59 PM UTC
+          const daysToSunday = utcDayOfWeek; // Days to go back to Sunday
+          const sundayDate = new Date(Date.UTC(utcYear, utcMonth, utcDate - daysToSunday));
+          const saturdayDate = new Date(Date.UTC(utcYear, utcMonth, utcDate - daysToSunday + 6));
+          
+          const startDate = getUTCStartOfDay(sundayDate.getUTCFullYear(), sundayDate.getUTCMonth(), sundayDate.getUTCDate());
+          const endDate = getUTCEndOfDay(saturdayDate.getUTCFullYear(), saturdayDate.getUTCMonth(), saturdayDate.getUTCDate());
           
           filteredLeads = filteredLeads.filter((lead: any) => {
             const createdAt = new Date(lead.createdAt);
@@ -497,13 +510,11 @@ const Leads = () => {
           break;
         }
         case 'month': {
-          // Set start date to 1st of current month at 00:00:00
-          const startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-          startDate.setHours(0, 0, 0, 0);
-          
-          // Set end date to last day of current month at 23:59:59
-          const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-          endDate.setHours(23, 59, 59, 999);
+          // This Month: 1st day 12:00:00 AM to last day 11:59:59 PM UTC
+          const startDate = getUTCStartOfDay(utcYear, utcMonth, 1);
+          // Get last day of month
+          const lastDayOfMonth = new Date(Date.UTC(utcYear, utcMonth + 1, 0));
+          const endDate = getUTCEndOfDay(lastDayOfMonth.getUTCFullYear(), lastDayOfMonth.getUTCMonth(), lastDayOfMonth.getUTCDate());
           
           filteredLeads = filteredLeads.filter((lead: any) => {
             const createdAt = new Date(lead.createdAt);
@@ -512,11 +523,15 @@ const Leads = () => {
           break;
         }
         case 'quarter': {
-          const currentQuarter = Math.floor(now.getMonth() / 3);
-          const startDate = new Date(now.getFullYear(), currentQuarter * 3, 1);
-          startDate.setHours(0, 0, 0, 0);
-          const endDate = new Date(now.getFullYear(), currentQuarter * 3 + 3, 0);
-          endDate.setHours(23, 59, 59, 999);
+          // This Quarter: 1st day of quarter 12:00:00 AM to last day 11:59:59 PM UTC
+          const currentQuarter = Math.floor(utcMonth / 3);
+          const quarterStartMonth = currentQuarter * 3;
+          const quarterEndMonth = quarterStartMonth + 3;
+          
+          const startDate = getUTCStartOfDay(utcYear, quarterStartMonth, 1);
+          // Get last day of quarter
+          const lastDayOfQuarter = new Date(Date.UTC(utcYear, quarterEndMonth, 0));
+          const endDate = getUTCEndOfDay(lastDayOfQuarter.getUTCFullYear(), lastDayOfQuarter.getUTCMonth(), lastDayOfQuarter.getUTCDate());
           
           filteredLeads = filteredLeads.filter((lead: any) => {
             const createdAt = new Date(lead.createdAt);
@@ -525,10 +540,9 @@ const Leads = () => {
           break;
         }
         case 'year': {
-          const startDate = new Date(now.getFullYear(), 0, 1);
-          startDate.setHours(0, 0, 0, 0);
-          const endDate = new Date(now.getFullYear(), 11, 31);
-          endDate.setHours(23, 59, 59, 999);
+          // This Year: Jan 1 12:00:00 AM to Dec 31 11:59:59 PM UTC
+          const startDate = getUTCStartOfDay(utcYear, 0, 1);
+          const endDate = getUTCEndOfDay(utcYear, 11, 31);
           
           filteredLeads = filteredLeads.filter((lead: any) => {
             const createdAt = new Date(lead.createdAt);
@@ -537,14 +551,9 @@ const Leads = () => {
           break;
         }
         case 'custom': {
-          const from = customDateFrom ? new Date(customDateFrom) : null;
-          const to = customDateTo ? new Date(customDateTo) : null;
-          if (from) {
-            from.setHours(0, 0, 0, 0);
-          }
-          if (to) {
-            to.setHours(23, 59, 59, 999);
-          }
+          // Custom range: Parse dates and set UTC boundaries
+          const from = customDateFrom ? new Date(customDateFrom + 'T00:00:00.000Z') : null;
+          const to = customDateTo ? new Date(customDateTo + 'T23:59:59.999Z') : null;
 
           filteredLeads = filteredLeads.filter((lead: any) => {
             const createdAt = new Date(lead.createdAt);
@@ -1066,12 +1075,12 @@ const Leads = () => {
                   onChange={(e) => setSelectedDateRange(e.target.value)}
                 >
                   <option value="">All Time</option>
-                  <option value="today">Today ({new Date().toLocaleDateString()})</option>
+                  <option value="today">Today</option>
                   <option value="week">This Week</option>
-                  <option value="month">This Month ({new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })})</option>
+                  <option value="month">This Month</option>
                   <option value="quarter">This Quarter</option>
-                  <option value="year">This Year ({new Date().getFullYear()})</option>
-                  <option value="custom">Custom Range…</option>
+                  <option value="year">This Year</option>
+                  <option value="custom">Custom Range</option>
                 </select>
 
                 {selectedDateRange === 'custom' && (

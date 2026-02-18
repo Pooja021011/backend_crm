@@ -210,67 +210,85 @@ const Metrics = () => {
   // Helper function to convert period to date range
   const getDateRangeFromPeriod = (period: string) => {
     const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
+    // Get current date in UTC
+    const utcYear = now.getUTCFullYear();
+    const utcMonth = now.getUTCMonth();
+    const utcDate = now.getUTCDate();
+    const utcDayOfWeek = now.getUTCDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+
+    // Helper to get UTC date at start of day (00:00:00.000 UTC)
+    const getUTCStartOfDay = (year: number, month: number, day: number): Date => {
+      return new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+    };
+
+    // Helper to get UTC date at end of day (23:59:59.999 UTC)
+    const getUTCEndOfDay = (year: number, month: number, day: number): Date => {
+      return new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
+    };
 
     switch (period) {
       case 'This Week': {
-        // Calculate current calendar week: Sunday (0) to Saturday (6)
-        const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-        const from = new Date(now);
-        from.setDate(now.getDate() - dayOfWeek); // Go back to Sunday
-        from.setHours(0, 0, 0, 0);
-        const to = new Date(now);
-        to.setDate(now.getDate() + (6 - dayOfWeek)); // Go forward to Saturday
-        to.setHours(23, 59, 59, 999);
+        // This Week: Sunday 12:00:00 AM to Saturday 11:59:59 PM UTC
+        const daysToSunday = utcDayOfWeek; // Days to go back to Sunday
+        const sundayDate = new Date(Date.UTC(utcYear, utcMonth, utcDate - daysToSunday));
+        const saturdayDate = new Date(Date.UTC(utcYear, utcMonth, utcDate - daysToSunday + 6));
+        
+        const from = getUTCStartOfDay(sundayDate.getUTCFullYear(), sundayDate.getUTCMonth(), sundayDate.getUTCDate());
+        const to = getUTCEndOfDay(saturdayDate.getUTCFullYear(), saturdayDate.getUTCMonth(), saturdayDate.getUTCDate());
         return { from, to };
       }
       case 'This Month': {
-        const from = new Date(currentYear, currentMonth, 1);
-        from.setHours(0, 0, 0, 0);
-        const to = new Date(currentYear, currentMonth + 1, 0);
-        to.setHours(23, 59, 59, 999);
+        // This Month: 1st day 12:00:00 AM to last day 11:59:59 PM UTC
+        const from = getUTCStartOfDay(utcYear, utcMonth, 1);
+        // Get last day of month
+        const lastDayOfMonth = new Date(Date.UTC(utcYear, utcMonth + 1, 0));
+        const to = getUTCEndOfDay(lastDayOfMonth.getUTCFullYear(), lastDayOfMonth.getUTCMonth(), lastDayOfMonth.getUTCDate());
         return { from, to };
       }
       case 'Last Month': {
-        const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
-        const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
-        const from = new Date(lastMonthYear, lastMonth, 1);
-        from.setHours(0, 0, 0, 0);
-        const to = new Date(lastMonthYear, lastMonth + 1, 0);
-        to.setHours(23, 59, 59, 999);
+        // Last Month: 1st day 12:00:00 AM to last day 11:59:59 PM UTC
+        const lastMonth = utcMonth === 0 ? 11 : utcMonth - 1;
+        const lastMonthYear = utcMonth === 0 ? utcYear - 1 : utcYear;
+        const from = getUTCStartOfDay(lastMonthYear, lastMonth, 1);
+        // Get last day of last month
+        const lastDayOfLastMonth = new Date(Date.UTC(lastMonthYear, lastMonth + 1, 0));
+        const to = getUTCEndOfDay(lastDayOfLastMonth.getUTCFullYear(), lastDayOfLastMonth.getUTCMonth(), lastDayOfLastMonth.getUTCDate());
         return { from, to };
       }
       case 'This Quarter': {
-        const quarterStart = Math.floor(currentMonth / 3) * 3;
-        const from = new Date(currentYear, quarterStart, 1);
-        from.setHours(0, 0, 0, 0);
-        const to = new Date(currentYear, quarterStart + 3, 0);
-        to.setHours(23, 59, 59, 999);
+        // This Quarter: 1st day of quarter 12:00:00 AM to last day 11:59:59 PM UTC
+        const quarterStart = Math.floor(utcMonth / 3) * 3;
+        const quarterEndMonth = quarterStart + 3;
+        
+        const from = getUTCStartOfDay(utcYear, quarterStart, 1);
+        // Get last day of quarter
+        const lastDayOfQuarter = new Date(Date.UTC(utcYear, quarterEndMonth, 0));
+        const to = getUTCEndOfDay(lastDayOfQuarter.getUTCFullYear(), lastDayOfQuarter.getUTCMonth(), lastDayOfQuarter.getUTCDate());
         return { from, to };
       }
       case 'This Year': {
-        const from = new Date(currentYear, 0, 1);
-        from.setHours(0, 0, 0, 0);
-        const to = new Date(currentYear, 11, 31);
-        to.setHours(23, 59, 59, 999);
+        // This Year: Jan 1 12:00:00 AM to Dec 31 11:59:59 PM UTC
+        const from = getUTCStartOfDay(utcYear, 0, 1);
+        const to = getUTCEndOfDay(utcYear, 11, 31);
         return { from, to };
       }
       case 'Custom Range': {
-        // Ensure custom dates have proper time boundaries
+        // Ensure custom dates have proper UTC time boundaries
         if (customDateRange.from) {
-          customDateRange.from.setHours(0, 0, 0, 0);
+          const fromDate = new Date(customDateRange.from);
+          customDateRange.from = new Date(Date.UTC(fromDate.getUTCFullYear(), fromDate.getUTCMonth(), fromDate.getUTCDate(), 0, 0, 0, 0));
         }
         if (customDateRange.to) {
-          customDateRange.to.setHours(23, 59, 59, 999);
+          const toDate = new Date(customDateRange.to);
+          customDateRange.to = new Date(Date.UTC(toDate.getUTCFullYear(), toDate.getUTCMonth(), toDate.getUTCDate(), 23, 59, 59, 999));
         }
         return customDateRange;
       }
       default: {
-        const from = new Date(currentYear, currentMonth, 1);
-        from.setHours(0, 0, 0, 0);
-        const to = new Date(currentYear, currentMonth + 1, 0);
-        to.setHours(23, 59, 59, 999);
+        // Default to This Month
+        const from = getUTCStartOfDay(utcYear, utcMonth, 1);
+        const lastDayOfMonth = new Date(Date.UTC(utcYear, utcMonth + 1, 0));
+        const to = getUTCEndOfDay(lastDayOfMonth.getUTCFullYear(), lastDayOfMonth.getUTCMonth(), lastDayOfMonth.getUTCDate());
         return { from, to };
       }
     }
@@ -1595,7 +1613,7 @@ const Metrics = () => {
                 <option value="Last Month">Last Month</option>
                 <option value="This Quarter">This Quarter</option>
                 <option value="This Year">This Year</option>
-                <option value="Custom Range">Custom Range…</option>
+                <option value="Custom Range">Custom Range</option>
               </select>
             </div>
 
@@ -1608,14 +1626,20 @@ const Metrics = () => {
                     type="date"
                     value={customDateRange.from?.toISOString().split('T')[0] || ''}
                     onChange={(e) => {
-                      const date = e.target.value ? new Date(e.target.value) : undefined;
-                      if (date) {
-                        date.setHours(0, 0, 0, 0);
+                      if (e.target.value) {
+                        // Parse date string as UTC (YYYY-MM-DD format)
+                        const [year, month, day] = e.target.value.split('-').map(Number);
+                        const date = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0)); // UTC
+                        setCustomDateRange((prev) => ({
+                          ...prev,
+                          from: date,
+                        }));
+                      } else {
+                        setCustomDateRange((prev) => ({
+                          ...prev,
+                          from: undefined,
+                        }));
                       }
-                      setCustomDateRange((prev) => ({
-                        ...prev,
-                        from: date,
-                      }));
                     }}
                     className="w-full h-8 px-2 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                   />
@@ -1626,14 +1650,20 @@ const Metrics = () => {
                     type="date"
                     value={customDateRange.to?.toISOString().split('T')[0] || ''}
                     onChange={(e) => {
-                      const date = e.target.value ? new Date(e.target.value) : undefined;
-                      if (date) {
-                        date.setHours(23, 59, 59, 999);
+                      if (e.target.value) {
+                        // Parse date string as UTC (YYYY-MM-DD format)
+                        const [year, month, day] = e.target.value.split('-').map(Number);
+                        const date = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999)); // UTC end of day
+                        setCustomDateRange((prev) => ({
+                          ...prev,
+                          to: date,
+                        }));
+                      } else {
+                        setCustomDateRange((prev) => ({
+                          ...prev,
+                          to: undefined,
+                        }));
                       }
-                      setCustomDateRange((prev) => ({
-                        ...prev,
-                        to: date,
-                      }));
                     }}
                     className="w-full h-8 px-2 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                   />

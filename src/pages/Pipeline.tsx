@@ -374,10 +374,21 @@ const Pipeline = () => {
 
   const formatDateInput = (d: Date) => {
     // YYYY-MM-DD for <input type="date">
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
+    // Use UTC to avoid timezone issues
+    const year = d.getUTCFullYear();
+    const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+  };
+
+  // Helper to get UTC date at start of day (00:00:00.000 UTC)
+  const getUTCStartOfDay = (year: number, month: number, day: number): Date => {
+    return new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+  };
+
+  // Helper to get UTC date at end of day (23:59:59.999 UTC)
+  const getUTCEndOfDay = (year: number, month: number, day: number): Date => {
+    return new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
   };
 
   const applyPresetRange = (
@@ -386,59 +397,70 @@ const Pipeline = () => {
     setTo: (v: string) => void
   ) => {
     const now = new Date();
+    // Get current date in UTC
+    const utcYear = now.getUTCFullYear();
+    const utcMonth = now.getUTCMonth();
+    const utcDate = now.getUTCDate();
+    const utcDayOfWeek = now.getUTCDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    
     let from: Date;
     let to: Date;
 
     switch (range) {
       case 'today': {
-        from = new Date(now);
-        from.setHours(0, 0, 0, 0);
-        to = new Date(now);
-        to.setHours(23, 59, 59, 999);
+        // Today: 12:00:00 AM to 11:59:59 PM UTC
+        from = getUTCStartOfDay(utcYear, utcMonth, utcDate);
+        to = getUTCEndOfDay(utcYear, utcMonth, utcDate);
         setFrom(formatDateInput(from));
         setTo(formatDateInput(to));
         return;
       }
       case 'week': {
-        // Calculate current calendar week: Sunday (0) to Saturday (6)
-        const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-        from = new Date(now);
-        from.setDate(now.getDate() - dayOfWeek); // Go back to Sunday
-        from.setHours(0, 0, 0, 0);
-        to = new Date(now);
-        to.setDate(now.getDate() + (6 - dayOfWeek)); // Go forward to Saturday
-        to.setHours(23, 59, 59, 999);
+        // This Week: Sunday 12:00:00 AM to Saturday 11:59:59 PM UTC
+        const daysToSunday = utcDayOfWeek; // Days to go back to Sunday
+        const sundayDate = new Date(Date.UTC(utcYear, utcMonth, utcDate - daysToSunday));
+        const saturdayDate = new Date(Date.UTC(utcYear, utcMonth, utcDate - daysToSunday + 6));
+        
+        from = getUTCStartOfDay(sundayDate.getUTCFullYear(), sundayDate.getUTCMonth(), sundayDate.getUTCDate());
+        to = getUTCEndOfDay(saturdayDate.getUTCFullYear(), saturdayDate.getUTCMonth(), saturdayDate.getUTCDate());
         setFrom(formatDateInput(from));
         setTo(formatDateInput(to));
         return;
       }
       case 'month': {
-        // Current calendar month: 1st to last day of current month
-        from = new Date(now.getFullYear(), now.getMonth(), 1);
-        from.setHours(0, 0, 0, 0);
-        to = new Date(now.getFullYear(), now.getMonth() + 1, 0); // Last day of current month
-        to.setHours(23, 59, 59, 999);
+        // This Month: 1st day 12:00:00 AM to last day 11:59:59 PM UTC
+        const firstDay = getUTCStartOfDay(utcYear, utcMonth, 1);
+        // Get last day of month
+        const lastDayOfMonth = new Date(Date.UTC(utcYear, utcMonth + 1, 0));
+        const lastDay = getUTCEndOfDay(lastDayOfMonth.getUTCFullYear(), lastDayOfMonth.getUTCMonth(), lastDayOfMonth.getUTCDate());
+        
+        from = firstDay;
+        to = lastDay;
         setFrom(formatDateInput(from));
         setTo(formatDateInput(to));
         return;
       }
       case 'quarter': {
-        // Current calendar quarter: 1st day to last day of current quarter
-        const currentQuarter = Math.floor(now.getMonth() / 3);
-        from = new Date(now.getFullYear(), currentQuarter * 3, 1);
-        from.setHours(0, 0, 0, 0);
-        to = new Date(now.getFullYear(), currentQuarter * 3 + 3, 0); // Last day of quarter
-        to.setHours(23, 59, 59, 999);
+        // This Quarter: 1st day of quarter 12:00:00 AM to last day 11:59:59 PM UTC
+        const currentQuarter = Math.floor(utcMonth / 3);
+        const quarterStartMonth = currentQuarter * 3;
+        const quarterEndMonth = quarterStartMonth + 3;
+        
+        const firstDay = getUTCStartOfDay(utcYear, quarterStartMonth, 1);
+        // Get last day of quarter
+        const lastDayOfQuarter = new Date(Date.UTC(utcYear, quarterEndMonth, 0));
+        const lastDay = getUTCEndOfDay(lastDayOfQuarter.getUTCFullYear(), lastDayOfQuarter.getUTCMonth(), lastDayOfQuarter.getUTCDate());
+        
+        from = firstDay;
+        to = lastDay;
         setFrom(formatDateInput(from));
         setTo(formatDateInput(to));
         return;
       }
       case 'year': {
-        // Current calendar year: Jan 1 to Dec 31
-        from = new Date(now.getFullYear(), 0, 1);
-        from.setHours(0, 0, 0, 0);
-        to = new Date(now.getFullYear(), 11, 31);
-        to.setHours(23, 59, 59, 999);
+        // This Year: Jan 1 12:00:00 AM to Dec 31 11:59:59 PM UTC
+        from = getUTCStartOfDay(utcYear, 0, 1);
+        to = getUTCEndOfDay(utcYear, 11, 31);
         setFrom(formatDateInput(from));
         setTo(formatDateInput(to));
         return;
@@ -1448,12 +1470,12 @@ const Pipeline = () => {
                 }}
               >
                 <option value="">All Time</option>
-                <option value="today">Today ({new Date().toLocaleDateString()})</option>
+                <option value="today">Today</option>
                 <option value="week">This Week</option>
-                <option value="month">This Month ({new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })})</option>
+                <option value="month">This Month</option>
                 <option value="quarter">This Quarter</option>
-                <option value="year">This Year ({new Date().getFullYear()})</option>
-                <option value="custom">Custom Range…</option>
+                <option value="year">This Year</option>
+                <option value="custom">Custom Range</option>
               </select>
 
               {createdDateRange === 'custom' && (
@@ -1506,12 +1528,12 @@ const Pipeline = () => {
                 }}
               >
                 <option value="">All Time</option>
-                <option value="today">Today ({new Date().toLocaleDateString()})</option>
+                <option value="today">Today</option>
                 <option value="week">This Week</option>
-                <option value="month">This Month ({new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })})</option>
+                <option value="month">This Month</option>
                 <option value="quarter">This Quarter</option>
-                <option value="year">This Year ({new Date().getFullYear()})</option>
-                <option value="custom">Custom Range…</option>
+                <option value="year">This Year</option>
+                <option value="custom">Custom Range</option>
               </select>
 
               {lastTouchedDateRange === 'custom' && (
