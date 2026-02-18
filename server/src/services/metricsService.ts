@@ -746,7 +746,7 @@ export const metricsService = {
 
     // SLA breaches for leads created this month (2h/16h/48h ET) - Only OUTBOUND communications count as "reach out"
     const createdThisMonthIds = new Set(leadsReceived.map((l) => l.id));
-    const slaBreaches = activeLeads.filter((l) => {
+    const slaBreachLeads = activeLeads.filter((l) => {
       if (!createdThisMonthIds.has(l.id)) return false;
       
       // Get the FIRST OUTBOUND communication (CALL/SMS/EMAIL only) for SLA breach check
@@ -770,11 +770,12 @@ export const metricsService = {
       
       // Only count as breach if the FIRST contact happened AFTER the threshold
       return hoursToReachOut > thresholdHours;
-    }).length;
+    });
+    const slaBreaches = slaBreachLeads.length;
 
     // 48h stale across leads in pipeline status "No contact made" through "contract sent"
     // that have gone 48 hours without being reached out to (OUTBOUND only)
-    const stale48h = activeLeads.filter((l) => {
+    const stale48hLeads = activeLeads.filter((l) => {
       // Filter by pipeline stage: only "No Contact Made" through "Contract Sent"
       if (!l.pipelineStage) {
         return false; // Exclude leads without pipeline stage info
@@ -797,7 +798,8 @@ export const metricsService = {
       // If reached out (OUTBOUND), check if 48h passed since last OUTBOUND reach out
       const hoursSince = (nowDt.getTime() - new Date(lastOutboundAt).getTime()) / (1000 * 60 * 60);
       return hoursSince >= 48;
-    }).length;
+    });
+    const stale48h = stale48hLeads.length;
 
     // Tasks past due more than 6 hours
     // Get all leads with tasks that are past due more than 6 hours
@@ -849,7 +851,15 @@ export const metricsService = {
 
     const tasksPastDue6h = leadsWithPastDueTasks.length;
 
-    const leadsMishandled = slaBreaches + stale48h + tasksPastDue6h;
+    // Count unique mishandled leads (a lead can appear in multiple categories)
+    // Get IDs from each category (reuse filtered results to avoid duplicate filtering)
+    const slaBreachLeadIds = new Set(slaBreachLeads.map(l => l.id));
+    const stale48hLeadIds = new Set(stale48hLeads.map(l => l.id));
+    const tasksPastDueLeadIds = new Set(leadsWithPastDueTasks.map(l => l.id));
+
+    // Combine all unique mishandled lead IDs
+    const allMishandledLeadIds = new Set([...slaBreachLeadIds, ...stale48hLeadIds, ...tasksPastDueLeadIds]);
+    const leadsMishandled = allMishandledLeadIds.size;
 
     return {
       totalContracts,
