@@ -209,12 +209,16 @@ export const leadService = {
         const leadWithAddress = await prisma.lead.findUnique({
           where: { id: leadId },
           include: {
-            address: true
+            address: true,
+            seller: true,
+            buyer: true
           }
         });
         
         if (leadWithAddress) {
           const address = leadWithAddress.address?.address1 || 'Unknown address';
+          const sellerName = leadWithAddress.seller ? `${leadWithAddress.seller.firstName} ${leadWithAddress.seller.lastName}` : null;
+          const buyerName = leadWithAddress.buyer ? `${leadWithAddress.buyer.firstName} ${leadWithAddress.buyer.lastName}` : null;
           
           const notification = await notificationService.createNotification({
             type: 'NEW_CONTRACT',
@@ -226,7 +230,9 @@ export const leadService = {
             triggeredBy: userId || undefined,
             data: {
               address: address,
-              stageName: stage?.name
+              stageName: stage?.name,
+              sellerName: sellerName,
+              buyerName: buyerName
             }
           });
           console.log(`[Under Contract Notification] Created notification: ${notification.id}, targetRoles: ${JSON.stringify(['ADMIN', 'MANAGER'])}, leadId: ${leadId}, address: ${address}`);

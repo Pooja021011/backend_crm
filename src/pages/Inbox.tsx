@@ -1530,6 +1530,8 @@ const Inbox = () => {
                 ? n.lead.address 
                 : `${n.lead.address.address1 || ''}, ${n.lead.address.city || ''}, ${n.lead.address.state || ''}`.replace(/^,\s*|,\s*$/g, '').replace(/,\s*,/g, ',').trim() || n.message || '')
             : (n.message || ''),
+          // Extract owner name from lead data
+          ownerName: n.lead?.sellerName || n.lead?.buyerName || n.data?.vendorName || null,
           dealId: n.deal?.id,
           triggeredBy: n.triggeredBy
         }));
@@ -1946,8 +1948,8 @@ const Inbox = () => {
                                   {notification.subject}
                                 </span>
                               </div>
-                              <div className="text-xs text-gray-600 mb-0.5">
-                                {notification.preview || notification.message || ''}
+                              <div className="text-xs text-gray-500 mb-0.5">
+                                {notification.ownerName || 'Unknown'}
                               </div>
                               {notification.leadAddress && notification.leadAddress.trim() && (
                                 <div className="text-xs text-gray-500 mb-0.5">
