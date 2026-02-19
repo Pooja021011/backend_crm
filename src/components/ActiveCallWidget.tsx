@@ -234,7 +234,7 @@ export const ActiveCallWidget: React.FC<ActiveCallWidgetProps> = ({
   return (
     <div
       ref={containerRef}
-      className="fixed bg-white rounded-xl shadow-lg border border-gray-200 p-2 w-60 z-[9999] cursor-grab active:cursor-grabbing"
+      className="fixed bg-white rounded-xl shadow-lg border border-gray-200 p-2 w-72 z-[9999] cursor-grab active:cursor-grabbing"
       style={{ left: pos.x, top: pos.y, touchAction: 'none' }}
       onPointerDown={(e) => {
         // Allow normal interaction with controls/links without dragging.
@@ -336,13 +336,13 @@ export const ActiveCallWidget: React.FC<ActiveCallWidgetProps> = ({
 
       {/* Call Controls - More Compact */}
       <div className="space-y-2">
-        <div className="flex gap-2 justify-center">
+        <div className="flex gap-1 justify-center">
           {/* Mute/Unmute Button */}
           <Button
             onClick={onToggleMute}
             variant="outline"
             size="sm"
-            className={`flex-1 text-xs ${
+            className={`flex-1 text-xs px-1.5 ${
               isMuted 
                 ? 'border border-red-500 bg-red-50 text-red-600 hover:bg-red-100' 
                 : 'border border-gray-300 hover:border-gray-400'
@@ -351,12 +351,12 @@ export const ActiveCallWidget: React.FC<ActiveCallWidgetProps> = ({
           >
             {isMuted ? (
               <>
-                <MicOff className="w-3 h-3 mr-1" />
+                <MicOff className="w-3 h-3 mr-0.5" />
                 Unmute
               </>
             ) : (
               <>
-                <Mic className="w-3 h-3 mr-1" />
+                <Mic className="w-3 h-3 mr-0.5" />
                 Mute
               </>
             )}
@@ -368,13 +368,13 @@ export const ActiveCallWidget: React.FC<ActiveCallWidgetProps> = ({
               onClick={() => setIsDialerExpanded(!isDialerExpanded)}
               variant="outline"
               size="sm"
-              className={`flex-1 text-xs ${
+              className={`flex-1 text-xs px-1.5 ${
                 isDialerExpanded
                   ? 'border border-blue-500 bg-blue-50 text-blue-600 hover:bg-blue-100'
                   : 'border border-gray-300 hover:border-gray-400'
               }`}
             >
-              <Grid3x3 className="w-3 h-3 mr-1" />
+              <Grid3x3 className="w-3 h-3 mr-0.5" />
               Dialer
             </Button>
           )}
@@ -383,9 +383,9 @@ export const ActiveCallWidget: React.FC<ActiveCallWidgetProps> = ({
           <Button
             onClick={onHangUp}
             size="sm"
-            className="flex-1 text-xs bg-red-500 hover:bg-red-600 text-white border border-red-600"
+            className="flex-1 text-xs px-1.5 bg-red-500 hover:bg-red-600 text-white border border-red-600"
           >
-            <PhoneOff className="w-3 h-3 mr-1" />
+            <PhoneOff className="w-3 h-3 mr-0.5" />
             End
           </Button>
         </div>
