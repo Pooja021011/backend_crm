@@ -16,6 +16,22 @@ export interface NotificationData {
 
 export const notificationService = {
   /**
+   * Get highest priority role from user's roles
+   * Priority order: ADMIN (highest) > MANAGER > ACQ > DISP > TC (lowest)
+   */
+  getHighestPriorityRole(userRoles: RoleName[]): RoleName | null {
+    const priorityOrder: RoleName[] = ['ADMIN', 'MANAGER', 'ACQ', 'DISP', 'TC'];
+    
+    for (const role of priorityOrder) {
+      if (userRoles.includes(role)) {
+        return role;
+      }
+    }
+    
+    return null;
+  },
+
+  /**
    * Create a new notification
    */
   async createNotification(notificationData: NotificationData) {
@@ -35,7 +51,8 @@ export const notificationService = {
         }
       });
 
-      console.log(`📢 Notification created: ${notification.type} - ${notification.title}`);
+      console.log(`📢 Notification created: ${notification.id} - ${notification.type} - ${notification.title}`);
+      console.log(`   targetRoles: ${JSON.stringify(notification.targetRoles)}, targetUserId: ${notification.targetUserId}, leadId: ${notification.leadId}`);
       return notification;
     } catch (error) {
       console.error('Error creating notification:', error);
@@ -45,11 +62,17 @@ export const notificationService = {
 
   /**
    * Get notifications for a user (by user ID or roles)
+   * Applies role priority: ADMIN > MANAGER > ACQ > DISP > TC
    */
   async getUserNotifications(userId: string, userRoles: RoleName[]) {
     try {
       // Filter out undefined/null values from userRoles
       const validRoles = userRoles.filter(role => role != null);
+      
+      // Get highest priority role
+      const highestPriorityRole = this.getHighestPriorityRole(validRoles);
+      
+      console.log(`[getUserNotifications] userId: ${userId}, userRoles: ${JSON.stringify(validRoles)}, highestPriorityRole: ${highestPriorityRole}`);
       
       // Build the where clause conditionally
       const whereClause: any = {
@@ -58,17 +81,58 @@ export const notificationService = {
           { isRead: false },
           // User or role targeting
           {
-            OR: [
-              { targetUserId: userId }
-            ]
+            OR: []
           }
         ]
       };
       
-      // Only add role-based filtering if there are valid roles
-      if (validRoles.length > 0) {
-        whereClause.AND[1].OR.push({ targetRoles: { hasSome: validRoles } });
+      // Apply role priority filtering
+      if (highestPriorityRole === 'ADMIN') {
+        // ADMIN: Show only ADMIN-targeted notifications (not ACQ-specific)
+        whereClause.AND[1].OR.push({ targetRoles: { hasSome: ['ADMIN'] } });
+        console.log('[getUserNotifications] ADMIN: Adding targetRoles filter for ADMIN');
+      } else if (highestPriorityRole === 'MANAGER') {
+        // MANAGER: Show MANAGER-targeted notifications (not ACQ-specific)
+        whereClause.AND[1].OR.push({ targetRoles: { hasSome: ['MANAGER'] } });
+        console.log('[getUserNotifications] MANAGER: Adding targetRoles filter for MANAGER');
+      } else if (highestPriorityRole === 'ACQ') {
+        // ACQ: Show ACQ-specific notifications (user-targeted)
+        whereClause.AND[1].OR.push({ targetUserId: userId });
+        console.log('[getUserNotifications] ACQ: Adding targetUserId filter');
+      } else if (highestPriorityRole) {
+        // Other roles: Show role-targeted notifications
+        whereClause.AND[1].OR.push({ targetRoles: { hasSome: [highestPriorityRole] } });
+        console.log(`[getUserNotifications] ${highestPriorityRole}: Adding targetRoles filter`);
       }
+      
+      // Always include user-targeted notifications (for specific assignments)
+      // But only if not already added for ACQ (to avoid duplicate)
+      if (highestPriorityRole !== 'ACQ') {
+        whereClause.AND[1].OR.push({ targetUserId: userId });
+      }
+      
+      // If OR array is empty, add a condition that will never match (to avoid Prisma error)
+      if (whereClause.AND[1].OR.length === 0) {
+        whereClause.AND[1].OR.push({ id: 'never-match' });
+      }
+      
+      console.log('[getUserNotifications] Final whereClause:', JSON.stringify(whereClause, null, 2));
+      
+      // Debug: Check what notifications exist before filtering
+      const allUnreadNotifications = await prisma.notification.findMany({
+        where: { isRead: false },
+        select: {
+          id: true,
+          type: true,
+          title: true,
+          targetRoles: true,
+          targetUserId: true
+        }
+      });
+      console.log(`[getUserNotifications] DEBUG: Total unread notifications in DB: ${allUnreadNotifications.length}`);
+      allUnreadNotifications.forEach(n => {
+        console.log(`  - ${n.type}: ${n.title} (targetRoles: ${JSON.stringify(n.targetRoles)}, targetUserId: ${n.targetUserId})`);
+      });
       
       const notifications = await prisma.notification.findMany({
         where: whereClause,
@@ -93,6 +157,11 @@ export const notificationService = {
           createdAt: 'desc'
         },
         take: 50 // Limit to recent 50 unread notifications
+      });
+
+      console.log(`[getUserNotifications] Found ${notifications.length} notifications after filtering`);
+      notifications.forEach(n => {
+        console.log(`  - ${n.type}: ${n.title} (targetRoles: ${JSON.stringify(n.targetRoles)}, targetUserId: ${n.targetUserId})`);
       });
 
       return notifications;
@@ -127,16 +196,43 @@ export const notificationService = {
   /**
    * Get unread notification count for a user
    */
+  /**
+   * Get unread notification count for a user
+   * Applies role priority: ADMIN > MANAGER > ACQ > DISP > TC
+   */
   async getUnreadCount(userId: string, userRoles: RoleName[]) {
     try {
+      // Filter out undefined/null values from userRoles
+      const validRoles = userRoles.filter(role => role != null);
+      
+      // Get highest priority role
+      const highestPriorityRole = this.getHighestPriorityRole(validRoles);
+      
+      const whereClause: any = {
+        isRead: false,
+        OR: []
+      };
+      
+      // Apply role priority filtering
+      if (highestPriorityRole === 'ADMIN') {
+        // ADMIN: Count only ADMIN-targeted notifications
+        whereClause.OR.push({ targetRoles: { hasSome: ['ADMIN'] } });
+      } else if (highestPriorityRole === 'MANAGER') {
+        // MANAGER: Count MANAGER-targeted notifications
+        whereClause.OR.push({ targetRoles: { hasSome: ['MANAGER'] } });
+      } else if (highestPriorityRole === 'ACQ') {
+        // ACQ: Count ACQ-specific notifications (user-targeted)
+        whereClause.OR.push({ targetUserId: userId });
+      } else if (highestPriorityRole) {
+        // Other roles: Count role-targeted notifications
+        whereClause.OR.push({ targetRoles: { hasSome: [highestPriorityRole] } });
+      }
+      
+      // Always include user-targeted notifications
+      whereClause.OR.push({ targetUserId: userId });
+      
       const count = await prisma.notification.count({
-        where: {
-          isRead: false,
-          OR: [
-            { targetUserId: userId },
-            { targetRoles: { hasSome: userRoles } }
-          ]
-        }
+        where: whereClause
       });
 
       return count;

@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { PhoneOff, Mic, MicOff, Clock, Mail, Phone } from 'lucide-react';
+import { PhoneOff, Mic, MicOff, Clock, Mail, Phone, Grid3x3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CallStatus } from '@/hooks/useTwilioDevice';
 import { API_BASE, makeApiCall } from '@/config/api';
 import { useNavigate } from 'react-router-dom';
+import { useTwilioContext } from '@/contexts/TwilioContext';
 
 interface ActiveCallWidgetProps {
   callStatus: CallStatus;
@@ -34,10 +35,12 @@ export const ActiveCallWidget: React.FC<ActiveCallWidgetProps> = ({
   contactInfo,
 }) => {
   const navigate = useNavigate();
+  const { activeCall } = useTwilioContext();
   const disconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [resolvedLead, setResolvedLead] = useState<ResolvedLeadInfo | null>(null);
   const [leadLoading, setLeadLoading] = useState(false);
   const [leadError, setLeadError] = useState<string | null>(null);
+  const [isDialerExpanded, setIsDialerExpanded] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   // Draggable positioning (fixed)
@@ -130,6 +133,21 @@ export const ActiveCallWidget: React.FC<ActiveCallWidgetProps> = ({
   const leadId = contactInfo?.leadId || '';
 
   const hasLeadHint = Boolean(leadId) || Boolean(phoneNumber);
+  
+  // Check if this is an outbound call (outbound calls have leadId)
+  const isOutboundCall = Boolean(leadId);
+  
+  // Send DTMF digit during call
+  const sendDigit = (digit: string) => {
+    if (activeCall && callStatus.status === 'connected') {
+      try {
+        activeCall.sendDigits(digit);
+        console.log(`📞 Sent DTMF digit: ${digit}`);
+      } catch (error) {
+        console.error('Failed to send digit:', error);
+      }
+    }
+  };
 
   const display = useMemo(() => {
     const name = resolvedLead?.name || contactInfo?.name || undefined;
@@ -344,6 +362,23 @@ export const ActiveCallWidget: React.FC<ActiveCallWidgetProps> = ({
             )}
           </Button>
 
+          {/* Dialer Button - Only show for outbound calls when connected */}
+          {isOutboundCall && callStatus.status === 'connected' && (
+            <Button
+              onClick={() => setIsDialerExpanded(!isDialerExpanded)}
+              variant="outline"
+              size="sm"
+              className={`flex-1 text-xs ${
+                isDialerExpanded
+                  ? 'border border-blue-500 bg-blue-50 text-blue-600 hover:bg-blue-100'
+                  : 'border border-gray-300 hover:border-gray-400'
+              }`}
+            >
+              <Grid3x3 className="w-3 h-3 mr-1" />
+              Dialer
+            </Button>
+          )}
+
           {/* Hang Up Button */}
           <Button
             onClick={onHangUp}
@@ -354,6 +389,27 @@ export const ActiveCallWidget: React.FC<ActiveCallWidgetProps> = ({
             End
           </Button>
         </div>
+
+        {/* Dial Pad - Expandable for outbound calls */}
+        {isOutboundCall && callStatus.status === 'connected' && isDialerExpanded && (
+          <div className="mt-2 p-2 bg-gray-50 rounded-lg border border-gray-200">
+            <div className="grid grid-cols-3 gap-2">
+              {/* Dial pad buttons: 1-9, *, 0, # */}
+              {['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'].map((digit) => (
+                <Button
+                  key={digit}
+                  onClick={() => sendDigit(digit)}
+                  variant="outline"
+                  size="sm"
+                  className="h-10 w-full text-sm font-semibold hover:bg-blue-50 hover:border-blue-300 active:bg-blue-100"
+                  disabled={!activeCall}
+                >
+                  {digit}
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Error Message */}

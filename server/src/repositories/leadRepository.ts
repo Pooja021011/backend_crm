@@ -1,5 +1,6 @@
 import { prisma } from '../config/db.js';
 import type { LeadType, TaskStatus } from '@prisma/client';
+import { notificationService } from '../services/notificationService.js';
 
 export type LeadCreateInput =
   | { type: 'SELLER'; marketId?: string; leadSourceId?: string; address: { address1: string; city: string; state: string; zip: string; countyId?: string }; seller: { firstName: string; lastName: string; phone: string; email: string; motivation?: string; notes?: string }; assignedUserId?: string; pipelineStageId?: string }
@@ -92,7 +93,7 @@ export const leadRepository = {
       // Get default lead status
       const defaultStatus = await getDefaultLeadStatus();
       
-      return prisma.lead.create({
+      const lead = await prisma.lead.create({
         data: {
           leadType: 'SELLER',
           marketId: marketId || null,
@@ -118,6 +119,71 @@ export const leadRepository = {
         },
         include: includeLead,
       });
+      
+      // Create notifications after lead creation (non-blocking)
+      try {
+        const leadAddress = lead.address?.address1 || 'Unknown address';
+        
+        // Notify MANAGER for ANY new lead
+        const managerNotification = await notificationService.createNotification({
+          type: 'NEW_LEAD',
+          title: 'New Lead',
+          message: leadAddress,
+          priority: 'MEDIUM',
+          targetRoles: ['MANAGER'],
+          leadId: lead.id,
+          triggeredBy: createdById || undefined,
+          data: {
+            address: leadAddress,
+            leadType: 'SELLER'
+          }
+        });
+        console.log(`[New Lead Notification] Created MANAGER notification: ${managerNotification.id}, targetRoles: ${JSON.stringify(['MANAGER'])}, leadId: ${lead.id}, address: ${leadAddress}`);
+        
+        // Notify ACQ agent if lead is assigned and user doesn't have ADMIN/MANAGER role
+        if (assignedUserId) {
+          const assignedUser = await prisma.user.findUnique({
+            where: { id: assignedUserId },
+            include: {
+              roles: {
+                include: {
+                  role: {
+                    select: { name: true }
+                  }
+                }
+              }
+            }
+          });
+          
+          if (assignedUser) {
+            const userRoles = assignedUser.roles.map((ur: any) => ur.role?.name || ur.name).filter(Boolean);
+            const hasAdmin = userRoles.includes('ADMIN');
+            const hasManager = userRoles.includes('MANAGER');
+            
+            // Only notify ACQ if user doesn't have ADMIN or MANAGER role
+            if (!hasAdmin && !hasManager && userRoles.includes('ACQ')) {
+              await notificationService.createNotification({
+                type: 'NEW_LEAD',
+                title: 'New Lead in Your Pipeline',
+                message: leadAddress,
+                priority: 'MEDIUM',
+                targetUserId: assignedUserId,
+                leadId: lead.id,
+                triggeredBy: createdById || undefined,
+                data: {
+                  address: leadAddress,
+                  leadType: 'SELLER'
+                }
+              });
+            }
+          }
+        }
+      } catch (error) {
+        // Non-blocking: log error but don't break lead creation
+        console.error('Error creating notifications for new lead:', error);
+      }
+      
+      return lead;
     }
     if (input.type === 'BUYER') {
       const { buyer, criteria, marketId, assignedUserId, leadSourceId } = input;
@@ -166,6 +232,32 @@ export const leadRepository = {
       });
       
       console.log('✅ Created BUYER lead with buyerCriteria:', lead.buyerCriteria);
+      
+      // Create notifications after lead creation (non-blocking)
+      try {
+        const leadAddress = lead.address?.address1 || 'New buyer lead';
+        const buyerName = lead.buyer ? `${lead.buyer.firstName} ${lead.buyer.lastName}` : 'Unknown buyer';
+        
+        // Notify MANAGER for ANY new lead
+        await notificationService.createNotification({
+          type: 'NEW_LEAD',
+          title: 'New Lead',
+          message: `${buyerName} - ${leadAddress}`,
+          priority: 'MEDIUM',
+          targetRoles: ['MANAGER'],
+          leadId: lead.id,
+          triggeredBy: createdById || undefined,
+          data: {
+            address: leadAddress,
+            leadType: 'BUYER',
+            buyerName: buyerName
+          }
+        });
+      } catch (error) {
+        // Non-blocking: log error but don't break lead creation
+        console.error('Error creating notifications for new lead:', error);
+      }
+      
       return lead;
     }
     if (input.type === 'VENDOR') {
@@ -185,7 +277,7 @@ export const leadRepository = {
       // Get default lead status
       const defaultStatus = await getDefaultLeadStatus();
       
-      return prisma.lead.create({
+      const lead = await prisma.lead.create({
         data: {
           leadType: 'VENDOR',
           marketId: marketId || null,
@@ -210,6 +302,73 @@ export const leadRepository = {
         },
         include: includeLead,
       });
+      
+      // Create notifications after lead creation (non-blocking)
+      try {
+        const vendorName = lead.vendor ? `${lead.vendor.firstName} ${lead.vendor.lastName}` : 'Unknown vendor';
+        const vendorCompany = (lead.vendor as any)?.company || '';
+        const leadAddress = lead.address?.address1 || vendorCompany || 'Unknown address';
+        
+        // Notify MANAGER for ANY new lead
+        await notificationService.createNotification({
+          type: 'NEW_LEAD',
+          title: 'New Lead',
+          message: `${vendorName}${vendorCompany ? ` - ${vendorCompany}` : ''} - ${leadAddress}`,
+          priority: 'MEDIUM',
+          targetRoles: ['MANAGER'],
+          leadId: lead.id,
+          triggeredBy: createdById || undefined,
+          data: {
+            address: leadAddress,
+            leadType: 'VENDOR',
+            vendorName: vendorName
+          }
+        });
+        
+        // Notify ACQ agent if lead is assigned and user doesn't have ADMIN/MANAGER role
+        if (assignedUserId) {
+          const assignedUser = await prisma.user.findUnique({
+            where: { id: assignedUserId },
+            include: {
+              roles: {
+                include: {
+                  role: {
+                    select: { name: true }
+                  }
+                }
+              }
+            }
+          });
+          
+          if (assignedUser) {
+            const userRoles = assignedUser.roles.map((ur: any) => ur.role?.name || ur.name).filter(Boolean);
+            const hasAdmin = userRoles.includes('ADMIN');
+            const hasManager = userRoles.includes('MANAGER');
+            
+            // Only notify ACQ if user doesn't have ADMIN or MANAGER role
+            if (!hasAdmin && !hasManager && userRoles.includes('ACQ')) {
+              await notificationService.createNotification({
+                type: 'NEW_LEAD',
+                title: 'New Lead in Your Pipeline',
+                message: leadAddress,
+                priority: 'MEDIUM',
+                targetUserId: assignedUserId,
+                leadId: lead.id,
+                triggeredBy: createdById || undefined,
+                data: {
+                  address: leadAddress,
+                  leadType: 'VENDOR'
+                }
+              });
+            }
+          }
+        }
+      } catch (error) {
+        // Non-blocking: log error but don't break lead creation
+        console.error('Error creating notifications for new lead:', error);
+      }
+      
+      return lead;
     }
   },
 
@@ -500,10 +659,87 @@ export const leadRepository = {
     if (pipelineStageId) where.pipelineStageId = pipelineStageId;
     if (status) where.status = status;
     if (leadStatusId) where.leadStatusId = leadStatusId;
-    if (createdFrom || createdTo) where.createdAt = { gte: createdFrom ? new Date(createdFrom) : undefined, lte: createdTo ? new Date(createdTo) : undefined };
-    if (updatedFrom || updatedTo) where.updatedAt = { gte: updatedFrom ? new Date(updatedFrom) : undefined, lte: updatedTo ? new Date(updatedTo) : undefined };
+    
+    /**
+     * Normalize date string to YYYY-MM-DD format for consistent parsing
+     */
+    const normalizeDateString = (dateStr: string | null | undefined): string | null => {
+      if (!dateStr || !dateStr.trim()) return null;
+      
+      const trimmed = dateStr.trim();
+      
+      if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+        const [year, month, day] = trimmed.split('-').map(Number);
+        if (month >= 1 && month <= 12 && day >= 1 && day <= 31 && year >= 1900 && year <= 2100) {
+          return trimmed;
+        }
+      }
+      
+      const ddmmyyyyMatch = trimmed.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
+      if (ddmmyyyyMatch) {
+        const [, day, month, year] = ddmmyyyyMatch;
+        const dayNum = parseInt(day, 10);
+        const monthNum = parseInt(month, 10);
+        const yearNum = parseInt(year, 10);
+        
+        if (monthNum >= 1 && monthNum <= 12 && dayNum >= 1 && dayNum <= 31 && yearNum >= 1900 && yearNum <= 2100) {
+          const normalizedMonth = monthNum.toString().padStart(2, '0');
+          const normalizedDay = dayNum.toString().padStart(2, '0');
+          return `${yearNum}-${normalizedMonth}-${normalizedDay}`;
+        }
+      }
+      
+      const yyyymmddMatch = trimmed.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/);
+      if (yyyymmddMatch) {
+        const [, year, month, day] = yyyymmddMatch;
+        const yearNum = parseInt(year, 10);
+        const monthNum = parseInt(month, 10);
+        const dayNum = parseInt(day, 10);
+        
+        if (monthNum >= 1 && monthNum <= 12 && dayNum >= 1 && dayNum <= 31 && yearNum >= 1900 && yearNum <= 2100) {
+          const normalizedMonth = monthNum.toString().padStart(2, '0');
+          const normalizedDay = dayNum.toString().padStart(2, '0');
+          return `${yearNum}-${normalizedMonth}-${normalizedDay}`;
+        }
+      }
+      
+      const parsedDate = new Date(trimmed);
+      if (!isNaN(parsedDate.getTime())) {
+        const year = parsedDate.getFullYear();
+        const month = (parsedDate.getMonth() + 1).toString().padStart(2, '0');
+        const day = parsedDate.getDate().toString().padStart(2, '0');
+        
+        if (year >= 1900 && year <= 2100) {
+          return `${year}-${month}-${day}`;
+        }
+      }
+      
+      return null;
+    };
+    
+    if (createdFrom || createdTo) {
+      const normalizedFrom = createdFrom ? normalizeDateString(createdFrom) : null;
+      const normalizedTo = createdTo ? normalizeDateString(createdTo) : null;
+      where.createdAt = { 
+        ...(normalizedFrom ? { gte: new Date(`${normalizedFrom}T00:00:00.000Z`) } : {}), 
+        ...(normalizedTo ? { lte: new Date(`${normalizedTo}T23:59:59.999Z`) } : {}) 
+      };
+    }
+    if (updatedFrom || updatedTo) {
+      const normalizedFrom = updatedFrom ? normalizeDateString(updatedFrom) : null;
+      const normalizedTo = updatedTo ? normalizeDateString(updatedTo) : null;
+      where.updatedAt = { 
+        ...(normalizedFrom ? { gte: new Date(`${normalizedFrom}T00:00:00.000Z`) } : {}), 
+        ...(normalizedTo ? { lte: new Date(`${normalizedTo}T23:59:59.999Z`) } : {}) 
+      };
+    }
     if (countyId) where.address = { countyId };
-    if (tasksDueBefore) where.tasks = { some: { status: 'OPEN', dueAt: { lte: new Date(tasksDueBefore) } } };
+    if (tasksDueBefore) {
+      const normalized = normalizeDateString(tasksDueBefore);
+      if (normalized) {
+        where.tasks = { some: { status: 'OPEN', dueAt: { lte: new Date(`${normalized}T23:59:59.999Z`) } } };
+      }
+    }
     if (type === 'BUYER') {
       if (vipBuyer != null) where.buyer = { ...(where.buyer || {}), vip: vipBuyer };
       if (blacklistedBuyer != null) where.buyer = { ...(where.buyer || {}), blacklisted: blacklistedBuyer };

@@ -33,7 +33,7 @@ import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, c
 import { snapCenterToCursor } from "@dnd-kit/modifiers";
 import { differenceInHours, isToday, addDays } from "date-fns";
 import { API_BASE, makeApiCall } from "@/config/api";
-import { safeDate } from "@/utils/validation";
+import { safeDate, normalizeDateString } from "@/utils/validation";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePipelineNav } from "@/contexts/PipelineNavContext";
@@ -692,10 +692,23 @@ const Pipeline = () => {
 
       // Admin/Manager filters
       if (isAdminOrManager) {
-        if (createdFrom) filters.append('createdFrom', createdFrom);
-        if (createdTo) filters.append('createdTo', createdTo);
-        if (lastTouchedFrom) filters.append('lastTouchedFrom', lastTouchedFrom);
-        if (lastTouchedTo) filters.append('lastTouchedTo', lastTouchedTo);
+        // Normalize dates to YYYY-MM-DD format before sending to backend
+        if (createdFrom) {
+          const normalized = normalizeDateString(createdFrom);
+          if (normalized) filters.append('createdFrom', normalized);
+        }
+        if (createdTo) {
+          const normalized = normalizeDateString(createdTo);
+          if (normalized) filters.append('createdTo', normalized);
+        }
+        if (lastTouchedFrom) {
+          const normalized = normalizeDateString(lastTouchedFrom);
+          if (normalized) filters.append('lastTouchedFrom', normalized);
+        }
+        if (lastTouchedTo) {
+          const normalized = normalizeDateString(lastTouchedTo);
+          if (normalized) filters.append('lastTouchedTo', normalized);
+        }
         
         // Multi-select agent filters
         if (selectedAcqAgents.length > 0) {

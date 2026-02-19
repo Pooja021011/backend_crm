@@ -3,6 +3,7 @@ import { taskRepository } from '../repositories/taskRepository.js';
 import { prisma } from '../config/db.js';
 import { dealRepository } from '../repositories/dealRepository.js';
 import { stageTransitionService } from './stageTransitionService.js';
+import { notificationService } from './notificationService.js';
 
 export const leadService = {
   create: (input: LeadCreateInput, createdById?: string) => leadRepository.create(input, createdById),
@@ -202,6 +203,38 @@ export const leadService = {
                !name.includes('pending')) {
       // Set deal.contractedAt when moving forward to Under Contract (exact match only)
       await dealRepository.upsertByLeadId(leadId, { contractedAt: new Date() });
+      
+      // Create notification for ADMIN and MANAGER roles
+      try {
+        const leadWithAddress = await prisma.lead.findUnique({
+          where: { id: leadId },
+          include: {
+            address: true
+          }
+        });
+        
+        if (leadWithAddress) {
+          const address = leadWithAddress.address?.address1 || 'Unknown address';
+          
+          const notification = await notificationService.createNotification({
+            type: 'NEW_CONTRACT',
+            title: 'New Deal Under Contract',
+            message: address,
+            priority: 'HIGH',
+            targetRoles: ['ADMIN', 'MANAGER'],
+            leadId: leadId,
+            triggeredBy: userId || undefined,
+            data: {
+              address: address,
+              stageName: stage?.name
+            }
+          });
+          console.log(`[Under Contract Notification] Created notification: ${notification.id}, targetRoles: ${JSON.stringify(['ADMIN', 'MANAGER'])}, leadId: ${leadId}, address: ${address}`);
+        }
+      } catch (error) {
+        // Non-blocking: log error but don't break the stage move
+        console.error('Error creating notification for under contract:', error);
+      }
     }
     
     if (name.includes('closed')) {

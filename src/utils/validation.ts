@@ -181,6 +181,76 @@ export const isValidDate = (dateValue: Date | string | null | undefined): boolea
   return isValid(date);
 };
 
+/**
+ * Normalize date string to YYYY-MM-DD format (ISO date format)
+ * Handles multiple input formats: dd-mm-yyyy, dd/mm/yyyy, yyyy-mm-dd, yyyy/mm/dd
+ * This ensures consistent date parsing regardless of browser locale
+ * @param dateStr - Date string in any format
+ * @returns Normalized date string in YYYY-MM-DD format or null if invalid
+ */
+export const normalizeDateString = (dateStr: string | null | undefined): string | null => {
+  if (!dateStr || !dateStr.trim()) return null;
+  
+  const trimmed = dateStr.trim();
+  
+  // Already in YYYY-MM-DD format (ISO date format)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    // Validate the date is actually valid
+    const [year, month, day] = trimmed.split('-').map(Number);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31 && year >= 1900 && year <= 2100) {
+      return trimmed;
+    }
+  }
+  
+  // Format: dd-mm-yyyy or dd/mm/yyyy
+  const ddmmyyyyMatch = trimmed.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
+  if (ddmmyyyyMatch) {
+    const [, day, month, year] = ddmmyyyyMatch;
+    const dayNum = parseInt(day, 10);
+    const monthNum = parseInt(month, 10);
+    const yearNum = parseInt(year, 10);
+    
+    // Validate ranges
+    if (monthNum >= 1 && monthNum <= 12 && dayNum >= 1 && dayNum <= 31 && yearNum >= 1900 && yearNum <= 2100) {
+      // Format as YYYY-MM-DD with zero padding
+      const normalizedMonth = monthNum.toString().padStart(2, '0');
+      const normalizedDay = dayNum.toString().padStart(2, '0');
+      return `${yearNum}-${normalizedMonth}-${normalizedDay}`;
+    }
+  }
+  
+  // Format: yyyy-mm-dd or yyyy/mm/dd (already handled above, but just in case)
+  const yyyymmddMatch = trimmed.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/);
+  if (yyyymmddMatch) {
+    const [, year, month, day] = yyyymmddMatch;
+    const yearNum = parseInt(year, 10);
+    const monthNum = parseInt(month, 10);
+    const dayNum = parseInt(day, 10);
+    
+    if (monthNum >= 1 && monthNum <= 12 && dayNum >= 1 && dayNum <= 31 && yearNum >= 1900 && yearNum <= 2100) {
+      const normalizedMonth = monthNum.toString().padStart(2, '0');
+      const normalizedDay = dayNum.toString().padStart(2, '0');
+      return `${yearNum}-${normalizedMonth}-${normalizedDay}`;
+    }
+  }
+  
+  // If no pattern matches, try parsing as Date and converting
+  // This handles edge cases and other formats
+  const parsedDate = new Date(trimmed);
+  if (!isNaN(parsedDate.getTime()) && isValid(parsedDate)) {
+    const year = parsedDate.getFullYear();
+    const month = (parsedDate.getMonth() + 1).toString().padStart(2, '0');
+    const day = parsedDate.getDate().toString().padStart(2, '0');
+    
+    // Validate the parsed date makes sense
+    if (year >= 1900 && year <= 2100) {
+      return `${year}-${month}-${day}`;
+    }
+  }
+  
+  return null;
+};
+
 // E.164 Phone number validation (for Twilio)
 // Format: +[country code][number] e.g., +17752548172
 export const validateE164PhoneNumber = (phone: string): ValidationResult => {

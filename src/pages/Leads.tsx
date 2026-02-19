@@ -62,6 +62,7 @@ import { usePipelineNav } from "@/contexts/PipelineNavContext";
 import { SortableTableHeader, useSortable } from "@/components/SortableTableHeader";
 import { ImportCSVDialog } from "@/components/ImportCSVDialog";
 import { LeadActions } from "@/components/LeadActions";
+import { normalizeDateString } from "@/utils/validation";
 import { generateCSVTemplate } from "@/utils/csvUtils";
 import { toast } from "@/hooks/use-toast";
 import { API_BASE } from "@/config/api";
@@ -552,8 +553,11 @@ const Leads = () => {
         }
         case 'custom': {
           // Custom range: Parse dates and set UTC boundaries
-          const from = customDateFrom ? new Date(customDateFrom + 'T00:00:00.000Z') : null;
-          const to = customDateTo ? new Date(customDateTo + 'T23:59:59.999Z') : null;
+          // Normalize dates to YYYY-MM-DD format for consistent parsing
+          const normalizedFrom = customDateFrom ? normalizeDateString(customDateFrom) : null;
+          const normalizedTo = customDateTo ? normalizeDateString(customDateTo) : null;
+          const from = normalizedFrom ? new Date(normalizedFrom + 'T00:00:00.000Z') : null;
+          const to = normalizedTo ? new Date(normalizedTo + 'T23:59:59.999Z') : null;
 
           filteredLeads = filteredLeads.filter((lead: any) => {
             const createdAt = new Date(lead.createdAt);

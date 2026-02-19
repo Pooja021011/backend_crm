@@ -481,8 +481,81 @@ export const pipelineService = {
    */
   async getPipelineLeads(pipelineKey: string, filters: PipelineLeadFilters = {}) {
     try {
-      const parseRangeStart = (v?: string) => (v ? new Date(v.length <= 10 ? `${v}T00:00:00.000Z` : v) : undefined);
-      const parseRangeEnd = (v?: string) => (v ? new Date(v.length <= 10 ? `${v}T23:59:59.999Z` : v) : undefined);
+      /**
+       * Normalize date string to YYYY-MM-DD format for consistent parsing
+       * Handles multiple input formats: dd-mm-yyyy, dd/mm/yyyy, yyyy-mm-dd
+       */
+      const normalizeDateString = (dateStr: string | null | undefined): string | null => {
+        if (!dateStr || !dateStr.trim()) return null;
+        
+        const trimmed = dateStr.trim();
+        
+        // Already in YYYY-MM-DD format (ISO date format)
+        if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+          const [year, month, day] = trimmed.split('-').map(Number);
+          if (month >= 1 && month <= 12 && day >= 1 && day <= 31 && year >= 1900 && year <= 2100) {
+            return trimmed;
+          }
+        }
+        
+        // Format: dd-mm-yyyy or dd/mm/yyyy
+        const ddmmyyyyMatch = trimmed.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
+        if (ddmmyyyyMatch) {
+          const [, day, month, year] = ddmmyyyyMatch;
+          const dayNum = parseInt(day, 10);
+          const monthNum = parseInt(month, 10);
+          const yearNum = parseInt(year, 10);
+          
+          if (monthNum >= 1 && monthNum <= 12 && dayNum >= 1 && dayNum <= 31 && yearNum >= 1900 && yearNum <= 2100) {
+            const normalizedMonth = monthNum.toString().padStart(2, '0');
+            const normalizedDay = dayNum.toString().padStart(2, '0');
+            return `${yearNum}-${normalizedMonth}-${normalizedDay}`;
+          }
+        }
+        
+        // Format: yyyy-mm-dd or yyyy/mm/dd
+        const yyyymmddMatch = trimmed.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/);
+        if (yyyymmddMatch) {
+          const [, year, month, day] = yyyymmddMatch;
+          const yearNum = parseInt(year, 10);
+          const monthNum = parseInt(month, 10);
+          const dayNum = parseInt(day, 10);
+          
+          if (monthNum >= 1 && monthNum <= 12 && dayNum >= 1 && dayNum <= 31 && yearNum >= 1900 && yearNum <= 2100) {
+            const normalizedMonth = monthNum.toString().padStart(2, '0');
+            const normalizedDay = dayNum.toString().padStart(2, '0');
+            return `${yearNum}-${normalizedMonth}-${normalizedDay}`;
+          }
+        }
+        
+        // Try parsing as Date (handles ISO strings and other formats)
+        const parsedDate = new Date(trimmed);
+        if (!isNaN(parsedDate.getTime())) {
+          const year = parsedDate.getFullYear();
+          const month = (parsedDate.getMonth() + 1).toString().padStart(2, '0');
+          const day = parsedDate.getDate().toString().padStart(2, '0');
+          
+          if (year >= 1900 && year <= 2100) {
+            return `${year}-${month}-${day}`;
+          }
+        }
+        
+        return null;
+      };
+
+      const parseRangeStart = (v?: string) => {
+        if (!v) return undefined;
+        const normalized = normalizeDateString(v);
+        if (!normalized) return undefined;
+        return new Date(`${normalized}T00:00:00.000Z`);
+      };
+      
+      const parseRangeEnd = (v?: string) => {
+        if (!v) return undefined;
+        const normalized = normalizeDateString(v);
+        if (!normalized) return undefined;
+        return new Date(`${normalized}T23:59:59.999Z`);
+      };
 
       const pipeline = await prisma.pipelineDefinition.findUnique({
         where: { key: pipelineKey as any },

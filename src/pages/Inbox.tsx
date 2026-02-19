@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -77,7 +77,7 @@ const Inbox = () => {
   const navigate = useNavigate();
   const { makeCall: makeBrowserCall, hangUp, callStatus, isInitializing, toggleMute, isMuted } = useTwilioContext();
   
-  const [activeTab, setActiveTab] = useState("emails");
+  const [activeTab, setActiveTab] = useState("notifications");
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [gmailEmails, setGmailEmails] = useState<any[]>([]);
   const [emailSettings, setEmailSettings] = useState<any>(null);
@@ -1525,7 +1525,11 @@ const Inbox = () => {
           priority: (n.priority || 'medium').toLowerCase(),
           notificationType: n.type,
           leadId: n.lead?.id,
-          leadAddress: n.lead?.address ? `${n.lead.address.address1}, ${n.lead.address.city}, ${n.lead.address.state}` : '',
+          leadAddress: n.lead?.address 
+            ? (typeof n.lead.address === 'string' 
+                ? n.lead.address 
+                : `${n.lead.address.address1 || ''}, ${n.lead.address.city || ''}, ${n.lead.address.state || ''}`.replace(/^,\s*|,\s*$/g, '').replace(/,\s*,/g, ',').trim() || n.message || '')
+            : (n.message || ''),
           dealId: n.deal?.id,
           triggeredBy: n.triggeredBy
         }));
@@ -1563,9 +1567,13 @@ const Inbox = () => {
 
   // Load on tab switch
   useEffect(() => {
-    if (activeTab === 'tasks') fetchTasks();
-    if (activeTab === 'communications') fetchCommunications();
-    if (activeTab === 'reminders') {
+    if (activeTab === 'notifications') {
+      fetchNotifications();
+    } else if (activeTab === 'tasks') {
+      fetchTasks();
+    } else if (activeTab === 'communications') {
+      fetchCommunications();
+    } else if (activeTab === 'reminders') {
       fetchReminders();
       fetchReminderCounts();
       // Re-enable notifications for reminders tab
@@ -1577,6 +1585,10 @@ const Inbox = () => {
     if (source === "primary") {
       // For primary tab, only show Gmail emails with 'primary' category
       return gmailEmails.filter(email => email.category === 'primary');
+    } else if (source === "notifications") {
+      // For notifications tab, show all notifications
+      console.log(`🔍 Getting notifications for display: ${notifications.length} items`, notifications);
+      return [...notifications];
     } else if (source === "emails") {
       // For emails tab, show all Gmail emails (all categories)
       console.log(`🔍 Getting Gmail emails for display: ${gmailEmails.length} items`, gmailEmails);
@@ -1632,6 +1644,10 @@ const Inbox = () => {
     // For calls and SMS, all items are unread, so count all
     if (source === 'calls' || source === 'sms') {
       return messages.length;
+    }
+    // For notifications, count unread notifications
+    if (source === 'notifications') {
+      return messages.filter(m => m.unread).length;
     }
     // For reminders, count all reminders (they're all unread by default)
     if (source === 'reminders') {
@@ -1711,6 +1727,22 @@ const Inbox = () => {
       <div className="bg-white border-b border-gray-200 px-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="h-12 bg-transparent border-0 p-0 space-x-6">
+            {/* Notifications Tab - First Tab */}
+            <TabsTrigger 
+              value="notifications" 
+              className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-blue-500 data-[state=active]:text-blue-600 rounded-none border-b-2 border-transparent hover:border-gray-300 px-0 pb-3"
+            >
+              <div className="flex items-center gap-2">
+                <Bell className="w-4 h-4" />
+                <span>Notifications</span>
+                {getUnreadCount("notifications") > 0 && (
+                  <Badge className="bg-blue-500 text-white text-xs px-1.5 py-0.5 rounded-full">
+                    {getUnreadCount("notifications")}
+                  </Badge>
+                )}
+              </div>
+            </TabsTrigger>
+
             {/* Primary Tab - Temporarily Hidden */}
             {false && (
               <TabsTrigger 
@@ -1824,8 +1856,116 @@ const Inbox = () => {
           {/* Messages List */}
           <TabsContent value={activeTab} className="mt-0">
             <div className="bg-white">
-              {/* SMS Tab Content */}
-              {activeTab === 'sms' ? (
+              {/* Notifications Tab Content */}
+              {activeTab === 'notifications' ? (
+                <div>
+                  {/* Notifications Header */}
+                  <div className="flex items-center justify-between p-4 border-b bg-gray-50">
+                    <h3 className="text-lg font-semibold text-gray-900">Notifications</h3>
+                    <Button
+                      onClick={fetchNotifications}
+                      variant="ghost"
+                      size="sm"
+                      disabled={loadingNotifications}
+                      className="text-gray-600 hover:text-gray-900"
+                    >
+                      {loadingNotifications ? (
+                        <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                      ) : (
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                      )}
+                      Refresh
+                    </Button>
+                  </div>
+
+                  {/* Notifications List */}
+                  {loadingNotifications ? (
+                    <div className="p-12 text-center">
+                      <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+                      <p className="text-gray-600">Loading notifications...</p>
+                    </div>
+                  ) : notifications.length === 0 ? (
+                    <div className="p-12 text-center">
+                      <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Bell className="w-8 h-8 text-blue-600" />
+                      </div>
+                      <p className="text-lg font-medium text-gray-500">No notifications</p>
+                      <p className="text-gray-400">All caught up! You have no new notifications.</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-200">
+                      {notifications.map((notification) => (
+                        <div
+                          key={notification.id}
+                          className={`flex items-start gap-3 p-3 hover:bg-gray-50 cursor-pointer transition-colors ${
+                            notification.unread ? 'bg-blue-50/50' : ''
+                          }`}
+                          onClick={() => {
+                            // Mark as read and navigate to lead if available
+                            if (notification.leadId) {
+                              navigate(`/leads/${notification.leadId}/edit`);
+                            }
+                            // Mark as read in backend
+                            const markAsRead = async () => {
+                              try {
+                                const accessToken = localStorage.getItem('accessToken');
+                                await fetch(`${API_BASE}/notifications/${notification.id}/read`, {
+                                  method: 'POST',
+                                  headers: {
+                                    'Authorization': `Bearer ${accessToken}`,
+                                    'Content-Type': 'application/json'
+                                  }
+                                });
+                                // Update local state
+                                setNotifications(prev => 
+                                  prev.map(n => n.id === notification.id ? { ...n, unread: false } : n)
+                                );
+                              } catch (error) {
+                                console.error('Failed to mark notification as read:', error);
+                              }
+                            };
+                            markAsRead();
+                          }}
+                        >
+                          {/* Notification Icon - Compact */}
+                          <div className="flex-shrink-0">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                              notification.unread ? 'bg-blue-100' : 'bg-gray-100'
+                            }`}>
+                              {React.cloneElement(getMessageIcon(notification.type, notification.notificationType) as React.ReactElement, {
+                                className: 'w-4 h-4'
+                              })}
+                            </div>
+                          </div>
+                          
+                          {/* Notification Content */}
+                          <div className="flex-1 min-w-0 flex items-start justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <span className={`font-semibold text-sm ${notification.unread ? 'text-gray-900' : 'text-gray-700'}`}>
+                                  {notification.subject}
+                                </span>
+                              </div>
+                              <div className="text-xs text-gray-600 mb-0.5">
+                                {notification.preview || notification.message || ''}
+                              </div>
+                              {notification.leadAddress && notification.leadAddress.trim() && (
+                                <div className="text-xs text-gray-500 mb-0.5">
+                                  {notification.leadAddress}
+                                </div>
+                              )}
+                            </div>
+                            {/* Date/Time on the right */}
+                            <div className="flex-shrink-0 text-xs text-gray-400 whitespace-nowrap">
+                              {notification.time}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : activeTab === 'sms' ? (
                 <div>
                   {/* SMS Header */}
                   <div className="flex items-center justify-between p-4 border-b bg-gray-50">

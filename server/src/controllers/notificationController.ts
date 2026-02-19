@@ -9,7 +9,10 @@ export const notificationController = {
   async getUserNotifications(req: Request, res: Response) {
     try {
       const userId = req.user?.id;
-      const userRoles = req.user?.roles?.map((r: any) => r.role?.name || r.name) as RoleName[] || [];
+      // req.user.roles is already a string[] from auth middleware, not an array of objects
+      const userRoles = (req.user?.roles || []) as RoleName[];
+
+      console.log(`[notificationController] getUserNotifications - userId: ${userId}, userRoles: ${JSON.stringify(userRoles)}`);
 
       if (!userId) {
         return res.status(401).json({
@@ -19,6 +22,8 @@ export const notificationController = {
       }
 
       const notifications = await notificationService.getUserNotifications(userId, userRoles);
+      
+      console.log(`[notificationController] Returning ${notifications.length} notifications to frontend`);
 
       // Transform notifications for frontend
       const transformedNotifications = notifications.map(notification => ({
@@ -32,7 +37,12 @@ export const notificationController = {
         readAt: notification.readAt,
         lead: notification.lead ? {
           id: notification.lead.id,
-          address: notification.lead.address?.address1,
+          address: notification.lead.address ? {
+            address1: notification.lead.address.address1 || '',
+            city: notification.lead.address.city || '',
+            state: notification.lead.address.state || '',
+            zip: notification.lead.address.zip || ''
+          } : null,
           sellerName: notification.lead.seller ? 
             `${notification.lead.seller.firstName} ${notification.lead.seller.lastName}` : null,
           buyerName: notification.lead.buyer ? 
@@ -69,7 +79,8 @@ export const notificationController = {
   async getUnreadCount(req: Request, res: Response) {
     try {
       const userId = req.user?.id;
-      const userRoles = req.user?.roles?.map((r: any) => r.role?.name || r.name) as RoleName[] || [];
+      // req.user.roles is already a string[] from auth middleware, not an array of objects
+      const userRoles = (req.user?.roles || []) as RoleName[];
 
       if (!userId) {
         return res.status(401).json({

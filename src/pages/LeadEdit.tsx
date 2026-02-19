@@ -437,6 +437,10 @@ const LeadEdit: React.FC = () => {
   // Collapsible sections (Acquisitions tab)
   const [isAdditionalInfoOpen, setIsAdditionalInfoOpen] = useState(false);
   const [isPhotosOpen, setIsPhotosOpen] = useState(false);
+  const [isMarketingDescriptionOpen, setIsMarketingDescriptionOpen] = useState(false);
+  
+  // Marketing description
+  const [marketingDescription, setMarketingDescription] = useState('');
   
   // Notes and communications
   const [noteText, setNoteText] = useState('');
@@ -907,6 +911,7 @@ const LeadEdit: React.FC = () => {
     
     // Clear timeline-related state immediately when id changes
     setAppointmentDate('');
+    setMarketingDescription(''); // Clear marketing description to prevent stale data
     
     // Update current id ref (prevents stale closures)
     currentLeadIdRef.current = id || null;
@@ -1229,6 +1234,9 @@ const LeadEdit: React.FC = () => {
         setWaterHeaterAge(customFields.waterHeaterAge?.toString() || '');
         setWaterType(customFields.waterType || '');
         setSewerType(customFields.sewerType || '');
+        
+        // Load marketing description from customFields
+        setMarketingDescription(customFields.marketingDescription || '');
         
         // Load valuation from customFields
         setEstimatedValue(customFields.estimatedValue?.toString() || '');
@@ -1950,6 +1958,7 @@ const LeadEdit: React.FC = () => {
       underwritingTimeline: underwritingTimeline !== null && underwritingTimeline !== undefined ? underwritingTimeline : null,
       underwritingRehabCost: underwritingRehabCost || null,
       finalOffer: finalOffer || null,
+      marketingDescription: marketingDescription || null,
     };
     
     // If onlyDirtyFields is true, only return fields that have been modified
@@ -2005,6 +2014,7 @@ const LeadEdit: React.FC = () => {
     underwritingTimeline,
     underwritingRehabCost,
     finalOffer,
+    marketingDescription,
   ]);
 
   const buildLeadPatchPayload = useCallback((options?: { includeLeadOwners?: boolean; forceAllFields?: boolean }) => {
@@ -4819,6 +4829,43 @@ const LeadEdit: React.FC = () => {
                   taxes={underwritingTaxes}
                   timeline={underwritingTimeline}
                 />
+
+                {/* 7. Marketing Description */}
+                <Collapsible open={isMarketingDescriptionOpen} onOpenChange={setIsMarketingDescriptionOpen}>
+                  <div className="border border-slate-200 rounded-lg bg-white p-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1">
+                        <FileText className="w-3 h-3 text-slate-500" />
+                        <span className="text-xs font-medium text-slate-600">Marketing Description</span>
+                      </div>
+                      <CollapsibleTrigger asChild>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0"
+                          aria-label={isMarketingDescriptionOpen ? 'Collapse section' : 'Expand section'}
+                        >
+                          <ChevronDown className={`h-4 w-4 transition-transform ${isMarketingDescriptionOpen ? 'rotate-180' : ''}`} />
+                        </Button>
+                      </CollapsibleTrigger>
+                    </div>
+
+                    <CollapsibleContent className="mt-2">
+                      <Textarea
+                        value={marketingDescription}
+                        onChange={(e) => {
+                          setMarketingDescription(e.target.value);
+                          markFieldDirty('marketingDescription');
+                        }}
+                        onBlur={() => void flushAutoSave('blur')}
+                        placeholder="Enter marketing description..."
+                        className="min-h-[200px] text-sm"
+                        disabled={!canEditLead}
+                      />
+                    </CollapsibleContent>
+                  </div>
+                </Collapsible>
               </TabsContent>
 
               {/* Transactions Tab */}
