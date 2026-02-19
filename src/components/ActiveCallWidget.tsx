@@ -392,8 +392,8 @@ export const ActiveCallWidget: React.FC<ActiveCallWidgetProps> = ({
 
         {/* Dial Pad - Expandable for outbound calls */}
         {isOutboundCall && callStatus.status === 'connected' && isDialerExpanded && (
-          <div className="mt-2 p-2 bg-gray-50 rounded-lg border border-gray-200">
-            <div className="grid grid-cols-3 gap-2">
+          <div className="mt-2 p-1.5 bg-gray-50 rounded-lg border border-gray-200">
+            <div className="grid grid-cols-3 gap-1.5">
               {/* Dial pad buttons: 1-9, *, 0, # */}
               {['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'].map((digit) => (
                 <Button
@@ -401,7 +401,7 @@ export const ActiveCallWidget: React.FC<ActiveCallWidgetProps> = ({
                   onClick={() => sendDigit(digit)}
                   variant="outline"
                   size="sm"
-                  className="h-10 w-full text-sm font-semibold hover:bg-blue-50 hover:border-blue-300 active:bg-blue-100"
+                  className="h-8 w-full text-xs font-semibold hover:bg-blue-50 hover:border-blue-300 active:bg-blue-100"
                   disabled={!activeCall}
                 >
                   {digit}
