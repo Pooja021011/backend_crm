@@ -3076,7 +3076,7 @@ const LeadEdit: React.FC = () => {
       console.log('🔵 Making browser call to:', phoneNumber, 'leadId:', id);
       
       // Use browser calling
-      await makeBrowserCall(phoneNumber);
+      await makeBrowserCall(phoneNumber, id);
       
       // Store call in database for history
       try {
@@ -3123,7 +3123,7 @@ const LeadEdit: React.FC = () => {
     try {
       console.log('🔵 Making browser call to:', phoneNumber, 'leadId:', id);
       
-      await makeBrowserCall(phoneNumber);
+      await makeBrowserCall(phoneNumber, id);
       
       // Store call in database for history
       try {

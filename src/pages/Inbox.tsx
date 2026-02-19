@@ -1062,7 +1062,7 @@ const Inbox = () => {
       console.log('🔵 Making browser call to:', phoneNumber, 'leadId:', leadId);
       
       // Use browser calling instead of phone calling
-      await makeBrowserCall(phoneNumber);
+      await makeBrowserCall(phoneNumber, leadId);
       
       // Store call in database for history
       try {
