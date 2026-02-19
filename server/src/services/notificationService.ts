@@ -135,7 +135,15 @@ export const notificationService = {
       });
       
       const notifications = await prisma.notification.findMany({
-        where: whereClause,
+        where: {
+          ...whereClause,
+          // Only show specific notification types in the notifications tab
+          // Exclude MISSED_CALL, NEW_CALL, NEW_SMS, NEW_DEAL_ASSIGNED
+          // Only show: NEW_CONTRACT, NEW_LEAD
+          type: {
+            in: ['NEW_CONTRACT', 'NEW_LEAD']
+          }
+        },
         include: {
           lead: {
             include: {
