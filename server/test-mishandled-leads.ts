@@ -163,9 +163,32 @@ async function testMishandledLeads(assignedUserId?: string) {
     console.log(`\n📋 Valid Stages for Stale48h: ${Array.from(validStageIdsForStale48h).join(', ') || 'None'}`);
 
     // 4. SLA Breaches - Only OUTBOUND communications count as "reach out" (matching Major KPI logic)
+    // EXCLUDE leads with upcoming tasks (same as "Needs Attention" and "Stale 48h" logic)
+    const tasksCutoffDate = new Date('2026-01-20T00:00:00Z'); // Tasks cutoff date (same as reminder logic)
     const createdThisMonthIds = new Set(leadsReceived.map((l) => l.id));
     const slaBreachLeads = activeLeads.filter((l) => {
       if (!createdThisMonthIds.has(l.id)) return false;
+      
+      // EXCLUDE leads with upcoming tasks (matching "Needs Attention" and "Stale 48h" logic)
+      const hasUpcomingTask = (l as any).tasks?.some((t: any) => {
+        if (t.status !== 'OPEN') return false;
+        const dueDate = new Date(t.dueAt);
+        if (dueDate < tasksCutoffDate || dueDate <= nowDt) return false; // Not upcoming
+        const title = String(t.title || '');
+        const isAutoCreated = 
+          title.startsWith('Review note on ') ||
+          title.startsWith('Underwrite ') ||
+          title.startsWith('Make Offer on ') ||
+          title.startsWith('Follow Up With ') ||
+          title.startsWith('Contract Sent - Awaiting Signature for ') ||
+          title.startsWith('URGENT: DocuSign Failed for ') ||
+          title.startsWith('Check Voided Contract With ');
+        return !isAutoCreated;
+      });
+      
+      if (hasUpcomingTask) {
+        return false; // Exclude leads with upcoming tasks
+      }
       
       // Get the FIRST OUTBOUND communication (CALL/SMS/EMAIL only) for SLA breach check
       // Communications are ordered by occurredAt asc, so [0] is the first/earliest
@@ -209,7 +232,7 @@ async function testMishandledLeads(assignedUserId?: string) {
 
     // 5. Stale 48h - Only OUTBOUND communications count as "reach out" (matching Major KPI logic)
     // EXCLUDE leads with upcoming tasks (same as "Needs Attention" logic)
-    const tasksCutoffDate = new Date('2026-01-20T00:00:00Z'); // Tasks cutoff date (same as reminder logic)
+    // Note: tasksCutoffDate already defined above for SLA breach check
     const stale48hLeads = activeLeads.filter((l) => {
       if (!l.pipelineStage) return false;
       if (!validStageIdsForStale48h.has(l.pipelineStage.id)) return false;
@@ -270,7 +293,7 @@ async function testMishandledLeads(assignedUserId?: string) {
     });
 
     // 6. Tasks Past Due 6h+
-    const tasksCutoffDate = new Date('2026-01-20T00:00:00Z');
+    // Note: tasksCutoffDate is already declared above for stale48h logic
     const leadsWithPastDueTasks = await prisma.lead.findMany({
       where: {
         leadType: 'SELLER',
@@ -360,12 +383,22 @@ async function testMishandledLeads(assignedUserId?: string) {
     // Combine all mishandled lead IDs
     const allMishandledIds = new Set([...slaBreachIds, ...stale48hIds, ...tasksPastDueIds]);
     
+    // Calculate overlaps
+    const slaAndStale = Array.from(slaBreachIds).filter(id => stale48hIds.has(id)).length;
+    const slaAndTasks = Array.from(slaBreachIds).filter(id => tasksPastDueIds.has(id)).length;
+    const staleAndTasks = Array.from(stale48hIds).filter(id => tasksPastDueIds.has(id)).length;
+    const allThree = Array.from(slaBreachIds).filter(id => stale48hIds.has(id) && tasksPastDueIds.has(id)).length;
+    
+    const totalWithOverlap = slaBreachLeads.length + stale48hLeads.length + leadsWithPastDueTasks.length;
+    const overlapCount = totalWithOverlap - allMishandledIds.size;
+    
     console.log(`\n${'='.repeat(80)}`);
     console.log(`\n📊 SUMMARY:`);
     console.log(`   SLA Breaches: ${slaBreachLeads.length}`);
     console.log(`   Stale 48h: ${stale48hLeads.length}`);
     console.log(`   Tasks Past Due 6h+: ${leadsWithPastDueTasks.length}`);
-    console.log(`   TOTAL MISHANDLED: ${allMishandledIds.size}`);
+    console.log(`   Overlap (leads in multiple categories): ${overlapCount}`);
+    console.log(`   TOTAL MISHANDLED (unique): ${allMishandledIds.size}`);
     
     // Detailed breakdown: Each lead with matched rules
     console.log(`\n📋 DETAILED BREAKDOWN - Each Lead with Matched Rules:`);

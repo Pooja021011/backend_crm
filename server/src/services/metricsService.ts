@@ -92,6 +92,69 @@ function getSlaThresholdHoursEt(createdAt: Date): number {
   return hourEt >= 8 && hourEt <= 17 ? 2 : 16;
 }
 
+/**
+ * Normalize date string to YYYY-MM-DD format for consistent parsing
+ * Handles multiple input formats: dd-mm-yyyy, dd/mm/yyyy, yyyy-mm-dd
+ * This ensures consistent date parsing regardless of browser locale
+ */
+function normalizeDateString(dateStr: string | null | undefined): string | null {
+  if (!dateStr || !dateStr.trim()) return null;
+  
+  const trimmed = dateStr.trim();
+  
+  // Already in YYYY-MM-DD format (ISO date format)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const [year, month, day] = trimmed.split('-').map(Number);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31 && year >= 1900 && year <= 2100) {
+      return trimmed;
+    }
+  }
+  
+  // Format: dd-mm-yyyy or dd/mm/yyyy
+  const ddmmyyyyMatch = trimmed.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
+  if (ddmmyyyyMatch) {
+    const [, day, month, year] = ddmmyyyyMatch;
+    const dayNum = parseInt(day, 10);
+    const monthNum = parseInt(month, 10);
+    const yearNum = parseInt(year, 10);
+    
+    if (monthNum >= 1 && monthNum <= 12 && dayNum >= 1 && dayNum <= 31 && yearNum >= 1900 && yearNum <= 2100) {
+      const normalizedMonth = monthNum.toString().padStart(2, '0');
+      const normalizedDay = dayNum.toString().padStart(2, '0');
+      return `${yearNum}-${normalizedMonth}-${normalizedDay}`;
+    }
+  }
+  
+  // Format: yyyy-mm-dd or yyyy/mm/dd
+  const yyyymmddMatch = trimmed.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/);
+  if (yyyymmddMatch) {
+    const [, year, month, day] = yyyymmddMatch;
+    const yearNum = parseInt(year, 10);
+    const monthNum = parseInt(month, 10);
+    const dayNum = parseInt(day, 10);
+    
+    if (monthNum >= 1 && monthNum <= 12 && dayNum >= 1 && dayNum <= 31 && yearNum >= 1900 && yearNum <= 2100) {
+      const normalizedMonth = monthNum.toString().padStart(2, '0');
+      const normalizedDay = dayNum.toString().padStart(2, '0');
+      return `${yearNum}-${normalizedMonth}-${normalizedDay}`;
+    }
+  }
+  
+  // Try parsing as Date (handles ISO strings and other formats)
+  const parsedDate = new Date(trimmed);
+  if (!isNaN(parsedDate.getTime())) {
+    const year = parsedDate.getFullYear();
+    const month = (parsedDate.getMonth() + 1).toString().padStart(2, '0');
+    const day = parsedDate.getDate().toString().padStart(2, '0');
+    
+    if (year >= 1900 && year <= 2100) {
+      return `${year}-${month}-${day}`;
+    }
+  }
+  
+  return null;
+}
+
 function computeLastActivityAt(lead: {
   updatedAt: Date;
   communications?: Array<{ occurredAt: Date | null; createdAt: Date }>;
@@ -745,9 +808,32 @@ export const metricsService = {
     }
 
     // SLA breaches for leads created this month (2h/16h/48h ET) - Only OUTBOUND communications count as "reach out"
+    // EXCLUDE leads with upcoming tasks (same as "Needs Attention" and "Stale 48h" logic)
+    const tasksCutoffDate = new Date('2026-01-20T00:00:00Z'); // Tasks cutoff date (same as reminder logic)
     const createdThisMonthIds = new Set(leadsReceived.map((l) => l.id));
     const slaBreachLeads = activeLeads.filter((l) => {
       if (!createdThisMonthIds.has(l.id)) return false;
+      
+      // EXCLUDE leads with upcoming tasks (matching "Needs Attention" and "Stale 48h" logic)
+      const hasUpcomingTask = (l as any).tasks?.some((t: any) => {
+        if (t.status !== 'OPEN') return false;
+        const dueDate = new Date(t.dueAt);
+        if (dueDate < tasksCutoffDate || dueDate <= nowDt) return false; // Not upcoming
+        const title = String(t.title || '');
+        const isAutoCreated = 
+          title.startsWith('Review note on ') ||
+          title.startsWith('Underwrite ') ||
+          title.startsWith('Make Offer on ') ||
+          title.startsWith('Follow Up With ') ||
+          title.startsWith('Contract Sent - Awaiting Signature for ') ||
+          title.startsWith('URGENT: DocuSign Failed for ') ||
+          title.startsWith('Check Voided Contract With ');
+        return !isAutoCreated;
+      });
+      
+      if (hasUpcomingTask) {
+        return false; // Exclude leads with upcoming tasks
+      }
       
       // Get the FIRST OUTBOUND communication (CALL/SMS/EMAIL only) for SLA breach check
       // Communications are ordered by occurredAt asc, so [0] is the first/earliest
@@ -776,7 +862,7 @@ export const metricsService = {
     // 48h stale across leads in pipeline status "No contact made" through "contract sent"
     // that have gone 48 hours without being reached out to (OUTBOUND only)
     // EXCLUDE leads with upcoming tasks (same as "Needs Attention" logic)
-    const tasksCutoffDate = new Date('2026-01-20T00:00:00Z'); // Tasks cutoff date (same as reminder logic)
+    // Note: tasksCutoffDate already defined above for SLA breach check
     const stale48hLeads = activeLeads.filter((l) => {
       // Filter by pipeline stage: only "No Contact Made" through "Contract Sent"
       if (!l.pipelineStage) {
@@ -1253,8 +1339,31 @@ export const metricsService = {
     
     // Handle date filtering with global filter support
     if (filters.dateFrom && filters.dateTo) {
-      start = dayjs.utc(filters.dateFrom);
-      end = dayjs.utc(filters.dateTo);
+      const normalizedFrom = normalizeDateString(filters.dateFrom);
+      const normalizedTo = normalizeDateString(filters.dateTo);
+      if (normalizedFrom && normalizedTo) {
+        start = dayjs.utc(normalizedFrom);
+        end = dayjs.utc(normalizedTo);
+      } else {
+        // Fallback to timeframe if normalization fails
+        const timeframe = filters.timeframe || 'This Month';
+        if (timeframe === 'This Month') { 
+          start = now.startOf('month'); 
+          end = now.endOf('month'); 
+        } else if (timeframe === 'Last Month') { 
+          start = now.subtract(1, 'month').startOf('month'); 
+          end = now.subtract(1, 'month').endOf('month'); 
+        } else if (timeframe === 'This Quarter') { 
+          start = now.startOf('quarter'); 
+          end = now.endOf('quarter'); 
+        } else if (timeframe === 'This Year') {
+          start = now.startOf('year');
+          end = now.endOf('year');
+        } else {
+          start = now.startOf('month');
+          end = now.endOf('month');
+        }
+      }
     } else {
       // Fallback to timeframe
       const timeframe = filters.timeframe || 'This Month';
@@ -1410,8 +1519,31 @@ export const metricsService = {
     
     // Handle date filtering with global filter support
     if (filters.dateFrom && filters.dateTo) {
-      start = dayjs.utc(filters.dateFrom);
-      end = dayjs.utc(filters.dateTo);
+      const normalizedFrom = normalizeDateString(filters.dateFrom);
+      const normalizedTo = normalizeDateString(filters.dateTo);
+      if (normalizedFrom && normalizedTo) {
+        start = dayjs.utc(normalizedFrom);
+        end = dayjs.utc(normalizedTo);
+      } else {
+        // Fallback to timeframe if normalization fails
+        const timeframe = filters.timeframe || 'This Month';
+        if (timeframe === 'This Month') { 
+          start = now.startOf('month'); 
+          end = now.endOf('month'); 
+        } else if (timeframe === 'Last Month') { 
+          start = now.subtract(1, 'month').startOf('month'); 
+          end = now.subtract(1, 'month').endOf('month'); 
+        } else if (timeframe === 'This Quarter') { 
+          start = now.startOf('quarter'); 
+          end = now.endOf('quarter'); 
+        } else if (timeframe === 'This Year') {
+          start = now.startOf('year');
+          end = now.endOf('year');
+        } else {
+          start = now.startOf('month');
+          end = now.endOf('month');
+        }
+      }
     } else {
       // Fallback to timeframe
       const timeframe = filters.timeframe || 'This Month';
@@ -1582,8 +1714,31 @@ export const metricsService = {
     
     // Handle date filtering with global filter support
     if (filters.dateFrom && filters.dateTo) {
-      start = dayjs.utc(filters.dateFrom);
-      end = dayjs.utc(filters.dateTo);
+      const normalizedFrom = normalizeDateString(filters.dateFrom);
+      const normalizedTo = normalizeDateString(filters.dateTo);
+      if (normalizedFrom && normalizedTo) {
+        start = dayjs.utc(normalizedFrom);
+        end = dayjs.utc(normalizedTo);
+      } else {
+        // Fallback to timeframe if normalization fails
+        const timeframe = filters.timeframe || 'This Month';
+        if (timeframe === 'This Month') { 
+          start = now.startOf('month'); 
+          end = now.endOf('month'); 
+        } else if (timeframe === 'Last Month') { 
+          start = now.subtract(1, 'month').startOf('month'); 
+          end = now.subtract(1, 'month').endOf('month'); 
+        } else if (timeframe === 'This Quarter') { 
+          start = now.startOf('quarter'); 
+          end = now.endOf('quarter'); 
+        } else if (timeframe === 'This Year') {
+          start = now.startOf('year');
+          end = now.endOf('year');
+        } else {
+          start = now.startOf('month');
+          end = now.endOf('month');
+        }
+      }
     } else {
       // Fallback to timeframe
       const timeframe = filters.timeframe || 'This Month';
@@ -1768,8 +1923,31 @@ export const metricsService = {
     
     // Handle date filtering with global filter support
     if (filters.dateFrom && filters.dateTo) {
-      start = dayjs.utc(filters.dateFrom);
-      end = dayjs.utc(filters.dateTo);
+      const normalizedFrom = normalizeDateString(filters.dateFrom);
+      const normalizedTo = normalizeDateString(filters.dateTo);
+      if (normalizedFrom && normalizedTo) {
+        start = dayjs.utc(normalizedFrom);
+        end = dayjs.utc(normalizedTo);
+      } else {
+        // Fallback to timeframe if normalization fails
+        const timeframe = filters.timeframe || 'This Month';
+        if (timeframe === 'This Month') { 
+          start = now.startOf('month'); 
+          end = now.endOf('month'); 
+        } else if (timeframe === 'Last Month') { 
+          start = now.subtract(1, 'month').startOf('month'); 
+          end = now.subtract(1, 'month').endOf('month'); 
+        } else if (timeframe === 'This Quarter') { 
+          start = now.startOf('quarter'); 
+          end = now.endOf('quarter'); 
+        } else if (timeframe === 'This Year') {
+          start = now.startOf('year');
+          end = now.endOf('year');
+        } else {
+          start = now.startOf('month');
+          end = now.endOf('month');
+        }
+      }
     } else {
       // Fallback to timeframe
       const timeframe = filters.timeframe || 'This Month';
@@ -2365,10 +2543,15 @@ export const metricsService = {
     // Build date filter - default to current month if no dates provided
     const dateFilter: any = {};
     if (dateFrom && dateTo) {
-      dateFilter.createdAt = {
-        gte: new Date(dateFrom),
-        lte: new Date(dateTo)
-      };
+      const normalizedFrom = normalizeDateString(dateFrom);
+      const normalizedTo = normalizeDateString(dateTo);
+      
+      if (normalizedFrom && normalizedTo) {
+        dateFilter.createdAt = {
+          gte: new Date(`${normalizedFrom}T00:00:00.000Z`),
+          lte: new Date(`${normalizedTo}T23:59:59.999Z`)
+        };
+      }
     } else {
       // Default to current month if no date filters provided (matches Leads page behavior)
       const now = dayjs.utc();
@@ -2460,10 +2643,15 @@ export const metricsService = {
     // Build date filter
     const dateFilter: any = {};
     if (dateFrom && dateTo) {
-      dateFilter.createdAt = {
-        gte: new Date(dateFrom),
-        lte: new Date(dateTo)
-      };
+      const normalizedFrom = normalizeDateString(dateFrom);
+      const normalizedTo = normalizeDateString(dateTo);
+      
+      if (normalizedFrom && normalizedTo) {
+        dateFilter.createdAt = {
+          gte: new Date(`${normalizedFrom}T00:00:00.000Z`),
+          lte: new Date(`${normalizedTo}T23:59:59.999Z`)
+        };
+      }
     } else if (timeframe) {
       const now = new Date();
       // Use UTC for consistent date calculations
