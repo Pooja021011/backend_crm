@@ -44,6 +44,10 @@ interface LeadInfo {
   pipelineStage?: {
     name: string;
   };
+  assignedUser?: {
+    firstName: string;
+    lastName: string;
+  };
 }
 
 const MishandledLeads = () => {
@@ -88,6 +92,24 @@ const MishandledLeads = () => {
             }
           } catch (error) {
             console.error('Error fetching lead details:', error);
+            // Try fetching individual leads if batch fails
+            try {
+              const leadsMap = new Map<string, LeadInfo>();
+              for (const id of leadIds) {
+                try {
+                  const leadRes = await makeApiCall(`${API_BASE}/leads/${id}`);
+                  const leadJson = await leadRes.json();
+                  if (leadJson?.data) {
+                    leadsMap.set(id, leadJson.data);
+                  }
+                } catch (err) {
+                  console.error(`Error fetching lead ${id}:`, err);
+                }
+              }
+              setLeadsInfo(leadsMap);
+            } catch (err) {
+              console.error('Error fetching individual leads:', err);
+            }
           }
         }
       } catch (error) {
@@ -183,14 +205,16 @@ const MishandledLeads = () => {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lead ID</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Assigned Agent</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Matched Rules</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Condition</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {leadDetails.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
+                      <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
                         No mishandled leads found
                       </td>
                     </tr>
@@ -198,6 +222,9 @@ const MishandledLeads = () => {
                     leadDetails.map((lead) => {
                       const leadInfo = leadsInfo.get(lead.leadId);
                       const status = leadInfo?.leadStatus?.name || leadInfo?.pipelineStage?.name || 'Unknown';
+                      const assignedAgent = leadInfo?.assignedUser 
+                        ? `${leadInfo.assignedUser.firstName} ${leadInfo.assignedUser.lastName}`.trim()
+                        : 'Unassigned';
                       
                       // Get conditions for all matched rules
                       const conditions = lead.conditions || {};
@@ -209,12 +236,17 @@ const MishandledLeads = () => {
                       return (
                         <tr key={lead.leadId} className="hover:bg-gray-50">
                           <td className="px-4 py-3">
-                            <button
-                              onClick={() => navigate(`/leads/${lead.leadId}/edit`)}
+                            <a
+                              href={`/leads/${lead.leadId}/edit`}
+                              target="_blank"
+                              rel="noopener noreferrer"
                               className="text-sm font-mono text-blue-600 hover:text-blue-800 hover:underline"
                             >
                               {lead.leadId}
-                            </button>
+                            </a>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900">
+                            {assignedAgent}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-900">
                             {status}
