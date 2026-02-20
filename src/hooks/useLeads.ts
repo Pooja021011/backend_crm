@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 
 export type LeadType = 'SELLER' | 'BUYER' | 'VENDOR';
@@ -251,7 +251,7 @@ export const useLeads = (): LeadsHookReturn => {
     }
   };
 
-  const listLeads = async (params?: LeadsListParams, signal?: AbortSignal): Promise<Lead[]> => {
+  const listLeads = useCallback(async (params?: LeadsListParams, signal?: AbortSignal): Promise<Lead[]> => {
     // Don't proceed if signal is already aborted
     if (signal?.aborted) {
       throw new Error('Request aborted');
@@ -301,7 +301,7 @@ export const useLeads = (): LeadsHookReturn => {
         setIsLoading(false);
       }
     }
-  };
+  }, []); // Empty deps - function doesn't depend on any props/state
 
   const refreshLeads = async (): Promise<void> => {
     await listLeads();

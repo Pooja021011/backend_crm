@@ -338,9 +338,18 @@ const Leads = () => {
     loadFilterData(); // Load dynamic filter options
   }, []);
 
-  // Fetch leads with current filters (all filters now server-side)
-  // Calculate date range inline to avoid dependency on getDateRangeForAPI function
-  const fetchLeadsWithFilters = useCallback(async (signal?: AbortSignal) => {
+  // Load leads when filters change (including date filters)
+  // Inline the fetch logic to avoid callback dependency issues
+  useEffect(() => {
+    // Cancel previous request if it exists
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
+    // Create new AbortController for this request
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+    
     // Calculate date range inline
     let dateRange: { createdFrom?: string; createdTo?: string } = {};
     
@@ -429,22 +438,8 @@ const Leads = () => {
       filterParams.leadSourceIds = selectedLeadSources;
     }
     
-    await listLeads(filterParams, signal);
-  }, [activeTab, selectedDateRange, customDateFrom, customDateTo, searchQuery, selectedMarkets, selectedStatuses, selectedPipelineStatuses, selectedAgents, selectedLeadSources, listLeads]);
-
-  // Load leads when filters change (including date filters)
-  // Use stringified arrays for comparison to prevent infinite loops
-  useEffect(() => {
-    // Cancel previous request if it exists
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    
-    // Create new AbortController for this request
-    const abortController = new AbortController();
-    abortControllerRef.current = abortController;
-    
-    fetchLeadsWithFilters(abortController.signal).catch((err) => {
+    // Fetch leads with abort signal
+    listLeads(filterParams, abortController.signal).catch((err) => {
       // Ignore abort errors
       if (err instanceof Error && err.message !== 'Request aborted') {
         console.error('Error fetching leads:', err);
@@ -468,8 +463,9 @@ const Leads = () => {
     selectedStatuses.join(','), 
     selectedPipelineStatuses.join(','), 
     selectedAgents.join(','), 
-    selectedLeadSources.join(','),
-    fetchLeadsWithFilters
+    selectedLeadSources.join(',')
+    // Note: listLeads is memoized with useCallback in useLeads hook, so it's stable
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   ]);
 
   // Handle leadId parameter from URL to navigate to lead detail
