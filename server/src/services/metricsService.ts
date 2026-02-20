@@ -808,32 +808,9 @@ export const metricsService = {
     }
 
     // SLA breaches for leads created this month (2h/16h/48h ET) - Only OUTBOUND communications count as "reach out"
-    // EXCLUDE leads with upcoming tasks (same as "Needs Attention" and "Stale 48h" logic)
-    const tasksCutoffDate = new Date('2026-01-20T00:00:00Z'); // Tasks cutoff date (same as reminder logic)
     const createdThisMonthIds = new Set(leadsReceived.map((l) => l.id));
     const slaBreachLeads = activeLeads.filter((l) => {
       if (!createdThisMonthIds.has(l.id)) return false;
-      
-      // EXCLUDE leads with upcoming tasks (matching "Needs Attention" and "Stale 48h" logic)
-      const hasUpcomingTask = (l as any).tasks?.some((t: any) => {
-        if (t.status !== 'OPEN') return false;
-        const dueDate = new Date(t.dueAt);
-        if (dueDate < tasksCutoffDate || dueDate <= nowDt) return false; // Not upcoming
-        const title = String(t.title || '');
-        const isAutoCreated = 
-          title.startsWith('Review note on ') ||
-          title.startsWith('Underwrite ') ||
-          title.startsWith('Make Offer on ') ||
-          title.startsWith('Follow Up With ') ||
-          title.startsWith('Contract Sent - Awaiting Signature for ') ||
-          title.startsWith('URGENT: DocuSign Failed for ') ||
-          title.startsWith('Check Voided Contract With ');
-        return !isAutoCreated;
-      });
-      
-      if (hasUpcomingTask) {
-        return false; // Exclude leads with upcoming tasks
-      }
       
       // Get the FIRST OUTBOUND communication (CALL/SMS/EMAIL only) for SLA breach check
       // Communications are ordered by occurredAt asc, so [0] is the first/earliest
@@ -861,8 +838,8 @@ export const metricsService = {
 
     // 48h stale across leads in pipeline status "No contact made" through "contract sent"
     // that have gone 48 hours without being reached out to (OUTBOUND only)
-    // EXCLUDE leads with upcoming tasks (same as "Needs Attention" logic)
-    // Note: tasksCutoffDate already defined above for SLA breach check
+    // EXCLUDE leads with upcoming tasks (as per requirements)
+    const tasksCutoffDate = new Date('2026-01-20T00:00:00Z'); // Tasks cutoff date (same as reminder logic)
     const stale48hLeads = activeLeads.filter((l) => {
       // Filter by pipeline stage: only "No Contact Made" through "Contract Sent"
       if (!l.pipelineStage) {
@@ -872,7 +849,7 @@ export const metricsService = {
         return false;
       }
       
-      // EXCLUDE leads with upcoming tasks (matching "Needs Attention" logic)
+      // EXCLUDE leads with upcoming tasks (as per requirements)
       const hasUpcomingTask = (l as any).tasks?.some((t: any) => {
         if (t.status !== 'OPEN') return false;
         const dueDate = new Date(t.dueAt);
@@ -912,7 +889,7 @@ export const metricsService = {
 
     // Tasks past due more than 6 hours
     // Get all leads with tasks that are past due more than 6 hours
-    // Note: tasksCutoffDate is already declared above for stale48h logic
+    // Note: tasksCutoffDate already defined above for stale48h logic
     const leadsWithPastDueTasks = await prisma.lead.findMany({
       where: {
         leadType: 'SELLER',

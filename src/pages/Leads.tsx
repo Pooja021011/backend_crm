@@ -6,6 +6,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { MultiSelect } from "@/components/ui/multi-select";
+import {
+  getUTCDateRangeFromPeriod,
+  getUTCStartOfDay,
+  getUTCEndOfDay,
+  isDateInUTCRange,
+  parseDateUTC,
+} from "@/utils/dateUtils";
 import { 
   Table,
   TableBody,
@@ -465,89 +472,19 @@ const Leads = () => {
     }
     
     if (selectedDateRange) {
-      const now = new Date();
-      // Get current date in UTC
-      const utcYear = now.getUTCFullYear();
-      const utcMonth = now.getUTCMonth();
-      const utcDate = now.getUTCDate();
-      const utcDayOfWeek = now.getUTCDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-      
-      // Helper to get UTC date at start of day (00:00:00.000 UTC)
-      const getUTCStartOfDay = (year: number, month: number, day: number): Date => {
-        return new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
-      };
-
-      // Helper to get UTC date at end of day (23:59:59.999 UTC)
-      const getUTCEndOfDay = (year: number, month: number, day: number): Date => {
-        return new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
-      };
-      
       // Date Created filter: Always use createdAt, no fallback
+      // Use global UTC utilities for consistent timezone handling
       switch (selectedDateRange) {
-        case 'today': {
-          // Today: 12:00:00 AM to 11:59:59 PM UTC
-          const startDate = getUTCStartOfDay(utcYear, utcMonth, utcDate);
-          const endDate = getUTCEndOfDay(utcYear, utcMonth, utcDate);
-          
-          filteredLeads = filteredLeads.filter((lead: any) => {
-            const createdAt = new Date(lead.createdAt);
-            return createdAt >= startDate && createdAt <= endDate;
-          });
-          break;
-        }
-        case 'week': {
-          // This Week: Sunday 12:00:00 AM to Saturday 11:59:59 PM UTC
-          const daysToSunday = utcDayOfWeek; // Days to go back to Sunday
-          const sundayDate = new Date(Date.UTC(utcYear, utcMonth, utcDate - daysToSunday));
-          const saturdayDate = new Date(Date.UTC(utcYear, utcMonth, utcDate - daysToSunday + 6));
-          
-          const startDate = getUTCStartOfDay(sundayDate.getUTCFullYear(), sundayDate.getUTCMonth(), sundayDate.getUTCDate());
-          const endDate = getUTCEndOfDay(saturdayDate.getUTCFullYear(), saturdayDate.getUTCMonth(), saturdayDate.getUTCDate());
-          
-          filteredLeads = filteredLeads.filter((lead: any) => {
-            const createdAt = new Date(lead.createdAt);
-            return createdAt >= startDate && createdAt <= endDate;
-          });
-          break;
-        }
-        case 'month': {
-          // This Month: 1st day 12:00:00 AM to last day 11:59:59 PM UTC
-          const startDate = getUTCStartOfDay(utcYear, utcMonth, 1);
-          // Get last day of month
-          const lastDayOfMonth = new Date(Date.UTC(utcYear, utcMonth + 1, 0));
-          const endDate = getUTCEndOfDay(lastDayOfMonth.getUTCFullYear(), lastDayOfMonth.getUTCMonth(), lastDayOfMonth.getUTCDate());
-          
-          filteredLeads = filteredLeads.filter((lead: any) => {
-            const createdAt = new Date(lead.createdAt);
-            return createdAt >= startDate && createdAt <= endDate;
-          });
-          break;
-        }
-        case 'quarter': {
-          // This Quarter: 1st day of quarter 12:00:00 AM to last day 11:59:59 PM UTC
-          const currentQuarter = Math.floor(utcMonth / 3);
-          const quarterStartMonth = currentQuarter * 3;
-          const quarterEndMonth = quarterStartMonth + 3;
-          
-          const startDate = getUTCStartOfDay(utcYear, quarterStartMonth, 1);
-          // Get last day of quarter
-          const lastDayOfQuarter = new Date(Date.UTC(utcYear, quarterEndMonth, 0));
-          const endDate = getUTCEndOfDay(lastDayOfQuarter.getUTCFullYear(), lastDayOfQuarter.getUTCMonth(), lastDayOfQuarter.getUTCDate());
-          
-          filteredLeads = filteredLeads.filter((lead: any) => {
-            const createdAt = new Date(lead.createdAt);
-            return createdAt >= startDate && createdAt <= endDate;
-          });
-          break;
-        }
+        case 'today':
+        case 'week':
+        case 'month':
+        case 'quarter':
         case 'year': {
-          // This Year: Jan 1 12:00:00 AM to Dec 31 11:59:59 PM UTC
-          const startDate = getUTCStartOfDay(utcYear, 0, 1);
-          const endDate = getUTCEndOfDay(utcYear, 11, 31);
-          
+          // Use global UTC utilities for preset ranges
+          const { start, end } = getUTCDateRangeFromPeriod(selectedDateRange);
           filteredLeads = filteredLeads.filter((lead: any) => {
             const createdAt = new Date(lead.createdAt);
-            return createdAt >= startDate && createdAt <= endDate;
+            return isDateInUTCRange(createdAt, start, end);
           });
           break;
         }
@@ -556,8 +493,12 @@ const Leads = () => {
           // Normalize dates to YYYY-MM-DD format for consistent parsing
           const normalizedFrom = customDateFrom ? normalizeDateString(customDateFrom) : null;
           const normalizedTo = customDateTo ? normalizeDateString(customDateTo) : null;
-          const from = normalizedFrom ? new Date(normalizedFrom + 'T00:00:00.000Z') : null;
-          const to = normalizedTo ? new Date(normalizedTo + 'T23:59:59.999Z') : null;
+          const from = normalizedFrom ? parseDateUTC(normalizedFrom) : null;
+          const to = normalizedTo ? getUTCEndOfDay(
+            new Date(normalizedTo + 'T00:00:00.000Z').getUTCFullYear(),
+            new Date(normalizedTo + 'T00:00:00.000Z').getUTCMonth(),
+            new Date(normalizedTo + 'T00:00:00.000Z').getUTCDate()
+          ) : null;
 
           filteredLeads = filteredLeads.filter((lead: any) => {
             const createdAt = new Date(lead.createdAt);

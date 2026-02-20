@@ -39,6 +39,7 @@ model User {
   emailSettings            UserEmailSettings?
   targetedNotifications    Notification[]            @relation("NotificationTarget")
   triggeredNotifications   Notification[]            @relation("NotificationTriggeredBy")
+  notificationReads         NotificationRead[]
   smsSettings              UserSmsSettings?
   leadDistributionSettings LeadDistributionSettings?
   priceHistoryChanges      PriceHistory[]            @relation("PriceChangedByUser")
@@ -817,9 +818,24 @@ model Notification {
   createdAt DateTime  @default(now())
   readAt    DateTime?
 
+  reads     NotificationRead[]
+
   @@index([targetUserId, isRead])
   @@index([targetRoles, isRead])
   @@index([type, createdAt])
+}
+
+model NotificationRead {
+  notificationId String
+  userId          String
+  readAt          DateTime @default(now())
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([notificationId, userId])
+  @@index([userId, readAt])
+  @@index([notificationId])
 }
 
 // Marketing Platform Settings

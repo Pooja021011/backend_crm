@@ -26,15 +26,22 @@ export const notificationController = {
       console.log(`[notificationController] Returning ${notifications.length} notifications to frontend`);
 
       // Transform notifications for frontend
-      const transformedNotifications = notifications.map(notification => ({
+      const transformedNotifications = notifications.map(notification => {
+        // Check if this notification has been read by the current user
+        const userRead = notification.reads && notification.reads.length > 0 
+          ? notification.reads[0] 
+          : null;
+        const isReadByUser = !!userRead;
+        
+        return {
         id: notification.id,
         type: notification.type,
         title: notification.title,
         message: notification.message,
         priority: notification.priority,
-        isRead: notification.isRead,
+        isRead: isReadByUser, // Use per-user read status
         createdAt: notification.createdAt,
-        readAt: notification.readAt,
+        readAt: userRead?.readAt || notification.readAt, // Use per-user readAt if available
         lead: notification.lead ? {
           id: notification.lead.id,
           address: notification.lead.address ? {
@@ -54,7 +61,8 @@ export const notificationController = {
           email: notification.triggeredUser.email
         } : null,
         data: notification.data
-      }));
+        };
+      });
 
       res.json({
         success: true,

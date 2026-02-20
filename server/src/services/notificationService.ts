@@ -32,10 +32,54 @@ export const notificationService = {
   },
 
   /**
-   * Create a new notification
+   * Create a new notification (with duplicate prevention)
    */
   async createNotification(notificationData: NotificationData) {
     try {
+      // Check for existing notification to prevent duplicates
+      // For NEW_CONTRACT and NEW_LEAD, check if notification already exists for same leadId, type, and target
+      if (notificationData.type === 'NEW_CONTRACT' || notificationData.type === 'NEW_LEAD') {
+        // Find all notifications of this type for this lead
+        const existingNotifications = await prisma.notification.findMany({
+          where: {
+            type: notificationData.type,
+            leadId: notificationData.leadId
+          },
+          orderBy: { createdAt: 'desc' }
+        });
+
+        // Check if any existing notification matches the target
+        for (const existing of existingNotifications) {
+          let isDuplicate = false;
+
+          // Check targetRoles match (arrays have same elements, order doesn't matter)
+          if (notificationData.targetRoles && notificationData.targetRoles.length > 0) {
+            const existingRoles = (existing.targetRoles || []).sort();
+            const newRoles = [...notificationData.targetRoles].sort();
+            if (existingRoles.length === newRoles.length && 
+                existingRoles.every((role, idx) => role === newRoles[idx])) {
+              // Also check targetUserId matches (both null or both same)
+              if ((!existing.targetUserId && !notificationData.targetUserId) ||
+                  (existing.targetUserId === notificationData.targetUserId)) {
+                isDuplicate = true;
+              }
+            }
+          } 
+          // Check targetUserId match (when no targetRoles)
+          else if (notificationData.targetUserId) {
+            if (existing.targetUserId === notificationData.targetUserId &&
+                (!existing.targetRoles || existing.targetRoles.length === 0)) {
+              isDuplicate = true;
+            }
+          }
+
+          if (isDuplicate) {
+            console.log(`⚠️ Duplicate notification prevented: ${notificationData.type} for leadId: ${notificationData.leadId}, existing notification: ${existing.id}`);
+            return existing;
+          }
+        }
+      }
+
       const notification = await prisma.notification.create({
         data: {
           type: notificationData.type,
@@ -77,8 +121,6 @@ export const notificationService = {
       // Build the where clause conditionally
       const whereClause: any = {
         AND: [
-          // Only show unread notifications
-          { isRead: false },
           // User or role targeting
           {
             OR: []
@@ -89,38 +131,44 @@ export const notificationService = {
       // Apply role priority filtering
       if (highestPriorityRole === 'ADMIN') {
         // ADMIN: Show only ADMIN-targeted notifications (not ACQ-specific)
-        whereClause.AND[1].OR.push({ targetRoles: { hasSome: ['ADMIN'] } });
+        whereClause.AND[0].OR.push({ targetRoles: { hasSome: ['ADMIN'] } });
         console.log('[getUserNotifications] ADMIN: Adding targetRoles filter for ADMIN');
       } else if (highestPriorityRole === 'MANAGER') {
         // MANAGER: Show MANAGER-targeted notifications (not ACQ-specific)
-        whereClause.AND[1].OR.push({ targetRoles: { hasSome: ['MANAGER'] } });
+        whereClause.AND[0].OR.push({ targetRoles: { hasSome: ['MANAGER'] } });
         console.log('[getUserNotifications] MANAGER: Adding targetRoles filter for MANAGER');
       } else if (highestPriorityRole === 'ACQ') {
         // ACQ: Show ACQ-specific notifications (user-targeted)
-        whereClause.AND[1].OR.push({ targetUserId: userId });
+        whereClause.AND[0].OR.push({ targetUserId: userId });
         console.log('[getUserNotifications] ACQ: Adding targetUserId filter');
       } else if (highestPriorityRole) {
         // Other roles: Show role-targeted notifications
-        whereClause.AND[1].OR.push({ targetRoles: { hasSome: [highestPriorityRole] } });
+        whereClause.AND[0].OR.push({ targetRoles: { hasSome: [highestPriorityRole] } });
         console.log(`[getUserNotifications] ${highestPriorityRole}: Adding targetRoles filter`);
       }
       
       // Always include user-targeted notifications (for specific assignments)
       // But only if not already added for ACQ (to avoid duplicate)
       if (highestPriorityRole !== 'ACQ') {
-        whereClause.AND[1].OR.push({ targetUserId: userId });
+        whereClause.AND[0].OR.push({ targetUserId: userId });
       }
       
       // If OR array is empty, add a condition that will never match (to avoid Prisma error)
-      if (whereClause.AND[1].OR.length === 0) {
-        whereClause.AND[1].OR.push({ id: 'never-match' });
+      if (whereClause.AND[0].OR.length === 0) {
+        whereClause.AND[0].OR.push({ id: 'never-match' });
       }
       
       console.log('[getUserNotifications] Final whereClause:', JSON.stringify(whereClause, null, 2));
       
-      // Debug: Check what notifications exist before filtering
+      // Debug: Check what notifications exist before filtering (excluding read by this user)
       const allUnreadNotifications = await prisma.notification.findMany({
-        where: { isRead: false },
+        where: {
+          reads: {
+            none: {
+              userId: userId
+            }
+          }
+        },
         select: {
           id: true,
           type: true,
@@ -142,6 +190,12 @@ export const notificationService = {
           // Only show: NEW_CONTRACT, NEW_LEAD
           type: {
             in: ['NEW_CONTRACT', 'NEW_LEAD']
+          },
+          // Only show notifications NOT read by this user
+          reads: {
+            none: {
+              userId: userId
+            }
           }
         },
         include: {
@@ -158,6 +212,15 @@ export const notificationService = {
               firstName: true,
               lastName: true,
               email: true
+            }
+          },
+          reads: {
+            where: {
+              userId: userId
+            },
+            select: {
+              userId: true,
+              readAt: true
             }
           }
         },
@@ -180,18 +243,31 @@ export const notificationService = {
   },
 
   /**
-   * Mark notification as read
+   * Mark notification as read (per-user)
    */
   async markAsRead(notificationId: string, userId: string) {
     try {
-      const notification = await prisma.notification.update({
-        where: { 
-          id: notificationId
+      // Use NotificationRead table for per-user read status
+      await prisma.notificationRead.upsert({
+        where: {
+          notificationId_userId: {
+            notificationId: notificationId,
+            userId: userId
+          }
         },
-        data: {
-          isRead: true,
+        update: {
+          readAt: new Date()
+        },
+        create: {
+          notificationId: notificationId,
+          userId: userId,
           readAt: new Date()
         }
+      });
+
+      // Fetch and return the notification
+      const notification = await prisma.notification.findUnique({
+        where: { id: notificationId }
       });
 
       return notification;
@@ -217,8 +293,13 @@ export const notificationService = {
       const highestPriorityRole = this.getHighestPriorityRole(validRoles);
       
       const whereClause: any = {
-        isRead: false,
-        OR: []
+        OR: [],
+        // Only show notifications NOT read by this user
+        reads: {
+          none: {
+            userId: userId
+          }
+        }
       };
       
       // Apply role priority filtering
@@ -238,6 +319,11 @@ export const notificationService = {
       
       // Always include user-targeted notifications
       whereClause.OR.push({ targetUserId: userId });
+      
+      // Only count NEW_CONTRACT and NEW_LEAD notifications
+      whereClause.type = {
+        in: ['NEW_CONTRACT', 'NEW_LEAD']
+      };
       
       const count = await prisma.notification.count({
         where: whereClause

@@ -37,6 +37,12 @@ import { safeDate, normalizeDateString } from "@/utils/validation";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePipelineNav } from "@/contexts/PipelineNavContext";
+import {
+  getUTCDateRangeFromPeriod,
+  getUTCStartOfDay,
+  getUTCEndOfDay,
+  formatDateInputUTC,
+} from "@/utils/dateUtils";
 
 const Pipeline = () => {
   const { toast } = useToast();
@@ -372,103 +378,24 @@ const Pipeline = () => {
     }
   };
 
-  const formatDateInput = (d: Date) => {
-    // YYYY-MM-DD for <input type="date">
-    // Use UTC to avoid timezone issues
-    const year = d.getUTCFullYear();
-    const month = String(d.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(d.getUTCDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  // Helper to get UTC date at start of day (00:00:00.000 UTC)
-  const getUTCStartOfDay = (year: number, month: number, day: number): Date => {
-    return new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
-  };
-
-  // Helper to get UTC date at end of day (23:59:59.999 UTC)
-  const getUTCEndOfDay = (year: number, month: number, day: number): Date => {
-    return new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
-  };
+  // Use global UTC utilities for date formatting
+  const formatDateInput = formatDateInputUTC;
 
   const applyPresetRange = (
     range: string,
     setFrom: (v: string) => void,
     setTo: (v: string) => void
   ) => {
-    const now = new Date();
-    // Get current date in UTC
-    const utcYear = now.getUTCFullYear();
-    const utcMonth = now.getUTCMonth();
-    const utcDate = now.getUTCDate();
-    const utcDayOfWeek = now.getUTCDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    // Use global UTC utilities for consistent timezone handling
+    const { start, end } = getUTCDateRangeFromPeriod(range);
     
-    let from: Date;
-    let to: Date;
-
-    switch (range) {
-      case 'today': {
-        // Today: 12:00:00 AM to 11:59:59 PM UTC
-        from = getUTCStartOfDay(utcYear, utcMonth, utcDate);
-        to = getUTCEndOfDay(utcYear, utcMonth, utcDate);
-        setFrom(formatDateInput(from));
-        setTo(formatDateInput(to));
-        return;
-      }
-      case 'week': {
-        // This Week: Sunday 12:00:00 AM to Saturday 11:59:59 PM UTC
-        const daysToSunday = utcDayOfWeek; // Days to go back to Sunday
-        const sundayDate = new Date(Date.UTC(utcYear, utcMonth, utcDate - daysToSunday));
-        const saturdayDate = new Date(Date.UTC(utcYear, utcMonth, utcDate - daysToSunday + 6));
-        
-        from = getUTCStartOfDay(sundayDate.getUTCFullYear(), sundayDate.getUTCMonth(), sundayDate.getUTCDate());
-        to = getUTCEndOfDay(saturdayDate.getUTCFullYear(), saturdayDate.getUTCMonth(), saturdayDate.getUTCDate());
-        setFrom(formatDateInput(from));
-        setTo(formatDateInput(to));
-        return;
-      }
-      case 'month': {
-        // This Month: 1st day 12:00:00 AM to last day 11:59:59 PM UTC
-        const firstDay = getUTCStartOfDay(utcYear, utcMonth, 1);
-        // Get last day of month
-        const lastDayOfMonth = new Date(Date.UTC(utcYear, utcMonth + 1, 0));
-        const lastDay = getUTCEndOfDay(lastDayOfMonth.getUTCFullYear(), lastDayOfMonth.getUTCMonth(), lastDayOfMonth.getUTCDate());
-        
-        from = firstDay;
-        to = lastDay;
-        setFrom(formatDateInput(from));
-        setTo(formatDateInput(to));
-        return;
-      }
-      case 'quarter': {
-        // This Quarter: 1st day of quarter 12:00:00 AM to last day 11:59:59 PM UTC
-        const currentQuarter = Math.floor(utcMonth / 3);
-        const quarterStartMonth = currentQuarter * 3;
-        const quarterEndMonth = quarterStartMonth + 3;
-        
-        const firstDay = getUTCStartOfDay(utcYear, quarterStartMonth, 1);
-        // Get last day of quarter
-        const lastDayOfQuarter = new Date(Date.UTC(utcYear, quarterEndMonth, 0));
-        const lastDay = getUTCEndOfDay(lastDayOfQuarter.getUTCFullYear(), lastDayOfQuarter.getUTCMonth(), lastDayOfQuarter.getUTCDate());
-        
-        from = firstDay;
-        to = lastDay;
-        setFrom(formatDateInput(from));
-        setTo(formatDateInput(to));
-        return;
-      }
-      case 'year': {
-        // This Year: Jan 1 12:00:00 AM to Dec 31 11:59:59 PM UTC
-        from = getUTCStartOfDay(utcYear, 0, 1);
-        to = getUTCEndOfDay(utcYear, 11, 31);
-        setFrom(formatDateInput(from));
-        setTo(formatDateInput(to));
-        return;
-      }
-      default:
-        // All Time / empty
-        setFrom('');
-        setTo('');
+    if (start && end) {
+      setFrom(formatDateInputUTC(start));
+      setTo(formatDateInputUTC(end));
+    } else {
+      // All Time / empty
+      setFrom('');
+      setTo('');
     }
   };
 
