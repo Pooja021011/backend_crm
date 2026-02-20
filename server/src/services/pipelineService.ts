@@ -702,8 +702,35 @@ export const pipelineService = {
           }
         ];
         
-        // Add OR condition - Prisma will combine with existing conditions using AND
-        whereClause.OR = lastTouchedOr;
+        // Wrap existing conditions in AND array and add OR condition
+        // Prisma requires all conditions to be in AND array when mixing with OR
+        // Check if we already have an AND array
+        if (whereClause.AND) {
+          // Already has AND array, just add our OR condition
+          whereClause.AND.push({ OR: lastTouchedOr });
+        } else {
+          // No AND array yet, create one with existing conditions
+          const existingConditions = { ...whereClause };
+          // Remove OR if it exists (will be handled separately)
+          const existingOR = existingConditions.OR;
+          delete existingConditions.OR;
+          
+          whereClause.AND = [
+            ...Object.keys(existingConditions).map(key => ({ [key]: existingConditions[key] })),
+            { OR: lastTouchedOr }
+          ];
+          
+          // If there was an existing OR, combine it with our OR
+          if (existingOR) {
+            // Combine both OR conditions into one
+            whereClause.AND.push({ OR: existingOR });
+          }
+          
+          // Remove the individual properties since they're now in AND array
+          Object.keys(existingConditions).forEach(key => {
+            delete whereClause[key];
+          });
+        }
       }
 
       // Apply role-based Needs Attention filter
@@ -1194,7 +1221,30 @@ export const pipelineService = {
         
         // Apply OR conditions to whereClause
         if (needsAttentionConditions.length > 0) {
-          whereClause.OR = needsAttentionConditions;
+          // If we already have an AND array (from lastTouched filter), add to it
+          if (whereClause.AND) {
+            whereClause.AND.push({ OR: needsAttentionConditions });
+          } else {
+            // No AND array yet, wrap existing conditions in AND array
+            const existingConditions = { ...whereClause };
+            const existingOR = existingConditions.OR;
+            delete existingConditions.OR;
+            
+            whereClause.AND = [
+              ...Object.keys(existingConditions).map(key => ({ [key]: existingConditions[key] })),
+              { OR: needsAttentionConditions }
+            ];
+            
+            // If there was an existing OR, combine it
+            if (existingOR) {
+              whereClause.AND.push({ OR: existingOR });
+            }
+            
+            // Remove individual properties
+            Object.keys(existingConditions).forEach(key => {
+              delete whereClause[key];
+            });
+          }
           console.log(`🔍 Applied ${needsAttentionConditions.length} needs attention conditions`);
         }
       }
