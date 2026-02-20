@@ -639,10 +639,13 @@ export const pipelineService = {
         const dateFrom = filters.lastTouchedFrom ? parseRangeStart(filters.lastTouchedFrom) : undefined;
         const dateTo = filters.lastTouchedTo ? parseRangeEnd(filters.lastTouchedTo) : undefined;
         
-        // Build date filter for communications
+        // Build date filter for communications - only include if we have dates
         const commDateFilter: any = {};
         if (dateFrom) commDateFilter.gte = dateFrom;
         if (dateTo) commDateFilter.lte = dateTo;
+        
+        // Only use commDateFilter if it has at least one property
+        const hasCommDateFilter = Object.keys(commDateFilter).length > 0;
         
         // Create OR condition: (lastContactAt in range) OR (has valid communication in range)
         const lastTouchedOr: any[] = [
@@ -653,54 +656,60 @@ export const pipelineService = {
               ...(dateTo ? { lte: dateTo } : {}),
             }
           },
-          // Condition 2: Has communication (CALL/SMS/EMAIL, excluding missed/ringing calls) in range
-          {
+        ];
+        
+        // Condition 2: Has communication (CALL/SMS/EMAIL, excluding missed/ringing calls) in range
+        // Only add if we have date filters
+        if (hasCommDateFilter) {
+          const commConditions: any[] = [
+            // Date check: occurredAt OR (occurredAt is null AND createdAt in range)
+            {
+              OR: [
+                { occurredAt: commDateFilter },
+                {
+                  AND: [
+                    { occurredAt: null },
+                    { createdAt: commDateFilter }
+                  ]
+                }
+              ]
+            },
+            // Type check: CALL, SMS, or EMAIL
+            { type: { in: ['CALL', 'SMS', 'EMAIL'] } },
+            // Exclude missed/ringing calls
+            {
+              OR: [
+                { type: { not: 'CALL' } },
+                {
+                  AND: [
+                    { type: 'CALL' },
+                    {
+                      OR: [
+                        { metadata: null },
+                        {
+                          NOT: {
+                            metadata: {
+                              path: ['status'],
+                              in: ['missed', 'ringing']
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ];
+          
+          lastTouchedOr.push({
             communications: {
               some: {
-                AND: [
-                  // Date check: occurredAt OR (occurredAt is null AND createdAt in range)
-                  {
-                    OR: [
-                      { occurredAt: commDateFilter },
-                      {
-                        AND: [
-                          { occurredAt: null },
-                          { createdAt: commDateFilter }
-                        ]
-                      }
-                    ]
-                  },
-                  // Type check: CALL, SMS, or EMAIL
-                  { type: { in: ['CALL', 'SMS', 'EMAIL'] } },
-                  // Exclude missed/ringing calls
-                  {
-                    OR: [
-                      { type: { not: 'CALL' } },
-                      {
-                        AND: [
-                          { type: 'CALL' },
-                          {
-                            OR: [
-                              { metadata: null },
-                              {
-                                NOT: {
-                                  metadata: {
-                                    path: ['status'],
-                                    in: ['missed', 'ringing']
-                                  }
-                                }
-                              }
-                            ]
-                          }
-                        ]
-                      }
-                    ]
-                  }
-                ]
+                AND: commConditions
               }
             }
-          }
-        ];
+          });
+        }
         
         // Wrap existing conditions in AND array and add OR condition
         // Prisma requires all conditions to be in AND array when mixing with OR
@@ -711,26 +720,44 @@ export const pipelineService = {
         } else {
           // No AND array yet, create one with existing conditions
           const existingConditions = { ...whereClause };
-          // Remove OR if it exists (will be handled separately)
+          // Remove OR and AND if they exist (will be handled separately)
           const existingOR = existingConditions.OR;
+          const existingAND = existingConditions.AND;
           delete existingConditions.OR;
+          delete existingConditions.AND;
           
-          whereClause.AND = [
-            ...Object.keys(existingConditions).map(key => ({ [key]: existingConditions[key] })),
-            { OR: lastTouchedOr }
-          ];
+          // Build AND array with existing conditions
+          const andConditions: any[] = [];
           
-          // If there was an existing OR, combine it with our OR
-          if (existingOR) {
-            // Combine both OR conditions into one
-            whereClause.AND.push({ OR: existingOR });
+          // Add individual conditions
+          Object.keys(existingConditions).forEach(key => {
+            if (existingConditions[key] !== undefined && existingConditions[key] !== null) {
+              andConditions.push({ [key]: existingConditions[key] });
+            }
+          });
+          
+          // Add existing AND conditions if any
+          if (existingAND && Array.isArray(existingAND)) {
+            andConditions.push(...existingAND);
           }
+          
+          // Add our OR condition
+          andConditions.push({ OR: lastTouchedOr });
+          
+          // If there was an existing OR, add it too
+          if (existingOR) {
+            andConditions.push({ OR: existingOR });
+          }
+          
+          whereClause.AND = andConditions;
           
           // Remove the individual properties since they're now in AND array
           Object.keys(existingConditions).forEach(key => {
             delete whereClause[key];
           });
         }
+        
+        console.log('🔍 Last Touched filter applied, whereClause structure:', JSON.stringify(whereClause, null, 2));
       }
 
       // Apply role-based Needs Attention filter
