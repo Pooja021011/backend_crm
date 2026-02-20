@@ -642,12 +642,8 @@ export const useLeads = (): LeadsHookReturn => {
     });
   };
 
-  // Load leads on mount
-  useEffect(() => {
-    if (user) {
-      listLeads().catch(console.error);
-    }
-  }, [user]);
+  // Note: Leads are loaded by components when needed, not automatically on mount
+  // This prevents duplicate API calls when multiple components use this hook
 
   return {
     leads,

@@ -332,14 +332,196 @@ const Leads = () => {
 
   // Ref to track current request for cancellation
   const abortControllerRef = useRef<AbortController | null>(null);
+  // Ref to track last filter values to prevent unnecessary calls
+  // Initialize with null to ensure first load happens
+  const lastFilterValuesRef = useRef<string | null>(null);
+  // Ref to track if filter data has been loaded to prevent duplicate calls
+  const filterDataLoadedRef = useRef<boolean>(false);
+  // Ref to track if leads are currently being loaded to prevent duplicate calls
+  const isLoadingLeadsRef = useRef<boolean>(false);
 
-  // Load all leads and filter data on component mount
+  // Create stable filter key using useMemo to prevent unnecessary recalculations
+  const currentFilterKey = useMemo(() => {
+    return JSON.stringify({
+      activeTab,
+      selectedDateRange,
+      customDateFrom,
+      customDateTo,
+      searchQuery,
+      selectedMarkets: [...selectedMarkets].sort().join(','),
+      selectedStatuses: [...selectedStatuses].sort().join(','),
+      selectedPipelineStatuses: [...selectedPipelineStatuses].sort().join(','),
+      selectedAgents: [...selectedAgents].sort().join(','),
+      selectedLeadSources: [...selectedLeadSources].sort().join(',')
+    });
+  }, [activeTab, selectedDateRange, customDateFrom, customDateTo, searchQuery, selectedMarkets, selectedStatuses, selectedPipelineStatuses, selectedAgents, selectedLeadSources]);
+
+  // Load dynamic filter data - optimized to run all requests in parallel
+  // Defined before useEffect to avoid hoisting issues
+  const loadFilterData = useCallback(async () => {
+    setLoadingFilters(true);
+    try {
+      const accessToken = localStorage.getItem('accessToken');
+      const headers = { 'Authorization': `Bearer ${accessToken}` };
+      
+      // Fetch all filter data in parallel for better performance
+      const pipelineKeys = ['ACQUISITIONS', 'DISPOSITIONS', 'TRANSACTION'];
+      
+      const [
+        marketsResponse,
+        ...pipelineStageResponses
+      ] = await Promise.all([
+        fetch(`${API_BASE}/settings/markets`, { headers }),
+        ...pipelineKeys.map(key => 
+          fetch(`${API_BASE}/pipeline/${key}/stages`, { headers })
+        ),
+        fetch(`${API_BASE}/lead-statuses`, { headers }),
+        fetch(`${API_BASE}/agents`, { headers }),
+        fetch(`${API_BASE}/settings/lead-sources`, { headers })
+      ]);
+
+      // Process markets
+      if (marketsResponse.ok) {
+        const marketsData = await marketsResponse.json();
+        setFilterMarkets(marketsData.data || []);
+      }
+
+      // Process pipeline stages
+      const allStages: any[] = [];
+      for (let i = 0; i < pipelineKeys.length; i++) {
+        try {
+          const stagesResponse = pipelineStageResponses[i];
+          if (stagesResponse?.ok) {
+            const stagesData = await stagesResponse.json();
+            if (stagesData.data) {
+              allStages.push(...stagesData.data.map((stage: any) => ({
+                ...stage,
+                pipelineKey: pipelineKeys[i]
+              })));
+            }
+          }
+        } catch (error) {
+          console.error(`Error fetching ${pipelineKeys[i]} stages:`, error);
+        }
+      }
+      setPipelineStages(allStages);
+
+      // Process lead statuses
+      const statusesIndex = pipelineKeys.length;
+      const statusesResponse = pipelineStageResponses[statusesIndex];
+      if (statusesResponse?.ok) {
+        const statusesData = await statusesResponse.json();
+        setLeadStatuses(statusesData.data || []);
+      }
+
+      // Process agents
+      const agentsIndex = pipelineKeys.length + 1;
+      const agentsResponse = pipelineStageResponses[agentsIndex];
+      if (agentsResponse?.ok) {
+        const agentsData = await agentsResponse.json();
+        setAgents(agentsData.data || []);
+      }
+
+      // Process lead sources
+      const leadSourcesIndex = pipelineKeys.length + 2;
+      const leadSourcesResponse = pipelineStageResponses[leadSourcesIndex];
+      if (leadSourcesResponse?.ok) {
+        const leadSourcesData = await leadSourcesResponse.json();
+        setLeadSources(leadSourcesData.data || []);
+      }
+      
+    } catch (error) {
+      console.error('Error loading filter data:', error);
+    } finally {
+      setLoadingFilters(false);
+    }
+  }, []); // Empty deps - state setters are stable, and we use ref to prevent duplicate calls
+
+  // Load all leads and filter data on component mount (only once)
   useEffect(() => {
+    // Prevent duplicate calls, especially with React StrictMode
+    if (filterDataLoadedRef.current) {
+      return;
+    }
+    filterDataLoadedRef.current = true;
     loadFilterData(); // Load dynamic filter options
-  }, []);
+  }, [loadFilterData]);
+
+  // Initial load on mount - load leads with default filters
+  useEffect(() => {
+    // Only run once on initial mount
+    if (lastFilterValuesRef.current !== null) {
+      return; // Already loaded or filters changed
+    }
+    
+    console.log('🚀 Initial load - fetching leads with default filters');
+    
+    // Build initial filter params
+    const initialParams: any = {
+      type: activeTab,
+      take: 10000
+    };
+    
+    // Create AbortController for initial load
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+    isLoadingLeadsRef.current = true;
+    
+    // Fetch initial leads
+    listLeads(initialParams, abortController.signal)
+      .then((leads) => {
+        console.log('✅ Initial leads loaded:', leads?.length || 0, 'leads');
+        isLoadingLeadsRef.current = false;
+        // Set initial filter key after successful load
+        lastFilterValuesRef.current = currentFilterKey;
+      })
+      .catch((err) => {
+        isLoadingLeadsRef.current = false;
+        if (err instanceof Error && err.message !== 'Request aborted') {
+          console.error('❌ Error loading initial leads:', err);
+          toast({
+            title: "Error Loading Leads",
+            description: err.message || "Failed to load leads. Please try again.",
+            variant: "destructive",
+          });
+        }
+      });
+    
+    return () => {
+      if (abortControllerRef.current === abortController) {
+        abortController.abort();
+        abortControllerRef.current = null;
+        isLoadingLeadsRef.current = false;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run once on mount
 
   // Load leads when filters change - SIMPLE: Kill old request, make new one
   useEffect(() => {
+    // Skip initial load (handled by separate useEffect above)
+    if (lastFilterValuesRef.current === null) {
+      return;
+    }
+    
+    // Skip if filters haven't actually changed
+    if (lastFilterValuesRef.current === currentFilterKey) {
+      console.log('⏭️ Skipping leads fetch - filters unchanged');
+      return;
+    }
+    
+    // Skip if already loading (prevent duplicate calls from StrictMode)
+    if (isLoadingLeadsRef.current) {
+      console.log('⏭️ Skipping leads fetch - already loading');
+      return;
+    }
+    
+    console.log('🔄 Loading leads with filters:', currentFilterKey);
+    
+    // Update tracking
+    lastFilterValuesRef.current = currentFilterKey;
+    isLoadingLeadsRef.current = true;
+    
     // Cancel previous request if it exists
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -438,33 +620,39 @@ const Leads = () => {
     }
     
     // Fetch leads with abort signal - SIMPLE: just call it
-    listLeads(filterParams, abortController.signal).catch((err) => {
-      // Ignore abort errors
-      if (err instanceof Error && err.message !== 'Request aborted') {
-        console.error('Error fetching leads:', err);
-      }
-    });
+    console.log('📡 Calling listLeads with params:', filterParams);
+    listLeads(filterParams, abortController.signal)
+      .then((leads) => {
+        console.log('✅ Leads loaded successfully:', leads?.length || 0, 'leads');
+        isLoadingLeadsRef.current = false;
+      })
+      .catch((err) => {
+        isLoadingLeadsRef.current = false;
+        // Ignore abort errors
+        if (err instanceof Error && err.message !== 'Request aborted') {
+          console.error('❌ Error fetching leads:', err);
+          toast({
+            title: "Error Loading Leads",
+            description: err.message || "Failed to load leads. Please try again.",
+            variant: "destructive",
+          });
+        } else {
+          console.log('⏹️ Request aborted');
+        }
+      });
     
     // Cleanup: cancel request if component unmounts or dependencies change
     return () => {
+      // Only abort if this is still the current request
       if (abortControllerRef.current === abortController) {
+        console.log('🧹 Cleaning up - aborting request');
         abortController.abort();
         abortControllerRef.current = null;
+        isLoadingLeadsRef.current = false;
       }
     };
-  }, [
-    activeTab, 
-    selectedDateRange, 
-    customDateFrom, 
-    customDateTo, 
-    searchQuery, 
-    selectedMarkets.join(','), // Stringify for stable comparison
-    selectedStatuses.join(','), 
-    selectedPipelineStatuses.join(','), 
-    selectedAgents.join(','), 
-    selectedLeadSources.join(','),
-    listLeads
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentFilterKey]); // Only depend on currentFilterKey - listLeads is stable
 
   // Handle leadId parameter from URL to navigate to lead detail
   useEffect(() => {
@@ -475,78 +663,6 @@ const Leads = () => {
       navigate(`/leads/${leadIdParam}/edit`);
     }
   }, [searchParams, navigate]);
-
-  // Load dynamic filter data
-  const loadFilterData = async () => {
-    setLoadingFilters(true);
-    try {
-      // Fetch markets
-      const marketsResponse = await fetch(`${API_BASE}/settings/markets`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
-      });
-      if (marketsResponse.ok) {
-        const marketsData = await marketsResponse.json();
-        setFilterMarkets(marketsData.data || []);
-      }
-
-      // Fetch all pipeline stages (from all pipelines)
-      const allStages: any[] = [];
-      const pipelineKeys = ['ACQUISITIONS', 'DISPOSITIONS', 'TRANSACTION'];
-      
-      for (const pipelineKey of pipelineKeys) {
-        try {
-          const stagesResponse = await fetch(`${API_BASE}/pipeline/${pipelineKey}/stages`, {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
-          });
-          if (stagesResponse.ok) {
-            const stagesData = await stagesResponse.json();
-            if (stagesData.data) {
-              allStages.push(...stagesData.data.map((stage: any) => ({
-                ...stage,
-                pipelineKey
-              })));
-            }
-          }
-        } catch (error) {
-          console.error(`Error fetching ${pipelineKey} stages:`, error);
-        }
-      }
-      
-      setPipelineStages(allStages);
-
-      // Fetch all lead statuses from API instead of extracting from current leads
-      const statusesResponse = await fetch(`${API_BASE}/lead-statuses`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
-      });
-      if (statusesResponse.ok) {
-        const statusesData = await statusesResponse.json();
-        setLeadStatuses(statusesData.data || []);
-      }
-
-      // Fetch agents for ACQ/DISP filters
-      const agentsResponse = await fetch(`${API_BASE}/agents`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
-      });
-      if (agentsResponse.ok) {
-        const agentsData = await agentsResponse.json();
-        setAgents(agentsData.data || []);
-      }
-
-      // Fetch lead sources
-      const leadSourcesResponse = await fetch(`${API_BASE}/settings/lead-sources`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
-      });
-      if (leadSourcesResponse.ok) {
-        const leadSourcesData = await leadSourcesResponse.json();
-        setLeadSources(leadSourcesData.data || []);
-      }
-      
-    } catch (error) {
-      console.error('Error loading filter data:', error);
-    } finally {
-      setLoadingFilters(false);
-    }
-  };
 
   // Clear selected items and filters when switching tabs
   useEffect(() => {
