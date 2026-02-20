@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -330,62 +330,8 @@ const Leads = () => {
   // Sorting functionality - default to createdAt DESC (newest first)
   const { sortConfig, handleSort, resetSort } = useSortable({ key: 'createdAt', direction: 'desc' });
 
-  // Helper function to get UTC date range from filters
-  const getDateRangeForAPI = useCallback((): { createdFrom?: string; createdTo?: string } => {
-    if (!selectedDateRange) {
-      return {};
-    }
-
-    if (selectedDateRange === 'custom') {
-      const normalizedFrom = customDateFrom ? normalizeDateString(customDateFrom) : null;
-      const normalizedTo = customDateTo ? normalizeDateString(customDateTo) : null;
-      
-      if (normalizedFrom && normalizedTo) {
-        const from = parseDateUTC(normalizedFrom);
-        const to = getUTCEndOfDay(
-          new Date(normalizedTo + 'T00:00:00.000Z').getUTCFullYear(),
-          new Date(normalizedTo + 'T00:00:00.000Z').getUTCMonth(),
-          new Date(normalizedTo + 'T00:00:00.000Z').getUTCDate()
-        );
-        
-        if (!isNaN(from.getTime()) && !isNaN(to.getTime())) {
-          return {
-            createdFrom: from.toISOString(),
-            createdTo: to.toISOString()
-          };
-        }
-      } else if (normalizedFrom) {
-        const from = parseDateUTC(normalizedFrom);
-        if (!isNaN(from.getTime())) {
-          return { createdFrom: from.toISOString() };
-        }
-      } else if (normalizedTo) {
-        const to = getUTCEndOfDay(
-          new Date(normalizedTo + 'T00:00:00.000Z').getUTCFullYear(),
-          new Date(normalizedTo + 'T00:00:00.000Z').getUTCMonth(),
-          new Date(normalizedTo + 'T00:00:00.000Z').getUTCDate()
-        );
-        if (!isNaN(to.getTime())) {
-          return { createdTo: to.toISOString() };
-        }
-      }
-      return {};
-    } else {
-      // Preset ranges (today, week, month, quarter, year)
-      const { start, end } = getUTCDateRangeFromPeriod(selectedDateRange);
-      
-      // Validate dates before using them
-      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-        console.error('Invalid date range from getUTCDateRangeFromPeriod:', { start, end, selectedDateRange });
-        return {};
-      }
-      
-      return {
-        createdFrom: start.toISOString(),
-        createdTo: end.toISOString()
-      };
-    }
-  }, [selectedDateRange, customDateFrom, customDateTo]);
+  // Ref to track current request for cancellation
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Load all leads and filter data on component mount
   useEffect(() => {
@@ -393,8 +339,58 @@ const Leads = () => {
   }, []);
 
   // Fetch leads with current filters (all filters now server-side)
-  const fetchLeadsWithFilters = useCallback(async () => {
-    const dateRange = getDateRangeForAPI();
+  // Calculate date range inline to avoid dependency on getDateRangeForAPI function
+  const fetchLeadsWithFilters = useCallback(async (signal?: AbortSignal) => {
+    // Calculate date range inline
+    let dateRange: { createdFrom?: string; createdTo?: string } = {};
+    
+    if (selectedDateRange) {
+      if (selectedDateRange === 'custom') {
+        const normalizedFrom = customDateFrom ? normalizeDateString(customDateFrom) : null;
+        const normalizedTo = customDateTo ? normalizeDateString(customDateTo) : null;
+        
+        if (normalizedFrom && normalizedTo) {
+          const from = parseDateUTC(normalizedFrom);
+          const to = getUTCEndOfDay(
+            new Date(normalizedTo + 'T00:00:00.000Z').getUTCFullYear(),
+            new Date(normalizedTo + 'T00:00:00.000Z').getUTCMonth(),
+            new Date(normalizedTo + 'T00:00:00.000Z').getUTCDate()
+          );
+          
+          if (!isNaN(from.getTime()) && !isNaN(to.getTime())) {
+            dateRange = {
+              createdFrom: from.toISOString(),
+              createdTo: to.toISOString()
+            };
+          }
+        } else if (normalizedFrom) {
+          const from = parseDateUTC(normalizedFrom);
+          if (!isNaN(from.getTime())) {
+            dateRange = { createdFrom: from.toISOString() };
+          }
+        } else if (normalizedTo) {
+          const to = getUTCEndOfDay(
+            new Date(normalizedTo + 'T00:00:00.000Z').getUTCFullYear(),
+            new Date(normalizedTo + 'T00:00:00.000Z').getUTCMonth(),
+            new Date(normalizedTo + 'T00:00:00.000Z').getUTCDate()
+          );
+          if (!isNaN(to.getTime())) {
+            dateRange = { createdTo: to.toISOString() };
+          }
+        }
+      } else {
+        // Preset ranges (today, week, month, quarter, year)
+        const { start, end } = getUTCDateRangeFromPeriod(selectedDateRange);
+        
+        // Validate dates before using them
+        if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+          dateRange = {
+            createdFrom: start.toISOString(),
+            createdTo: end.toISOString()
+          };
+        }
+      }
+    }
     
     // Build filter params for API
     const filterParams: any = {
@@ -433,16 +429,48 @@ const Leads = () => {
       filterParams.leadSourceIds = selectedLeadSources;
     }
     
-    await listLeads(filterParams);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, getDateRangeForAPI, searchQuery, selectedMarkets, selectedStatuses, selectedPipelineStatuses, selectedAgents, selectedLeadSources]);
+    await listLeads(filterParams, signal);
+  }, [activeTab, selectedDateRange, customDateFrom, customDateTo, searchQuery, selectedMarkets, selectedStatuses, selectedPipelineStatuses, selectedAgents, selectedLeadSources, listLeads]);
 
   // Load leads when filters change (including date filters)
-  // Use direct dependencies to avoid infinite loop from listLeads reference changes
+  // Use stringified arrays for comparison to prevent infinite loops
   useEffect(() => {
-    fetchLeadsWithFilters();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, selectedDateRange, customDateFrom, customDateTo, searchQuery, selectedMarkets, selectedStatuses, selectedPipelineStatuses, selectedAgents, selectedLeadSources]);
+    // Cancel previous request if it exists
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
+    // Create new AbortController for this request
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+    
+    fetchLeadsWithFilters(abortController.signal).catch((err) => {
+      // Ignore abort errors
+      if (err instanceof Error && err.message !== 'Request aborted') {
+        console.error('Error fetching leads:', err);
+      }
+    });
+    
+    // Cleanup: cancel request if component unmounts or dependencies change
+    return () => {
+      if (abortControllerRef.current === abortController) {
+        abortController.abort();
+        abortControllerRef.current = null;
+      }
+    };
+  }, [
+    activeTab, 
+    selectedDateRange, 
+    customDateFrom, 
+    customDateTo, 
+    searchQuery, 
+    selectedMarkets.join(','), // Stringify for comparison
+    selectedStatuses.join(','), 
+    selectedPipelineStatuses.join(','), 
+    selectedAgents.join(','), 
+    selectedLeadSources.join(','),
+    fetchLeadsWithFilters
+  ]);
 
   // Handle leadId parameter from URL to navigate to lead detail
   useEffect(() => {

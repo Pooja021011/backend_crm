@@ -156,21 +156,34 @@ export const useLeads = (): LeadsHookReturn => {
   const makeAuthenticatedRequest = async (url: string, options: RequestInit = {}) => {
     const accessToken = localStorage.getItem('accessToken');
     
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-        'Authorization': `Bearer ${accessToken}`,
-      },
-    });
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          ...options.headers,
+          'Authorization': `Bearer ${accessToken}`,
+        },
+      });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+      // Check if request was aborted
+      if ((options.signal as AbortSignal)?.aborted) {
+        throw new DOMException('Request aborted', 'AbortError');
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      return response.json();
+    } catch (err) {
+      // Re-throw AbortError as-is
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        throw new Error('Request aborted');
+      }
+      throw err;
     }
-
-    return response.json();
   };
 
   const createLead = async (data: CreateLeadData): Promise<Lead> => {
@@ -238,7 +251,12 @@ export const useLeads = (): LeadsHookReturn => {
     }
   };
 
-  const listLeads = async (params?: LeadsListParams): Promise<Lead[]> => {
+  const listLeads = async (params?: LeadsListParams, signal?: AbortSignal): Promise<Lead[]> => {
+    // Don't proceed if signal is already aborted
+    if (signal?.aborted) {
+      throw new Error('Request aborted');
+    }
+    
     setError(null);
     setIsLoading(true);
     try {
@@ -260,16 +278,28 @@ export const useLeads = (): LeadsHookReturn => {
       }
       
       const url = `${API_BASE}/leads${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
-      const response = await makeAuthenticatedRequest(url);
+      const response = await makeAuthenticatedRequest(url, { signal });
+      
+      // Check if request was aborted before updating state
+      if (signal?.aborted) {
+        throw new Error('Request aborted');
+      }
       
       setLeads(response.data);
       return response.data;
     } catch (err) {
+      // Don't set error or throw if request was aborted
+      if (err instanceof Error && err.message === 'Request aborted') {
+        throw err;
+      }
       const errorMessage = err instanceof Error ? err.message : 'Failed to list leads';
       setError(errorMessage);
       throw new Error(errorMessage);
     } finally {
-      setIsLoading(false);
+      // Only set loading to false if request wasn't aborted
+      if (!signal?.aborted) {
+        setIsLoading(false);
+      }
     }
   };
 
