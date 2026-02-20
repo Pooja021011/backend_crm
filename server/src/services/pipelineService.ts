@@ -1,4 +1,5 @@
 import { prisma } from '../config/db.js';
+import { Prisma } from '@prisma/client';
 import { logger } from '../config/logger.js';
 import { stageTransitionService } from './stageTransitionService.js';
 import { leadService } from './leadService.js';
@@ -648,30 +649,34 @@ export const pipelineService = {
         const hasCommDateFilter = Object.keys(commDateFilter).length > 0;
         
         // Create OR condition: (lastContactAt in range) OR (has valid communication in range)
-        const lastTouchedOr: any[] = [
-          // Condition 1: lastContactAt in range
-          {
-            lastContactAt: {
-              ...(dateFrom ? { gte: dateFrom } : {}),
-              ...(dateTo ? { lte: dateTo } : {}),
-            }
-          },
-        ];
+        const lastTouchedOr: any[] = [];
+        
+        // Condition 1: lastContactAt in range (only add if we have at least one date)
+        if (dateFrom || dateTo) {
+          const lastContactAtFilter: any = {};
+          if (dateFrom) lastContactAtFilter.gte = dateFrom;
+          if (dateTo) lastContactAtFilter.lte = dateTo;
+          
+          // Only add if filter has at least one property
+          if (Object.keys(lastContactAtFilter).length > 0) {
+            lastTouchedOr.push({
+              lastContactAt: lastContactAtFilter
+            });
+          }
+        }
         
         // Condition 2: Has communication (CALL/SMS/EMAIL, excluding missed/ringing calls) in range
         // Only add if we have date filters
         if (hasCommDateFilter) {
           const commConditions: any[] = [
-            // Date check: occurredAt OR (occurredAt is null AND createdAt in range)
+            // Date check: Check if occurredAt OR createdAt is in range
+            // Simplified: If occurredAt exists, use it; otherwise createdAt is used
             {
               OR: [
+                // Check occurredAt if it exists and is in range
                 { occurredAt: commDateFilter },
-                {
-                  AND: [
-                    { occurredAt: null },
-                    { createdAt: commDateFilter }
-                  ]
-                }
+                // If occurredAt doesn't match (including null), check createdAt
+                { createdAt: commDateFilter }
               ]
             },
             // Type check: CALL, SMS, or EMAIL
@@ -685,14 +690,29 @@ export const pipelineService = {
                     { type: 'CALL' },
                     {
                       OR: [
-                        { metadata: null },
+                        // metadata is null
+                        { metadata: { equals: Prisma.JsonNull } },
+                        // OR metadata.status is not 'missed' and not 'ringing'
+                        // Prisma doesn't support 'in' for JSON path, so use OR with equals
                         {
-                          NOT: {
-                            metadata: {
-                              path: ['status'],
-                              in: ['missed', 'ringing']
+                          AND: [
+                            {
+                              NOT: {
+                                metadata: {
+                                  path: ['status'],
+                                  equals: 'missed'
+                                }
+                              }
+                            },
+                            {
+                              NOT: {
+                                metadata: {
+                                  path: ['status'],
+                                  equals: 'ringing'
+                                }
+                              }
                             }
-                          }
+                          ]
                         }
                       ]
                     }
@@ -711,13 +731,18 @@ export const pipelineService = {
           });
         }
         
-        // Wrap existing conditions in AND array and add OR condition
-        // Prisma requires all conditions to be in AND array when mixing with OR
-        // Check if we already have an AND array
-        if (whereClause.AND) {
-          // Already has AND array, just add our OR condition
-          whereClause.AND.push({ OR: lastTouchedOr });
+        // Only apply filter if we have at least one condition
+        if (lastTouchedOr.length === 0) {
+          console.log('⚠️ No lastTouched conditions to apply, skipping filter');
+          // Don't apply any filter if we have no conditions
         } else {
+          // Wrap existing conditions in AND array and add OR condition
+          // Prisma requires all conditions to be in AND array when mixing with OR
+          // Check if we already have an AND array
+          if (whereClause.AND) {
+            // Already has AND array, just add our OR condition
+            whereClause.AND.push({ OR: lastTouchedOr });
+          } else {
           // No AND array yet, create one with existing conditions
           const existingConditions = { ...whereClause };
           // Remove OR and AND if they exist (will be handled separately)
@@ -729,10 +754,25 @@ export const pipelineService = {
           // Build AND array with existing conditions
           const andConditions: any[] = [];
           
-          // Add individual conditions
+          // Add individual conditions (skip empty objects and undefined values)
           Object.keys(existingConditions).forEach(key => {
-            if (existingConditions[key] !== undefined && existingConditions[key] !== null) {
-              andConditions.push({ [key]: existingConditions[key] });
+            const value = existingConditions[key];
+            // Skip undefined, null, empty objects, and empty arrays
+            if (value !== undefined && value !== null) {
+              if (typeof value === 'object' && !Array.isArray(value)) {
+                // Check if object has any properties
+                if (Object.keys(value).length > 0) {
+                  andConditions.push({ [key]: value });
+                }
+              } else if (Array.isArray(value)) {
+                // Only add if array has items
+                if (value.length > 0) {
+                  andConditions.push({ [key]: value });
+                }
+              } else {
+                // Primitive values
+                andConditions.push({ [key]: value });
+              }
             }
           });
           
@@ -755,9 +795,10 @@ export const pipelineService = {
           Object.keys(existingConditions).forEach(key => {
             delete whereClause[key];
           });
+          }
+          
+          console.log('🔍 Last Touched filter applied, whereClause structure:', JSON.stringify(whereClause, null, 2));
         }
-        
-        console.log('🔍 Last Touched filter applied, whereClause structure:', JSON.stringify(whereClause, null, 2));
       }
 
       // Apply role-based Needs Attention filter
@@ -1278,8 +1319,10 @@ export const pipelineService = {
 
       console.log('🔍 Final whereClause:', JSON.stringify(whereClause, null, 2));
 
-      const leads = await prisma.lead.findMany({
-        where: whereClause,
+      let leads;
+      try {
+        leads = await prisma.lead.findMany({
+          where: whereClause,
         include: {
           address: true,
           seller: true,
@@ -1318,7 +1361,7 @@ export const pipelineService = {
             }
           },
           communications: {
-            orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }],
+            orderBy: { createdAt: 'desc' }, // Use createdAt for ordering since occurredAt can be null
             take: 10, // Get recent communications for last touched/activity + counts
             select: {
               id: true,
@@ -1363,7 +1406,24 @@ export const pipelineService = {
           { pipelineStage: { orderIndex: 'asc' } },
           { id: 'asc' },
         ]
-      });
+        });
+      } catch (prismaError: any) {
+        console.error('❌ Prisma query error:', {
+          message: prismaError.message,
+          code: prismaError.code,
+          meta: prismaError.meta,
+          whereClause: JSON.stringify(whereClause, null, 2)
+        });
+        logger.error({ 
+          pipelineKey, 
+          filters, 
+          error: prismaError.message,
+          code: prismaError.code,
+          meta: prismaError.meta,
+          whereClause: JSON.stringify(whereClause, null, 2)
+        }, 'Prisma query error in getPipelineLeads');
+        throw prismaError;
+      }
 
       console.log(`🔍 Query returned ${leads.length} leads`);
       if (filters.dispAgentId) {
