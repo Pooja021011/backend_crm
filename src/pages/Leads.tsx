@@ -332,6 +332,26 @@ const Leads = () => {
 
   // Ref to track current request for cancellation
   const abortControllerRef = useRef<AbortController | null>(null);
+  // Ref to prevent duplicate calls while loading
+  const isFetchingRef = useRef<boolean>(false);
+  // Ref to track last filter values to prevent unnecessary calls
+  const lastFiltersRef = useRef<string>('');
+
+  // Create a stable filter key for comparison
+  const currentFilterKey = useMemo(() => {
+    return JSON.stringify({
+      activeTab,
+      selectedDateRange,
+      customDateFrom,
+      customDateTo,
+      searchQuery,
+      selectedMarkets: selectedMarkets.sort().join(','),
+      selectedStatuses: selectedStatuses.sort().join(','),
+      selectedPipelineStatuses: selectedPipelineStatuses.sort().join(','),
+      selectedAgents: selectedAgents.sort().join(','),
+      selectedLeadSources: selectedLeadSources.sort().join(',')
+    });
+  }, [activeTab, selectedDateRange, customDateFrom, customDateTo, searchQuery, selectedMarkets, selectedStatuses, selectedPipelineStatuses, selectedAgents, selectedLeadSources]);
 
   // Load all leads and filter data on component mount
   useEffect(() => {
@@ -341,6 +361,19 @@ const Leads = () => {
   // Load leads when filters change (including date filters)
   // Inline the fetch logic to avoid callback dependency issues
   useEffect(() => {
+    // Check if filters actually changed
+    if (lastFiltersRef.current === currentFilterKey) {
+      return; // Filters haven't changed, skip
+    }
+    
+    // Prevent duplicate calls if already fetching
+    if (isFetchingRef.current) {
+      return;
+    }
+    
+    // Update last filters
+    lastFiltersRef.current = currentFilterKey;
+    
     // Cancel previous request if it exists
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -349,6 +382,7 @@ const Leads = () => {
     // Create new AbortController for this request
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
+    isFetchingRef.current = true;
     
     // Calculate date range inline
     let dateRange: { createdFrom?: string; createdTo?: string } = {};
@@ -439,34 +473,27 @@ const Leads = () => {
     }
     
     // Fetch leads with abort signal
-    listLeads(filterParams, abortController.signal).catch((err) => {
-      // Ignore abort errors
-      if (err instanceof Error && err.message !== 'Request aborted') {
-        console.error('Error fetching leads:', err);
-      }
-    });
+    listLeads(filterParams, abortController.signal)
+      .then(() => {
+        isFetchingRef.current = false;
+      })
+      .catch((err) => {
+        isFetchingRef.current = false;
+        // Ignore abort errors
+        if (err instanceof Error && err.message !== 'Request aborted') {
+          console.error('Error fetching leads:', err);
+        }
+      });
     
     // Cleanup: cancel request if component unmounts or dependencies change
     return () => {
       if (abortControllerRef.current === abortController) {
         abortController.abort();
         abortControllerRef.current = null;
+        isFetchingRef.current = false;
       }
     };
-  }, [
-    activeTab, 
-    selectedDateRange, 
-    customDateFrom, 
-    customDateTo, 
-    searchQuery, 
-    selectedMarkets.join(','), // Stringify for comparison
-    selectedStatuses.join(','), 
-    selectedPipelineStatuses.join(','), 
-    selectedAgents.join(','), 
-    selectedLeadSources.join(',')
-    // Note: listLeads is memoized with useCallback in useLeads hook, so it's stable
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  ]);
+  }, [currentFilterKey, listLeads]);
 
   // Handle leadId parameter from URL to navigate to lead detail
   useEffect(() => {
