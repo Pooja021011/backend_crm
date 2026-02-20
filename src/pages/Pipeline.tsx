@@ -389,6 +389,14 @@ const Pipeline = () => {
     // Use global UTC utilities for consistent timezone handling
     const { start, end } = getUTCDateRangeFromPeriod(range);
     
+    // Validate dates before using them
+    if (!start || !end || isNaN(start.getTime()) || isNaN(end.getTime())) {
+      console.error('Invalid date range from getUTCDateRangeFromPeriod:', { start, end, range });
+      setFrom('');
+      setTo('');
+      return;
+    }
+    
     if (start && end) {
       setFrom(formatDateInputUTC(start));
       setTo(formatDateInputUTC(end));

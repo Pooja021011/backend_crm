@@ -222,6 +222,23 @@ const Metrics = () => {
       case 'This Quarter':
       case 'This Year': {
         const { start, end } = getUTCDateRangeFromPeriod(period);
+        
+        // Validate dates before using them
+        if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+          console.error('Invalid date range from getUTCDateRangeFromPeriod:', { start, end, period });
+          // Fallback to This Month
+          const fallback = getUTCDateRangeFromPeriod('This Month');
+          if (isNaN(fallback.start.getTime()) || isNaN(fallback.end.getTime())) {
+            // Ultimate fallback - current month
+            const now = new Date();
+            const fallbackStart = getUTCStartOfDay(now.getUTCFullYear(), now.getUTCMonth(), 1);
+            const lastDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0));
+            const fallbackEnd = getUTCEndOfDay(lastDay.getUTCFullYear(), lastDay.getUTCMonth(), lastDay.getUTCDate());
+            return { from: fallbackStart, to: fallbackEnd };
+          }
+          return { from: fallback.start, to: fallback.end };
+        }
+        
         return { from: start, to: end };
       }
       case 'Custom Range': {
@@ -247,6 +264,18 @@ const Metrics = () => {
       default: {
         // Default to This Month
         const { start, end } = getUTCDateRangeFromPeriod('This Month');
+        
+        // Validate dates before using them
+        if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+          console.error('Invalid date range from getUTCDateRangeFromPeriod:', { start, end, period: 'This Month' });
+          // Return current month as fallback
+          const now = new Date();
+          const fallbackStart = getUTCStartOfDay(now.getUTCFullYear(), now.getUTCMonth(), 1);
+          const lastDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0));
+          const fallbackEnd = getUTCEndOfDay(lastDay.getUTCFullYear(), lastDay.getUTCMonth(), lastDay.getUTCDate());
+          return { from: fallbackStart, to: fallbackEnd };
+        }
+        
         return { from: start, to: end };
       }
     }
