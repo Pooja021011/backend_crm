@@ -640,6 +640,9 @@ export const leadRepository = {
     const where: any = {};
     
     // Role-based access control
+    let isACQRestricted = false; // Track if ACQ agent restriction is applied
+    let isDispRestricted = false; // Track if DISP agent restriction is applied
+    
     if (userRoles.length > 0) {
       const isACQ = userRoles.includes('ACQ');
       const isDisp = userRoles.includes('DISP');
@@ -649,14 +652,17 @@ export const leadRepository = {
       const isTC = userRoles.includes('TC');
 
       // Role-based lead type restrictions
+      // IMPORTANT: If user has MANAGER role along with ACQ/DISP, MANAGER privileges apply (can see all leads)
       if (isACQ && !isAdmin && !isExecutive && !isManager && !isTC) {
-        // Acquisitions Agent can only see their assigned seller leads
+        // Acquisitions Agent (without MANAGER role) can only see their assigned seller leads
         where.leadType = 'SELLER';
         where.assignedUserId = userId;
+        isACQRestricted = true; // Mark that ACQ restriction is active
       } else if (isDisp && !isAdmin && !isExecutive && !isManager && !isTC) {
-        // Dispositions Agent can only see their assigned buyer leads
+        // Dispositions Agent (without MANAGER role) can only see their assigned buyer leads
         where.leadType = 'BUYER';
         where.assignedUserId = userId;
+        isDispRestricted = true; // Mark that DISP restriction is active
       }
       // Admin, Executive, Manager, TC can see all lead types
     }
@@ -687,10 +693,32 @@ export const leadRepository = {
     }
     
     // Assigned user filter: support both single and array
+    // SECURITY: ACQ/DISP agents (without MANAGER role) cannot use this filter to see other agents' leads
     if (assignedUserIds && assignedUserIds.length > 0) {
-      where.assignedUserId = { in: assignedUserIds };
+      if (isACQRestricted || isDispRestricted) {
+        // ACQ/DISP agent restriction is active - validate filter
+        // Only allow filtering by their own userId
+        const validUserIds = assignedUserIds.filter(id => id === userId);
+        if (validUserIds.length > 0) {
+          // Only apply filter if it includes their own userId
+          where.assignedUserId = { in: validUserIds };
+        }
+        // If filter doesn't include their userId, ignore it (restriction already applied above)
+      } else {
+        // No restriction - apply filter normally (for ADMIN, MANAGER, EXECUTIVE, TC)
+        where.assignedUserId = { in: assignedUserIds };
+      }
     } else if (assignedUserId) {
-      where.assignedUserId = assignedUserId;
+      if (isACQRestricted || isDispRestricted) {
+        // ACQ/DISP agent restriction is active - only allow their own userId
+        if (assignedUserId === userId) {
+          where.assignedUserId = assignedUserId;
+        }
+        // If filter is for different user, ignore it (restriction already applied above)
+      } else {
+        // No restriction - apply filter normally
+        where.assignedUserId = assignedUserId;
+      }
     }
     
     // Lead source filter: support both single and array

@@ -447,6 +447,23 @@ const Leads = () => {
     loadFilterData(); // Load dynamic filter options
   }, [loadFilterData]);
 
+  // Auto-select logged-in agent for ACQ agents (without MANAGER role) - they can only see their own leads
+  useEffect(() => {
+    if (isACQ && !isAdmin && !isExecutive && !isManager && !isTC && user?.id) {
+      // ACQ agent can only see their own leads, so auto-select their own ID
+      if (agents.length > 0) {
+        // Check if user exists in agents list before setting
+        const userInAgents = agents.some((a: any) => a.id === user.id);
+        if (userInAgents) {
+          setSelectedAgents([user.id]);
+        }
+      } else {
+        // If agents not loaded yet, set it anyway (will be validated when agents load)
+        setSelectedAgents([user.id]);
+      }
+    }
+  }, [isACQ, isAdmin, isExecutive, isManager, isTC, user?.id, agents]);
+
   // Initial load on mount - load leads with default filters
   useEffect(() => {
     // Only run once on initial mount
@@ -1244,19 +1261,44 @@ const Leads = () => {
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-gray-700">Acquisitions Agent</label>
                   <MultiSelect
-                    options={agents
-                      .filter((a: any) => {
-                        const roles = (a.roles || []).map((r: any) => r?.role?.name || r?.name || r);
-                        return roles.includes('ACQ') || roles.includes('MANAGER');
-                      })
-                      .map((a: any) => ({
-                        label: `${a.firstName} ${a.lastName}`,
-                        value: a.id
-                      }))}
+                    options={(() => {
+                      // If ACQ agent (without MANAGER role), only show their own name
+                      if (isACQ && !isAdmin && !isExecutive && !isManager && !isTC) {
+                        // Filter to only show current user
+                        const filteredAgents = agents.filter((a: any) => {
+                          const roles = (a.roles || []).map((r: any) => r?.role?.name || r?.name || r);
+                          return a.id === user?.id && (roles.includes('ACQ') || roles.includes('MANAGER'));
+                        });
+                        
+                        // If user not found in agents list, add them manually
+                        if (filteredAgents.length === 0 && user?.id && user?.firstName && user?.lastName) {
+                          return [{
+                            label: `${user.firstName} ${user.lastName}`,
+                            value: user.id
+                          }];
+                        }
+                        
+                        return filteredAgents.map((a: any) => ({
+                          label: `${a.firstName} ${a.lastName}`,
+                          value: a.id
+                        }));
+                      }
+                      
+                      // For MANAGER, ADMIN, EXECUTIVE, TC: show all ACQ agents
+                      return agents
+                        .filter((a: any) => {
+                          const roles = (a.roles || []).map((r: any) => r?.role?.name || r?.name || r);
+                          return roles.includes('ACQ') || roles.includes('MANAGER');
+                        })
+                        .map((a: any) => ({
+                          label: `${a.firstName} ${a.lastName}`,
+                          value: a.id
+                        }));
+                    })()}
                     selected={selectedAgents}
                     onChange={setSelectedAgents}
                     placeholder="All ACQ Agents"
-                    disabled={loadingFilters}
+                    disabled={loadingFilters || (isACQ && !isAdmin && !isExecutive && !isManager && !isTC)}
                     className="h-8"
                   />
                 </div>

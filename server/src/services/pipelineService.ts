@@ -580,13 +580,28 @@ export const pipelineService = {
       };
 
       // Apply role-based filtering
+      let isACQRestricted = false; // Track if ACQ agent restriction is applied
+      let isDispRestricted = false; // Track if DISP agent restriction is applied
+      
       if (filters.userRole && filters.userId) {
         // Handle userRole as array (passed from controller)
         const userRoles = Array.isArray(filters.userRole) ? filters.userRole : [filters.userRole];
         const access = this.getPipelineAccess(userRoles);
         
+        // IMPORTANT: If user has MANAGER role along with ACQ/DISP, MANAGER privileges apply (canViewFull: true)
         if (access.canViewAssignedOnly) {
           whereClause.assignedUserId = filters.userId;
+          // Track restrictions for security validation
+          const hasACQ = userRoles.includes('ACQ');
+          const hasDISP = userRoles.includes('DISP');
+          const hasAdminRole = userRoles.some(r => ['ADMIN', 'EXECUTIVE', 'MANAGER'].includes(r));
+          
+          if (hasACQ && !hasAdminRole) {
+            isACQRestricted = true;
+          }
+          if (hasDISP && !hasAdminRole) {
+            isDispRestricted = true;
+          }
         }
         
         // Filter by lead type based on role
@@ -605,8 +620,18 @@ export const pipelineService = {
         // ADMIN/EXECUTIVE/MANAGER see all lead types (no filter applied)
       }
 
+      // SECURITY: ACQ/DISP agents (without MANAGER role) cannot use filters to see other agents' leads
       if (filters.assignedUserId) {
-        whereClause.assignedUserId = filters.assignedUserId;
+        if (isACQRestricted || isDispRestricted) {
+          // ACQ/DISP agent restriction is active - only allow their own userId
+          if (filters.assignedUserId === filters.userId) {
+            whereClause.assignedUserId = filters.assignedUserId;
+          }
+          // If filter is for different user, ignore it (restriction already applied above)
+        } else {
+          // No restriction - apply filter normally (for ADMIN, MANAGER, EXECUTIVE, TC)
+          whereClause.assignedUserId = filters.assignedUserId;
+        }
       }
 
       if (filters.dispAgentId) {
@@ -615,8 +640,21 @@ export const pipelineService = {
       }
 
       // Multi-select agent filters
+      // SECURITY: ACQ agents (without MANAGER role) cannot use this filter to see other agents' leads
       if (filters.acqAgentIds && filters.acqAgentIds.length > 0) {
-        whereClause.assignedUserId = { in: filters.acqAgentIds };
+        if (isACQRestricted) {
+          // ACQ agent restriction is active - validate filter
+          // Only allow filtering by their own userId
+          const validUserIds = filters.acqAgentIds.filter(id => id === filters.userId);
+          if (validUserIds.length > 0) {
+            // Only apply filter if it includes their own userId
+            whereClause.assignedUserId = { in: validUserIds };
+          }
+          // If filter doesn't include their userId, ignore it (restriction already applied above)
+        } else {
+          // No restriction - apply filter normally (for ADMIN, MANAGER, EXECUTIVE, TC)
+          whereClause.assignedUserId = { in: filters.acqAgentIds };
+        }
       }
 
       if (filters.dispAgentIds && filters.dispAgentIds.length > 0) {
