@@ -62,7 +62,16 @@ export const leadController = {
   },
 
   async list(req: Request, res: Response) {
+    // Debug: Log raw query params to see what Express is receiving
+    console.log('📥 Raw query params:', JSON.stringify(req.query, null, 2));
+    console.log('📥 leadStatusIds type:', typeof req.query.leadStatusIds, 'value:', req.query.leadStatusIds);
+    
     const q = listLeadsQuery.parse(req.query);
+    
+    // Debug: Log parsed query params
+    console.log('✅ Parsed query params:', JSON.stringify(q, null, 2));
+    console.log('✅ leadStatusIds after parse:', q.leadStatusIds);
+    
     const user = (req as any).user;
     // Roles are already strings in the JWT token, no need to map
     const userRoles = user?.roles || [];

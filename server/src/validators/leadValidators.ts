@@ -1,10 +1,26 @@
 import { z } from 'zod';
 
 // Helper to handle Express query params which can be string or array
+// Express parses repeated query params like ?key=val1&key=val2 as arrays
 const arrayOrStringToArray = (val: unknown): string[] | undefined => {
   if (val === undefined || val === null) return undefined;
-  if (Array.isArray(val)) return val as string[];
-  if (typeof val === 'string') return [val];
+  
+  // If it's already an array, filter and return
+  if (Array.isArray(val)) {
+    // Filter out empty strings, null, undefined and return valid UUIDs
+    const filtered = (val as any[])
+      .filter(v => v !== null && v !== undefined && v !== '' && typeof v === 'string')
+      .map(v => String(v).trim())
+      .filter(v => v.length > 0);
+    return filtered.length > 0 ? filtered as string[] : undefined;
+  }
+  
+  // If it's a string, convert to array (trim whitespace)
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    return trimmed !== '' ? [trimmed] : undefined;
+  }
+  
   return undefined;
 };
 
