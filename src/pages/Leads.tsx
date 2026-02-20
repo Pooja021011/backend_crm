@@ -477,13 +477,22 @@ const Leads = () => {
       })
       .catch((err) => {
         isLoadingLeadsRef.current = false;
-        if (err instanceof Error && err.message !== 'Request aborted') {
+        // Ignore abort errors - don't show toast for intentional cancellations
+        const isAbortError = err instanceof DOMException && err.name === 'AbortError' ||
+                            (err instanceof Error && (
+                              err.message === 'Request aborted' ||
+                              err.message.includes('aborted') ||
+                              err.message === 'The user aborted a request.'
+                            ));
+        if (!isAbortError) {
           console.error('❌ Error loading initial leads:', err);
           toast({
             title: "Error Loading Leads",
-            description: err.message || "Failed to load leads. Please try again.",
+            description: err instanceof Error ? err.message : "Failed to load leads. Please try again.",
             variant: "destructive",
           });
+        } else {
+          console.log('⏹️ Request aborted (initial load)');
         }
       });
     
@@ -628,12 +637,18 @@ const Leads = () => {
       })
       .catch((err) => {
         isLoadingLeadsRef.current = false;
-        // Ignore abort errors
-        if (err instanceof Error && err.message !== 'Request aborted') {
+        // Ignore abort errors - don't show toast for intentional cancellations
+        const isAbortError = err instanceof DOMException && err.name === 'AbortError' ||
+                            (err instanceof Error && (
+                              err.message === 'Request aborted' ||
+                              err.message.includes('aborted') ||
+                              err.message === 'The user aborted a request.'
+                            ));
+        if (!isAbortError) {
           console.error('❌ Error fetching leads:', err);
           toast({
             title: "Error Loading Leads",
-            description: err.message || "Failed to load leads. Please try again.",
+            description: err instanceof Error ? err.message : "Failed to load leads. Please try again.",
             variant: "destructive",
           });
         } else {
