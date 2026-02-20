@@ -48,9 +48,10 @@ interface KPICardProps {
   value: string;
   trend?: string;
   color: "blue" | "green" | "purple" | "orange" | "yellow" | "red" | "indigo";
+  onClick?: () => void;
 }
 
-const KPICard = ({ title, value, trend, color }: KPICardProps) => {
+const KPICard = ({ title, value, trend, color, onClick }: KPICardProps) => {
   const colorConfig = {
     blue: {
       bg: "bg-blue-500",
@@ -106,10 +107,14 @@ const KPICard = ({ title, value, trend, color }: KPICardProps) => {
   const config = colorConfig[color];
 
   return (
-    <div className={cn(
-      "px-3 py-2 rounded-lg shadow-sm transition-all duration-300 hover:shadow-md min-w-[120px] flex-shrink-0",
-      config.bg
-    )}>
+    <div 
+      className={cn(
+        "px-3 py-2 rounded-lg shadow-sm transition-all duration-300 hover:shadow-md min-w-[120px] flex-shrink-0",
+        config.bg,
+        onClick ? "cursor-pointer hover:opacity-90" : "cursor-default"
+      )}
+      {...(onClick && { onClick })}
+    >
       <div className="space-y-0.5">
         <div className="flex items-center justify-between">
           <p className={cn("text-[10px] font-semibold uppercase tracking-wide", config.label)}>

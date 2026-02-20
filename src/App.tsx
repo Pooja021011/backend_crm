@@ -24,6 +24,7 @@ import AddBuyerLead from "./pages/AddBuyerLead";
 import AddVendorLead from "./pages/AddVendorLead";
 import Agents from "./pages/Agents";
 import LeadEdit from "./pages/LeadEdit";
+import MishandledLeads from "./pages/MishandledLeads";
 
 const queryClient = new QueryClient();
 
@@ -86,6 +87,11 @@ const App = () => (
               <Route path="/metrics" element={
                 <ProtectedAppRoute>
                   <Metrics />
+                </ProtectedAppRoute>
+              } />
+              <Route path="/mishandled-leads" element={
+                <ProtectedAppRoute>
+                  <MishandledLeads />
                 </ProtectedAppRoute>
               } />
               <Route path="/settings" element={

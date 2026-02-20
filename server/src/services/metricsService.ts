@@ -527,7 +527,10 @@ export const metricsService = {
       // Additional breakdown for debugging/transparency
       result.slaBreaches = managerData.slaBreaches; // New leads mishandled (2h/16h/48h)
       result.stale48h = managerData.stale48h; // Leads untouched 48h+ (No Contact Made through Contract Sent)
+      result.tasksPastDue6h = managerData.tasksPastDue6h; // Tasks past due 6h+
       result.leadsReceived = managerData.leadsReceived;
+      // Detailed breakdown with lead IDs and matched rules
+      result.mishandledBreakdown = managerData.mishandledBreakdown;
     }
     // ACQ AGENT KPIs (personal stats for this agent) - Third Priority
     // ACQ Agent KPIs always show current month data (ignore timeframe parameter)
@@ -561,7 +564,10 @@ export const metricsService = {
       // Additional breakdown for debugging/transparency
       result.slaBreachesPersonal = acqData.slaBreaches; // New leads mishandled (2h/16h/48h)
       result.stale48hPersonal = acqData.stale48h; // Leads untouched 48h+ (No Contact Made through Contract Sent)
+      result.tasksPastDue6h = acqData.tasksPastDue6h; // Tasks past due 6h+
       result.leadsReceivedPersonal = acqData.leadsReceived;
+      // Detailed breakdown with lead IDs and matched rules
+      result.mishandledBreakdownPersonal = acqData.mishandledBreakdown;
     }
     // DISP (Dispositions) KPIs - Hidden for now
     // else if (isDISP) {
@@ -809,8 +815,8 @@ export const metricsService = {
 
     // SLA breaches for leads created this month (2h/16h/48h ET) - Only OUTBOUND communications count as "reach out"
     const createdThisMonthIds = new Set(leadsReceived.map((l) => l.id));
-    const slaBreachLeads = activeLeads.filter((l) => {
-      if (!createdThisMonthIds.has(l.id)) return false;
+    const slaBreachLeadsWithDetails = activeLeads.map((l) => {
+      if (!createdThisMonthIds.has(l.id)) return null;
       
       // Get the FIRST OUTBOUND communication (CALL/SMS/EMAIL only) for SLA breach check
       // Communications are ordered by occurredAt asc, so [0] is the first/earliest
@@ -820,33 +826,52 @@ export const metricsService = {
       
       const thresholdHours = getSlaThresholdHoursEt(l.createdAt);
       
+      let isBreach = false;
+      let condition = '';
+      
       if (!firstOutboundAt) {
         // If never reached out (no OUTBOUND communication), check if threshold exceeded
         const hoursSinceCreation = (nowDt.getTime() - l.createdAt.getTime()) / (1000 * 60 * 60);
-        return hoursSinceCreation > thresholdHours;
+        isBreach = hoursSinceCreation > thresholdHours;
+        if (isBreach) {
+          condition = `Never reached out - ${hoursSinceCreation.toFixed(1)}h since creation (threshold: ${thresholdHours}h)`;
+        }
+      } else {
+        // If reached out (OUTBOUND), check if FIRST reach out happened within threshold
+        // Calculate time from lead creation to FIRST outbound contact
+        const leadCreatedAt = new Date(l.createdAt);
+        const hoursToReachOut = (firstOutboundAt.getTime() - leadCreatedAt.getTime()) / (1000 * 60 * 60);
+        
+        // Only count as breach if the FIRST contact happened AFTER the threshold
+        isBreach = hoursToReachOut > thresholdHours;
+        if (isBreach) {
+          condition = `First contact after ${hoursToReachOut.toFixed(1)}h (threshold: ${thresholdHours}h)`;
+        }
       }
       
-      // If reached out (OUTBOUND), check if FIRST reach out happened within threshold
-      // Calculate time from lead creation to FIRST outbound contact
-      const leadCreatedAt = new Date(l.createdAt);
-      const hoursToReachOut = (firstOutboundAt.getTime() - leadCreatedAt.getTime()) / (1000 * 60 * 60);
+      if (!isBreach) return null;
       
-      // Only count as breach if the FIRST contact happened AFTER the threshold
-      return hoursToReachOut > thresholdHours;
-    });
+      return {
+        lead: l,
+        condition: condition,
+        thresholdHours: thresholdHours
+      };
+    }).filter((item): item is { lead: any; condition: string; thresholdHours: number } => item !== null);
+    
+    const slaBreachLeads = slaBreachLeadsWithDetails.map(item => item.lead);
     const slaBreaches = slaBreachLeads.length;
 
     // 48h stale across leads in pipeline status "No contact made" through "contract sent"
     // that have gone 48 hours without being reached out to (OUTBOUND only)
     // EXCLUDE leads with upcoming tasks (as per requirements)
     const tasksCutoffDate = new Date('2026-01-20T00:00:00Z'); // Tasks cutoff date (same as reminder logic)
-    const stale48hLeads = activeLeads.filter((l) => {
+    const stale48hLeadsWithDetails = activeLeads.map((l) => {
       // Filter by pipeline stage: only "No Contact Made" through "Contract Sent"
       if (!l.pipelineStage) {
-        return false; // Exclude leads without pipeline stage info
+        return null; // Exclude leads without pipeline stage info
       }
       if (!validStageIdsForStale48h.has(l.pipelineStage.id)) {
-        return false;
+        return null;
       }
       
       // EXCLUDE leads with upcoming tasks (as per requirements)
@@ -867,7 +892,7 @@ export const metricsService = {
       });
       
       if (hasUpcomingTask) {
-        return false; // Exclude leads with upcoming tasks
+        return null; // Exclude leads with upcoming tasks
       }
       
       // Get the MOST RECENT OUTBOUND communication (CALL/SMS/EMAIL only) for stale48h check
@@ -876,21 +901,40 @@ export const metricsService = {
       const lastOutboundComm = allOutboundComms[allOutboundComms.length - 1]; // Last in asc order = most recent
       const lastOutboundAt = lastOutboundComm?.occurredAt ? new Date(lastOutboundComm.occurredAt) : null;
       
+      let isStale = false;
+      let condition = '';
+      
       if (!lastOutboundAt) {
         // If never reached out (no OUTBOUND communication), check if 48h passed since creation
         const hoursSinceCreation = (nowDt.getTime() - l.createdAt.getTime()) / (1000 * 60 * 60);
-        return hoursSinceCreation >= 48;
+        isStale = hoursSinceCreation >= 48;
+        if (isStale) {
+          condition = `Never reached out - ${hoursSinceCreation.toFixed(1)}h since creation`;
+        }
+      } else {
+        // If reached out (OUTBOUND), check if 48h passed since last OUTBOUND reach out
+        const hoursSince = (nowDt.getTime() - new Date(lastOutboundAt).getTime()) / (1000 * 60 * 60);
+        isStale = hoursSince >= 48;
+        if (isStale) {
+          condition = `No contact for ${hoursSince.toFixed(1)}h (last: ${lastOutboundAt.toISOString().split('T')[0]})`;
+        }
       }
-      // If reached out (OUTBOUND), check if 48h passed since last OUTBOUND reach out
-      const hoursSince = (nowDt.getTime() - new Date(lastOutboundAt).getTime()) / (1000 * 60 * 60);
-      return hoursSince >= 48;
-    });
+      
+      if (!isStale) return null;
+      
+      return {
+        lead: l,
+        condition: condition
+      };
+    }).filter((item): item is { lead: any; condition: string } => item !== null);
+    
+    const stale48hLeads = stale48hLeadsWithDetails.map(item => item.lead);
     const stale48h = stale48hLeads.length;
 
     // Tasks past due more than 6 hours
     // Get all leads with tasks that are past due more than 6 hours
     // Note: tasksCutoffDate already defined above for stale48h logic
-    const leadsWithPastDueTasks = await prisma.lead.findMany({
+    const leadsWithPastDueTasksData = await prisma.lead.findMany({
       where: {
         leadType: 'SELLER',
         pipelineStage: { pipeline: { key: 'ACQUISITIONS' } },
@@ -931,8 +975,53 @@ export const metricsService = {
       },
       select: {
         id: true,
+        tasks: {
+          where: {
+            status: 'OPEN',
+            dueAt: {
+              lte: new Date(nowDt.getTime() - 6 * 60 * 60 * 1000),
+              gte: tasksCutoffDate,
+            },
+            NOT: {
+              OR: [
+                { title: { startsWith: 'Review note on ' } },
+                { title: { startsWith: 'Underwrite ' } },
+                { title: { startsWith: 'Make Offer on ' } },
+                { title: { startsWith: 'Follow Up With ' } },
+                { title: { startsWith: 'Contract Sent - Awaiting Signature for ' } },
+                { title: { startsWith: 'URGENT: DocuSign Failed for ' } },
+                { title: { startsWith: 'Check Voided Contract With ' } },
+              ]
+            }
+          },
+          select: {
+            id: true,
+            title: true,
+            dueAt: true,
+          }
+        }
       },
       distinct: ['id'], // Avoid counting same lead multiple times if it has multiple past due tasks
+    });
+
+    const leadsWithPastDueTasks = leadsWithPastDueTasksData.map(lead => {
+      // Find the most past due task
+      const pastDueTasks = lead.tasks || [];
+      if (pastDueTasks.length === 0) return { leadId: lead.id, condition: '' };
+      
+      const mostPastDue = pastDueTasks.reduce((latest: any, task: any) => {
+        const taskHours = (nowDt.getTime() - new Date(task.dueAt).getTime()) / (1000 * 60 * 60);
+        const latestHours = latest ? (nowDt.getTime() - new Date(latest.dueAt).getTime()) / (1000 * 60 * 60) : 0;
+        return taskHours > latestHours ? task : latest;
+      }, null);
+      
+      const hoursPastDue = (nowDt.getTime() - new Date(mostPastDue.dueAt).getTime()) / (1000 * 60 * 60);
+      const condition = `${mostPastDue.title} - ${hoursPastDue.toFixed(1)}h past due`;
+      
+      return {
+        leadId: lead.id,
+        condition: condition
+      };
     });
 
     const tasksPastDue6h = leadsWithPastDueTasks.length;
@@ -941,11 +1030,46 @@ export const metricsService = {
     // Get IDs from each category (reuse filtered results to avoid duplicate filtering)
     const slaBreachLeadIds = new Set(slaBreachLeads.map(l => l.id));
     const stale48hLeadIds = new Set(stale48hLeads.map(l => l.id));
-    const tasksPastDueLeadIds = new Set(leadsWithPastDueTasks.map(l => l.id));
+    const tasksPastDueLeadIds = new Set(leadsWithPastDueTasks.map((item: { leadId: string; condition: string }) => item.leadId));
 
     // Combine all unique mishandled lead IDs
     const allMishandledLeadIds = new Set([...slaBreachLeadIds, ...stale48hLeadIds, ...tasksPastDueLeadIds]);
     const leadsMishandled = allMishandledLeadIds.size;
+
+    // Build detailed breakdown with lead IDs and matched rules with conditions
+    const leadDetails = Array.from(allMishandledLeadIds).map(id => {
+      const slaBreach = slaBreachLeadIds.has(id);
+      const stale48h = stale48hLeadIds.has(id);
+      const tasksPastDue = tasksPastDueLeadIds.has(id);
+      
+      const rules: string[] = [];
+      const ruleConditions: Record<string, string> = {};
+      
+      if (slaBreach) {
+        rules.push('SLA_BREACH');
+        const slaDetail = slaBreachLeadsWithDetails.find(item => item.lead.id === id);
+        ruleConditions['SLA_BREACH'] = slaDetail?.condition || 'SLA threshold exceeded';
+      }
+      
+      if (stale48h) {
+        rules.push('STALE_48H');
+        const staleDetail = stale48hLeadsWithDetails.find(item => item.lead.id === id);
+        ruleConditions['STALE_48H'] = staleDetail?.condition || 'No contact for 48h+';
+      }
+      
+      if (tasksPastDue) {
+        rules.push('TASKS_PAST_DUE_6H');
+        const taskDetail = leadsWithPastDueTasks.find((item: { leadId: string; condition: string }) => item.leadId === id);
+        ruleConditions['TASKS_PAST_DUE_6H'] = taskDetail?.condition || 'Task past due 6h+';
+      }
+      
+      return {
+        leadId: id,
+        rules: rules,
+        ruleCount: rules.length,
+        conditions: ruleConditions
+      };
+    });
 
     return {
       totalContracts,
@@ -955,6 +1079,14 @@ export const metricsService = {
       slaBreaches,
       stale48h,
       tasksPastDue6h,
+      // Detailed breakdown
+      mishandledBreakdown: {
+        slaBreachLeadIds: Array.from(slaBreachLeadIds),
+        stale48hLeadIds: Array.from(stale48hLeadIds),
+        tasksPastDueLeadIds: Array.from(tasksPastDueLeadIds),
+        allMishandledLeadIds: Array.from(allMishandledLeadIds),
+        leadDetails: leadDetails
+      }
     };
   },
 
