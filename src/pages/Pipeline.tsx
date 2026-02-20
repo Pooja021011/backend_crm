@@ -286,6 +286,12 @@ const Pipeline = () => {
         didInitialLoadRef.current = false;
         return;
       }
+      console.log('🔄 Pipeline data reload triggered by filter change:', {
+        lastTouchedFrom,
+        lastTouchedTo,
+        createdFrom,
+        createdTo,
+      });
       loadPipelineData();
     }
   }, [transactionPipelineView, needsAttentionView, selectedLeadSource, currentPipeline, pipelineAccess, createdFrom, createdTo, lastTouchedFrom, lastTouchedTo, selectedAcqAgents, selectedDispAgents]);
@@ -389,17 +395,36 @@ const Pipeline = () => {
     // Use global UTC utilities for consistent timezone handling
     const { start, end } = getUTCDateRangeFromPeriod(range);
     
+    // Debug logging
+    console.log('🔍 applyPresetRange called:', {
+      range,
+      start,
+      end,
+      startValid: start && !isNaN(start.getTime()),
+      endValid: end && !isNaN(end.getTime()),
+      startISO: start ? start.toISOString() : 'invalid',
+      endISO: end ? end.toISOString() : 'invalid',
+    });
+    
     // Validate dates before using them
     if (!start || !end || isNaN(start.getTime()) || isNaN(end.getTime())) {
-      console.error('Invalid date range from getUTCDateRangeFromPeriod:', { start, end, range });
+      console.error('❌ Invalid date range from getUTCDateRangeFromPeriod:', { start, end, range });
       setFrom('');
       setTo('');
       return;
     }
     
     if (start && end) {
-      setFrom(formatDateInputUTC(start));
-      setTo(formatDateInputUTC(end));
+      const fromValue = formatDateInputUTC(start);
+      const toValue = formatDateInputUTC(end);
+      console.log('✅ Setting date range:', { 
+        fromValue, 
+        toValue,
+        fromDate: start.toISOString(),
+        toDate: end.toISOString()
+      });
+      setFrom(fromValue);
+      setTo(toValue);
     } else {
       // All Time / empty
       setFrom('');
@@ -638,10 +663,12 @@ const Pipeline = () => {
         }
         if (lastTouchedFrom) {
           const normalized = normalizeDateString(lastTouchedFrom);
+          console.log('📅 Last Touched From:', { original: lastTouchedFrom, normalized });
           if (normalized) filters.append('lastTouchedFrom', normalized);
         }
         if (lastTouchedTo) {
           const normalized = normalizeDateString(lastTouchedTo);
+          console.log('📅 Last Touched To:', { original: lastTouchedTo, normalized });
           if (normalized) filters.append('lastTouchedTo', normalized);
         }
         
@@ -1466,8 +1493,17 @@ const Pipeline = () => {
                 value={lastTouchedDateRange}
                 onChange={(e) => {
                   const range = e.target.value;
+                  console.log('🔄 Last Touched filter changed:', range);
                   setLastTouchedDateRange(range);
                   if (range === 'custom') {
+                    return;
+                  }
+                  if (range === '') {
+                    // Clear filters when "All Time" is selected
+                    setLastTouchedFrom('');
+                    setLastTouchedTo('');
+                    setLastTouchedCustomFrom('');
+                    setLastTouchedCustomTo('');
                     return;
                   }
                   setLastTouchedCustomFrom('');
