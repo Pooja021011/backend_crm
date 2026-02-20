@@ -483,6 +483,12 @@ const Leads = () => {
           // Use global UTC utilities for preset ranges
           const { start, end } = getUTCDateRangeFromPeriod(selectedDateRange);
           
+          // Validate dates before using them
+          if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+            console.error('Invalid date range from getUTCDateRangeFromPeriod:', { start, end, selectedDateRange });
+            break; // Skip filtering if dates are invalid
+          }
+          
           // Debug logging for week filter
           if (selectedDateRange === 'week') {
             console.log('📅 Week Filter Range:', {

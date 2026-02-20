@@ -32,10 +32,11 @@ export const getUTCDateComponents = (date: Date = new Date()) => {
  * Get UTC date at start of day (00:00:00.000 UTC)
  */
 export const getUTCStartOfDay = (year?: number, month?: number, day?: number): Date => {
-  const components = year !== undefined && month !== undefined && day !== undefined
-    ? { year, month, day }
-    : getUTCDateComponents();
+  if (year !== undefined && month !== undefined && day !== undefined) {
+    return new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+  }
   
+  const components = getUTCDateComponents();
   return new Date(Date.UTC(
     components.year,
     components.month,
@@ -51,10 +52,11 @@ export const getUTCStartOfDay = (year?: number, month?: number, day?: number): D
  * Get UTC date at end of day (23:59:59.999 UTC)
  */
 export const getUTCEndOfDay = (year?: number, month?: number, day?: number): Date => {
-  const components = year !== undefined && month !== undefined && day !== undefined
-    ? { year, month, day }
-    : getUTCDateComponents();
+  if (year !== undefined && month !== undefined && day !== undefined) {
+    return new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
+  }
   
+  const components = getUTCDateComponents();
   return new Date(Date.UTC(
     components.year,
     components.month,
@@ -138,11 +140,18 @@ export const getUTCThisWeekRange = (): { start: Date; end: Date } => {
   // Calculate Sunday date (today - daysToSunday)
   // Date.UTC automatically handles month/year overflow correctly
   const sundayDay = components.date - daysToSunday;
+  
+  // Create Sunday date - Date.UTC handles negative/zero days correctly (rolls to previous month)
   const sundayDate = new Date(Date.UTC(
     components.year,
     components.month,
     sundayDay
   ));
+  
+  // Validate the date is valid
+  if (isNaN(sundayDate.getTime())) {
+    throw new Error(`Invalid Sunday date calculated: year=${components.year}, month=${components.month}, day=${sundayDay}`);
+  }
   
   // Calculate Saturday date (Sunday + 6 days)
   const saturdayDate = new Date(Date.UTC(
@@ -150,6 +159,11 @@ export const getUTCThisWeekRange = (): { start: Date; end: Date } => {
     components.month,
     sundayDay + 6
   ));
+  
+  // Validate the date is valid
+  if (isNaN(saturdayDate.getTime())) {
+    throw new Error(`Invalid Saturday date calculated: year=${components.year}, month=${components.month}, day=${sundayDay + 6}`);
+  }
   
   // Ensure we get the correct UTC date components after potential month overflow
   const sundayYear = sundayDate.getUTCFullYear();
@@ -160,10 +174,15 @@ export const getUTCThisWeekRange = (): { start: Date; end: Date } => {
   const saturdayMonth = saturdayDate.getUTCMonth();
   const saturdayDayFinal = saturdayDate.getUTCDate();
   
-  return {
-    start: getUTCStartOfDay(sundayYear, sundayMonth, sundayDayFinal),
-    end: getUTCEndOfDay(saturdayYear, saturdayMonth, saturdayDayFinal),
-  };
+  const start = getUTCStartOfDay(sundayYear, sundayMonth, sundayDayFinal);
+  const end = getUTCEndOfDay(saturdayYear, saturdayMonth, saturdayDayFinal);
+  
+  // Final validation
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+    throw new Error(`Invalid date range: start=${start}, end=${end}`);
+  }
+  
+  return { start, end };
 };
 
 /**
