@@ -107,13 +107,23 @@ export interface Lead {
 export interface LeadsListParams {
   type?: LeadType;
   marketId?: string;
+  marketIds?: string[]; // Multiple markets
   pipelineStageId?: string;
+  pipelineStageIds?: string[]; // Multiple pipeline stages
   status?: string;
+  leadStatusId?: string;
+  leadStatusIds?: string[]; // Multiple lead statuses
+  assignedUserId?: string;
+  assignedUserIds?: string[]; // Multiple assigned users
+  leadSourceId?: string;
+  leadSourceIds?: string[]; // Multiple lead sources
   q?: string;
   sort?: string;
   order?: 'asc' | 'desc';
   skip?: number;
   take?: number;
+  createdFrom?: string; // UTC ISO datetime string
+  createdTo?: string; // UTC ISO datetime string
 }
 
 export interface LeadsHookReturn {
@@ -237,7 +247,14 @@ export const useLeads = (): LeadsHookReturn => {
       if (params) {
         Object.entries(params).forEach(([key, value]) => {
           if (value !== undefined && value !== null) {
-            queryParams.append(key, value.toString());
+            // Handle arrays by appending each value separately
+            if (Array.isArray(value)) {
+              value.forEach(item => {
+                queryParams.append(key, item.toString());
+              });
+            } else {
+              queryParams.append(key, value.toString());
+            }
           }
         });
       }

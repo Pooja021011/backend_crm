@@ -1,18 +1,34 @@
 import { z } from 'zod';
 
+// Helper to handle Express query params which can be string or array
+const arrayOrStringToArray = (val: unknown): string[] | undefined => {
+  if (val === undefined || val === null) return undefined;
+  if (Array.isArray(val)) return val as string[];
+  if (typeof val === 'string') return [val];
+  return undefined;
+};
+
 export const listLeadsQuery = z.object({
   type: z.enum(['SELLER', 'BUYER', 'VENDOR']).optional(),
-  marketId: z.string().uuid().optional(),
-  pipelineStageId: z.string().uuid().optional(),
+  marketId: z.string().uuid().optional(), // Single market (legacy support)
+  marketIds: z.preprocess(arrayOrStringToArray, z.array(z.string().uuid()).optional()), // Multiple markets
+  pipelineStageId: z.string().uuid().optional(), // Single pipeline stage (legacy support)
+  pipelineStageIds: z.preprocess(arrayOrStringToArray, z.array(z.string().uuid()).optional()), // Multiple pipeline stages
   status: z.string().optional(),
+  leadStatusId: z.string().uuid().optional(), // Single lead status (legacy support)
+  leadStatusIds: z.preprocess(arrayOrStringToArray, z.array(z.string().uuid()).optional()), // Multiple lead statuses
+  assignedUserId: z.string().uuid().optional(), // Single assigned user (legacy support)
+  assignedUserIds: z.preprocess(arrayOrStringToArray, z.array(z.string().uuid()).optional()), // Multiple assigned users
+  leadSourceId: z.string().uuid().optional(), // Single lead source (legacy support)
+  leadSourceIds: z.preprocess(arrayOrStringToArray, z.array(z.string().uuid()).optional()), // Multiple lead sources
   countyId: z.string().uuid().optional(),
   createdFrom: z.string().datetime().optional(),
   createdTo: z.string().datetime().optional(),
   updatedFrom: z.string().datetime().optional(),
   updatedTo: z.string().datetime().optional(),
   tasksDueBefore: z.string().datetime().optional(),
-  priceRangeIds: z.array(z.string().uuid()).optional(),
-  assetClassIds: z.array(z.string().uuid()).optional(),
+  priceRangeIds: z.preprocess(arrayOrStringToArray, z.array(z.string().uuid()).optional()),
+  assetClassIds: z.preprocess(arrayOrStringToArray, z.array(z.string().uuid()).optional()),
   vipBuyer: z.coerce.boolean().optional(),
   blacklistedBuyer: z.coerce.boolean().optional(),
   vendorCompany: z.string().optional(),

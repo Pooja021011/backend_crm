@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -84,7 +84,8 @@ const Leads = () => {
     leads, 
     isLoading, 
     error, 
-    fetchLeads, 
+    fetchLeads,
+    listLeads,
     updateLead,
     deleteLead, 
     getLeadsByType, 
@@ -329,11 +330,119 @@ const Leads = () => {
   // Sorting functionality - default to createdAt DESC (newest first)
   const { sortConfig, handleSort, resetSort } = useSortable({ key: 'createdAt', direction: 'desc' });
 
+  // Helper function to get UTC date range from filters
+  const getDateRangeForAPI = useCallback((): { createdFrom?: string; createdTo?: string } => {
+    if (!selectedDateRange) {
+      return {};
+    }
+
+    if (selectedDateRange === 'custom') {
+      const normalizedFrom = customDateFrom ? normalizeDateString(customDateFrom) : null;
+      const normalizedTo = customDateTo ? normalizeDateString(customDateTo) : null;
+      
+      if (normalizedFrom && normalizedTo) {
+        const from = parseDateUTC(normalizedFrom);
+        const to = getUTCEndOfDay(
+          new Date(normalizedTo + 'T00:00:00.000Z').getUTCFullYear(),
+          new Date(normalizedTo + 'T00:00:00.000Z').getUTCMonth(),
+          new Date(normalizedTo + 'T00:00:00.000Z').getUTCDate()
+        );
+        
+        if (!isNaN(from.getTime()) && !isNaN(to.getTime())) {
+          return {
+            createdFrom: from.toISOString(),
+            createdTo: to.toISOString()
+          };
+        }
+      } else if (normalizedFrom) {
+        const from = parseDateUTC(normalizedFrom);
+        if (!isNaN(from.getTime())) {
+          return { createdFrom: from.toISOString() };
+        }
+      } else if (normalizedTo) {
+        const to = getUTCEndOfDay(
+          new Date(normalizedTo + 'T00:00:00.000Z').getUTCFullYear(),
+          new Date(normalizedTo + 'T00:00:00.000Z').getUTCMonth(),
+          new Date(normalizedTo + 'T00:00:00.000Z').getUTCDate()
+        );
+        if (!isNaN(to.getTime())) {
+          return { createdTo: to.toISOString() };
+        }
+      }
+      return {};
+    } else {
+      // Preset ranges (today, week, month, quarter, year)
+      const { start, end } = getUTCDateRangeFromPeriod(selectedDateRange);
+      
+      // Validate dates before using them
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        console.error('Invalid date range from getUTCDateRangeFromPeriod:', { start, end, selectedDateRange });
+        return {};
+      }
+      
+      return {
+        createdFrom: start.toISOString(),
+        createdTo: end.toISOString()
+      };
+    }
+  }, [selectedDateRange, customDateFrom, customDateTo]);
+
   // Load all leads and filter data on component mount
   useEffect(() => {
-    fetchLeads(); // Fetch all leads without type filter
     loadFilterData(); // Load dynamic filter options
   }, []);
+
+  // Fetch leads with current filters (all filters now server-side)
+  const fetchLeadsWithFilters = useCallback(async () => {
+    const dateRange = getDateRangeForAPI();
+    
+    // Build filter params for API
+    const filterParams: any = {
+      type: activeTab,
+      ...dateRange,
+      take: 10000 // Fetch up to 10000 leads
+    };
+    
+    // Add search query if present
+    if (searchQuery && searchQuery.trim()) {
+      filterParams.q = searchQuery.trim();
+    }
+    
+    // Add market filters (array)
+    if (selectedMarkets.length > 0) {
+      filterParams.marketIds = selectedMarkets;
+    }
+    
+    // Add lead status filters (array)
+    if (selectedStatuses.length > 0) {
+      filterParams.leadStatusIds = selectedStatuses;
+    }
+    
+    // Add pipeline stage filters (array)
+    if (selectedPipelineStatuses.length > 0) {
+      filterParams.pipelineStageIds = selectedPipelineStatuses;
+    }
+    
+    // Add assigned user filters (array)
+    if (selectedAgents.length > 0) {
+      filterParams.assignedUserIds = selectedAgents;
+    }
+    
+    // Add lead source filters (array)
+    if (selectedLeadSources.length > 0) {
+      filterParams.leadSourceIds = selectedLeadSources;
+    }
+    
+    await listLeads(filterParams);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, getDateRangeForAPI, searchQuery, selectedMarkets, selectedStatuses, selectedPipelineStatuses, selectedAgents, selectedLeadSources]);
+
+  // Load leads when filters change (including date filters)
+  // Use direct dependencies to avoid infinite loop from listLeads reference changes
+  useEffect(() => {
+    fetchLeadsWithFilters();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, selectedDateRange, customDateFrom, customDateTo, searchQuery, selectedMarkets, selectedStatuses, selectedPipelineStatuses, selectedAgents, selectedLeadSources]);
 
   // Handle leadId parameter from URL to navigate to lead detail
   useEffect(() => {
@@ -431,143 +540,19 @@ const Leads = () => {
   }, [activeTab]);
 
 
-  // Get filtered and sorted leads based on search and active tab
+  // Get filtered and sorted leads - all filtering is now done server-side
   const getCurrentLeads = useMemo(() => {
-    let filteredLeads = getLeadsByType(activeTab);
+    // API already filters by type, date, markets, statuses, pipeline stages, agents, lead sources, and search
+    // We only need to apply client-side sorting here
+    let filteredLeads = [...leads];
     
-    // Apply search filter
-    if (searchQuery) {
-      filteredLeads = searchLeads(searchQuery).filter(lead => lead.leadType === activeTab);
-    }
-    
-    // Apply multi-select filters
-    if (selectedMarkets.length > 0) {
-      filteredLeads = filteredLeads.filter(lead => {
-        return selectedMarkets.includes(lead.marketId);
-      });
-    }
-    
-    if (selectedStatuses.length > 0) {
-      filteredLeads = filteredLeads.filter(lead => {
-        return selectedStatuses.includes(lead.leadStatusId);
-      });
-    }
-    
-    if (selectedPipelineStatuses.length > 0) {
-      filteredLeads = filteredLeads.filter(lead => {
-        return selectedPipelineStatuses.includes(lead.pipelineStageId);
-      });
-    }
-
-    // Agent filters (multi-select)
-    if (selectedAgents.length > 0) {
-      filteredLeads = filteredLeads.filter((lead: any) => selectedAgents.includes(lead.assignedUserId));
-    }
-
-    // Lead Source filter (multi-select)
-    if (selectedLeadSources.length > 0) {
-      filteredLeads = filteredLeads.filter(lead => {
-        return selectedLeadSources.includes(lead.leadSourceId);
-      });
-    }
-    
-    if (selectedDateRange) {
-      // Date Created filter: Always use createdAt, no fallback
-      // Use global UTC utilities for consistent timezone handling
-      switch (selectedDateRange) {
-        case 'today':
-        case 'week':
-        case 'month':
-        case 'quarter':
-        case 'year': {
-          // Use global UTC utilities for preset ranges
-          const { start, end } = getUTCDateRangeFromPeriod(selectedDateRange);
-          
-          // Validate dates before using them
-          if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-            console.error('Invalid date range from getUTCDateRangeFromPeriod:', { start, end, selectedDateRange });
-            break; // Skip filtering if dates are invalid
-          }
-          
-          // Debug logging for week filter
-          if (selectedDateRange === 'week') {
-            console.log('📅 Week Filter Range:', {
-              start: start.toISOString(),
-              end: end.toISOString(),
-              startDate: `${start.getUTCFullYear()}-${String(start.getUTCMonth() + 1).padStart(2, '0')}-${String(start.getUTCDate()).padStart(2, '0')}`,
-              endDate: `${end.getUTCFullYear()}-${String(end.getUTCMonth() + 1).padStart(2, '0')}-${String(end.getUTCDate()).padStart(2, '0')}`,
-              totalLeadsBeforeFilter: filteredLeads.length
-            });
-          }
-          
-          filteredLeads = filteredLeads.filter((lead: any) => {
-            const createdAt = new Date(lead.createdAt);
-            // Get UTC date components for accurate comparison
-            const leadYear = createdAt.getUTCFullYear();
-            const leadMonth = createdAt.getUTCMonth();
-            const leadDate = createdAt.getUTCDate();
-            
-            // Create UTC date at start of day for the lead (normalize to start of day)
-            const leadDateUTC = getUTCStartOfDay(leadYear, leadMonth, leadDate);
-            
-            // Compare with range (start and end are already UTC dates at start/end of day)
-            const isInRange = leadDateUTC >= start && leadDateUTC <= end;
-            
-            // Debug first 3 leads for week filter
-            if (selectedDateRange === 'week' && filteredLeads.indexOf(lead) < 3) {
-              console.log('🔍 Lead Check:', {
-                leadId: lead.id?.substring(0, 8),
-                createdAt: lead.createdAt,
-                leadDateUTC: leadDateUTC.toISOString(),
-                leadDateStr: `${leadYear}-${String(leadMonth + 1).padStart(2, '0')}-${String(leadDate).padStart(2, '0')}`,
-                isInRange,
-                startCompare: leadDateUTC >= start,
-                endCompare: leadDateUTC <= end
-              });
-            }
-            
-            return isInRange;
-          });
-          
-          if (selectedDateRange === 'week') {
-            console.log('📊 Week Filter Result:', {
-              totalLeadsAfterFilter: filteredLeads.length
-            });
-          }
-          
-          break;
-        }
-        case 'custom': {
-          // Custom range: Parse dates and set UTC boundaries
-          // Normalize dates to YYYY-MM-DD format for consistent parsing
-          const normalizedFrom = customDateFrom ? normalizeDateString(customDateFrom) : null;
-          const normalizedTo = customDateTo ? normalizeDateString(customDateTo) : null;
-          const from = normalizedFrom ? parseDateUTC(normalizedFrom) : null;
-          const to = normalizedTo ? getUTCEndOfDay(
-            new Date(normalizedTo + 'T00:00:00.000Z').getUTCFullYear(),
-            new Date(normalizedTo + 'T00:00:00.000Z').getUTCMonth(),
-            new Date(normalizedTo + 'T00:00:00.000Z').getUTCDate()
-          ) : null;
-
-          filteredLeads = filteredLeads.filter((lead: any) => {
-            const createdAt = new Date(lead.createdAt);
-            // Use >= and <= for consistency with preset ranges (same logic)
-            if (from && createdAt < from) return false;
-            if (to && createdAt > to) return false;
-            return true;
-          });
-          break;
-        }
-      }
-    }
-    
-    // Apply sorting
+    // Apply sorting (client-side for now, can be moved to server-side later if needed)
     if (sortConfig.key && sortConfig.direction) {
       filteredLeads = sortLeads(filteredLeads, sortConfig.key, sortConfig.direction);
     }
     
     return filteredLeads;
-  }, [getLeadsByType, activeTab, searchQuery, searchLeads, selectedMarkets, selectedStatuses, selectedPipelineStatuses, selectedDateRange, customDateFrom, customDateTo, selectedAgents, selectedLeadSources, sortConfig, sortLeads, pipelineStages]);
+  }, [leads, sortConfig, sortLeads]);
 
   const getLeadCount = (type: "SELLER" | "BUYER" | "VENDOR") => {
     // Count all leads of this type from the main leads array (not filtered by role)
@@ -1513,24 +1498,40 @@ const Leads = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {currentLeads.map((lead) => (
-                      <TableRow 
-                        key={lead.id} 
-                        className="border-b border-gray-100 hover:bg-blue-50/50 cursor-pointer"
-                        onClick={() => handleLeadClick(lead.id)}
-                      >
-                        <TableCell 
-                          className="sticky left-0 bg-white z-10 border-r border-gray-200 p-0"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className="flex items-center justify-center">
-                            <Checkbox 
-                              className="h-3.5 w-3.5"
-                              checked={selectedItems.includes(lead.id)}
-                              onCheckedChange={() => handleSelectItem(lead.id)}
-                            />
+                    {isLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8">
+                          <div className="flex flex-col items-center justify-center gap-2">
+                            <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+                            <p className="text-sm text-gray-600">Loading leads...</p>
                           </div>
                         </TableCell>
+                      </TableRow>
+                    ) : currentLeads.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8">
+                          <p className="text-sm text-gray-500">No leads found</p>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      currentLeads.map((lead) => (
+                        <TableRow 
+                          key={lead.id} 
+                          className="border-b border-gray-100 hover:bg-blue-50/50 cursor-pointer"
+                          onClick={() => handleLeadClick(lead.id)}
+                        >
+                          <TableCell 
+                            className="sticky left-0 bg-white z-10 border-r border-gray-200 p-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="flex items-center justify-center">
+                              <Checkbox 
+                                className="h-3.5 w-3.5"
+                                checked={selectedItems.includes(lead.id)}
+                                onCheckedChange={() => handleSelectItem(lead.id)}
+                              />
+                            </div>
+                          </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
                             <MapPin className="w-3 h-3 text-gray-400 flex-shrink-0" />
@@ -1600,7 +1601,8 @@ const Leads = () => {
                           />
                         </TableCell>
                       </TableRow>
-                    ))}
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </div>
@@ -1645,41 +1647,57 @@ const Leads = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {currentLeads.map((lead) => (
-                      <TableRow 
-                        key={lead.id} 
-                        className="border-b border-gray-100 hover:bg-green-50/50 cursor-pointer"
-                        onClick={() => handleLeadClick(lead.id)}
-                      >
-                        <TableCell 
-                          className="sticky left-0 bg-white z-10 border-r border-gray-200 p-0"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className="flex items-center justify-center">
-                            <Checkbox 
-                              className="h-3.5 w-3.5"
-                              checked={selectedItems.includes(lead.id)}
-                              onCheckedChange={() => handleSelectItem(lead.id)}
-                            />
+                    {isLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={10} className="text-center py-8">
+                          <div className="flex flex-col items-center justify-center gap-2">
+                            <Loader2 className="w-6 h-6 animate-spin text-green-500" />
+                            <p className="text-sm text-gray-600">Loading leads...</p>
                           </div>
                         </TableCell>
-                        <TableCell>
-                          {(() => {
-                            const contact = getContactName(lead);
-                            return (
-                              <div className="flex items-center gap-1.5">
-                                <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-                                  <span className="text-[10px] font-medium text-green-600">
-                                    {contact.initials}
+                      </TableRow>
+                    ) : currentLeads.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={10} className="text-center py-8">
+                          <p className="text-sm text-gray-500">No leads found</p>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      currentLeads.map((lead) => (
+                        <TableRow 
+                          key={lead.id} 
+                          className="border-b border-gray-100 hover:bg-green-50/50 cursor-pointer"
+                          onClick={() => handleLeadClick(lead.id)}
+                        >
+                          <TableCell 
+                            className="sticky left-0 bg-white z-10 border-r border-gray-200 p-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="flex items-center justify-center">
+                              <Checkbox 
+                                className="h-3.5 w-3.5"
+                                checked={selectedItems.includes(lead.id)}
+                                onCheckedChange={() => handleSelectItem(lead.id)}
+                              />
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {(() => {
+                              const contact = getContactName(lead);
+                              return (
+                                <div className="flex items-center gap-1.5">
+                                  <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                    <span className="text-[10px] font-medium text-green-600">
+                                      {contact.initials}
+                                    </span>
+                                  </div>
+                                  <span className="font-medium text-gray-900 truncate">
+                                    {(contact.firstName || '').trim()} {(contact.lastName || '').trim()}
                                   </span>
                                 </div>
-                                <span className="font-medium text-gray-900 truncate">
-                                  {(contact.firstName || '').trim()} {(contact.lastName || '').trim()}
-                                </span>
-                              </div>
-                            );
-                          })()}
-                        </TableCell>
+                              );
+                            })()}
+                          </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1 text-gray-600">
                             <Phone className="w-2.5 h-2.5 flex-shrink-0" />
@@ -1743,7 +1761,8 @@ const Leads = () => {
                           />
                         </TableCell>
                       </TableRow>
-                    ))}
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </div>
@@ -1786,41 +1805,57 @@ const Leads = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {activeTab === "VENDOR" ? currentLeads.map((lead) => (
-                      <TableRow 
-                        key={lead.id} 
-                        className="border-b border-gray-100 hover:bg-purple-50/50 cursor-pointer"
-                        onClick={() => handleLeadClick(lead.id)}
-                      >
-                        <TableCell 
-                          className="sticky left-0 bg-white z-10 border-r border-gray-200 p-0"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className="flex items-center justify-center">
-                            <Checkbox 
-                              className="h-3.5 w-3.5"
-                              checked={selectedItems.includes(lead.id)}
-                              onCheckedChange={() => handleSelectItem(lead.id)}
-                            />
+                    {isLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8">
+                          <div className="flex flex-col items-center justify-center gap-2">
+                            <Loader2 className="w-6 h-6 animate-spin text-purple-500" />
+                            <p className="text-sm text-gray-600">Loading leads...</p>
                           </div>
                         </TableCell>
-                        <TableCell>
-                          {(() => {
-                            const contact = getContactName(lead);
-                            return (
-                              <div className="flex items-center gap-1.5">
-                                <div className="w-5 h-5 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
-                                  <span className="text-[10px] font-medium text-orange-600">
-                                    {contact.initials}
+                      </TableRow>
+                    ) : currentLeads.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8">
+                          <p className="text-sm text-gray-500">No leads found</p>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      activeTab === "VENDOR" ? currentLeads.map((lead) => (
+                        <TableRow 
+                          key={lead.id} 
+                          className="border-b border-gray-100 hover:bg-purple-50/50 cursor-pointer"
+                          onClick={() => handleLeadClick(lead.id)}
+                        >
+                          <TableCell 
+                            className="sticky left-0 bg-white z-10 border-r border-gray-200 p-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="flex items-center justify-center">
+                              <Checkbox 
+                                className="h-3.5 w-3.5"
+                                checked={selectedItems.includes(lead.id)}
+                                onCheckedChange={() => handleSelectItem(lead.id)}
+                              />
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {(() => {
+                              const contact = getContactName(lead);
+                              return (
+                                <div className="flex items-center gap-1.5">
+                                  <div className="w-5 h-5 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                    <span className="text-[10px] font-medium text-orange-600">
+                                      {contact.initials}
+                                    </span>
+                                  </div>
+                                  <span className="font-medium text-gray-900 truncate">
+                                    {(contact.firstName || '').trim()} {(contact.lastName || '').trim()}
                                   </span>
                                 </div>
-                                <span className="font-medium text-gray-900 truncate">
-                                  {(contact.firstName || '').trim()} {(contact.lastName || '').trim()}
-                                </span>
-                              </div>
-                            );
-                          })()}
-                        </TableCell>
+                              );
+                            })()}
+                          </TableCell>
                         <TableCell className="font-medium text-gray-900 truncate">{lead.vendor?.company}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1 text-gray-600">
@@ -1853,7 +1888,8 @@ const Leads = () => {
                           />
                         </TableCell>
                       </TableRow>
-                    )) : []}
+                      )) : null
+                    )}
                   </TableBody>
                 </Table>
               </div>
