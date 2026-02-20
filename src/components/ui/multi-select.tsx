@@ -116,24 +116,25 @@ export function MultiSelect({
                   e.preventDefault()
                   e.stopPropagation()
                 }}
-                onClick={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  handleSelect(option.value)
-                }}
               >
                 <Checkbox
                   checked={selected.includes(option.value)}
                   onCheckedChange={(checked) => {
-                    // Toggle selection - checkbox handles its own state
+                    // Only handle selection here - prevent double triggers
                     handleSelect(option.value)
                   }}
                   onClick={(e) => {
+                    e.preventDefault()
                     e.stopPropagation()
                   }}
                 />
                 <label 
                   className="text-xs cursor-pointer flex-1"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    handleSelect(option.value)
+                  }}
                   onMouseDown={(e) => {
                     e.preventDefault()
                   }}
