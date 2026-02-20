@@ -605,9 +605,16 @@ export const leadRepository = {
   async list(params: {
     type?: LeadType;
     marketId?: string;
+    marketIds?: string[];
     pipelineStageId?: string;
+    pipelineStageIds?: string[];
     status?: string;
     leadStatusId?: string;
+    leadStatusIds?: string[];
+    assignedUserId?: string;
+    assignedUserIds?: string[];
+    leadSourceId?: string;
+    leadSourceIds?: string[];
     countyId?: string;
     createdFrom?: string;
     createdTo?: string;
@@ -628,7 +635,7 @@ export const leadRepository = {
     userRoles?: string[];
     userId?: string;
   }) {
-    const { type, marketId, pipelineStageId, status, leadStatusId, countyId, createdFrom, createdTo, updatedFrom, updatedTo, tasksDueBefore, priceRangeIds, assetClassIds, vipBuyer, blacklistedBuyer, vendorCompany, vendorIndustry, q, sort = 'createdAt', order = 'desc', skip = 0, take = 10000, userRoles = [], userId } = params;
+    const { type, marketId, marketIds, pipelineStageId, pipelineStageIds, status, leadStatusId, leadStatusIds, assignedUserId, assignedUserIds, leadSourceId, leadSourceIds, countyId, createdFrom, createdTo, updatedFrom, updatedTo, tasksDueBefore, priceRangeIds, assetClassIds, vipBuyer, blacklistedBuyer, vendorCompany, vendorIndustry, q, sort = 'createdAt', order = 'desc', skip = 0, take = 10000, userRoles = [], userId } = params;
 
     const where: any = {};
     
@@ -655,10 +662,43 @@ export const leadRepository = {
     }
     
     if (type) where.leadType = type;
-    if (marketId) where.marketId = marketId;
-    if (pipelineStageId) where.pipelineStageId = pipelineStageId;
+    
+    // Market filter: support both single and array
+    if (marketIds && marketIds.length > 0) {
+      where.marketId = { in: marketIds };
+    } else if (marketId) {
+      where.marketId = marketId;
+    }
+    
+    // Pipeline stage filter: support both single and array
+    if (pipelineStageIds && pipelineStageIds.length > 0) {
+      where.pipelineStageId = { in: pipelineStageIds };
+    } else if (pipelineStageId) {
+      where.pipelineStageId = pipelineStageId;
+    }
+    
     if (status) where.status = status;
-    if (leadStatusId) where.leadStatusId = leadStatusId;
+    
+    // Lead status filter: support both single and array
+    if (leadStatusIds && leadStatusIds.length > 0) {
+      where.leadStatusId = { in: leadStatusIds };
+    } else if (leadStatusId) {
+      where.leadStatusId = leadStatusId;
+    }
+    
+    // Assigned user filter: support both single and array
+    if (assignedUserIds && assignedUserIds.length > 0) {
+      where.assignedUserId = { in: assignedUserIds };
+    } else if (assignedUserId) {
+      where.assignedUserId = assignedUserId;
+    }
+    
+    // Lead source filter: support both single and array
+    if (leadSourceIds && leadSourceIds.length > 0) {
+      where.leadSourceId = { in: leadSourceIds };
+    } else if (leadSourceId) {
+      where.leadSourceId = leadSourceId;
+    }
     
     /**
      * Normalize date string to YYYY-MM-DD format for consistent parsing
@@ -767,6 +807,12 @@ export const leadRepository = {
         { vendor: { email: { contains: q, mode: 'insensitive' } } },
         { vendor: { phone: { contains: q, mode: 'insensitive' } } },
       ];
+    }
+
+    // Debug: Log the final where clause, especially leadStatusId filter
+    if (leadStatusIds || leadStatusId) {
+      console.log('🔍 Repository - Final where clause leadStatusId:', JSON.stringify(where.leadStatusId, null, 2));
+      console.log('🔍 Repository - Full where clause:', JSON.stringify(where, null, 2));
     }
 
     return prisma.lead.findMany({
