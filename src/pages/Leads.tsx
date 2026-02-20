@@ -482,10 +482,53 @@ const Leads = () => {
         case 'year': {
           // Use global UTC utilities for preset ranges
           const { start, end } = getUTCDateRangeFromPeriod(selectedDateRange);
+          
+          // Debug logging for week filter
+          if (selectedDateRange === 'week') {
+            console.log('📅 Week Filter Range:', {
+              start: start.toISOString(),
+              end: end.toISOString(),
+              startDate: `${start.getUTCFullYear()}-${String(start.getUTCMonth() + 1).padStart(2, '0')}-${String(start.getUTCDate()).padStart(2, '0')}`,
+              endDate: `${end.getUTCFullYear()}-${String(end.getUTCMonth() + 1).padStart(2, '0')}-${String(end.getUTCDate()).padStart(2, '0')}`,
+              totalLeadsBeforeFilter: filteredLeads.length
+            });
+          }
+          
           filteredLeads = filteredLeads.filter((lead: any) => {
             const createdAt = new Date(lead.createdAt);
-            return isDateInUTCRange(createdAt, start, end);
+            // Get UTC date components for accurate comparison
+            const leadYear = createdAt.getUTCFullYear();
+            const leadMonth = createdAt.getUTCMonth();
+            const leadDate = createdAt.getUTCDate();
+            
+            // Create UTC date at start of day for the lead (normalize to start of day)
+            const leadDateUTC = getUTCStartOfDay(leadYear, leadMonth, leadDate);
+            
+            // Compare with range (start and end are already UTC dates at start/end of day)
+            const isInRange = leadDateUTC >= start && leadDateUTC <= end;
+            
+            // Debug first 3 leads for week filter
+            if (selectedDateRange === 'week' && filteredLeads.indexOf(lead) < 3) {
+              console.log('🔍 Lead Check:', {
+                leadId: lead.id?.substring(0, 8),
+                createdAt: lead.createdAt,
+                leadDateUTC: leadDateUTC.toISOString(),
+                leadDateStr: `${leadYear}-${String(leadMonth + 1).padStart(2, '0')}-${String(leadDate).padStart(2, '0')}`,
+                isInRange,
+                startCompare: leadDateUTC >= start,
+                endCompare: leadDateUTC <= end
+              });
+            }
+            
+            return isInRange;
           });
+          
+          if (selectedDateRange === 'week') {
+            console.log('📊 Week Filter Result:', {
+              totalLeadsAfterFilter: filteredLeads.length
+            });
+          }
+          
           break;
         }
         case 'custom': {

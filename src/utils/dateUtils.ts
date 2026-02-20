@@ -133,29 +133,36 @@ export const getUTCTodayRange = (): { start: Date; end: Date } => {
  */
 export const getUTCThisWeekRange = (): { start: Date; end: Date } => {
   const components = getUTCDateComponents();
-  const daysToSunday = components.dayOfWeek; // Days to go back to Sunday
+  const daysToSunday = components.dayOfWeek; // Days to go back to Sunday (0 = Sunday, so 0 days back)
+  
+  // Calculate Sunday date (today - daysToSunday)
+  // Date.UTC automatically handles month/year overflow correctly
+  const sundayDay = components.date - daysToSunday;
   const sundayDate = new Date(Date.UTC(
     components.year,
     components.month,
-    components.date - daysToSunday
+    sundayDay
   ));
+  
+  // Calculate Saturday date (Sunday + 6 days)
   const saturdayDate = new Date(Date.UTC(
     components.year,
     components.month,
-    components.date - daysToSunday + 6
+    sundayDay + 6
   ));
   
+  // Ensure we get the correct UTC date components after potential month overflow
+  const sundayYear = sundayDate.getUTCFullYear();
+  const sundayMonth = sundayDate.getUTCMonth();
+  const sundayDayFinal = sundayDate.getUTCDate();
+  
+  const saturdayYear = saturdayDate.getUTCFullYear();
+  const saturdayMonth = saturdayDate.getUTCMonth();
+  const saturdayDayFinal = saturdayDate.getUTCDate();
+  
   return {
-    start: getUTCStartOfDay(
-      sundayDate.getUTCFullYear(),
-      sundayDate.getUTCMonth(),
-      sundayDate.getUTCDate()
-    ),
-    end: getUTCEndOfDay(
-      saturdayDate.getUTCFullYear(),
-      saturdayDate.getUTCMonth(),
-      saturdayDate.getUTCDate()
-    ),
+    start: getUTCStartOfDay(sundayYear, sundayMonth, sundayDayFinal),
+    end: getUTCEndOfDay(saturdayYear, saturdayMonth, saturdayDayFinal),
   };
 };
 
