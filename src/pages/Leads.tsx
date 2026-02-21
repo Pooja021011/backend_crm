@@ -566,11 +566,19 @@ const Leads = () => {
         const normalizedTo = customDateTo ? normalizeDateString(customDateTo) : null;
         
         if (normalizedFrom && normalizedTo) {
-          const from = parseDateUTC(normalizedFrom);
+          // Parse dates and get UTC components
+          const fromDate = new Date(normalizedFrom + 'T00:00:00.000Z');
+          const toDate = new Date(normalizedTo + 'T00:00:00.000Z');
+          
+          const from = getUTCStartOfDay(
+            fromDate.getUTCFullYear(),
+            fromDate.getUTCMonth(),
+            fromDate.getUTCDate()
+          );
           const to = getUTCEndOfDay(
-            new Date(normalizedTo + 'T00:00:00.000Z').getUTCFullYear(),
-            new Date(normalizedTo + 'T00:00:00.000Z').getUTCMonth(),
-            new Date(normalizedTo + 'T00:00:00.000Z').getUTCDate()
+            toDate.getUTCFullYear(),
+            toDate.getUTCMonth(),
+            toDate.getUTCDate()
           );
           
           if (!isNaN(from.getTime()) && !isNaN(to.getTime())) {
@@ -580,15 +588,21 @@ const Leads = () => {
             };
           }
         } else if (normalizedFrom) {
-          const from = parseDateUTC(normalizedFrom);
+          const fromDate = new Date(normalizedFrom + 'T00:00:00.000Z');
+          const from = getUTCStartOfDay(
+            fromDate.getUTCFullYear(),
+            fromDate.getUTCMonth(),
+            fromDate.getUTCDate()
+          );
           if (!isNaN(from.getTime())) {
             dateRange = { createdFrom: from.toISOString() };
           }
         } else if (normalizedTo) {
+          const toDate = new Date(normalizedTo + 'T00:00:00.000Z');
           const to = getUTCEndOfDay(
-            new Date(normalizedTo + 'T00:00:00.000Z').getUTCFullYear(),
-            new Date(normalizedTo + 'T00:00:00.000Z').getUTCMonth(),
-            new Date(normalizedTo + 'T00:00:00.000Z').getUTCDate()
+            toDate.getUTCFullYear(),
+            toDate.getUTCMonth(),
+            toDate.getUTCDate()
           );
           if (!isNaN(to.getTime())) {
             dateRange = { createdTo: to.toISOString() };
