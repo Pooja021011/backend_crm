@@ -810,19 +810,75 @@ export const leadRepository = {
     };
     
     if (createdFrom || createdTo) {
-      const normalizedFrom = createdFrom ? normalizeDateString(createdFrom) : null;
-      const normalizedTo = createdTo ? normalizeDateString(createdTo) : null;
+      // Check if dates are already in ISO format (from frontend)
+      let fromDate: Date | null = null;
+      let toDate: Date | null = null;
+      
+      if (createdFrom) {
+        // If it's already an ISO string, use it directly
+        if (createdFrom.includes('T') && createdFrom.includes('Z')) {
+          fromDate = new Date(createdFrom);
+        } else {
+          // Otherwise, normalize and create date
+          const normalized = normalizeDateString(createdFrom);
+          if (normalized) {
+            fromDate = new Date(`${normalized}T00:00:00.000Z`);
+          }
+        }
+      }
+      
+      if (createdTo) {
+        // If it's already an ISO string, use it directly
+        if (createdTo.includes('T') && createdTo.includes('Z')) {
+          toDate = new Date(createdTo);
+        } else {
+          // Otherwise, normalize and create date
+          const normalized = normalizeDateString(createdTo);
+          if (normalized) {
+            toDate = new Date(`${normalized}T23:59:59.999Z`);
+          }
+        }
+      }
+      
       where.createdAt = { 
-        ...(normalizedFrom ? { gte: new Date(`${normalizedFrom}T00:00:00.000Z`) } : {}), 
-        ...(normalizedTo ? { lte: new Date(`${normalizedTo}T23:59:59.999Z`) } : {}) 
+        ...(fromDate && !isNaN(fromDate.getTime()) ? { gte: fromDate } : {}), 
+        ...(toDate && !isNaN(toDate.getTime()) ? { lte: toDate } : {}) 
       };
     }
     if (updatedFrom || updatedTo) {
-      const normalizedFrom = updatedFrom ? normalizeDateString(updatedFrom) : null;
-      const normalizedTo = updatedTo ? normalizeDateString(updatedTo) : null;
+      // Check if dates are already in ISO format (from frontend)
+      let fromDate: Date | null = null;
+      let toDate: Date | null = null;
+      
+      if (updatedFrom) {
+        // If it's already an ISO string, use it directly
+        if (updatedFrom.includes('T') && updatedFrom.includes('Z')) {
+          fromDate = new Date(updatedFrom);
+        } else {
+          // Otherwise, normalize and create date
+          const normalized = normalizeDateString(updatedFrom);
+          if (normalized) {
+            fromDate = new Date(`${normalized}T00:00:00.000Z`);
+          }
+        }
+      }
+      
+      if (updatedTo) {
+        // If it's already an ISO string, use it directly
+        if (updatedTo.includes('T') && updatedTo.includes('Z')) {
+          toDate = new Date(updatedTo);
+        } else {
+          // Otherwise, normalize and create date
+          const normalized = normalizeDateString(updatedTo);
+          if (normalized) {
+            toDate = new Date(`${normalized}T23:59:59.999Z`);
+          }
+        }
+      }
+      
       where.updatedAt = { 
-        ...(normalizedFrom ? { gte: new Date(`${normalizedFrom}T00:00:00.000Z`) } : {}), 
-        ...(normalizedTo ? { lte: new Date(`${normalizedTo}T23:59:59.999Z`) } : {}) 
+        ...(fromDate && !isNaN(fromDate.getTime()) ? { gte: fromDate } : {}), 
+        ...(toDate && !isNaN(toDate.getTime()) ? { lte: toDate } : {}) 
       };
     }
     if (countyId) where.address = { countyId };
