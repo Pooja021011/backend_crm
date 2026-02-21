@@ -1250,12 +1250,17 @@ const Leads = () => {
                         <PopoverContent className="w-auto p-0" align="start">
                           <Calendar
                             mode="single"
-                            selected={customDateFrom ? new Date(customDateFrom + 'T00:00:00.000Z') : undefined}
+                            selected={customDateFrom ? (() => {
+                              const [year, month, day] = customDateFrom.split('-').map(Number);
+                              return new Date(year, month - 1, day);
+                            })() : undefined}
                             onSelect={(date) => {
                               if (date) {
-                                const year = date.getUTCFullYear();
-                                const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-                                const day = String(date.getUTCDate()).padStart(2, '0');
+                                // Use local date components to preserve the date user selected
+                                // Calendar component works in local timezone
+                                const year = date.getFullYear();
+                                const month = String(date.getMonth() + 1).padStart(2, '0');
+                                const day = String(date.getDate()).padStart(2, '0');
                                 setCustomDateFrom(`${year}-${month}-${day}`);
                               }
                             }}
@@ -1280,12 +1285,17 @@ const Leads = () => {
                         <PopoverContent className="w-auto p-0" align="start">
                           <Calendar
                             mode="single"
-                            selected={customDateTo ? new Date(customDateTo + 'T00:00:00.000Z') : undefined}
+                            selected={customDateTo ? (() => {
+                              const [year, month, day] = customDateTo.split('-').map(Number);
+                              return new Date(year, month - 1, day);
+                            })() : undefined}
                             onSelect={(date) => {
                               if (date) {
-                                const year = date.getUTCFullYear();
-                                const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-                                const day = String(date.getUTCDate()).padStart(2, '0');
+                                // Use local date components to preserve the date user selected
+                                // Calendar component works in local timezone
+                                const year = date.getFullYear();
+                                const month = String(date.getMonth() + 1).padStart(2, '0');
+                                const day = String(date.getDate()).padStart(2, '0');
                                 setCustomDateTo(`${year}-${month}-${day}`);
                               }
                             }}
