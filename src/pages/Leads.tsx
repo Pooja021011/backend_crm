@@ -566,20 +566,12 @@ const Leads = () => {
         const normalizedTo = customDateTo ? normalizeDateString(customDateTo) : null;
         
         if (normalizedFrom && normalizedTo) {
-          // Parse dates and get UTC components
-          const fromDate = new Date(normalizedFrom + 'T00:00:00.000Z');
-          const toDate = new Date(normalizedTo + 'T00:00:00.000Z');
+          // Parse YYYY-MM-DD format directly to avoid timezone issues
+          const [fromYear, fromMonth, fromDay] = normalizedFrom.split('-').map(Number);
+          const [toYear, toMonth, toDay] = normalizedTo.split('-').map(Number);
           
-          const from = getUTCStartOfDay(
-            fromDate.getUTCFullYear(),
-            fromDate.getUTCMonth(),
-            fromDate.getUTCDate()
-          );
-          const to = getUTCEndOfDay(
-            toDate.getUTCFullYear(),
-            toDate.getUTCMonth(),
-            toDate.getUTCDate()
-          );
+          const from = getUTCStartOfDay(fromYear, fromMonth - 1, fromDay);
+          const to = getUTCEndOfDay(toYear, toMonth - 1, toDay);
           
           if (!isNaN(from.getTime()) && !isNaN(to.getTime())) {
             dateRange = {
@@ -588,22 +580,14 @@ const Leads = () => {
             };
           }
         } else if (normalizedFrom) {
-          const fromDate = new Date(normalizedFrom + 'T00:00:00.000Z');
-          const from = getUTCStartOfDay(
-            fromDate.getUTCFullYear(),
-            fromDate.getUTCMonth(),
-            fromDate.getUTCDate()
-          );
+          const [fromYear, fromMonth, fromDay] = normalizedFrom.split('-').map(Number);
+          const from = getUTCStartOfDay(fromYear, fromMonth - 1, fromDay);
           if (!isNaN(from.getTime())) {
             dateRange = { createdFrom: from.toISOString() };
           }
         } else if (normalizedTo) {
-          const toDate = new Date(normalizedTo + 'T00:00:00.000Z');
-          const to = getUTCEndOfDay(
-            toDate.getUTCFullYear(),
-            toDate.getUTCMonth(),
-            toDate.getUTCDate()
-          );
+          const [toYear, toMonth, toDay] = normalizedTo.split('-').map(Number);
+          const to = getUTCEndOfDay(toYear, toMonth - 1, toDay);
           if (!isNaN(to.getTime())) {
             dateRange = { createdTo: to.toISOString() };
           }
