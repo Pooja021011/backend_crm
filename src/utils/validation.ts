@@ -202,13 +202,36 @@ export const normalizeDateString = (dateStr: string | null | undefined): string 
     }
   }
   
-  // Format: dd-mm-yyyy or dd/mm/yyyy
-  const ddmmyyyyMatch = trimmed.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
-  if (ddmmyyyyMatch) {
-    const [, day, month, year] = ddmmyyyyMatch;
-    const dayNum = parseInt(day, 10);
-    const monthNum = parseInt(month, 10);
+  // Format: MM/DD/YYYY or DD/MM/YYYY - need to detect which one
+  const dateMatch = trimmed.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
+  if (dateMatch) {
+    const [, first, second, year] = dateMatch;
+    const firstNum = parseInt(first, 10);
+    const secondNum = parseInt(second, 10);
     const yearNum = parseInt(year, 10);
+    
+    // Determine if it's MM/DD/YYYY or DD/MM/YYYY
+    let monthNum: number;
+    let dayNum: number;
+    
+    // If first number > 12, it must be DD/MM/YYYY (day can't be > 12)
+    if (firstNum > 12) {
+      // DD/MM/YYYY format
+      dayNum = firstNum;
+      monthNum = secondNum;
+    }
+    // If second number > 12, it must be MM/DD/YYYY (day can't be > 12)
+    else if (secondNum > 12) {
+      // MM/DD/YYYY format
+      monthNum = firstNum;
+      dayNum = secondNum;
+    }
+    // Both are <= 12 - ambiguous case, prefer MM/DD/YYYY (US format)
+    else {
+      // Prefer MM/DD/YYYY for US-based applications
+      monthNum = firstNum;
+      dayNum = secondNum;
+    }
     
     // Validate ranges
     if (monthNum >= 1 && monthNum <= 12 && dayNum >= 1 && dayNum <= 31 && yearNum >= 1900 && yearNum <= 2100) {
@@ -236,6 +259,7 @@ export const normalizeDateString = (dateStr: string | null | undefined): string 
   
   // If no pattern matches, try parsing as Date and converting
   // This handles edge cases and other formats
+  // NOTE: This is locale-dependent and should be avoided if possible
   const parsedDate = new Date(trimmed);
   if (!isNaN(parsedDate.getTime()) && isValid(parsedDate)) {
     const year = parsedDate.getFullYear();
