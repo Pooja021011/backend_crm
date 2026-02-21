@@ -53,7 +53,7 @@ import {
   Edit,
   Trash2,
   Eye,
-  Calendar,
+  Calendar as CalendarIcon,
   Star,
   Archive,
   Download,
@@ -63,6 +63,8 @@ import {
   SortAsc,
   SortDesc
 } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { useLeads, type LeadType } from "@/hooks/useLeads";
 import { useAuth } from "@/contexts/AuthContext";
@@ -1235,21 +1237,63 @@ const Leads = () => {
                   <div className="grid grid-cols-2 gap-2 pt-2">
                     <div className="space-y-1">
                       <label className="text-[10px] font-medium text-gray-600">From</label>
-                      <input
-                        type="date"
-                        value={customDateFrom}
-                        onChange={(e) => setCustomDateFrom(e.target.value)}
-                        className="w-full h-8 px-2 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                      />
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full h-8 px-2 py-1 text-xs justify-start font-normal"
+                          >
+                            <CalendarIcon className="mr-2 h-3 w-3" />
+                            {customDateFrom ? formatDateDisplayUTC(customDateFrom) : "Select date"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={customDateFrom ? new Date(customDateFrom + 'T00:00:00.000Z') : undefined}
+                            onSelect={(date) => {
+                              if (date) {
+                                const year = date.getUTCFullYear();
+                                const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+                                const day = String(date.getUTCDate()).padStart(2, '0');
+                                setCustomDateFrom(`${year}-${month}-${day}`);
+                              }
+                            }}
+                            weekStartsOn={0}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] font-medium text-gray-600">To</label>
-                      <input
-                        type="date"
-                        value={customDateTo}
-                        onChange={(e) => setCustomDateTo(e.target.value)}
-                        className="w-full h-8 px-2 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                      />
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full h-8 px-2 py-1 text-xs justify-start font-normal"
+                          >
+                            <CalendarIcon className="mr-2 h-3 w-3" />
+                            {customDateTo ? formatDateDisplayUTC(customDateTo) : "Select date"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={customDateTo ? new Date(customDateTo + 'T00:00:00.000Z') : undefined}
+                            onSelect={(date) => {
+                              if (date) {
+                                const year = date.getUTCFullYear();
+                                const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+                                const day = String(date.getUTCDate()).padStart(2, '0');
+                                setCustomDateTo(`${year}-${month}-${day}`);
+                              }
+                            }}
+                            weekStartsOn={0}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
                     </div>
                   </div>
                 )}
