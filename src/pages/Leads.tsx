@@ -12,6 +12,7 @@ import {
   getUTCEndOfDay,
   isDateInUTCRange,
   parseDateUTC,
+  formatDateDisplayUTC,
 } from "@/utils/dateUtils";
 import { 
   Table,
@@ -1779,10 +1780,10 @@ const Leads = () => {
                           )}
                         </TableCell>
                         <TableCell className="text-gray-600">
-                          {new Date(lead.createdAt).toLocaleDateString()}
+                          {formatDateDisplayUTC(lead.createdAt)}
                         </TableCell>
                         <TableCell className="text-gray-600">
-                          {lead.lastContactAt ? new Date(lead.lastContactAt).toLocaleDateString() : 'No contact'}
+                          {lead.lastContactAt ? formatDateDisplayUTC(lead.lastContactAt) : 'No contact'}
                         </TableCell>
                         <TableCell 
                           className="sticky right-0 bg-white z-10 border-l border-gray-200 p-0"
@@ -1939,10 +1940,10 @@ const Leads = () => {
                           {lead.buyer?.timeline || <span className="text-gray-400">-</span>}
                         </TableCell>
                         <TableCell className="text-gray-600">
-                          {lead.createdAt ? new Date(lead.createdAt).toLocaleDateString() : <span className="text-gray-400">-</span>}
+                          {lead.createdAt ? formatDateDisplayUTC(lead.createdAt) : <span className="text-gray-400">-</span>}
                         </TableCell>
                         <TableCell className="text-gray-600">
-                          {lead.lastContactAt ? new Date(lead.lastContactAt).toLocaleDateString() : <span className="text-gray-400">No contact</span>}
+                          {lead.lastContactAt ? formatDateDisplayUTC(lead.lastContactAt) : <span className="text-gray-400">No contact</span>}
                         </TableCell>
                         <TableCell 
                           className="sticky right-0 bg-white z-10 border-l border-gray-200 p-0"
@@ -2069,8 +2070,8 @@ const Leads = () => {
                         <TableCell>
                           <Badge className="bg-gray-100 text-gray-700 text-[10px] px-1.5 py-0">Pending</Badge>
                         </TableCell>
-                        <TableCell className="text-gray-600">{new Date(lead.createdAt).toLocaleDateString()}</TableCell>
-                        <TableCell className="text-gray-600">{lead.lastContactAt ? new Date(lead.lastContactAt).toLocaleDateString() : 'No contact'}</TableCell>
+                        <TableCell className="text-gray-600">{formatDateDisplayUTC(lead.createdAt)}</TableCell>
+                        <TableCell className="text-gray-600">{lead.lastContactAt ? formatDateDisplayUTC(lead.lastContactAt) : 'No contact'}</TableCell>
                         <TableCell 
                           className="sticky right-0 bg-white z-10 border-l border-gray-200 p-0"
                           onClick={(e) => e.stopPropagation()}

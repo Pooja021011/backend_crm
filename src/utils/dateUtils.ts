@@ -93,6 +93,23 @@ export const formatDateInputUTC = (date: Date): string => {
 };
 
 /**
+ * Format date for display (DD/MM/YYYY) using UTC components
+ * This ensures dates are displayed correctly regardless of user's timezone
+ */
+export const formatDateDisplayUTC = (dateValue: Date | string | null | undefined): string => {
+  if (!dateValue) return '';
+  
+  const date = typeof dateValue === 'string' ? new Date(dateValue) : dateValue;
+  if (isNaN(date.getTime())) return '';
+  
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const year = date.getUTCFullYear();
+  
+  return `${day}/${month}/${year}`;
+};
+
+/**
  * Parse date string to UTC Date
  * Handles YYYY-MM-DD format and converts to UTC
  */
