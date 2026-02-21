@@ -5,7 +5,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { TrendingUp, TrendingDown, Users, DollarSign, Target, Clock, BarChart3, Activity, Zap, Trophy, Award, FileText, MessageSquare, Phone, CheckSquare, MessageCircle, Bell, Filter, X, ChevronDown, Calendar, Shield, Medal, Lightbulb } from 'lucide-react';
+import { TrendingUp, TrendingDown, Users, DollarSign, Target, Clock, BarChart3, Activity, Zap, Trophy, Award, FileText, MessageSquare, Phone, CheckSquare, MessageCircle, Bell, Filter, X, ChevronDown, Calendar as CalendarIcon, Shield, Medal, Lightbulb } from 'lucide-react';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
 import { API_BASE, makeApiCall } from '@/config/api';
 import { useAuth } from '@/contexts/AuthContext';
@@ -14,6 +16,7 @@ import {
   getUTCDateRangeFromPeriod,
   getUTCStartOfDay,
   getUTCEndOfDay,
+  formatDateDisplayUTC,
 } from '@/utils/dateUtils';
 
 const Metrics = () => {
@@ -26,6 +29,8 @@ const Metrics = () => {
   // Global Filters State
   const [showFilters, setShowFilters] = useState(false);
   const [customDateRange, setCustomDateRange] = useState<{ from?: Date; to?: Date }>({});
+  const [metricsFromPickerOpen, setMetricsFromPickerOpen] = useState(false);
+  const [metricsToPickerOpen, setMetricsToPickerOpen] = useState(false);
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
   const [availableSources, setAvailableSources] = useState<string[]>([]);
   // Teams (Acq/Disp) pipeline overview
@@ -1609,51 +1614,89 @@ const Metrics = () => {
               <>
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-gray-700">From</label>
-                  <input
-                    type="date"
-                    value={customDateRange.from?.toISOString().split('T')[0] || ''}
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        // Parse date string as UTC (YYYY-MM-DD format)
-                        const [year, month, day] = e.target.value.split('-').map(Number);
-                        const date = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0)); // UTC
-                        setCustomDateRange((prev) => ({
-                          ...prev,
-                          from: date,
-                        }));
-                      } else {
-                        setCustomDateRange((prev) => ({
-                          ...prev,
-                          from: undefined,
-                        }));
-                      }
-                    }}
-                    className="w-full h-8 px-2 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                  />
+                  <Popover open={metricsFromPickerOpen} onOpenChange={setMetricsFromPickerOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full h-8 px-2 py-1 text-xs justify-start font-normal"
+                      >
+                        <CalendarIcon className="mr-2 h-3 w-3" />
+                        {customDateRange.from ? formatDateDisplayUTC(customDateRange.from) : "Select date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={customDateRange.from ? (() => {
+                          // Convert UTC date to local date for Calendar display
+                          const year = customDateRange.from.getUTCFullYear();
+                          const month = customDateRange.from.getUTCMonth();
+                          const day = customDateRange.from.getUTCDate();
+                          return new Date(year, month, day);
+                        })() : undefined}
+                        onSelect={(date) => {
+                          if (date) {
+                            // Convert to UTC start of day
+                            const utcDate = getUTCStartOfDay(
+                              date.getFullYear(),
+                              date.getMonth(),
+                              date.getDate()
+                            );
+                            setCustomDateRange((prev) => ({
+                              ...prev,
+                              from: utcDate,
+                            }));
+                            setMetricsFromPickerOpen(false);
+                          }
+                        }}
+                        weekStartsOn={0}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-gray-700">To</label>
-                  <input
-                    type="date"
-                    value={customDateRange.to?.toISOString().split('T')[0] || ''}
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        // Parse date string as UTC (YYYY-MM-DD format)
-                        const [year, month, day] = e.target.value.split('-').map(Number);
-                        const date = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999)); // UTC end of day
-                        setCustomDateRange((prev) => ({
-                          ...prev,
-                          to: date,
-                        }));
-                      } else {
-                        setCustomDateRange((prev) => ({
-                          ...prev,
-                          to: undefined,
-                        }));
-                      }
-                    }}
-                    className="w-full h-8 px-2 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                  />
+                  <Popover open={metricsToPickerOpen} onOpenChange={setMetricsToPickerOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full h-8 px-2 py-1 text-xs justify-start font-normal"
+                      >
+                        <CalendarIcon className="mr-2 h-3 w-3" />
+                        {customDateRange.to ? formatDateDisplayUTC(customDateRange.to) : "Select date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={customDateRange.to ? (() => {
+                          // Convert UTC date to local date for Calendar display
+                          const year = customDateRange.to.getUTCFullYear();
+                          const month = customDateRange.to.getUTCMonth();
+                          const day = customDateRange.to.getUTCDate();
+                          return new Date(year, month, day);
+                        })() : undefined}
+                        onSelect={(date) => {
+                          if (date) {
+                            // Convert to UTC end of day
+                            const utcDate = getUTCEndOfDay(
+                              date.getFullYear(),
+                              date.getMonth(),
+                              date.getDate()
+                            );
+                            setCustomDateRange((prev) => ({
+                              ...prev,
+                              to: utcDate,
+                            }));
+                            setMetricsToPickerOpen(false);
+                          }
+                        }}
+                        weekStartsOn={0}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </div>
               </>
             )}

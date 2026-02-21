@@ -23,8 +23,11 @@ import {
   AlertTriangle,
   Workflow,
   Loader2,
-  Filter
+  Filter,
+  Calendar as CalendarIcon
 } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -42,6 +45,7 @@ import {
   getUTCStartOfDay,
   getUTCEndOfDay,
   formatDateInputUTC,
+  formatDateDisplayUTC,
 } from "@/utils/dateUtils";
 
 const Pipeline = () => {
@@ -81,9 +85,13 @@ const Pipeline = () => {
   const [createdDateRange, setCreatedDateRange] = useState<string>('');
   const [createdCustomFrom, setCreatedCustomFrom] = useState<string>('');
   const [createdCustomTo, setCreatedCustomTo] = useState<string>('');
+  const [createdFromPickerOpen, setCreatedFromPickerOpen] = useState(false);
+  const [createdToPickerOpen, setCreatedToPickerOpen] = useState(false);
   const [lastTouchedDateRange, setLastTouchedDateRange] = useState<string>('');
   const [lastTouchedCustomFrom, setLastTouchedCustomFrom] = useState<string>('');
   const [lastTouchedCustomTo, setLastTouchedCustomTo] = useState<string>('');
+  const [lastTouchedFromPickerOpen, setLastTouchedFromPickerOpen] = useState(false);
+  const [lastTouchedToPickerOpen, setLastTouchedToPickerOpen] = useState(false);
   const [selectedAcqAgents, setSelectedAcqAgents] = useState<string[]>([]);
   const [selectedDispAgents, setSelectedDispAgents] = useState<string[]>([]);
   
@@ -1457,29 +1465,75 @@ const Pipeline = () => {
                 <div className="grid grid-cols-2 gap-2 pt-2">
                   <div className="space-y-1">
                     <label className="text-[10px] font-medium text-gray-600">From</label>
-                    <input
-                      type="date"
-                      value={createdCustomFrom}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setCreatedCustomFrom(v);
-                        setCreatedFrom(v);
-                      }}
-                      className="w-full h-8 px-2 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                    />
+                    <Popover open={createdFromPickerOpen} onOpenChange={setCreatedFromPickerOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="w-full h-8 px-2 py-1 text-xs justify-start font-normal"
+                        >
+                          <CalendarIcon className="mr-2 h-3 w-3" />
+                          {createdCustomFrom ? formatDateDisplayUTC(createdCustomFrom) : "Select date"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={createdCustomFrom ? (() => {
+                            const [year, month, day] = createdCustomFrom.split('-').map(Number);
+                            return new Date(year, month - 1, day);
+                          })() : undefined}
+                          onSelect={(date) => {
+                            if (date) {
+                              const year = date.getFullYear();
+                              const month = String(date.getMonth() + 1).padStart(2, '0');
+                              const day = String(date.getDate()).padStart(2, '0');
+                              const dateStr = `${year}-${month}-${day}`;
+                              setCreatedCustomFrom(dateStr);
+                              setCreatedFrom(dateStr);
+                              setCreatedFromPickerOpen(false);
+                            }
+                          }}
+                          weekStartsOn={0}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-medium text-gray-600">To</label>
-                    <input
-                      type="date"
-                      value={createdCustomTo}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setCreatedCustomTo(v);
-                        setCreatedTo(v);
-                      }}
-                      className="w-full h-8 px-2 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                    />
+                    <Popover open={createdToPickerOpen} onOpenChange={setCreatedToPickerOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="w-full h-8 px-2 py-1 text-xs justify-start font-normal"
+                        >
+                          <CalendarIcon className="mr-2 h-3 w-3" />
+                          {createdCustomTo ? formatDateDisplayUTC(createdCustomTo) : "Select date"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={createdCustomTo ? (() => {
+                            const [year, month, day] = createdCustomTo.split('-').map(Number);
+                            return new Date(year, month - 1, day);
+                          })() : undefined}
+                          onSelect={(date) => {
+                            if (date) {
+                              const year = date.getFullYear();
+                              const month = String(date.getMonth() + 1).padStart(2, '0');
+                              const day = String(date.getDate()).padStart(2, '0');
+                              const dateStr = `${year}-${month}-${day}`;
+                              setCreatedCustomTo(dateStr);
+                              setCreatedTo(dateStr);
+                              setCreatedToPickerOpen(false);
+                            }
+                          }}
+                          weekStartsOn={0}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
                   </div>
                 </div>
               )}
@@ -1524,29 +1578,75 @@ const Pipeline = () => {
                 <div className="grid grid-cols-2 gap-2 pt-2">
                   <div className="space-y-1">
                     <label className="text-[10px] font-medium text-gray-600">From</label>
-                    <input
-                      type="date"
-                      value={lastTouchedCustomFrom}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setLastTouchedCustomFrom(v);
-                        setLastTouchedFrom(v);
-                      }}
-                      className="w-full h-8 px-2 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                    />
+                    <Popover open={lastTouchedFromPickerOpen} onOpenChange={setLastTouchedFromPickerOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="w-full h-8 px-2 py-1 text-xs justify-start font-normal"
+                        >
+                          <CalendarIcon className="mr-2 h-3 w-3" />
+                          {lastTouchedCustomFrom ? formatDateDisplayUTC(lastTouchedCustomFrom) : "Select date"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={lastTouchedCustomFrom ? (() => {
+                            const [year, month, day] = lastTouchedCustomFrom.split('-').map(Number);
+                            return new Date(year, month - 1, day);
+                          })() : undefined}
+                          onSelect={(date) => {
+                            if (date) {
+                              const year = date.getFullYear();
+                              const month = String(date.getMonth() + 1).padStart(2, '0');
+                              const day = String(date.getDate()).padStart(2, '0');
+                              const dateStr = `${year}-${month}-${day}`;
+                              setLastTouchedCustomFrom(dateStr);
+                              setLastTouchedFrom(dateStr);
+                              setLastTouchedFromPickerOpen(false);
+                            }
+                          }}
+                          weekStartsOn={0}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-medium text-gray-600">To</label>
-                    <input
-                      type="date"
-                      value={lastTouchedCustomTo}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setLastTouchedCustomTo(v);
-                        setLastTouchedTo(v);
-                      }}
-                      className="w-full h-8 px-2 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                    />
+                    <Popover open={lastTouchedToPickerOpen} onOpenChange={setLastTouchedToPickerOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="w-full h-8 px-2 py-1 text-xs justify-start font-normal"
+                        >
+                          <CalendarIcon className="mr-2 h-3 w-3" />
+                          {lastTouchedCustomTo ? formatDateDisplayUTC(lastTouchedCustomTo) : "Select date"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={lastTouchedCustomTo ? (() => {
+                            const [year, month, day] = lastTouchedCustomTo.split('-').map(Number);
+                            return new Date(year, month - 1, day);
+                          })() : undefined}
+                          onSelect={(date) => {
+                            if (date) {
+                              const year = date.getFullYear();
+                              const month = String(date.getMonth() + 1).padStart(2, '0');
+                              const day = String(date.getDate()).padStart(2, '0');
+                              const dateStr = `${year}-${month}-${day}`;
+                              setLastTouchedCustomTo(dateStr);
+                              setLastTouchedTo(dateStr);
+                              setLastTouchedToPickerOpen(false);
+                            }
+                          }}
+                          weekStartsOn={0}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
                   </div>
                 </div>
               )}

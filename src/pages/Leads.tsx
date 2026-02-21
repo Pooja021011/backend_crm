@@ -276,6 +276,8 @@ const Leads = () => {
   const [selectedDateRange, setSelectedDateRange] = useState("");
   const [customDateFrom, setCustomDateFrom] = useState("");
   const [customDateTo, setCustomDateTo] = useState("");
+  const [fromDatePickerOpen, setFromDatePickerOpen] = useState(false);
+  const [toDatePickerOpen, setToDatePickerOpen] = useState(false);
   
   // Dynamic filter data
   const [filterMarkets, setFilterMarkets] = useState<any[]>([]);
@@ -1237,7 +1239,7 @@ const Leads = () => {
                   <div className="grid grid-cols-2 gap-2 pt-2">
                     <div className="space-y-1">
                       <label className="text-[10px] font-medium text-gray-600">From</label>
-                      <Popover>
+                      <Popover open={fromDatePickerOpen} onOpenChange={setFromDatePickerOpen}>
                         <PopoverTrigger asChild>
                           <Button
                             variant="outline"
@@ -1262,6 +1264,7 @@ const Leads = () => {
                                 const month = String(date.getMonth() + 1).padStart(2, '0');
                                 const day = String(date.getDate()).padStart(2, '0');
                                 setCustomDateFrom(`${year}-${month}-${day}`);
+                                setFromDatePickerOpen(false); // Close popover after selection
                               }
                             }}
                             weekStartsOn={0}
@@ -1272,7 +1275,7 @@ const Leads = () => {
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] font-medium text-gray-600">To</label>
-                      <Popover>
+                      <Popover open={toDatePickerOpen} onOpenChange={setToDatePickerOpen}>
                         <PopoverTrigger asChild>
                           <Button
                             variant="outline"
@@ -1297,6 +1300,7 @@ const Leads = () => {
                                 const month = String(date.getMonth() + 1).padStart(2, '0');
                                 const day = String(date.getDate()).padStart(2, '0');
                                 setCustomDateTo(`${year}-${month}-${day}`);
+                                setToDatePickerOpen(false); // Close popover after selection
                               }
                             }}
                             weekStartsOn={0}
