@@ -134,38 +134,41 @@ export const getUTCTodayRange = (): { start: Date; end: Date } => {
  * Returns Sunday 00:00:00 to Saturday 23:59:59 UTC
  */
 export const getUTCThisWeekRange = (): { start: Date; end: Date } => {
-  const components = getUTCDateComponents();
-  const daysToSunday = components.dayOfWeek; // Days to go back to Sunday (0 = Sunday, so 0 days back)
+  // Get current UTC date to ensure we're working with UTC, not local time
+  const now = new Date();
+  const components = getUTCDateComponents(now);
   
-  // Calculate Sunday date (today - daysToSunday)
-  // Date.UTC automatically handles month/year overflow correctly
-  const sundayDay = components.date - daysToSunday;
+  // Calculate days to go back to Sunday (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
+  const daysToSunday = components.dayOfWeek;
   
-  // Create Sunday date - Date.UTC handles negative/zero days correctly (rolls to previous month)
+  // Calculate Sunday date: subtract daysToSunday from current UTC date
+  // This ensures we get the most recent Sunday (including today if today is Sunday)
   const sundayDate = new Date(Date.UTC(
     components.year,
     components.month,
-    sundayDay
+    components.date - daysToSunday,
+    0, 0, 0, 0
   ));
   
   // Validate the date is valid
   if (isNaN(sundayDate.getTime())) {
-    throw new Error(`Invalid Sunday date calculated: year=${components.year}, month=${components.month}, day=${sundayDay}`);
+    throw new Error(`Invalid Sunday date calculated: year=${components.year}, month=${components.month}, day=${components.date - daysToSunday}`);
   }
   
   // Calculate Saturday date (Sunday + 6 days)
   const saturdayDate = new Date(Date.UTC(
     components.year,
     components.month,
-    sundayDay + 6
+    components.date - daysToSunday + 6,
+    23, 59, 59, 999
   ));
   
   // Validate the date is valid
   if (isNaN(saturdayDate.getTime())) {
-    throw new Error(`Invalid Saturday date calculated: year=${components.year}, month=${components.month}, day=${sundayDay + 6}`);
+    throw new Error(`Invalid Saturday date calculated: year=${components.year}, month=${components.month}, day=${components.date - daysToSunday + 6}`);
   }
   
-  // Ensure we get the correct UTC date components after potential month overflow
+  // Get the correct UTC date components (handles month/year overflow automatically)
   const sundayYear = sundayDate.getUTCFullYear();
   const sundayMonth = sundayDate.getUTCMonth();
   const sundayDayFinal = sundayDate.getUTCDate();
