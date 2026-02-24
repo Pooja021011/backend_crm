@@ -836,10 +836,16 @@ export const metricsService = {
       });
     }
 
-    // SLA breaches for leads created this month (2h/16h/48h ET) - Only OUTBOUND communications count as "reach out"
+    // SLA breaches for leads created this month (2h/18h/66h ET) - Only OUTBOUND communications count as "reach out"
     const createdThisMonthIds = new Set(leadsReceived.map((l) => l.id));
     const slaBreachLeadsWithDetails = activeLeads.map((l) => {
       if (!createdThisMonthIds.has(l.id)) return null;
+      
+      // EXCLUDE manually added SMS leads from SLA threshold (no outreach requirement)
+      const leadSourceName = (l as any).leadSource?.name || '';
+      if (leadSourceName.toLowerCase().includes('sms')) {
+        return null;
+      }
       
       // Get the FIRST OUTBOUND communication (CALL/SMS/EMAIL only) for SLA breach check
       // Communications are ordered by occurredAt asc, so [0] is the first/earliest

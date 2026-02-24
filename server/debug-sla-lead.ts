@@ -64,6 +64,11 @@ async function debugLead() {
       createdAt: true,
       assignedUserId: true,
       leadType: true,
+      leadSource: {
+        select: {
+          name: true,
+        }
+      },
       leadStatus: {
         select: { name: true }
       },
@@ -104,10 +109,18 @@ async function debugLead() {
   console.log('   Created At (UTC):', lead.createdAt.toISOString());
   console.log('   Created At (Local):', lead.createdAt.toString());
   console.log('   Lead Type:', lead.leadType);
+  console.log('   Lead Source:', (lead as any).leadSource?.name || 'None');
   console.log('   Lead Status:', lead.leadStatus?.name);
   console.log('   Pipeline Stage:', lead.pipelineStage?.name);
   console.log('   Pipeline Key:', lead.pipelineStage?.pipeline?.key);
   console.log('   Assigned User ID:', lead.assignedUserId);
+  
+  // Check if SMS lead (excluded from SLA)
+  const leadSourceName = (lead as any).leadSource?.name || '';
+  const isSmsLead = leadSourceName.toLowerCase().includes('sms');
+  if (isSmsLead) {
+    console.log('\n⚠️  SMS LEAD - EXCLUDED FROM SLA THRESHOLD');
+  }
   
   // Check if created this month
   const isCreatedThisMonth = lead.createdAt >= startOfMonth && lead.createdAt < endOfMonth;

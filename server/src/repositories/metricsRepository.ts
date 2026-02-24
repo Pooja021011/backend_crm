@@ -212,6 +212,11 @@ export const metricsRepository = {
         createdAt: true,
         updatedAt: true,
         lastContactAt: true,
+        leadSource: {
+          select: {
+            name: true,
+          }
+        },
         ...(filters.includePipelineStage ? {
           pipelineStage: {
             select: {

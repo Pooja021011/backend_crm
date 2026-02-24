@@ -102,6 +102,11 @@ async function testMishandledLeads(assignedUserId?: string) {
         createdAt: true,
         updatedAt: true,
         lastContactAt: true,
+        leadSource: {
+          select: {
+            name: true,
+          }
+        },
         pipelineStage: {
           select: {
             id: true,
@@ -166,6 +171,12 @@ async function testMishandledLeads(assignedUserId?: string) {
     const createdThisMonthIds = new Set(leadsReceived.map((l) => l.id));
     const slaBreachLeads = activeLeads.filter((l) => {
       if (!createdThisMonthIds.has(l.id)) return false;
+      
+      // EXCLUDE manually added SMS leads from SLA threshold (no outreach requirement)
+      const leadSourceName = (l as any).leadSource?.name || '';
+      if (leadSourceName.toLowerCase().includes('sms')) {
+        return false;
+      }
       
       // Get the FIRST OUTBOUND communication (CALL/SMS/EMAIL only) for SLA breach check
       // Communications are ordered by occurredAt asc, so [0] is the first/earliest
