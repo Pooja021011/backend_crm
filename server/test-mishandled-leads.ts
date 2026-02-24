@@ -37,11 +37,11 @@ function getSlaThresholdHoursEt(createdAt: Date): number {
   const hourEt = getEtHour(createdAt);
   const dayOfWeek = getEtDayOfWeek(createdAt);
   
-  if (dayOfWeek === 5 && hourEt >= 17) return 48;
-  if (dayOfWeek === 6) return 48;
-  if (dayOfWeek === 0 && hourEt < 18) return 48;
+  if (dayOfWeek === 5 && hourEt >= 17) return 66;
+  if (dayOfWeek === 6) return 66;
+  if (dayOfWeek === 0 && hourEt < 18) return 66;
   
-  return hourEt >= 8 && hourEt <= 17 ? 2 : 16;
+  return hourEt >= 8 && hourEt <= 17 ? 2 : 18;
 }
 
 async function testMishandledLeads(assignedUserId?: string) {

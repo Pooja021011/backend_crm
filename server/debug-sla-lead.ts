@@ -36,13 +36,13 @@ function getSlaThresholdHoursEt(createdAt: Date): number {
   const hourEt = getEtHour(createdAt);
   const dayOfWeek = getEtDayOfWeek(createdAt);
   
-  // Weekend rule: 5pm Friday to 6pm Sunday ET => 48h SLA
-  if (dayOfWeek === 5 && hourEt >= 17) return 48;
-  if (dayOfWeek === 6) return 48;
-  if (dayOfWeek === 0 && hourEt < 18) return 48;
+  // Weekend rule: 5pm Friday to 6pm Sunday ET => 66h SLA
+  if (dayOfWeek === 5 && hourEt >= 17) return 66;
+  if (dayOfWeek === 6) return 66;
+  if (dayOfWeek === 0 && hourEt < 18) return 66;
   
-  // Regular business hours: 8am–5pm ET (inclusive) => 2h SLA; else 16h SLA
-  return hourEt >= 8 && hourEt <= 17 ? 2 : 16;
+  // Regular business hours: 8am–5pm ET (inclusive) => 2h SLA; else 18h SLA
+  return hourEt >= 8 && hourEt <= 17 ? 2 : 18;
 }
 
 async function debugLead() {
@@ -166,6 +166,9 @@ async function debugLead() {
 }
 
 debugLead().catch(console.error);
+
+
+
 
 
 

@@ -67,7 +67,7 @@ async function checkLead() {
       hour12: false,
     }).formatToParts(leadCreatedAt).find((p) => p.type === 'hour')?.value || '0';
     const hourEtNum = parseInt(hourEt, 10);
-    const threshold = hourEtNum >= 8 && hourEtNum <= 17 ? 2 : 16;
+    const threshold = hourEtNum >= 8 && hourEtNum <= 17 ? 2 : 18;
     console.log('  Threshold:', threshold, 'hours');
     console.log('  Is Breach?', hoursToReachOut > threshold);
     console.log('  Breached by:', (hoursToReachOut - threshold).toFixed(2), 'hours');
