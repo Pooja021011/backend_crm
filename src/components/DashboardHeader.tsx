@@ -109,7 +109,7 @@ const KPICard = ({ title, value, trend, color, onClick }: KPICardProps) => {
   return (
     <div 
       className={cn(
-        "px-3 py-2 rounded-lg shadow-sm transition-all duration-300 hover:shadow-md min-w-[120px] flex-shrink-0",
+        "px-3 py-2 rounded-lg shadow-sm transition-all duration-300 hover:shadow-md min-w-[130px] flex-shrink-0",
         config.bg,
         onClick ? "cursor-pointer hover:opacity-90" : "cursor-default"
       )}
@@ -518,7 +518,7 @@ export const DashboardHeader = () => {
               onMouseUp={handleMouseUpOrLeave}
               onMouseLeave={handleMouseUpOrLeave}
             >
-              <div className="flex gap-2 pb-1 justify-start items-center">
+              <div className="flex gap-2 pb-1 pr-4 justify-start items-center">
               {/* ADMIN KPIs */}
               {kpiData.modes?.includes('admin') && (
                 <>
@@ -558,6 +558,7 @@ export const DashboardHeader = () => {
                     title="MISHANDLED"
                     value={isLoadingKpis ? "..." : String(kpiData.leadsMishandled || 0)}
                     color={kpiData.mishandledColor || 'green'}
+                    onClick={() => navigate('/mishandled-leads')}
                   />
                 </>
               )}
@@ -580,6 +581,7 @@ export const DashboardHeader = () => {
                     title="MY MISHANDLED"
                     value={isLoadingKpis ? "..." : String(kpiData.leadsMishandledPersonal || 0)}
                     color={kpiData.mishandledColorPersonal || 'green'}
+                    onClick={() => navigate('/mishandled-leads')}
                   />
                 </>
               )}
