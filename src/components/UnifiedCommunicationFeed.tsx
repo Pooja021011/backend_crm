@@ -329,9 +329,11 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
   const canEditTaskItem = (item: any) => {
     if (item.type !== 'TASK') return false;
     const userId = currentUser?.id;
-    // Only the creator can edit their own task
-    const isCreator = !!userId && item.createdById === userId;
-    return isCreator;
+    if (!userId) return false;
+    const isCreator = item.createdById === userId;
+    const isAssignee = item.assignedToId === userId;
+    const isLeadAssignedAgent = lead?.assignedUserId === userId;
+    return isCreator || isAssignee || isLeadAssignedAgent;
   };
 
   const openEditNote = (item: any) => {

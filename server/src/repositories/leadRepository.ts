@@ -594,7 +594,16 @@ export const leadRepository = {
         }
       };
     }
-    
+
+    // When lead is reassigned to another agent, reassign all tasks on this lead to the new agent
+    const newAssignedUserId = updateData.assignedUserId !== undefined ? updateData.assignedUserId : null;
+    if (newAssignedUserId !== undefined) {
+      await prisma.task.updateMany({
+        where: { leadId: id },
+        data: { assignedToId: newAssignedUserId },
+      });
+    }
+
     return prisma.lead.update({ where: { id }, data: updateData, include: includeLead });
   },
 

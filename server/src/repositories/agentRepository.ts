@@ -319,4 +319,21 @@ export const agentRepository = {
     });
     return count > 0;
   },
+
+  // Reassign all leads (and their open tasks) from one agent to another
+  reassignLeads: async (fromAgentId: string, toAgentId: string) => {
+    await prisma.lead.updateMany({
+      where: { assignedUserId: fromAgentId },
+      data: { assignedUserId: toAgentId },
+    });
+    // Reassign OPEN tasks on those leads: either assigned to old agent or unassigned
+    await prisma.task.updateMany({
+      where: {
+        status: 'OPEN',
+        lead: { assignedUserId: toAgentId },
+        OR: [{ assignedToId: fromAgentId }, { assignedToId: null }],
+      },
+      data: { assignedToId: toAgentId },
+    });
+  },
 };

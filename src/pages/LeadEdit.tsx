@@ -1589,7 +1589,6 @@ const LeadEdit: React.FC = () => {
         
         const filteredTasks = (data.data || []).filter((t: any) => {
           const title = t.title || '';
-          // Hide all auto-created tasks
           const isAutoCreated = autoCreatedTaskPrefixes.some(prefix => title.startsWith(prefix));
           return !isAutoCreated;
         });

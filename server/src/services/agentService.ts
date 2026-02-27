@@ -102,14 +102,21 @@ export const agentService = {
     return agentData;
   },
 
-  // Delete agent
-  deleteAgent: async (id: string) => {
-    // Check if agent has assigned leads
+  // Delete agent. Options: reassignToAgentId (string) = reassign leads then delete; null = delete (leads unassigned); undefined = delete only if no leads.
+  deleteAgent: async (id: string, options?: { reassignToAgentId?: string | null }) => {
     const hasAssignedLeads = await agentRepository.hasAssignedLeads(id);
+
+    if (options?.reassignToAgentId !== undefined) {
+      if (typeof options.reassignToAgentId === 'string') {
+        if (!hasAssignedLeads) return agentRepository.deleteAgent(id);
+        await agentRepository.reassignLeads(id, options.reassignToAgentId);
+      }
+      return agentRepository.deleteAgent(id);
+    }
+
     if (hasAssignedLeads) {
       throw new Error('Cannot delete agent who has assigned leads. Please reassign leads first.');
     }
-
     return agentRepository.deleteAgent(id);
   },
 };

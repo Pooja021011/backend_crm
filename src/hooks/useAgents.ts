@@ -46,7 +46,7 @@ export interface AgentsHookReturn {
   error: string | null;
   createAgent: (data: CreateAgentData) => Promise<Agent & { generatedPassword?: string }>;
   updateAgent: (id: string, data: UpdateAgentData) => Promise<Agent>;
-  deleteAgent: (id: string) => Promise<void>;
+  deleteAgent: (id: string, options?: { reassignToAgentId?: string | null }) => Promise<void>;
   getAgent: (id: string) => Promise<Agent>;
   refreshAgents: () => Promise<void>;
   getActiveAgents: () => Agent[];
@@ -133,13 +133,16 @@ export const useAgents = (): AgentsHookReturn => {
     }
   };
 
-  const deleteAgent = async (id: string): Promise<void> => {
+  const deleteAgent = async (id: string, options?: { reassignToAgentId?: string | null }): Promise<void> => {
     setError(null);
     try {
       await makeAuthenticatedRequest(`${API_BASE}/agents/${id}`, {
         method: 'DELETE',
+        ...(options?.reassignToAgentId !== undefined && {
+          body: JSON.stringify({ reassignToAgentId: options.reassignToAgentId }),
+        }),
       });
-      
+
       setAgents(prevAgents => prevAgents.filter(agent => agent.id !== id));
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to delete agent';
