@@ -15,16 +15,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -69,6 +59,7 @@ import { formatUsPhoneForDisplay, normalizeUsPhoneToE164 } from "@/utils/phone";
 import { useAgents, type Agent } from "@/hooks/useAgents";
 import { AddAgentDialog } from "@/components/AddAgentDialog";
 import { EditAgentDialog } from "@/components/EditAgentDialog";
+import { DeleteAgentDialog } from "@/components/DeleteAgentDialog";
 import { MarketingPlatformSettings } from "@/components/MarketingPlatformSettings";
 import { PipelineSettings } from "@/components/PipelineSettings";
 import { LeadDistributionSettings } from "@/components/LeadDistributionSettings";
@@ -134,6 +125,7 @@ const Settings = () => {
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null);
+  const [isDeletingAgent, setIsDeletingAgent] = useState(false);
 
   // SMS Settings state
   const [smsSettings, setSmsSettings] = useState<any>(null);
@@ -996,14 +988,14 @@ const Settings = () => {
   const handleDelete = (agent: Agent) => {
     setAgentToDelete(agent);
     setShowDeleteDialog(true);
+    refreshAgents(); // Ensure dropdown has latest agents (e.g. newly created)
   };
 
-  const confirmDelete = async () => {
+  const handleConfirmDelete = async (options?: { reassignToAgentId?: string | null }) => {
     if (!agentToDelete) return;
-
+    setIsDeletingAgent(true);
     try {
-      await deleteAgent(agentToDelete.id);
-      // Success toast removed - only show errors
+      await deleteAgent(agentToDelete.id, options);
       setShowDeleteDialog(false);
       setAgentToDelete(null);
     } catch (error) {
@@ -1012,6 +1004,8 @@ const Settings = () => {
         description: error instanceof Error ? error.message : "Failed to delete agent",
         variant: "destructive",
       });
+    } finally {
+      setIsDeletingAgent(false);
     }
   };
 
@@ -1943,7 +1937,6 @@ const Settings = () => {
                                         <DropdownMenuItem 
                                           onClick={() => handleDelete(agent)}
                                           className="text-red-600 focus:text-red-600"
-                                          disabled={agent._count.assignedLeads > 0}
                                         >
                                           <Trash2 className="w-4 h-4 mr-2" />
                                           Delete Agent
@@ -1979,34 +1972,15 @@ const Settings = () => {
                 />
               )}
 
-              {/* Delete Confirmation Dialog */}
-              <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Delete Agent</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Are you sure you want to delete <strong>{agentToDelete?.firstName} {agentToDelete?.lastName}</strong>? 
-                      This action cannot be undone.
-                      {agentToDelete?._count.assignedLeads > 0 && (
-                        <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-yellow-800">
-                          This agent has {agentToDelete._count.assignedLeads} assigned lead(s). 
-                          Please reassign these leads before deleting the agent.
-                        </div>
-                      )}
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={confirmDelete}
-                      className="bg-red-600 hover:bg-red-700"
-                      disabled={agentToDelete?._count.assignedLeads > 0}
-                    >
-                      Delete Agent
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+              {/* Delete Agent Dialog (with lead/task reassignment) */}
+              <DeleteAgentDialog
+                open={showDeleteDialog}
+                onOpenChange={setShowDeleteDialog}
+                agent={agentToDelete}
+                agents={agents}
+                onConfirm={handleConfirmDelete}
+                isDeleting={isDeletingAgent}
+              />
             </div>
           )}
 

@@ -10,8 +10,8 @@ router.use(authenticate);
 // List agents - accessible to all authenticated users
 router.get('/', (req, res, next) => agentController.listAgents(req, res).catch(next));
 
-// Admin-only routes for agent management
-router.use(requireRoles('ADMIN'));
+// Admin or Manager routes for agent management (create, get one, update, delete)
+router.use(requireRoles('ADMIN', 'MANAGER'));
 
 router.post('/', (req, res, next) => agentController.createAgent(req, res).catch(next));
 router.get('/:id', (req, res, next) => agentController.getAgent(req, res).catch(next));

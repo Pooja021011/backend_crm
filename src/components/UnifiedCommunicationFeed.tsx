@@ -329,9 +329,12 @@ export const UnifiedCommunicationFeed: React.FC<UnifiedCommunicationFeedProps> =
   const canEditTaskItem = (item: any) => {
     if (item.type !== 'TASK') return false;
     const userId = currentUser?.id;
-    // Only the creator can edit their own task
-    const isCreator = !!userId && item.createdById === userId;
-    return isCreator;
+    if (!userId) return false;
+    const isCreator = item.createdById === userId;
+    const isAssignee = item.assignedToId === userId;
+    const isLeadAssignedAgent = lead?.assignedUserId === userId;
+    // Reassigned agent / lead owner / admin / manager: same edit as fresh tasks
+    return isCreator || isAssignee || isLeadAssignedAgent || canEditLead;
   };
 
   const openEditNote = (item: any) => {

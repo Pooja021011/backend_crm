@@ -63,16 +63,24 @@ export const agentController = {
     }
   },
 
-  // Delete agent (admin only)
+  // Delete agent (admin/manager). Body may include { reassignToAgentId: string | null } to reassign or unassign leads.
   deleteAgent: async (req: Request, res: Response) => {
     try {
-      const deleted = await agentService.deleteAgent(req.params.id);
+      const id = req.params.id;
+      const body = (req as any).body ?? {};
+      const query = (req as any).query ?? {};
+      const raw = body.reassignToAgentId ?? query.reassignToAgentId;
+      const reassignToAgentId =
+        raw === undefined ? undefined : raw === null || raw === 'null' ? null : String(raw);
+      const options =
+        reassignToAgentId !== undefined ? { reassignToAgentId } : undefined;
+      const deleted = await agentService.deleteAgent(id, options);
       if (!deleted) {
         return res.status(404).json({ error: 'Agent not found' });
       }
       res.json({ success: true });
     } catch (error: any) {
-      if (error.message.includes('has assigned leads')) {
+      if (error.message?.includes('has assigned leads')) {
         return res.status(409).json({ error: error.message });
       }
       res.status(500).json({ error: 'Failed to delete agent' });

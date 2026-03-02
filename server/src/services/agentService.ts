@@ -102,15 +102,9 @@ export const agentService = {
     return agentData;
   },
 
-  // Delete agent
-  deleteAgent: async (id: string) => {
-    // Check if agent has assigned leads
-    const hasAssignedLeads = await agentRepository.hasAssignedLeads(id);
-    if (hasAssignedLeads) {
-      throw new Error('Cannot delete agent who has assigned leads. Please reassign leads first.');
-    }
-
-    return agentRepository.deleteAgent(id);
+  // Delete agent (optionally reassign or unassign leads via options.reassignToAgentId)
+  deleteAgent: async (id: string, options?: { reassignToAgentId?: string | null }) => {
+    return agentRepository.deleteAgent(id, options);
   },
 };
 

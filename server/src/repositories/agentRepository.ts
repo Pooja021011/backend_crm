@@ -3,12 +3,10 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 export const agentRepository = {
-  // List all active users with their roles (used for task assignment, mentions, etc.)
+  // List all users with their roles (used for task assignment, reassign dropdown, etc.)
   listAgents: async () => {
     return prisma.user.findMany({
-      where: {
-        status: 'active',
-      },
+      where: {},
       select: {
         id: true,
         firstName: true,
@@ -290,26 +288,101 @@ export const agentRepository = {
     });
   },
 
-  // Delete agent
-  deleteAgent: async (id: string) => {
-    return prisma.$transaction(async (tx) => {
-      // Remove user roles first
-      await tx.userRole.deleteMany({
-        where: { userId: id }
+  // Reassign all leads and all their tasks to another agent
+  reassignLeads: async (fromAgentId: string, toAgentId: string) => {
+    await prisma.$transaction(async (tx) => {
+      await tx.lead.updateMany({
+        where: { assignedUserId: fromAgentId },
+        data: { assignedUserId: toAgentId },
       });
-
-      // Delete refresh tokens
-      await tx.refreshToken.deleteMany({
-        where: { userId: id }
+      // Reassign all tasks on those leads to the new agent so they have full ownership
+      await tx.task.updateMany({
+        where: { lead: { assignedUserId: toAgentId } },
+        data: { assignedToId: toAgentId },
       });
-
-      // Delete the user
-      await tx.user.delete({
-        where: { id }
-      });
-
-      return true;
     });
+  },
+
+  // Delete agent
+  deleteAgent: async (id: string, options?: { reassignToAgentId?: string | null }) => {
+    const hasAssignedLeads = await prisma.lead.count({
+      where: { assignedUserId: id },
+    });
+    if (hasAssignedLeads && options?.reassignToAgentId === undefined) {
+      throw new Error('Cannot delete agent who has assigned leads. Please reassign leads first.');
+    }
+    if (typeof options?.reassignToAgentId === 'string') {
+      await agentRepository.reassignLeads(id, options.reassignToAgentId);
+    }
+    // Clear all references to this user so delete can succeed (reassign null = unassign, or no leads)
+    await prisma.$transaction(async (tx) => {
+      await tx.lead.updateMany({
+        where: { assignedUserId: id },
+        data: { assignedUserId: null },
+      });
+      await tx.lead.updateMany({
+        where: { createdById: id },
+        data: { createdById: null },
+      });
+      await tx.lead.updateMany({
+        where: { dispAgentId: id },
+        data: { dispAgentId: null },
+      });
+      await tx.task.updateMany({
+        where: { assignedToId: id },
+        data: { assignedToId: null },
+      });
+      await tx.task.updateMany({
+        where: { createdById: id },
+        data: { createdById: null },
+      });
+      await tx.auditLog.updateMany({
+        where: { changedById: id },
+        data: { changedById: null },
+      });
+      await tx.file.updateMany({
+        where: { uploadedById: id },
+        data: { uploadedById: null },
+      });
+      await tx.fileVersion.updateMany({
+        where: { uploadedById: id },
+        data: { uploadedById: null },
+      });
+      await tx.priceHistory.updateMany({
+        where: { changedById: id },
+        data: { changedById: null },
+      });
+      await tx.underwritingCalculation.updateMany({
+        where: { calculatedBy: id },
+        data: { calculatedBy: null },
+      });
+      await tx.communication.updateMany({
+        where: { createdById: id },
+        data: { createdById: null },
+      });
+      await tx.marketingLink.updateMany({
+        where: { createdById: id },
+        data: { createdById: null },
+      });
+      await tx.underwritingScenario.updateMany({
+        where: { createdById: id },
+        data: { createdById: null },
+      });
+      await tx.notification.updateMany({
+        where: { targetUserId: id },
+        data: { targetUserId: null },
+      });
+      await tx.notification.updateMany({
+        where: { triggeredBy: id },
+        data: { triggeredBy: null },
+      });
+      await tx.userEmailSettings.deleteMany({ where: { userId: id } });
+      await tx.userSmsSettings.deleteMany({ where: { userId: id } });
+      await tx.userRole.deleteMany({ where: { userId: id } });
+      await tx.refreshToken.deleteMany({ where: { userId: id } });
+      await tx.user.delete({ where: { id } });
+    });
+    return true;
   },
 
   // Check if agent has assigned leads
